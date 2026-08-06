@@ -946,3 +946,29 @@ pointer it reads is a mapped weight.
 Standing rule added: **any new vectorised load on a tensor that comes from `WeightStore` must
 either check alignment at runtime or use the funnel-shift pattern.** Unit-gate PASS is not evidence
 on this axis; only a full-model run is.
+
+### Optimization #3 — FULL-MODEL A/B: CONFIRMED, 8.63 -> 9.26 tok/s (1.072x)
+
+| | before Opt #3 | after |
+|---|---:|---:|
+| **Warm M=1 decode** | 115.8 ms/tok = **8.63 tok/s** | 108.0 ms/tok = **9.26 tok/s** |
+| Effective bandwidth | 96.7 GB/s = 40.3% | **103.7 GB/s = 43.2%** |
+| 43-layer verify, K=1 | 103.17 ms | 95.38 ms |
+| M=5 verify | 300.5 ms | 295.0 ms |
+| Correctness | argmax 11111 | argmax 11111 — **GATE PASS** |
+
+Predicted 108.6 ms from the bench (-6.1 ms x 2 calls/layer); measured **108.0**. The bench has now
+predicted two adopted optimizations to within ~1%, which settles the instrument policy: **`ncu` for
+mechanism, `gemm_bench` for magnitude, full model to confirm.**
+
+**Cumulative: 128.2 -> 108.0 ms/tok, 7.80 -> 9.26 tok/s = 1.187x**, at 43.2% of achievable
+bandwidth against a 21.4 tok/s wall.
+
+The K-sweep reconfirms Finding 14 a third time on faster kernels (`slide` 2.879x, `r128` 2.660x,
+`r4` 2.604x — DSA still grows *slowest*), and the K>=2 step penalty is undiminished (+0.519 at K=5),
+consistent with Finding 15's mechanism living somewhere neither optimization touched.
+
+Spec-decode is 117.0 ms/tok (0.92x of base) — it keeps losing ground as the base improves, exactly
+as Finding 17 predicts: the draft head is a fixed ~119 ms cost that the base-path optimizations do
+not touch, so every base win makes speculation look worse. **The draft head is now unambiguously the
+top lever.**

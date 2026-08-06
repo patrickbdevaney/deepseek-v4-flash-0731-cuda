@@ -11,6 +11,7 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 | # | lever | change | correctness | bench | **full model** | status |
 |---|---|---|---|---|---|---|
 | 2 | small-N GEMV wave quantisation | grid-stride + wave-aligned launch for `fp8_gemv_m1_kernel` | Gate K PASS | clamp-to-one-wave: `wq_b` 214.6 -> 186.3, `wo_b` 225.5 -> 194.7 (**worse**); round-down: within noise (`wq_a` 41.6 vs 156.8 across runs) | not run | **REVERTED — negative result.** Whole lever is <2% of `B_tok` (`wq_a` 1.6% + `wkv` 0.8%); could not justify risk to `wq_b`/`wo_b` (~26% at 89-94%) |
+| 3 | HC: warp-parallel Sinkhorn + block-per-output `k_mixes` | `hc_sinkhorn_kernel` retired 31 of 32 lanes and kept a runtime-indexed `c[HCMAX*HCMAX]` in **local (DRAM) memory**; now one warp per token with the 4x4 in registers and `__shfl_xor` reductions. `k_mixes` one warp -> one block per output. `HC_SCALAR=1` restores the old path. | Gate K PASS, `comb` max_abs 1.19e-07 -> **8.94e-08** | sinkhorn 0.0862 -> 0.0165 ms (**5.2x**); `hc_pre` 0.1137 -> 0.0436 (2.6x); -6.1 ms/step | **115.8 -> 108.0 ms/tok, 8.63 -> 9.26 tok/s = 1.072x**; 96.7 -> 103.7 GB/s | **ADOPTED** |
 | 1 | MoE grouped GEMM occupancy | `<<<grid,32>>>` (1 warp/block, 50% occupancy) -> `<<<grid,32*4>>>` with `n_block` derived from the warp id. Pure launch geometry; `MOE_WPB` env restores the old value. | Gate K PASS, MoE cosine **1.0000000** | 112 -> 122 GB/s @M=1 (1.09x) | **128.2 -> 115.8 ms/tok, 7.80 -> 8.63 tok/s = 1.107x**; 87.4 -> 96.7 GB/s (36.4% -> 40.3% of achievable) | **ADOPTED** |
 
 ## Baseline
@@ -18,19 +19,18 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 | | ms/tok | tok/s | GB/s | % of 240 achievable |
 |---|---:|---:|---:|---:|
 | Ported as-is (= prior project's 180B result, 126.7 ms) | 128.2 | 7.80 | 87.4 | 36.4% |
-| After Opt #1 | **115.8** | **8.63** | **96.7** | **40.3%** |
+| After Opt #1 | 115.8 | 8.63 | 96.7 | 40.3% |
+| After Opt #3 | **108.0** | **9.26** | **103.7** | **43.2%** |
+| **Cumulative** | **1.187x** | | | |
 | Target band (`ROOFLINE.md` §3) | 63–80 | 15–19 | 168–192 | 70–80% |
 | Wall | 46.7 | 21.4 | 240 | 100% |
 
 ## Next levers (measurement-backed, `LOOP_LOG.md` Findings 18-21)
 
-1. **HC + Sinkhorn fusion** (Finding 23) — 9.4% of wall-clock for 1.2% of the bytes, ~7.8x off
-   roofline, M-invariant. 20 sequential Sinkhorn iterations over a 4x4; fuse into one kernel that
-   keeps it in registers. Worth ~9 ms/step (~1.09x) and entirely local.
-2. **DSpark draft head** — ~6x off its own roofline; gates the entire speculative win (Finding 17).
-3. **The M>=2 verify step penalty** — ~+0.70 c_v at K=2, mechanism still OPEN after two refuted
+1. **DSpark draft head** — ~6x off its own roofline; gates the entire speculative win (Finding 17).
+2. **The M>=2 verify step penalty** — ~+0.70 c_v at K=2, mechanism still OPEN after two refuted
    hypotheses. Bench `ogroup_gemm_fp8` and the HC/Sinkhorn path before proposing a third.
-4. **MoE beyond occupancy** — still only ~51% of achievable after Opt #1.
+3. **MoE beyond occupancy** — still only ~51% of achievable after Opt #1.
 
 Retired: MLA projection GEMVs (already 89-94%), MXFP4 hardware unpack (already implemented),
 small-N GEMV wave quantisation (real mechanism, but the whole lever is <2% of `B_tok` — Opt #2).
