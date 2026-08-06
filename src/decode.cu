@@ -1,15 +1,21 @@
-// decode.cu — full 43-layer M=1 KV-cache DECODE driver for DeepSeek-V4-Flash-180B-REAP (Step 4 milestone 3).
-// Prefill-populates per-layer KV caches over [id0..id_{PS-1}], then autoregressively decodes M=1 tokens and
-// measures decode tok/s. Gate: the first decoded token must argmax == the expected id, which is
-// supplied via the DSV4_EXPECT env var (default 11111 = " Paris" for the canonical probe
-// "The capital of France is" = ids 0,671,6102,294,8760,344 on the 0731 checkpoint).
-// NOTE: the old hardcoded 270 belonged to the 180B project's DIFFERENT probe prompt
-// ("The capital of France is the powerhouse of" -> " the"). Keeping it would have reported a
-// spurious GATE FAIL on a numerically correct run. (the same
-// next-token the gated prefill produces at logits[s-1] for the canonical prompt). Memory-safe: weights load
-// native (WeightStore), scales/norms/wo_a re-dequant PER LAYER with release() — same peak as the prefill forward
-// (the per-token re-dequant is the first thing the native-dtype optimization removes).
+// decode.cu — full 43-layer M=1 KV-cache DECODE driver for DeepSeek-V4-Flash-0731-REAP.
+// Prefill-populates per-layer KV caches over [id0..id_{PS-1}], then autoregressively decodes M=1
+// tokens and measures decode tok/s.
+//
+// GATE: the first decoded token must argmax == the expected id, supplied via the DSV4_EXPECT env
+// var (default 11111 = " Paris" for the canonical probe "The capital of France is" =
+// ids 0,671,6102,294,8760,344). The old hardcoded 270 belonged to the 180B project's DIFFERENT
+// probe prompt ("...is the powerhouse of" -> " the") and reported a spurious GATE FAIL on a
+// numerically correct 0731 run — a prompt-specific answer must not live in a global constant.
+//
+// Memory-safe: weights load native (WeightStore, zero-copy on Thor's unified memory);
+// scales/norms/wo_a re-dequant PER LAYER with release().
+//
 //   build: bash scripts/build_decode.sh -> build/decode
+//   run:   ./build/decode <ckpt_dir> "0,671,6102,294,8760,344" 8        (base AR)
+//          DSV4_KSWEEP=1 ./build/decode ... 8                           (+ verify K-sweep)
+//   args:  <dir> <ids> <NDEC> [headdir] [NGEN0]
+//          headdir defaults to <dir> when the checkpoint has embedded mtp.* (0731 does).
 #include <unordered_map>
 #include "weight_store.h"
 #include "deepseek_v4.h"
@@ -29,6 +35,7 @@
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <cmath>
 using namespace dsv4;
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
@@ -331,13 +338,77 @@ int main(int argc, char** argv){
         // run-to-run). gate_mla_verify proves the M=K math bit-exact; full-model deterministic positions match.
         printf("[spec-verify] MATCH %d/%d -> %s  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)\n",
                match, VK, match>=VK-1?"PASS":"FAIL");
+
+        // ---- K-sweep + per-layer-flavour cost split (DSV4_KSWEEP=1) ----
+        // Decisive test for LOOP_LOG Finding 13. The weight-traffic model in ROOFLINE.md §5 says
+        // c_v(K) = (B_fixed + 43*|union|(K)*b_expert)/B_tok, i.e. 1.000/1.296/1.582/1.856/2.120
+        // for K=1..5. Measured c_v(5) is 2.62. Finding 13 refuted the MoE explanation by code
+        // inspection, leaving DSA (top-512 select + irregular gather PER QUERY POSITION) as the
+        // suspect. If that is right, the excess must be concentrated in the 21 ratio-4 layers
+        // (compressor + DSA indexer) and ABSENT from the 2 pure-sliding layers, which have neither.
+        // Timing per flavour separates them directly: pure-sliding is the control.
+        if(getenv("DSV4_KSWEEP")){
+            std::vector<cudaEvent_t> ev(N_LAYERS+1);
+            for(auto& e: ev) cudaEventCreate(&e);
+            const double cv_model[6]={0,1.000,1.296,1.582,1.856,2.120};
+            double TOT[6]={0},TS[6]={0},T128[6]={0},T4[6]={0};
+            for(int K=1; K<=DSPARK_BLOCK; ++K){
+                std::vector<int> kt(K); kt[0]=ids[s-1]; for(int i=1;i<K;++i) kt[i]=gen[i-1];
+                for(int L=0;L<N_LAYERS;++L) KV[L].T=0;                       // reset caches, then re-prefill
+                k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d);
+                k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
+                for(int L=0;L<N_LAYERS;++L){ arena_reset(); run_layer(L,true,0,h,h2,d_ids); std::swap(h,h2); }
+                CU(cudaMemcpy(d_vtok,kt.data(),(size_t)K*4,cudaMemcpyHostToDevice));
+                CU(cudaMemcpy(d_ids+PS,kt.data(),(size_t)K*4,cudaMemcpyHostToDevice));
+                k_embed<<<((size_t)K*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_vtok,K,d);
+                k_hc_expand<<<((size_t)K*hc*d+255)/256,256>>>(hv,h0,K,hc,d); CU(cudaDeviceSynchronize());
+                float* a=hv; float* b=hv2;
+                cudaEventRecord(ev[0]);
+                for(int L=0; L<N_LAYERS; ++L){ arena_reset(); int r=compress_ratio(L);
+                    if(r==0) block_verify_step (b,a,d_ids+PS,BW[L],PS,K,HC_SINKHORN_ITERS,EPS,KV[L]);
+                    else     cblock_verify_step(b,a,d_ids+PS,CW[L],PS,K,HC_SINKHORN_ITERS,EPS,KV[L]);
+                    cudaEventRecord(ev[L+1]); std::swap(a,b); }
+                CU(cudaDeviceSynchronize());
+                double tot=0, ts=0, t128=0, t4=0;
+                for(int L=0; L<N_LAYERS; ++L){ float dt; cudaEventElapsedTime(&dt,ev[L],ev[L+1]);
+                    tot+=dt; int r=compress_ratio(L); (r==0?ts:(r==128?t128:t4)) += dt; }
+                TOT[K]=tot; TS[K]=ts; T128[K]=t128; T4[K]=t4;
+            }
+            printf("\n[ksweep] 43-layer verify cost vs K (ms), split by layer flavour\n");
+            printf("[ksweep]  K |   total | slide(2L) | r128(20L) |  r4(21L) | c_v meas | c_v model | excess\n");
+            for(int K=1; K<=DSPARK_BLOCK; ++K)
+                printf("[ksweep] %2d | %7.2f | %9.2f | %9.2f | %8.2f | %8.3f | %9.3f | %+6.3f\n",
+                       K, TOT[K], TS[K], T128[K], T4[K], TOT[K]/TOT[1], cv_model[K], TOT[K]/TOT[1]-cv_model[K]);
+            printf("\n[ksweep] per-flavour growth K=1 -> K=%d (the actual test):\n", DSPARK_BLOCK);
+            printf("[ksweep]   slide (no compressor, no indexer) : %.3fx   <- control\n", TS[DSPARK_BLOCK]/TS[1]);
+            printf("[ksweep]   r128  (compressor, NO indexer)    : %.3fx\n", T128[DSPARK_BLOCK]/T128[1]);
+            printf("[ksweep]   r4    (compressor + DSA indexer)  : %.3fx\n", T4[DSPARK_BLOCK]/T4[1]);
+            printf("[ksweep] DSA hypothesis holds IFF r4 grows materially faster than slide and r128.\n");
+            for(auto& e: ev) cudaEventDestroy(e);
+        }
     }
     // ================= DSpark SPEC-DECODE (draft head + accept loop) =================
-    if(argc>4){
-        const char* headdir=argv[4]; const int BLK=DSPARK_BLOCK, hf=ROPE_DIM/2;
-        printf("\n[spec] loading DSpark head %s ...\n", headdir);
-        st::WeightStore WH(headdir, key_map, "mtp."); Loader LH(WH);
-        printf("[spec] head loaded %.2f GiB, %zu mtp tensors\n", WH.loadedGiB(), WH.count());
+    // On 0731-REAP the DSpark heads are EMBEDDED: mtp.0/1/2 ship inside the main checkpoint and are
+    // already resident in W. Opening a second WeightStore for them (as the 180B project had to,
+    // because its head lived in a separate repo) would duplicate ~6.5 GiB against ~16 GiB of
+    // headroom — the exact memory-neutrality violation that hard-hung this box before. So: reuse
+    // the main store by default, and only open a separate one if an explicit *different* head
+    // directory is passed (kept for backward compatibility with an external head).
+    const bool have_embedded_mtp = W.has("mtp.0.attn_norm.weight");
+    const char* headdir = (argc>4) ? argv[4] : (have_embedded_mtp ? dir : nullptr);
+    const bool separate_head = (headdir && strcmp(headdir, dir) != 0);
+    if(headdir){
+        const int BLK=DSPARK_BLOCK, hf=ROPE_DIM/2;
+        std::unique_ptr<st::WeightStore> WHp; std::unique_ptr<Loader> LHp;
+        if(separate_head){
+            printf("\n[spec] loading EXTERNAL DSpark head %s ...\n", headdir);
+            WHp.reset(new st::WeightStore(headdir, key_map, "mtp.")); LHp.reset(new Loader(*WHp));
+            printf("[spec] head loaded %.2f GiB, %zu mtp tensors (SEPARATE store)\n", WHp->loadedGiB(), WHp->count());
+        } else {
+            printf("\n[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)\n");
+        }
+        st::WeightStore& WH = separate_head ? *WHp : W;
+        Loader&          LH = separate_head ? *LHp : L;
         std::vector<float> bc,bs2; yarn::freqs(bc,bs2,seqmax,ROPE_DIM,0,ROPE_THETA,YARN_FACTOR,YARN_BETA_FAST,YARN_BETA_SLOW);
         const float* blk_cos=up_f(bc,keep); const float* blk_sin=up_f(bs2,keep);
         const uint8_t* main_proj=LH.raw("mtp.0.main_proj.weight"); const float* main_proj_s=LH.scale("mtp.0.main_proj.scale");

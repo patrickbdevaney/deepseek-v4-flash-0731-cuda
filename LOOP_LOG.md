@@ -392,3 +392,133 @@ selection work across verify positions.
 `std::set<void*>` probe, `tc_moe_gemm.cu:193`), so it does no device work after warm-up — but it
 is 480 host-side set lookups per layer, ~20,640 per decode step, on the critical path. Order ~1 ms
 of the 128 ms step. Worth hoisting, not urgent, and logged so it is not rediscovered.
+
+---
+
+## 2026-08-06 — Phase 5 / Gate D1: DSpark runs on the embedded heads; the K-sweep refutes my own hypothesis
+
+### Gate D1 — DSpark spec-decode WORKS, and lands at parity
+
+```
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK=5
+[spec] head built. mem 113.8/122.8 GiB
+  verify 1..8: accepted 1,2,0,1,4,1,4,4 of 4  (+correction each)
+[spec] generated 25 tokens over 8 verifies: mean tokens/verify = 3.12 (block=5, max 5)
+[spec] SPEC-DECODE: 129.1 ms/tok = 7.75 tok/s  (vs base 128.2 ms/tok -> 0.99x)
+```
+
+**The memory-neutral rewire worked**: `NSTAGE=3`, `head-experts=160`, discovered from the main
+checkpoint, **no second WeightStore** — total 113.8 GiB vs 111.2 GiB for base decode, i.e. the
+DSpark path costs +2.6 GiB of activations rather than the +6.5 GiB a duplicate store would have
+added on top. That would not have fit alongside the KV and arena.
+
+**Acceptance is not the problem.** 3.12 tokens per verify out of a max of 5 is a *good* rate for an
+un-fine-tuned head (α ≈ 0.7). **Cost is the problem** — see Finding 15.
+
+### Finding 14 — the K-sweep REFUTES the DSA hypothesis. It was mine, and it was wrong.
+
+Finding 13 refuted the prior project's MoE explanation and nominated DSA (top-512 select +
+irregular gather **per query position**) as the successor. The experiment was designed to be
+decisive: time the verify per layer flavour, since pure-sliding layers have neither compressor nor
+indexer and are the control.
+
+```
+per-flavour growth K=1 -> K=5
+  slide (no compressor, no indexer) : 2.754x   <- control
+  r128  (compressor, NO indexer)    : 2.573x
+  r4    (compressor + DSA indexer)  : 2.488x
+```
+
+**The DSA layers grow the SLOWEST.** The prediction was that `r4` would grow materially faster than
+`slide`; it grows *slower*, and the three flavours are within 10% of each other. DSA is not the
+cause of the verify excess. Recorded plainly because a hypothesis that survives on reputation is
+worse than no hypothesis: two successive explanations for `c_v` have now been wrong, and both were
+plausible-sounding. The layer-flavour split is what settled it, not argument.
+
+### Finding 15 — the real mechanism: a step-function M>=2 penalty, because the M=1 fast paths vanish
+
+Fitting the sweep against the layer-only byte model (`B_fixed_layers + |union|(K)/6 * B_expert`,
+priced at the *measured* 87.5 GB/s):
+
+| K | measured | byte model | excess |
+|---|---:|---:|---:|
+| 1 | 115.94 ms | **115.92 ms** | **+0.02** |
+| 2 | 225.60 | 153.87 | +71.73 |
+| 3 | 255.45 | 190.38 | +65.07 |
+| 4 | 272.82 | 225.53 | +47.29 |
+| 5 | 293.96 | 259.37 | +34.59 |
+
+**At K=1 the byte model is exact to 0.02 ms.** The entire anomaly is a *step* at K≥2 — step deltas
+are `+109.7, +29.8, +17.4, +21.1`, i.e. K=1→2 nearly doubles the cost while K=2→5 adds little.
+That is the signature of a fixed penalty, not a per-position cost.
+
+**Root cause, confirmed in code.** Two dense paths have M=1-only fast kernels:
+
+- `kernels/fp8_block_gemm.cu:99` — `if (g_tc_fp8 && M == 1 …) fp8_gemv_m1_kernel`; at M≥2 it falls
+  through to `tc_fp8_gemm`, an **m16-tile mma**.
+- `kernels/mla_attn.cu:268` — `if(bs==1 …) ogroup_gemv_fp8_kernel`; at bs>1 it falls through to
+  `tc_ogroup_fp8_kernel`, also m16, **plus** an extra `k_f2h` conversion pass and a `dmalloc`/`dfree`.
+
+At M=1 those GEMVs are bandwidth-bound and optimal (hence the exact model fit). At M=2–5 the m16
+tile computes 16 rows of mma to use 2–5 — 3–8x wasted mma throughput, and it is mma-latency bound,
+not bandwidth bound. The penalty is therefore *flat* across M=2..16, which is exactly the measured
+shape.
+
+**Why the excess shrinks with K:** the model assumes independent routing. Real routing is
+correlated, so the true expert union is smaller than `|union|(K)`. Solving at K=5 implies a real
+union of ~22 experts against the modelled 27.8 — 74% of slots distinct, entirely plausible for
+adjacent tokens. So two effects overlap: a constant ~72 ms M≥2 penalty, partly masked by the model
+over-charging for experts at larger K. **`ROOFLINE.md` §5's `E_frac` is conservative** — the real
+expert union is cheaper than modelled, which is a point in speculation's favour.
+
+**Do NOT "fix" this with an M=K GEMV.** The prior project already A/B'd exactly that and it was
+slower (334 → 362 ms); the code carries the negative result at `fp8_block_gemm.cu:101-105`
+(`GEMV_MK=1`, default off). Reason: a GEMV does M scalar dots per weight read, while the mma reads
+the weight once and does M×N. The fix is a **small-M tile shape** (fewer wasted rows per mma), not
+a different algorithm class.
+
+### Finding 16 — the flat M≥2 penalty INVERTS the k* guidance: bigger K is better, not smaller
+
+`ROOFLINE.md` §5 predicted `k* = 2–3` from the pure byte model. The measured curve says otherwise,
+precisely *because* of the step penalty — once you have paid it at K=2, additional verify positions
+are cheap:
+
+| K | verify+lm_head | per token if all accepted | speed-up |
+|---|---:|---:|---:|
+| 1 | 128.2 ms | 128.2 | 1.00x |
+| 2 | 237.9 | 119.0 | 1.08x |
+| 3 | 267.8 | 89.2 | 1.44x |
+| 4 | 285.1 | 71.3 | 1.80x |
+| 5 | 306.3 | **61.3** | **2.09x** |
+
+**k\* is at or above `dspark_block_size = 5`, not 2–3.** The `S(k)` table in `ROOFLINE.md` §5 is
+superseded by measurement for this engine. Note the *reason* is a defect: if Finding 15's penalty
+is fixed, small K gets cheaper and the optimum moves back down. Both facts should be carried
+together — **k\* depends on whether the small-M GEMM is fixed**, and the sweep must be re-run after
+any change there.
+
+### Finding 17 — the DSpark draft head is ~6x off its own roofline, and that is what eats the win
+
+Decomposing the measured 425 ms spec step: K=5 verify (294 ms) + lm_head (~12 ms) leaves
+**~119 ms for the draft head**. Its byte model — 3 DSpark blocks (MLA + top-6 of 160 experts each),
+the shared `lm_head`, and the rank-256 markov head — is ~1.75 GB → **~20 ms** at 87.5 GB/s.
+**The draft is ~6x off roofline**, and it costs almost as much as a whole M=1 decode step.
+
+That is decisive for the economics:
+
+| scenario | ms/verify | ms/token at a=3.12 | vs base |
+|---|---:|---:|---:|
+| **measured** | 425 | 136.2 | **0.94x** (parity) |
+| draft cost halved | 366 | 117.2 | 1.09x |
+| draft at its roofline | 314 | 100.7 | **1.27x** |
+
+**Why it is slow is not mysterious:** `kernels/dspark_real.cu` and `kernels/dspark_attn.cu` were
+written for the prior project's *correctness* milestone (Gate 2-real) and **never went through the
+optimization loop** — every one of the 9 banked decode optimizations targeted the main path. The
+draft also runs at M=BLK=5, so it pays Finding 15's penalty three times over, once per stage.
+
+**Gate D1 verdict: DSpark is correct, integrated, memory-neutral, and at parity (0.99x).** It is
+not yet a win, and the reason is entirely cost — acceptance at 3.12/5 is already adequate. Two
+levers, in order: (1) small-M dense GEMM (Finding 15) — helps verify *and* draft; (2) put the
+DSpark kernels through the optimization loop (Finding 17).
