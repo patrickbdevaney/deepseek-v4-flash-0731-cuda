@@ -1,6 +1,11 @@
 // decode.cu — full 43-layer M=1 KV-cache DECODE driver for DeepSeek-V4-Flash-180B-REAP (Step 4 milestone 3).
 // Prefill-populates per-layer KV caches over [id0..id_{PS-1}], then autoregressively decodes M=1 tokens and
-// measures decode tok/s. Gate: the first decoded token (input id_{s-1} at pos s-1) must argmax==270 (the same
+// measures decode tok/s. Gate: the first decoded token must argmax == the expected id, which is
+// supplied via the DSV4_EXPECT env var (default 11111 = " Paris" for the canonical probe
+// "The capital of France is" = ids 0,671,6102,294,8760,344 on the 0731 checkpoint).
+// NOTE: the old hardcoded 270 belonged to the 180B project's DIFFERENT probe prompt
+// ("The capital of France is the powerhouse of" -> " the"). Keeping it would have reported a
+// spurious GATE FAIL on a numerically correct run. (the same
 // next-token the gated prefill produces at logits[s-1] for the canonical prompt). Memory-safe: weights load
 // native (WeightStore), scales/norms/wo_a re-dequant PER LAYER with release() — same peak as the prefill forward
 // (the per-token re-dequant is the first thing the native-dtype optimization removes).
@@ -76,7 +81,7 @@ int main(int argc, char** argv){
     const char* dir = argc>1?argv[1]:"/home/patrickd/models/DeepSeek-V4-Flash-180B";
     std::vector<int> ids;
     if(argc>2 && strchr(argv[2],',')){ char* tok=strtok(argv[2],","); while(tok){ ids.push_back(atoi(tok)); tok=strtok(nullptr,","); } }
-    else { for(int i=0;i<8;++i) ids.push_back((int[]){671,6102,294,8760,344,270,106523,294}[i]); }
+    else { for(int i=0;i<6;++i) ids.push_back((int[]){0,671,6102,294,8760,344}[i]); }  // BOS + "The capital of France is"
     int s = ids.size();
     int NDEC = argc>3?atoi(argv[3]):6;                 // tokens to decode (autoregressive) after prefill
     int NGEN0 = argc>5?atoi(argv[5]):24;               // spec-decode tokens (if head given)
@@ -231,7 +236,8 @@ int main(int argc, char** argv){
         printf("  step %d pos %d -> token %d  (%.1f ms%s)\n", step, pos, am, ms, step==0?" warmup":"");
     }
     double warm_ms = NDEC>1 ? total_ms/(NDEC-1) : total_ms;
-    printf("\n[decode] first decoded token argmax = %d  (expect 270)  -> %s\n", first_am, first_am==270?"GATE PASS":"GATE FAIL");
+    const char* ev=getenv("DSV4_EXPECT"); const int EXPECT = ev?atoi(ev):11111;   // 11111 = " Paris"
+    printf("\n[decode] first decoded token argmax = %d  (expect %d)  -> %s\n", first_am, EXPECT, first_am==EXPECT?"GATE PASS":"GATE FAIL");
     printf("[decode] generated:"); for(int g:gen) printf(" %d",g); printf("\n");
     printf("[decode] WARM decode: %.1f ms/tok = %.2f tok/s  (M=1 steady state, %d-step avg)\n", warm_ms, 1000.0/warm_ms, NDEC-1);
 
@@ -285,7 +291,7 @@ int main(int argc, char** argv){
             cudaEventRecord(g1); cudaEventSynchronize(g1); float ms=0; cudaEventElapsedTime(&ms,g0,g1);
             if(step>0){ gms+=ms; gt++; } if(step==0) gm0=am; ggen.push_back(am); cur=am; }
         double gwarm=gt?gms/gt:0;
-        printf("[graph] first token argmax=%d (expect 270) -> %s\n", gm0, gm0==270?"GATE PASS":"GATE FAIL");
+        printf("[graph] first token argmax=%d (expect %d) -> %s\n", gm0, EXPECT, gm0==EXPECT?"GATE PASS":"GATE FAIL");
         printf("[graph] generated:"); for(int x:ggen) printf(" %d",x); printf("\n");
         printf("[graph] WARM: %.1f ms/tok = %.2f tok/s  vs non-graph %.1f ms/tok -> %.2fx\n", gwarm, 1000.0/gwarm, warm_ms, warm_ms/gwarm);
     }
@@ -436,5 +442,5 @@ int main(int argc, char** argv){
                ms_per_tok, ms_per_tok>0?1000.0/ms_per_tok:0, warm_ms, 1000.0/warm_ms, ms_per_tok>0?warm_ms/ms_per_tok:0);
     }
     size_t fb,tb; cudaMemGetInfo(&fb,&tb); printf("[decode] mem %.1f/%.1f GiB\n",(tb-fb)/1073741824.0,tb/1073741824.0);
-    return first_am==270?0:1;
+    return first_am==EXPECT?0:1;
 }

@@ -17,7 +17,8 @@ Last updated: 2026-08-06.
 | **A1** | oracle reproducible; `ARCH_DELTA` + `MODEL_INVENTORY` complete | **PARTIAL** — docs done, checkpoint down + integrity-checked, chat format specced (`CHAT_FORMAT.md`); oracle identified (`~/dspark-cuda-reap-finetune/ref/`) but not yet re-run against 0731 weights |
 | **K** | unit kernel gates vs torch oracle | **PASS** — 20/20 on ported sources, goldens regenerated |
 | **L1** | loads to device, peak < ~105 GB | **PASS** — 100.400 GiB / 45,821 tensors, zero-copy, GPU read verified vs file bytes |
-| G1–G9 | kernel gates | G1/G2/G5/G6/G7 covered by Gate K; G3/G4/G8/G9 in progress on real 0731 weights |
+| **G1–G8** | kernel gates + full AR forward | **PASS** — G1/G2/G5/G6/G7 via Gate K; **G3/G4/G8 via the full-model run**: "The capital of France is" → **" Paris. The capital of Spain is Madrid"** |
+| G9 | CUDA graph capture | ported, not yet re-gated on 0731 |
 | D1 | DSpark decode tok/s + acceptance | not started |
 | S1 | multi-turn tool-calling session | not started |
 
@@ -40,7 +41,9 @@ Last updated: 2026-08-06.
 | `B_tok` | **11.202 GB/token** |
 | Achievable BW | **240 GB/s measured** (212 contended) — not the ~200 inherited |
 | AR wall | **21.42 tok/s** @ 240 GB/s · 24.37 @ 273 spec |
-| Direct anchor (identical `B_tok`, same box, measured) | **7.89 tok/s / 126.7 ms/tok = 37% of achievable BW** |
+| **MEASURED base AR decode (0731)** | **7.81 tok/s / 128.1 ms/tok = 87.5 GB/s = 36.4% of achievable** |
+| Prior 180B anchor, for comparison | 7.89 tok/s / 126.7 ms/tok — **transferred to within 1.1%** |
+| M=5 verify | 336.1 ms = **2.62×** an M=1 decode (model says 2.120×) — ~5.6 GB excess traffic |
 | Base AR band after kernel work | **15–19 tok/s** (70–80% of achievable) |
 | DSpark band (α-sensitive, k*≈2–3) | **22–36 tok/s**, centred ~28 |
 | KV at fp8 | 3.36 KiB/token → 3.21 GiB at 1M context; **~105 MiB at 32K** |

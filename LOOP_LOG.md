@@ -261,3 +261,84 @@ weights in page cache — that is the whole reason peak stays near 100 GiB inste
 A warm restart therefore re-reads from disk by design. Making startup fast is a *separate*
 optimisation (and would trade against the memory constraint), not something the current loader
 regresses on. Recorded rather than silently treated as met.
+
+---
+
+## 2026-08-06 — Gate G8 PASS: the full model runs correctly on 0731, and the anchor holds
+
+### The run
+
+```
+[decode] loaded 100.40 GiB, 45821 tensors
+[decode] structs built. mem 111.3/122.8 GiB
+[decode] prefill 5 positions... done.
+  step 0 pos 5 -> token 11111  (125.6 ms warmup)
+  step 1 ... step 7                (124.0 - 135.8 ms)
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 128.1 ms/tok = 7.81 tok/s  (M=1 steady state, 7-step avg)
+[spec-verify] M=5 verify in ONE forward: 336.1 ms  -> 1.91x if all accepted
+[spec-verify] MATCH 5/5 -> PASS   (M=K verify == K sequential decodes)
+[decode] mem 111.9/122.8 GiB
+```
+
+Detokenised: prompt `"The capital of France is"` →
+
+> **"The capital of France is Paris. The capital of Spain is Madrid"**
+
+**The full 43-layer stack — MLA + KV compressor + DSA indexer + hyper-connections/Sinkhorn +
+MXFP4 160-expert MoE + hash routing + shared expert — is numerically correct end-to-end on the
+0731 checkpoint.** Gate G8 PASS.
+
+**Stale-gate correction.** The run printed `GATE FAIL` while being correct. The binary hardcoded
+`argmax == 270`, which was the 180B project's expectation for a *different* probe prompt
+("The capital of France is the powerhouse of" → `" the"`). Our prompt is
+`"The capital of France is"`, whose correct continuation is `" Paris"` = **11111** — exactly what
+the model produced. Replaced the hardcoded constant with a `DSV4_EXPECT` env var (default 11111)
+so the assertion travels with the prompt instead of silently rotting. Left as a caution: a gate
+that encodes a *prompt-specific* answer as a global constant will eventually report a false
+failure on correct code, which is as harmful as a false pass.
+
+### Finding 11 — the ROOFLINE §3 anchor transferred to within 1.1%
+
+| | ms/tok | tok/s | effective BW | % of 240 achievable |
+|---|---|---|---|---|
+| 180B, prior project | 126.7 | 7.89 | 88.4 GB/s | 36.8% |
+| **0731, measured here** | **128.1** | **7.81** | **87.5 GB/s** | **36.4%** |
+
+The prediction was that the identical `B_tok` (11.202 GB, matched component-by-component) makes
+the prior measurement a *direct* anchor rather than a scaled one. It came in **1.1% off**. This
+retires directive risk §13.3 ("the speed projection is weakly anchored") empirically rather than
+by argument, and it confirms the whole ported stack behaves as the byte model says it should.
+
+**Base AR is therefore 7.81 tok/s at 36.4% of achievable bandwidth, against a 21.4 tok/s wall.**
+The 15–19 tok/s band in `ROOFLINE.md` stands, and the work to reach it is the Phase-7 ladder.
+
+### Finding 12 — the `c_v(5) = 2.6x` anomaly REPRODUCES, and now it is ours to fix
+
+`ROOFLINE.md` §5 flagged an unexplained inherited discrepancy: the prior project measured an M=5
+verify at 2.6x an M=1 decode where the byte model predicts 2.120x. **It reproduces exactly here:
+336.1 ms / 128.1 ms = 2.62x.**
+
+Quantified against our own measured bandwidth:
+
+```
+ideal-dedup B_verify(5)          = 23,754 MB  -> 271.8 ms at the measured 87.5 GB/s
+actual                                          336.1 ms
+implied bytes moved              = 29,375 MB
+EXCESS                           =  5,622 MB   (+23.7%)
+```
+
+So the verify pass moves ~5.6 GB more than an expert-deduplicated verify should. That is close to
+(though not exactly) one extra full pass over the top-6 routed experts (3,449 MB) plus change,
+which is consistent with the standing hypothesis — **the M=K verify is re-reading expert weights
+per (token, expert) instead of once per activated expert.** The prior project's research doc
+named this and left an explicit unresolved action: *audit whether `k_grouped_w4a8` dedups by
+expert*. That audit is now the top open item, and unlike before it is measurable end-to-end here.
+
+Worth noting what this is **not**: it is not a correctness problem. `MATCH 5/5` — the M=K verify
+produces bit-identical tokens to 5 sequential decodes. It is purely wasted bandwidth.
+
+If the dedup lands, `c_v(5)` goes 2.62 → ~2.12 and, at unchanged acceptance, the
+`S(k)` table's k=2–3 optimum sharpens. Note the run already reports **1.91x if all 5 accepted**,
+which is the ceiling, not the expectation — realised speed-up depends on the acceptance rate α,
+still unmeasured.
