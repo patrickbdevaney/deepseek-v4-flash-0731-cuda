@@ -38,7 +38,6 @@ void dspark_markov(float* logits_bias, float* markov_embed, const int* token_ids
                    cudaStream_t stream){
     k_gather_rows_bf16<<<((size_t)n*rank+255)/256,256,0,stream>>>(markov_embed, (const __nv_bfloat16*)markov_w1, token_ids, n, rank);
     gemm_bf16w(logits_bias, markov_embed, markov_w2, n, vocab, rank, stream);      // C[n,vocab] = E[n,rank] @ W2[vocab,rank]^T
-    CU(cudaStreamSynchronize(stream));
 }
 
 // ---- Piece 2: tap mean-pool over hc -> main_hidden[:, slot*d:] ----
@@ -55,33 +54,63 @@ void dspark_tap_pool(float* main_hidden, const float* h, int s, int hc, int d, i
 __global__ void k_add_bias(float* logits, const float* bias, int n, int vocab){    // logits[t,:]+=bias[t,:]
     size_t i=blockIdx.x*(size_t)blockDim.x+threadIdx.x; if(i<(size_t)n*vocab) logits[i]+=bias[i];
 }
+// Device-side greedy argmax over one logits row. One block per row; grid-stride + shared reduce.
+__global__ void k_argmax_row(int* __restrict__ out, const float* __restrict__ logits,
+                             int vocab, int row_stride, const int* __restrict__ rows, int nrow){
+    const int r = blockIdx.x; if (r >= nrow) return;
+    const float* lg = logits + (size_t)rows[r] * row_stride;
+    __shared__ float sv[256]; __shared__ int si[256];
+    float bv = -1e30f; int bi = 0;
+    for (int v = threadIdx.x; v < vocab; v += blockDim.x) if (lg[v] > bv) { bv = lg[v]; bi = v; }
+    sv[threadIdx.x] = bv; si[threadIdx.x] = bi; __syncthreads();
+    for (int k = blockDim.x >> 1; k > 0; k >>= 1) {
+        if (threadIdx.x < k && sv[threadIdx.x + k] > sv[threadIdx.x]) {
+            sv[threadIdx.x] = sv[threadIdx.x + k]; si[threadIdx.x] = si[threadIdx.x + k]; }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) out[r] = si[0];
+}
+// out_ids[t,i+1] <- argmax; also copy first_ids into out_ids[t,0]
+__global__ void k_seed_first(int* out_ids, const int* first_ids, int s, int block){
+    int t = blockIdx.x*blockDim.x + threadIdx.x; if (t < s) out_ids[(size_t)t*(block+1)] = first_ids[t];
+}
+// gather out_ids[t,i] -> cur[t]; and the flat row index of logits[t,i]
+__global__ void k_pick(int* cur, int* rows, const int* out_ids, int s, int block, int i){
+    int t = blockIdx.x*blockDim.x + threadIdx.x; if (t >= s) return;
+    cur[t]  = out_ids[(size_t)t*(block+1) + i];
+    rows[t] = t*block + i;
+}
+__global__ void k_store(int* out_ids, const int* am, int s, int block, int i){
+    int t = blockIdx.x*blockDim.x + threadIdx.x; if (t < s) out_ids[(size_t)t*(block+1) + i + 1] = am[t];
+}
+
 void dspark_forward_head(int* output_ids, const float* x_block, const int* first_ids,
                          const float* hc_head_fn, const float* hc_head_scale, const float* hc_head_base,
                          const float* norm, const void* lm_head, const void* markov_w1, const void* markov_w2,
                          int s, int block, int hc, int d, int vocab, int rank, float eps, cudaStream_t stream){
     const int N=s*block;
-    float *collapsed,*logits,*bias,*membed; int *cur;
+    float *collapsed,*logits,*bias,*membed; int *cur,*rows,*am;
     CU(cudaMalloc(&collapsed,(size_t)N*d*4)); CU(cudaMalloc(&logits,(size_t)N*vocab*4));
-    CU(cudaMalloc(&bias,(size_t)s*vocab*4)); CU(cudaMalloc(&membed,(size_t)s*rank*4)); CU(cudaMalloc(&cur,(size_t)s*4));
+    CU(cudaMalloc(&bias,(size_t)s*vocab*4)); CU(cudaMalloc(&membed,(size_t)s*rank*4));
+    CU(cudaMalloc(&cur,(size_t)s*4)); CU(cudaMalloc(&rows,(size_t)s*4)); CU(cudaMalloc(&am,(size_t)s*4));
     // hc_head (hc 4->1) -> norm -> lm_head  over all N=s*block block-positions
     hc_head(collapsed, x_block, hc_head_fn, hc_head_scale, hc_head_base, N, hc, d, 1e-6f, stream);
     rmsnorm(collapsed, collapsed, norm, N, d, eps, true, stream);
     gemm_bf16w(logits, collapsed, lm_head, N, vocab, d, stream);            // [s,block,vocab]
-    CU(cudaStreamSynchronize(stream));
-    // host AR loop: out[:,0]=first_ids; for i: markov(out[:,i]) bias into logits[:,i]; out[:,i+1]=argmax
-    std::vector<int> out((size_t)s*(block+1)); std::vector<int> fid(s);
-    CU(cudaMemcpy(fid.data(),first_ids,(size_t)s*4,cudaMemcpyDeviceToHost));
-    for(int t=0;t<s;++t) out[(size_t)t*(block+1)+0]=fid[t];
-    std::vector<float> lg((size_t)s*vocab);
+
+    // DEVICE-SIDE greedy AR over the block (LOOP_LOG Finding 27). This loop used to run on the
+    // HOST: per position it synced, copied the whole 129,280-float logits row D2H, and scanned it
+    // on the CPU — 5 syncs, 2.6 MB of D2H and 5 host scans per draft, on the critical path of a
+    // kernel chain that is otherwise fully asynchronous. The dependency (position i+1 needs the
+    // argmax of position i) is real, but it is a DEVICE dependency; nothing needs to reach the host
+    // until the block is finished.
+    k_seed_first<<<(s+63)/64,64,0,stream>>>(output_ids, first_ids, s, block);
     for(int i=0;i<block;++i){
-        for(int t=0;t<s;++t) { int id=out[(size_t)t*(block+1)+i]; CU(cudaMemcpy(cur+t,&id,4,cudaMemcpyHostToDevice)); }
+        k_pick<<<(s+63)/64,64,0,stream>>>(cur, rows, output_ids, s, block, i);
         dspark_markov(bias, membed, cur, markov_w1, markov_w2, s, vocab, rank, stream);
-        // logits[:, i, :] += bias   (logits row for position i of each anchor)
         for(int t=0;t<s;++t) k_add_bias<<<(vocab+255)/256,256,0,stream>>>(logits+((size_t)t*block+i)*vocab, bias+(size_t)t*vocab, 1, vocab);
-        CU(cudaStreamSynchronize(stream));
-        for(int t=0;t<s;++t){ CU(cudaMemcpy(lg.data()+(size_t)t*vocab, logits+((size_t)t*block+i)*vocab, (size_t)vocab*4, cudaMemcpyDeviceToHost)); }
-        for(int t=0;t<s;++t){ const float* r=lg.data()+(size_t)t*vocab; int a=0; for(int v=1;v<vocab;++v) if(r[v]>r[a])a=v; out[(size_t)t*(block+1)+i+1]=a; }
+        k_argmax_row<<<s,256,0,stream>>>(am, logits, vocab, vocab, rows, s);
+        k_store<<<(s+63)/64,64,0,stream>>>(output_ids, am, s, block, i);
     }
-    CU(cudaMemcpy(output_ids,out.data(),(size_t)s*(block+1)*4,cudaMemcpyHostToDevice));
-    cudaFree(collapsed);cudaFree(logits);cudaFree(bias);cudaFree(membed);cudaFree(cur);
+    cudaFree(collapsed);cudaFree(logits);cudaFree(bias);cudaFree(membed);cudaFree(cur);cudaFree(rows);cudaFree(am);
 }
