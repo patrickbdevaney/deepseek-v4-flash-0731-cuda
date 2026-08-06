@@ -161,3 +161,39 @@ User granted sudo and push access. Both Gate-R1 open items #1 and #2 resolved.
   occupancy, warp-stall reasons, and cache hit rates — which is what the compute-bound-dequant
   hypothesis actually needs to be tested against.
 - **Recorded as a standing rule** in `README.md`, `STATUS.md` and `HARDWARE.md` §3.
+
+### Checkpoint acquisition — identity and integrity verified (directive §13.6)
+
+- All 48 shards + metadata downloaded, no `.incomplete` files, 101 GiB on disk (129 GiB free).
+- **`sha256sum -c SHA256SUMS`: 79/79 OK, 0 failures.**
+- **Cross-check against the remotely-harvested headers**: 45,821 tensors on both sides, keys
+  identical, **0 dtype/shape mismatches**, byte total reconciles to 107,803,320,952. So the
+  Phase-1 roofline — computed before the download finished — is validated against the real
+  artifact, not merely against repo metadata.
+- Provenance re-confirmed from the shipped manifest: `source_model:
+  deepseek-ai/DeepSeek-V4-Flash-0731`, `source_revision: 9e165c30…`, structural validation
+  `status: pass`. This is the 0731 lineage, not the pre-0731 preview and not an NVFP4 requant.
+
+**Process note (small, but it cost a confusing minute):** an `until ! pgrep -f "sha256sum -c"`
+wait loop **never terminates**, because the loop's own shell command line contains the pattern
+and `pgrep` matches itself. Verify completion from the output file, or use `pgrep -f` with a
+pattern that cannot match the waiter.
+
+### Finding 10 — `reasoning_effort` and `thinking_mode` are orthogonal, and one of them wrecks the prefix cache
+
+- **Finding.** Directive §9 frames the model as using "`low`/`high`/`max` reasoning_effort, **not**
+  a binary thinking toggle". `encoding_dsv4.py` has **both**: `thinking_mode ∈ {chat, thinking}`
+  (binary) *and* `reasoning_effort ∈ {low, high, max}` — and `reasoning_effort` has **no effect**
+  in chat mode.
+- **Consequence for the server.** Both must be exposed per-request; neither substitutes for the
+  other. Details in `CHAT_FORMAT.md`.
+- **Design consequence, worth knowing before Phase 6.** `reasoning_effort` is realised *purely as
+  a text prefix prepended before the system message* (default `low` = no prefix at all). Because
+  it sits at the very front of the prompt, **changing `reasoning_effort` invalidates the entire
+  prefix cache**, while changing `thinking_mode` only perturbs the tail. Prefix caching is called
+  out in the directive as a high-leverage Phase-6 feature; this interacts with it directly.
+- **Secondary.** Tool calls are **DSML**, not JSON, and each parameter carries
+  `string="true|false"` — the only signal separating the literal string `"5"` from the number `5`.
+  Neither gemma's nor Laguna's parser has this shape; §9's "do not assume it matches gemma's or
+  Laguna's" is correct and load-bearing. Four golden encode vectors ship in `encoding/tests/`,
+  which gives Gate S1 a byte-exact acceptance test.
