@@ -15,8 +15,9 @@ Last updated: 2026-08-06.
 | **P0** | can cite the source file for every architectural constant | **PASS** — `MODEL_INVENTORY.md`, all from `docs/config.json` + 48 shard headers |
 | **R1** | `ROOFLINE.md` with measured `B_tok`, AR wall, anchors, `E_frac(k)`, DSA unknown flagged | **PASS** — `ROOFLINE.md` |
 | **A1** | oracle reproducible; `ARCH_DELTA` + `MODEL_INVENTORY` complete | **PARTIAL** — docs done, checkpoint down + integrity-checked, chat format specced (`CHAT_FORMAT.md`); oracle identified (`~/dspark-cuda-reap-finetune/ref/`) but not yet re-run against 0731 weights |
-| L1 | loads to device, peak < ~105 GB, cached restart < 60 s | not started (blocked on download) |
-| G1–G9 | kernel gates | not started; **G1–G7 substantially pre-built and pre-gated** in the prior repo (see `ARCH_DELTA.md` §2) |
+| **K** | unit kernel gates vs torch oracle | **PASS** — 20/20 on ported sources, goldens regenerated |
+| **L1** | loads to device, peak < ~105 GB | **PASS** — 100.400 GiB / 45,821 tensors, zero-copy, GPU read verified vs file bytes |
+| G1–G9 | kernel gates | G1/G2/G5/G6/G7 covered by Gate K; G3/G4/G8/G9 in progress on real 0731 weights |
 | D1 | DSpark decode tok/s + acceptance | not started |
 | S1 | multi-turn tool-calling session | not started |
 

@@ -197,3 +197,67 @@ pattern that cannot match the waiter.
   Neither gemma's nor Laguna's parser has this shape; §9's "do not assume it matches gemma's or
   Laguna's" is correct and load-bearing. Four golden encode vectors ship in `encoding/tests/`,
   which gives Gate S1 a byte-exact acceptance test.
+
+---
+
+## 2026-08-06 (later still) — Gate K PASS, Gate L1 PASS on the 0731 checkpoint
+
+### Gate K — PASS (20/20 units)
+
+Sources copied from `~/dspark-cuda-reap-finetune` (left read-only). Goldens regenerated from
+scratch in a CPU-torch container (`vllm-dflash-thor:ddtree`, plain `docker run`, never
+`--runtime nvidia`). All pass: `fp8_block_gemm` (2e-5), TC fp8 mma (cosine 1.000000, 18.09x over
+the scalar path), `hc_sinkhorn` (1e-7), `sparse_attn` (3.7e-3, bf16 rounding), `rope` (2.4e-7),
+`rmsnorm` (7e-7), `act_quant`, `ogroup_gemm`, **`fp4_gemm` (MXFP4) 1e-5**, `router`
+(idx_mismatch=0), `moe` — per-token, batched, device-route and batched+TC all cosine
+**1.0000000** — `hc`, `compressor` (+overlap, +full, +rotate), `hadamard`, `index_score`,
+`act_quant_fp4`, `indexer`, `yarn`.
+
+**The MXFP4 path passing unchanged is the concrete confirmation of Finding 3.** No new dequant
+kernel was needed or written.
+
+**Fix required to build at all:** the prior repo's `scripts/build_gate.sh` omitted
+`kernels/dscratch.cu` and no longer linked (`undefined reference to g_arena*`). It had bit-rotted
+after the arena was introduced. Repaired here.
+
+### Gate P0/A1 addendum — structural validation on the real checkpoint
+
+`tools/inspect_weights.cpp` (pure C++/mmap, no CUDA) first reported **16 MISSING** — all in MTP.
+Root cause: its expectations still encoded the **180B**'s plain nextn head
+(`enorm`/`hnorm`/`e_proj`/`h_proj`/`norm`/`hc_head_fn` on every stage), which does not exist in
+0731. Rewrote them for the real DSpark chain. Now:
+
+```
+shards=48  tensors=45821
+TOTAL 107.803 GB = 100.400 GiB   (matches index total_size)
+structural validation: checked=1443  missing=0  shape_mismatch=0   RESULT: PASS
+```
+
+Every inferred DSpark shape was confirmed by the checkpoint:
+`mtp.0.main_proj [4096, 12288]` — exactly `3 × DIM`, i.e. the three tapped backbone layers
+(40/41/42) concatenated, not summed or pooled before projection — and
+`mtp.2.confidence_head.proj [1, 4352]` = `DIM + HEAD_DIM/2`.
+
+### Gate L1 — PASS
+
+```
+integrated=1 hostRegisterSupported=1 canUseHostPtrForRegMem=1 canMapHostMem=1
+loaded 100.400 GiB, 45821 tensors -> device pointers
+GPU read of layers.1.attn.wq_a.weight[:32]: MATCH file bytes
+Full-model weight->device load (single-copy pread, 100.4 GiB): PASS
+```
+
+- Loaded byte count equals the index's `total_size` exactly.
+- **Zero-copy**: Thor reports `integrated=1` and the weights are host-registered and mapped, so
+  there is no second 100 GiB device allocation. This is what makes the model fit at all.
+- Peak system memory ~102 GiB used of 122, bottoming out at **20 GiB available** — consistent
+  with `ROOFLINE.md`'s predicted 16.6 GiB headroom plus the process's own overhead.
+- Ran from a **cold page cache** (`drop_caches` first) so the timing is worst-case, and detached
+  per the hard rule.
+
+**Note on the "cached second start under 60 s" half of the directive's L1 criterion:** the loader
+deliberately does single-copy `pread` + `posix_fadvise(DONTNEED)` so it does *not* leave the
+weights in page cache — that is the whole reason peak stays near 100 GiB instead of doubling.
+A warm restart therefore re-reads from disk by design. Making startup fast is a *separate*
+optimisation (and would trade against the memory constraint), not something the current loader
+regresses on. Recorded rather than silently treated as met.
