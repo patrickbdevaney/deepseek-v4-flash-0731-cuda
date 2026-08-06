@@ -772,3 +772,47 @@ improved 129.1 → 118.8 ms/tok. Findings 16/17 are unchanged: the draft head re
 The K-sweep reconfirms Finding 14 on the faster kernels (`slide` 2.739x, `r128` 2.461x,
 `r4` 2.510x — DSA still not the driver) and the K≥2 step penalty persists at +0.700 at K=2, so
 Finding 15's mechanism remains open and is unaffected by this change.
+
+### Optimization #2 — wave quantisation in the small-N GEMVs: NEGATIVE RESULT, reverted
+
+Applied Finding 20's fix: made `fp8_gemv_m1_kernel` grid-stride and capped the launch so it is a
+whole number of waves. Two variants, neither adopted.
+
+| variant | wq_a (N=1024) | wq_b (N=32768) | wkv (N=512) | wo_b (N=4096) |
+|---|---:|---:|---:|---:|
+| original (one warp per row) | 45.1 GB/s | **214.6** | 129.7 | **225.5** |
+| clamp to one full wave | 41.8 | **186.3** | 124.9 | **194.7** |
+| round down to whole waves | 41.6 / 156.8 (!) | 192.4 / 187.7 | 127.3 / 127.1 | 212.3 / 207.0 |
+
+**Clamping to a single wave is clearly worse** on the two large shapes — it strips memory-level
+parallelism from `wq_b` and `wo_b`, which were already at 89–94%. Rounding down to whole waves
+avoids most of that harm but shows **no demonstrable gain**: back-to-back runs of the same binary
+give `wq_a` as 41.6 and 156.8 GB/s, a 3.8x swing. **Reverted to the original launch.** The
+grid-stride loop is retained because it is a no-op when `blocks == want`, so the mechanism stays
+available without changing behaviour.
+
+**Two lessons, and the second is the more important:**
+
+1. **The bench is not trustworthy for the small shapes.** A 4.19 MB weight is small enough that
+   allocation/first-touch effects dominate a 40-rep loop. It needs a longer warm-up and repeat
+   trials before it can adjudicate anything at that size. Its verdict on the *large* shapes (and on
+   Opt #1, which the full model then confirmed at 1.107x) has held up.
+
+2. **Finding 20 was right about the mechanism and wrong about the priority.** I ranked it #2 on the
+   *efficiency deficit* alone, having written one paragraph earlier that the correct ranking is
+   `bytes x (1 - efficiency)` — and then not applied it. The arithmetic I should have done first:
+
+   | shape | share of `B_tok` | efficiency | recoverable |
+   |---|---:|---:|---:|
+   | `wq_a` | 1.6% | 19% | ~1.3% |
+   | `wkv`  | 0.8% | 54% | ~0.4% |
+   | **total** | **2.4%** | | **~1.7%** |
+
+   **The entire lever is worth under 2% of the decode step**, so it could never have paid for the
+   risk of perturbing `wq_b`/`wo_b`, which together carry ~26% of `B_tok` at 89–94%. Wave
+   quantisation is real and `ncu` diagnosed it correctly; it simply is not worth fixing here.
+   Demoted from #2 to last.
+
+The revised standing order is in `OPTIMIZATION_LOG.md`: the DSpark draft head (Finding 17, ~6x off
+roofline and gating the whole speculative win) and the M>=2 step penalty (Finding 15, mechanism
+still open) are both worth far more than anything left in the dense GEMV path.

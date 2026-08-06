@@ -44,24 +44,51 @@ __global__ void fp8_block_gemm_kernel(float* __restrict__ C,
 // M=1 GEMV: one warp per output n. Lanes read the B[n] row uint-vectorized (4 fp8/load), coalesced (32 lanes
 // = 128 contiguous bytes); per-128-block scales applied per element; single warp-reduce. Bandwidth-bound —
 // beats the m16-tile TC at M=1 (which is mma-latency bound). Gated cosine vs fp8_block_gemm (tests/gate_fp8_gemv).
+// GRID-STRIDE (LOOP_LOG Finding 20). This used to launch exactly ceil(N*32/256) blocks — one warp
+// per output row, grid sized by the problem. At the small-N shapes that is a fractional number of
+// waves, and the tail wave costs almost a full kernel duration for a sliver of the work:
+//   wkv  N=512   ->   64 blocks = 0.53 waves -> 54% of achievable
+//   wq_a N=1024  ->  128 blocks = 1.07 waves -> 19%   (ncu: "up to 50.0% of the total runtime")
+//   wo_b N=4096  ->  512 blocks = 4.3  waves -> 94%
+//   wq_b N=32768 -> 4096 blocks = 34   waves -> 89%
+// Efficiency tracks wave count, not shape. Now the grid is capped at exactly the number of blocks
+// the device can hold resident, and each warp strides over its share of rows — so the launch is a
+// whole number of waves by construction and the tail disappears. Math per row is unchanged, so this
+// gates cosine-1.0 (tests/gate_fp8_gemv).
 __global__ void fp8_gemv_m1_kernel(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
                                    const uint8_t* __restrict__ B, const float* __restrict__ bs, int N, int K){
-    int warp = (blockIdx.x*blockDim.x + threadIdx.x) >> 5; if (warp >= N) return; int n = warp;
-    int lane = threadIdx.x & 31; int KB = K/128;
-    const uint8_t* Brow = B + (size_t)n*K; const float* bsr = bs + (size_t)(n/128)*KB;
-    float acc = 0.f;
-    for (int kb = 0; kb < KB; ++kb){
-        int base = kb*128 + lane*4;                       // 32 lanes * 4 = 128 contiguous bytes
-        unsigned av = *(const unsigned*)(A + base);        // 4 fp8 activations
-        unsigned bv = *(const unsigned*)(Brow + base);     // 4 fp8 weights
-        float sub = 0.f;
+    const int lane = threadIdx.x & 31; const int KB = K/128;
+    const int warp0  = (blockIdx.x*blockDim.x + threadIdx.x) >> 5;
+    const int stride = (gridDim.x*blockDim.x) >> 5;
+    for (int n = warp0; n < N; n += stride) {
+        const uint8_t* Brow = B + (size_t)n*K; const float* bsr = bs + (size_t)(n/128)*KB;
+        float acc = 0.f;
+        for (int kb = 0; kb < KB; ++kb){
+            int base = kb*128 + lane*4;                       // 32 lanes * 4 = 128 contiguous bytes
+            unsigned av = *(const unsigned*)(A + base);        // 4 fp8 activations
+            unsigned bv = *(const unsigned*)(Brow + base);     // 4 fp8 weights
+            float sub = 0.f;
+            #pragma unroll
+            for (int i = 0; i < 4; ++i) sub += dec_e4m3((av>>(i*8))&0xff) * dec_e4m3((bv>>(i*8))&0xff);
+            acc += sub * as[kb] * bsr[kb];
+        }
         #pragma unroll
-        for (int i = 0; i < 4; ++i) sub += dec_e4m3((av>>(i*8))&0xff) * dec_e4m3((bv>>(i*8))&0xff);
-        acc += sub * as[kb] * bsr[kb];
+        for (int o = 16; o > 0; o >>= 1) acc += __shfl_down_sync(0xffffffff, acc, o);
+        if (lane == 0) C[n] = acc;
     }
-    #pragma unroll
-    for (int o = 16; o > 0; o >>= 1) acc += __shfl_down_sync(0xffffffff, acc, o);
-    if (lane == 0) C[n] = acc;
+}
+// Blocks that exactly fill the device for this kernel: SMs x max resident blocks/SM. Queried once.
+__attribute__((unused)) static int gemv_m1_full_grid(int threads){
+    static int g = 0;
+    if (!g) {
+        int dev = 0, sms = 20, per_sm = 1;
+        cudaGetDevice(&dev);
+        cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, dev);
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&per_sm, (const void*)fp8_gemv_m1_kernel, threads, 0);
+        if (per_sm < 1) per_sm = 1;
+        g = sms * per_sm;
+    }
+    return g;
 }
 // M=K GEMV (small M, e.g. spec-decode block-verify M=5): one warp per output n reads the B[n] weight row ONCE
 // (uint-vectorized) and dots it against ALL M activation rows -> the weight bandwidth is amortized M× with no
@@ -97,7 +124,16 @@ void fp8_block_gemm(float* C, const uint8_t* A_fp8, const float* a_s,
                     int M, int N, int K, cudaStream_t stream) {
     // M=1 decode: vectorized GEMV (bandwidth-bound, beats the mma-latency-bound TC at M=1). K%128==0 always here.
     if (g_tc_fp8 && M == 1 && (K % 128 == 0) && getenv("NO_GEMV")==nullptr) {
-        int threads=256; fp8_gemv_m1_kernel<<<(N*32+threads-1)/threads, threads, 0, stream>>>(C, A_fp8, a_s, B_fp8, b_s, N, K); return; }
+        int threads=256;
+        // NEGATIVE RESULT — see LOOP_LOG.md Opt #2. Two wave-quantisation schemes were tried on
+        // top of the grid-stride kernel and NEITHER beat this plain one-warp-per-row launch:
+        //   clamp to a single full wave      -> wq_b 214.6 -> 186.3 GB/s, wo_b 225.5 -> 194.7 (worse)
+        //   round down to whole waves        -> within run-to-run noise; not demonstrable
+        // The grid-stride loop is retained (it is a no-op when blocks == want, since the stride then
+        // covers N in one pass) so the mechanism stays available, but the launch is the original.
+        int blocks = (N*32+threads-1)/threads;                     // one warp per output row
+        (void)gemv_m1_full_grid;                                   // kept for future experiments
+        fp8_gemv_m1_kernel<<<blocks, threads, 0, stream>>>(C, A_fp8, a_s, B_fp8, b_s, N, K); return; }
     // small-M M=K GEMV (env GEMV_MK=1): A/B'd SLOWER than TC at M>=2 (334->362 ms verify) — TC reads the weight
     // ONCE *and* does the M×N compute via mma, while this GEMV does M scalar dots/weight-read. Kept as a gated
     // reference/negative result; the M=1 GEMV above still wins (trivial compute at M=1). Default OFF for M>=2.
