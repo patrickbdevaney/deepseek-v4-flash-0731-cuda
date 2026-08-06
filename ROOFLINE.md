@@ -130,9 +130,14 @@ the directive warned about, and it is the dominant term.
 
 ### The autoregressive wall
 
+Achievable bandwidth is **measured, not inherited** — `tools/bw_probe.cu` gives **240 GB/s**
+(212 GB/s under memory contention), well above the ~200 GB/s planning figure carried from prior
+projects. See `HARDWARE.md` §2.
+
 ```
-@ 200 GB/s (achievable) :  17.85 tok/s   (56.0 ms/tok)
-@ 273 GB/s (peak)       :  24.37 tok/s   (41.0 ms/tok)
+@ 212 GB/s (contended)  :  18.92 tok/s   (52.8 ms/tok)
+@ 240 GB/s (achievable) :  21.42 tok/s   (46.7 ms/tok)   <- the operative wall
+@ 273 GB/s (spec peak)  :  24.37 tok/s   (41.0 ms/tok)
 ```
 KV traffic is excluded from `B_tok` above and is negligible by comparison — at 8K context it adds
 ~27 MB/token-step of cache reads against 11.2 GB of weights, under 0.3%.
@@ -154,7 +159,7 @@ Therefore the prior project's **measured** result transfers directly, with no sc
 | | value |
 |---|---|
 | Measured warm decode, 180B, this box | **126.7 ms/tok = 7.89 tok/s** |
-| Implied effective bandwidth | **88.4 GB/s = 32% of 273 GB/s peak** |
+| Implied effective bandwidth | **88.4 GB/s = 37% of the 240 GB/s achievable** (32% of spec peak) |
 | Optimisation history behind it | 9 gated wins, 0.50 → 7.89 tok/s (15.9×), full 43-layer CUDA graph captured bit-exact, measured at parity ⇒ GPU-bound, not launch-bound |
 
 > Note: the prior project's own docs state "8.77 GB/tok → ~25% of peak". That figure undercounts;
@@ -163,19 +168,20 @@ Therefore the prior project's **measured** result transfers directly, with no sc
 > smaller than the prior write-up claims. `tools/inventory.py --model-dir ~/models/DeepSeek-V4-Flash-180B`
 > reproduces this.
 
-**Well-written batch-1 decode kernels reach 70–80% of peak.** Closing 32% → 70–80% is a
-**2.2–2.5×** kernel-efficiency win, landing base AR decode at **17.5–19.6 tok/s** — which is the
-roofline wall (17.9 @ 200 GB/s). The wall and the target coincide, so there is no room for
-optimism beyond it: **the base AR ceiling on this hardware is ~18 tok/s, and speculation is the
-only route past it.**
+**Well-written batch-1 decode kernels reach 70–80% of achievable bandwidth.** Closing
+37% → 70–80% is a **1.9–2.2×** kernel-efficiency win, landing base AR decode at
+**15.0–17.1 tok/s**, against a wall of 21.4 tok/s. Unlike the earlier 200 GB/s framing, the
+target and the wall no longer coincide — there is genuine (if modest) room above the 70–80%
+band, but **the base AR ceiling on this hardware is ~21 tok/s, and speculation is the only route
+past it.**
 
 ### Projected band (base AR, no speculation)
 
 | | tok/s | basis |
 |---|---|---|
 | Today, ported as-is | **~7.9** | direct measurement, identical `B_tok` |
-| Realistic after kernel work | **12–18** | 45–70% of achievable BW |
-| Hard ceiling | **17.9 (200 GB/s) / 24.4 (273 GB/s)** | roofline |
+| Realistic after kernel work | **15–19** | 70–80% of the measured 240 GB/s |
+| Hard ceiling | **21.4** (240 GB/s measured) / 24.4 (273 spec) | roofline |
 
 **Confidence: HIGH** — unusually so for a Phase-0 projection, and much higher than the directive
 anticipated. This is not an MLA/DSA/DSpark extrapolation from a GQA model; it is the same
@@ -249,8 +255,8 @@ Speedup `S(k) = a(k)/c_v(k)`, with `a(k) = Σ_{j=1..k} α^j + 1`:
   `dspark_block_size = 5` is the mechanism's own natural width and is the value to sweep around,
   but expect the measured optimum to sit below it.
 - **Realistic ceiling from speculation alone is ~1.5–1.9×**, not the 2.5–4× the prior project's
-  planning documents hoped for. Combined with the base band: **DSpark decode lands in the
-  18–34 tok/s range**, centred near ~25.
+  planning documents hoped for. Combined with the base band (15–19 tok/s): **DSpark decode lands
+  in the 22–36 tok/s range**, centred near ~28.
 - The published external DSpark figure the directive cites (41.7 vs 26.1 tok/s ≈ 1.60×) sits
   **inside this band** and is consistent with it. Good corroboration, weakly weighted.
 
@@ -301,10 +307,15 @@ blind spot. If measured decode lands below this band, DSA is the first place to 
 
 ## 7. What Gate R1 leaves open
 
-1. **Achievable streaming bandwidth is unmeasured on this build** (~200 GB/s is inherited).
-   A stream microbenchmark tightens every band in this document.
-2. **`ncu` is permission-blocked.** Until it runs, "32% of peak" is an *inference from wall-clock
-   and byte counts*, not a per-kernel attribution. Needs the user's sudo (`HARDWARE.md` §4).
+1. ~~Achievable streaming bandwidth unmeasured~~ — **RESOLVED**: 240 GB/s measured
+   (`HARDWARE.md` §2). Re-run idle to finalise; the sweep was taken under download contention.
+2. ~~`ncu` permission-blocked~~ — **RESOLVED**, with a sting in the tail. `sudo ncu` works, but
+   **Thor exposes no DRAM counters, so `ncu`'s "Memory Throughput %" is L2 throughput and does
+   not mean bandwidth utilisation** — a kernel measured at 89% of peak reports 30%
+   (`HARDWARE.md` §3). **Bandwidth utilisation stays an analytical quantity** (byte model ÷
+   wall-clock); `ncu` is for compute throughput, occupancy, warp stalls and cache hit rates.
+   The prior project's planned "confirm Memory% vs Compute% per kernel" step would have been
+   actively misled by this metric.
 3. **The DSA verify cost** (§5) — no model, no measurement, no precedent.
 4. **The 2.6× vs 2.12× verify discrepancy** (§5) — inherited unexplained from the prior project.
 5. **0731-lineage acceptance rate is unknown.** The prior project measured 1.286/5 block

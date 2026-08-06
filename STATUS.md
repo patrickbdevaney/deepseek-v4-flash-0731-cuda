@@ -32,18 +32,21 @@ Last updated: 2026-08-06.
 |---|---|
 | Weights | 100.400 GiB of a 117 GiB pool → **16.6 GiB headroom** (23.1 without the MTP heads) |
 | `B_tok` | **11.202 GB/token** |
-| AR wall | **17.85 tok/s** @ 200 GB/s · 24.37 @ 273 GB/s |
-| Direct anchor (identical `B_tok`, same box, measured) | **7.89 tok/s / 126.7 ms/tok = 32% of peak BW** |
-| Base AR band after kernel work | **12–18 tok/s** |
-| DSpark band (α-sensitive, k*≈2–3) | **18–34 tok/s**, centred ~25 |
+| Achievable BW | **240 GB/s measured** (212 contended) — not the ~200 inherited |
+| AR wall | **21.42 tok/s** @ 240 GB/s · 24.37 @ 273 spec |
+| Direct anchor (identical `B_tok`, same box, measured) | **7.89 tok/s / 126.7 ms/tok = 37% of achievable BW** |
+| Base AR band after kernel work | **15–19 tok/s** (70–80% of achievable) |
+| DSpark band (α-sensitive, k*≈2–3) | **22–36 tok/s**, centred ~28 |
 | KV at fp8 | 3.36 KiB/token → 3.21 GiB at 1M context; **~105 MiB at 32K** |
 | Expert quant | **OCP MXFP4** (E2M1 + E8M0, block 32) — same as the prior checkpoint |
 
 ## Not yet measured / open
 
-1. Achievable streaming bandwidth on this build (200 GB/s inherited, unverified).
-2. `ncu` blocked by `ERR_NVGPUCTRPERM` — **needs the user's sudo**; converts "32% of peak" from
-   inference to per-kernel attribution.
+1. ~~Achievable bandwidth~~ **RESOLVED: 240 GB/s measured.** Re-run idle to finalise (the sweep
+   ran under download contention).
+2. ~~`ncu` blocked~~ **RESOLVED: `sudo /usr/local/cuda-13.0/bin/ncu` works** — and revealed that
+   Thor exposes no DRAM counters, so `ncu`'s "Memory Throughput %" is L2 throughput, not
+   bandwidth utilisation (89%-of-peak kernel reports 30%). Bandwidth stays analytical.
 3. DSA verify-step cost — no model, no measurement, no precedent.
 4. `c_v(5) = 2.6×` measured vs 2.12× modelled — inherited unexplained.
 5. 0731 DSpark acceptance rate α.
@@ -56,4 +59,6 @@ Last updated: 2026-08-06.
   **not** per-element `max_rel` — the prior project proved `max_rel` is pathological there
   (rises 1.6% → 4.1% from seq16 → seq256 on a *correct* path while cosine stays 1.0000000).
 - Single-tenant: only one process may hold the full model at a time.
+- Bandwidth utilisation is measured analytically (byte model ÷ wall-clock), never from `ncu`'s
+  "Memory Throughput %" — that metric is L2-derived on Thor and misleads. `HARDWARE.md` §3.
 - No REAP pruning work, no additional quantisation, no invented model constants.

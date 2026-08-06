@@ -35,10 +35,11 @@ unpruned 256-expert head), the chat encoding has no Jinja template, and the serv
 ```
 weights            100.400 GiB  of a 117 GiB unified pool  -> 16.6 GiB headroom
 B_tok               11.202 GB/token
-AR wall              17.85 tok/s @ 200 GB/s   (24.37 @ 273 peak)
-measured today        7.89 tok/s  = 32% of peak bandwidth   <- direct, same B_tok, same box
-base AR band         12-18 tok/s  after kernel work
-DSpark band          18-34 tok/s  centred ~25, k* = 2-3 (NOT 7)
+achievable BW          240 GB/s   measured (tools/bw_probe.cu), not the ~200 inherited
+AR wall              21.42 tok/s  @ 240 GB/s   (24.37 @ 273 spec)
+measured today        7.89 tok/s  = 37% of achievable   <- direct, same B_tok, same box
+base AR band         15-19 tok/s  after kernel work (70-80% of achievable)
+DSpark band          22-36 tok/s  centred ~28, k* = 2-3 (NOT 7)
 ```
 
 The largest per-token consumer is **MLA attention at 41.1%** — larger than all six routed
@@ -54,6 +55,8 @@ committed under `docs/`:
 python3 tools/fetch_headers.py     # harvest headers + metadata via HTTP range requests
 python3 tools/inventory.py         # inventory, quant-format proof, B_tok, AR wall, KV model
 python3 tools/verify_cost.py       # E_frac(k), c_v(k), the S(k) break-even table
+
+nvcc -O3 -arch=sm_110a tools/bw_probe.cu -o build/bw_probe && ./build/bw_probe 4096 30
 ```
 
 `tools/inventory.py` exits non-zero unless the summed tensor bytes reconcile exactly with
@@ -67,6 +70,8 @@ python3 tools/verify_cost.py       # E_frac(k), c_v(k), the S(k) break-even tabl
 - **Run full-model binaries detached**: `setsid nohup ./build/<bin> … > ~/run.log 2>&1 < /dev/null &`.
 - **Single-tenant**: one process may hold the full model at a time.
 - **Never loosen a gate.** Correctness gates precede speed gates, always.
+- **Do not trust `ncu`'s "Memory Throughput %" on Thor** — it is L2 throughput, not bandwidth
+  utilisation. Use the byte model ÷ wall-clock. See `HARDWARE.md` §3.
 - **No invented model constants** — read from disk, cite the file.
 - **No REAP pruning, no additional quantisation.** The checkpoint ships as it ships.
 

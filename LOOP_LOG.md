@@ -119,3 +119,45 @@ and caps speculation-alone at ~1.5–1.9× for plausible α. The vLLM recipe's
 **Open, carried into Phase 2+:** achievable streaming BW unmeasured · `ncu` blocked by
 `ERR_NVGPUCTRPERM` (needs sudo) · DSA verify cost unmodelled · the inherited `c_v(5)=2.6×` vs
 2.12× discrepancy · 0731 acceptance rate α.
+
+---
+
+## 2026-08-06 (later) — instrumentation unblocked: bandwidth measured, `ncu` unblocked
+
+User granted sudo and push access. Both Gate-R1 open items #1 and #2 resolved.
+
+### Finding 8 — achievable bandwidth is 240 GB/s, not the inherited ~200
+
+- **Finding.** `tools/bw_probe.cu` (grid-stride `float4` streaming read, 320 blocks × 256
+  threads, buffer ≫ L2, reduced so nothing is DCE'd) measures **240.7 / 241.5 / 242.8 GB/s** at
+  1 and 4 GiB, and **212.3 GB/s** at 8 GiB. That is **88–89% of the 273 GB/s spec peak**.
+- **Root cause of the old figure.** ~200 GB/s was a planning number carried from prior projects,
+  never measured on this build. It was ~17% pessimistic.
+- **Consequence.** The AR wall moves **17.85 → 21.42 tok/s**. Today's measured 7.89 tok/s is
+  **37% of achievable** (not 32% of spec peak), and the 70–80% target band becomes
+  **15.0–17.1 tok/s** against a 21.4 wall. Previously the target and the wall coincided; now
+  there is real headroom above the band. DSpark band moves to **22–36 tok/s, centred ~28**.
+- **Caveat.** The sweep ran while the 100 GiB checkpoint download was writing. The 8 GiB point is
+  contended; re-run idle before treating 240 as final. If anything this underestimates.
+
+### Finding 9 — `ncu` is unblocked, and its memory metric is a trap on this chip
+
+- **Finding.** `sudo /usr/local/cuda-13.0/bin/ncu` collects counters successfully. (Plain
+  `sudo ncu` fails `command not found` — not on root's `PATH`.) Persisted
+  `NVreg_RestrictProfilingToAdminUsers=0` to `/etc/modprobe.d/nvidia-profiler.conf` for
+  unprivileged profiling **after the next reboot**; not needed to proceed.
+- **The trap.** Profiling `stream_read` — independently measured at **244 GB/s ≈ 89% of spec
+  peak** — `ncu` reports `Memory Throughput 30.26%`, exactly equal to `L2 Cache Throughput
+  30.26%`, with `Average MC Channel Active Cycles = (!) nan` and `dram__cycles_active` missing.
+- **Root cause.** Thor has no discrete DRAM and exposes no memory-controller counters, so
+  SpeedOfLight's "Memory Throughput" degenerates to L2 throughput. `ncu` then emits the advisory
+  "memory bandwidth below 60% of peak typically indicates latency issues" — wrong here.
+- **Consequence, and why this mattered to catch now.** The prior project's planned first step was
+  *"unblock ncu; confirm Memory% vs Compute% per kernel to prove the software-dequant
+  compute-bound hypothesis"*. Run naively that would have reported ~30% memory throughput on
+  **every** kernel including already-optimal ones, and sent the optimisation loop chasing
+  phantom latency problems. **Bandwidth utilisation stays an analytical quantity on Thor**
+  (byte model ÷ wall-clock). `ncu` remains the right tool for `Compute (SM) Throughput`,
+  occupancy, warp-stall reasons, and cache hit rates — which is what the compute-bound-dequant
+  hypothesis actually needs to be tested against.
+- **Recorded as a standing rule** in `README.md`, `STATUS.md` and `HARDWARE.md` §3.

@@ -20,12 +20,65 @@ directive or from a prior project's notes — every line has a command next to i
 | Swap | 31 GiB | `free -g` |
 | Disk free (`/`, nvme0n1p1) | 230 GiB of 936 GiB at survey time | `df -h` |
 | Peak LPDDR5X bandwidth | 273 GB/s (spec) | vendor |
-| Achievable streaming BW | ~200 GB/s (planning figure) | carried from prior projects; **unverified on this build — re-measure at Gate B1** |
+| Achievable streaming BW | **240 GB/s measured** (212 under memory contention) | `tools/bw_probe.cu` — see §2 |
 
 `nvidia-smi` reports `Memory-Usage: Not Supported` on Thor — device memory is the unified
 pool, so **`free` is the authoritative memory instrument**, not `nvidia-smi`.
 
-## 2. The constraint that governs this project
+## 2. Achievable bandwidth — measured, not inherited
+
+`tools/bw_probe.cu` is a grid-stride `float4` streaming read over a buffer far larger than L2,
+reduced so nothing is optimised away. `nvcc -O3 -arch=sm_110a`, 320 blocks × 256 threads.
+
+| buffer | GB/s | % of 273 spec |
+|---|---:|---:|
+| 1 GiB | 240.7 | 88% |
+| 4 GiB | 241.5 / 242.8 | 89% |
+| 8 GiB | 212.3 | 78% |
+
+**~240 GB/s is the achievable streaming figure, ~212 GB/s under memory contention.** These were
+taken while a 100 GiB checkpoint download was writing, so the 8 GiB point is contended and the
+whole sweep is, if anything, a slight underestimate. **Re-run idle before treating 240 as final.**
+
+This supersedes the ~200 GB/s planning figure carried from prior projects and **raises the AR
+wall by ~20%** (`ROOFLINE.md` §2).
+
+## 3. Profiling: `ncu` is unblocked, and it lies about memory on this chip
+
+**Status: unblocked.** `sudo /usr/local/cuda-13.0/bin/ncu …` collects counters successfully.
+(Plain `sudo ncu` fails with `command not found` — `ncu` is not on root's `PATH`; use the full
+path.) Unprivileged `ncu` still returns `ERR_NVGPUCTRPERM`; `/etc/modprobe.d/nvidia-profiler.conf`
+now carries `options nvidia NVreg_RestrictProfilingToAdminUsers=0`, which will lift that **at the
+next reboot**. No reboot is needed to make progress — sudo works today.
+
+> ### ⚠ `ncu`'s "Memory Throughput %" does NOT mean DRAM bandwidth utilisation on Thor
+>
+> Profiling `stream_read` — a kernel independently measured at **244 GB/s, i.e. ~89% of spec
+> peak** — `ncu` reports:
+>
+> ```
+> Memory Throughput           %   30.26      <- NOT bandwidth utilisation
+> L2 Cache Throughput         %   30.26      <- identical: this is where the number comes from
+> Compute (SM) Throughput     %    5.28
+> Average MC Channel Active Cycles   (!) nan <- no DRAM counters on unified memory
+> dram__cycles_active                missing
+> ```
+>
+> Thor has no discrete DRAM and exposes no memory-controller counters, so SpeedOfLight's
+> "Memory Throughput" degenerates to **L2 throughput**. A kernel running at 89% of achievable
+> bandwidth reports 30%, and `ncu` then advises "memory bandwidth below 60% of peak typically
+> indicates latency issues" — which is simply wrong here.
+>
+> **Consequence.** The prior project's planned step 0 — *"confirm Memory% vs Compute% per kernel
+> to prove the software-dequant compute-bound hypothesis"* — would have been **actively misled**
+> by this metric. On Thor:
+> - **Bandwidth utilisation** must come from the analytical byte model ÷ wall-clock
+>   (`tools/inventory.py` + timing). That stays the authoritative instrument.
+> - **`ncu` is still valuable** for what it measures honestly: `Compute (SM) Throughput`,
+>   occupancy, warp-stall reasons, L1/L2 hit rates, and instruction mix — which is exactly what
+>   the compute-bound-dequant hypothesis actually needs.
+
+## 4. The constraint that governs this project
 
 Memory is unified and **shared with the host OS, the desktop session, and the agent tooling.**
 At rest, ~5 GiB is already in use before we allocate anything.
@@ -49,7 +102,7 @@ cost a physical power-cycle (`~/dspark-cuda-reap-finetune/GATE_LOG.md`):
    Then poll the log. A full-model run monopolises the device for tens of seconds at ~90% of
    the pool — batch measurements, and warn before starting one.
 
-## 3. Architecture facts that are already settled (empirical, prior project, CUDA 13.0)
+## 5. Architecture facts that are already settled (empirical, prior project, CUDA 13.0)
 
 These were tested on this exact box and toolkit. They are **negative results that still bind**,
 and re-deriving them is wasted time. Source: `~/dspark-cuda-reap-finetune/DECODE_GAP_RESEARCH.md`,
@@ -62,16 +115,10 @@ and re-deriving them is wasted time. Source: `~/dspark-cuda-reap-finetune/DECODE
 | `__nv_cvt_fp4x2_to_halfraw2` (HW FP4×2 → half2 unpack) | **OK** | The fast MXFP4 dequant primitive works. This is the top unexploited lever (see `ROOFLINE.md` §6). |
 | FP4 tensor-core **compute** | **BLOCKED** on all paths (ptxas, cuBLASLt reports 0 algos, CUTLASS, SASS) | FP4 is a **storage/bandwidth** format only. FP8 `mma` is the compute ceiling. Re-test with `~/dspark-cuda-reap-finetune/tools/cublas_fp4_probe.cu` after every CUDA toolkit update. |
 
-## 4. Known instrumentation gaps
+## 6. Remaining instrumentation gaps
 
-- **`ncu` is blocked by `ERR_NVGPUCTRPERM`.** Nsight Compute's SpeedOfLight section needs
-  elevated counter permissions. Unblocking it (`sudo ncu ...`, or setting
-  `NVreg_RestrictProfilingToAdminUsers=0`) is a ~30-minute de-risk that converts the central
-  "are our kernels compute-bound or memory-bound?" question from inference to measurement.
-  **This is the first thing to do in Phase 7 and it needs the user's sudo.**
-- Achievable streaming bandwidth (~200 GB/s) is a planning figure carried from prior work, not
-  measured on this build. A standalone `memcpy`/stream microbenchmark should establish it before
-  the roofline band in `ROOFLINE.md` is treated as final.
+- Achievable bandwidth is now measured (§2.1) but was taken under download contention; re-run
+  `./build/bw_probe 4096 30` on an idle box to finalise it.
 - `--runtime nvidia` Docker containers **wedge the device** on this box (stuck `runc` processes
   in uninterruptible D-state; `docker rm -f` hangs). Plain `docker run` works. All CUDA here
   compiles and runs on the host; only CPU-torch oracle work goes in a container.
