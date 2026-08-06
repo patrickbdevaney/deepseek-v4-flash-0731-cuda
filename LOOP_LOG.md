@@ -869,3 +869,80 @@ is the obvious fix and it is entirely local.
 **This is the third time the measured ranking has disagreed with the byte-share ranking**
 (MLA over-ranked, small-N GEMVs over-ranked, HC under-ranked). The byte model predicts the *floor*
 extremely well — it nailed K=1 to 0.02 ms — but says nothing about which kernels reach it.
+
+### Finding 24 + Optimization #3 — the Sinkhorn kernel ran ONE SCALAR THREAD with a spilled array
+
+Chasing Finding 23 into `hc_pre` split the cost four ways, and it was not the part I expected:
+
+```
+                        M=1      M=2      M=3      M=5      M=8
+hc_pre + sinkhorn    0.1137   0.1162   0.1188   0.1249   0.1295
+  of which sinkhorn  0.0862   0.0862   0.0866   0.0862   0.0863   <- 76% of hc_pre, and flat in M
+```
+
+`kernels/hc_sinkhorn.cu:14` reads `if (i >= n || threadIdx.x != 0) return;` — **the kernel launches
+32 threads and immediately retires 31 of them.** One scalar thread then runs all 20 iterations over
+`float c[HCMAX*HCMAX]`, indexed with runtime `(j,k)`. nvcc cannot keep a dynamically-indexed array
+in registers, so `c` lives in **local memory, which is DRAM-backed**. Roughly 640 dependent local
+round-trips per token — which is why normalising a **4x4 matrix** cost 86 us and 7.4 ms of the
+decode step.
+
+**Rewrote it warp-parallel in registers** (`hc_sinkhorn_warp_kernel`): one warp per token, lane `L`
+holds `comb[j,k]` with `j = L/hc`, `k = L%hc`. Row sums reduce over the low `log2(hc)` lane bits and
+column sums over the next `log2(hc)`, via `__shfl_xor_sync`. Those XOR masks never cross a group
+boundary, so the idle lanes (`L >= hc*hc`) cannot contaminate a reduction. Guarded to `hc` a power
+of two with `hc*hc <= 32` (config `hc_mult: 4` -> 16 lanes); anything else keeps the scalar path, and
+`HC_SCALAR=1` forces it for A/B.
+
+Also fixed alongside (**one measurement each**): `k_mixes` was one *warp* per output, i.e. 24 warps
+total to stream the 1.57 MB `hc_attn_fn` — now one block per output with a two-stage reduction and
+`float4` loads.
+
+**Correctness:** Gate K PASS, `[hc_sinkhorn]` `max_abs` pre 5.96e-08 / post 1.19e-07 / comb
+**8.94e-08** (was 1.19e-07 — marginally *better*, since the register path avoids a round-trip).
+
+| | scalar (old) | warp (new) | |
+|---|---:|---:|---|
+| `hc_sinkhorn` | 0.0862 ms | **0.0165 ms** | **5.2x** |
+| `hc_pre` total | 0.1137 | **0.0436** | **2.6x** |
+| per decode step (x2/layer x43) | 9.8 ms | **3.7 ms** | **-6.1 ms** |
+
+Predicted full-model effect: 115.8 -> ~108.6 ms/tok, i.e. ~9.2 tok/s. Full-model run is the arbiter.
+
+**Why this was worth finding.** The byte model rates HC at 1.2% of `B_tok` and would never have
+flagged it; it was 9.4% of wall-clock. And the kernel had been *correct* since the prior project's
+Gate K — it passed every correctness gate it was ever given, because "one thread does all the work"
+is a performance defect that no correctness oracle can see. It took profiling the composite, then
+splitting the composite, to reach it.
+
+### Finding 25 — the `float4` fast path faulted on real weights, and no unit gate could have caught it
+
+The first full-model run of Optimization #3 **crashed**:
+
+```
+[decode] structs built. mem 110.2/122.8 GiB
+[decode] prefill 5 positions...
+cuda kernels/moe.cu:222 misaligned address
+```
+
+(The report site is misleading — CUDA errors are sticky and surface at the next sync, so `moe.cu`
+was merely the first thing to check after the faulting launch.)
+
+**Cause:** the `float4` loads I added to `k_mixes` need **16-byte** alignment on both operands.
+`x` comes from the arena and is fine, but **`hc_fn` is a weight tensor mapped straight out of the
+safetensors shard**, and safetensors only guarantees **8-byte** tensor offsets. A `float4` load on a
+merely-8-byte-aligned pointer faults.
+
+**Fixed** by testing both pointers at runtime and falling back to scalar loads
+(`vec4 = (hcd%4==0) && !((uintptr_t)xr & 15) && !((uintptr_t)fr & 15)`).
+
+**Why this matters beyond the bug.** Gate K passed the change — twice — because
+`ref/gen_units.py` writes goldens that the harness loads into its own `cudaMalloc`'d buffers,
+which are 256-byte aligned. **The unit gate structurally cannot exercise real weight alignment.**
+This codebase already knew the hazard: the MoE GEMM carries `off_b = (uintptr_t)wprE & 15` plus a
+funnel shift for exactly this reason. I added a vectorised load without checking whether the
+pointer it reads is a mapped weight.
+
+Standing rule added: **any new vectorised load on a tensor that comes from `WeightStore` must
+either check alignment at runtime or use the funnel-shift pattern.** Unit-gate PASS is not evidence
+on this axis; only a full-model run is.

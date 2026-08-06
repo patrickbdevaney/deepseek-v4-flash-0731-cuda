@@ -17,6 +17,7 @@
 #include "dscratch.h"
 #include "mla_attn.h"
 #include "hc.h"
+#include "hc_sinkhorn.h"
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cstdio>
@@ -204,6 +205,22 @@ int main(int argc, char** argv) {
             CU(cudaFree(x)); CU(cudaFree(y)); CU(cudaFree(post)); CU(cudaFree(comb));
         }
         printf("   -> M=1 %.1f ms, M=5 %.1f ms (x2/layer: attn+ffn)\n", hp[0]*43*2, hp[3]*43*2);
+
+        // Break hc_pre down: which of its four kernels actually costs the time?
+        printf("%-22s","  of which sinkhorn");
+        double sk[6]={0};
+        const int mix_hc = (2+hc)*hc;
+        for (int mi=0, M=1; mi<5; ++mi) {
+            M = (int[]){1,2,3,5,8}[mi];
+            float* mixes = (float*)dalloc((size_t)M*mix_hc*4);
+            float* pre   = (float*)dalloc((size_t)M*hc*4);
+            float* post  = (float*)dalloc((size_t)M*hc*4);
+            float* comb  = (float*)dalloc((size_t)M*hc*hc*4);
+            sk[mi] = timeit([&]{ hc_sinkhorn(pre,post,comb,mixes,hcsc,hcba,M,hc,HC_SINKHORN_ITERS,HC_EPS,0); }, 20);
+            printf(" %9.4f", sk[mi]);
+            CU(cudaFree(mixes)); CU(cudaFree(pre)); CU(cudaFree(post)); CU(cudaFree(comb));
+        }
+        printf("   -> %.1f%% of hc_pre at M=1, %.1f ms/step\n", 100.0*sk[0]/hp[0], sk[0]*43*2);
         printf("\nThe M>=2 penalty to explain is ~72 ms across 43 layers. Whichever of these jumps\n"
                "at M=2 and stays flat to M=8 is the mechanism.\n");
     }
