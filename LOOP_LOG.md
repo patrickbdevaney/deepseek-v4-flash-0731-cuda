@@ -522,3 +522,128 @@ draft also runs at M=BLK=5, so it pays Finding 15's penalty three times over, on
 not yet a win, and the reason is entirely cost — acceptance at 3.12/5 is already adequate. Two
 levers, in order: (1) small-M dense GEMM (Finding 15) — helps verify *and* draft; (2) put the
 DSpark kernels through the optimization loop (Finding 17).
+
+---
+
+## 2026-08-06 — Phase 7 opens with a fast harness, and measurement overturns the priority order
+
+### tools/gemm_bench.cu — the loop is now seconds, not 10 minutes
+
+Every measurement so far cost a ~10-minute cold load of a 100 GiB checkpoint, which is fatal to
+"one change per measurement". These kernels do not care what the weight bytes *contain*, only
+their shapes — so `tools/gemm_bench.cu` allocates the real per-layer shapes (read from
+`docs/hdrs`, not invented), runs the real kernels, and reports achieved bandwidth against the
+measured 240 GB/s roof. Runs in seconds and is `ncu`-friendly.
+
+### Finding 18 — ROOFLINE §6's priority order is INVERTED by measurement. MLA is not the problem.
+
+| kernel (per layer, M=1) | w_MB | GB/s | % of 240 achievable |
+|---|---:|---:|---:|
+| MLA `wo_b` [4096, 8192] | 33.55 | **225.5** | **94%** |
+| MLA `wq_b` [32768, 1024] | 33.55 | **214.6** | **89%** |
+| MLA `wkv` [512, 4096] | 2.10 | 129.7 | 54% |
+| MLA `wq_a` [1024, 4096] | 4.19 | 45.1 | **19%** |
+| **MXFP4 grouped MoE** (6 experts) | 25.17 | **92.0** | **38%** |
+
+`ROOFLINE.md` §6 ranked **MLA #1** and MXFP4 MoE GEMV #2, reasoning purely from byte share
+(41.1% vs 30.8%). **The two MLA matrices that carry ~94% of MLA's bytes are already at 89–94% of
+achievable bandwidth — there is essentially nothing to win there.** The MoE, at 38%, is the real
+gap, and it is flat at ~92 GB/s across M=1..8 for *both* the mma and GEMV paths.
+
+This is the clearest lesson of the project so far: **byte share ranks what is worth optimising only
+if efficiency is uniform. It is not.** The correct ranking is `bytes × (1 − efficiency)`.
+
+### Finding 19 — the prior project's nominated "⭐ top lever" is already spent
+
+`DECODE_GAP_RESEARCH.md` T1.1 was: *"rebuild the FP4 MoE GEMV with HARDWARE x2 unpack —
+our rejected fp4 GEMV used SCALAR nibble decode, so the rejection doesn't cover this"*, rated a
+step-change.
+
+`kernels/tc_moe_gemm.cu:14`:
+```cpp
+__device__ __forceinline__ __half2 tcm_fp4x2(unsigned char b){
+    __half2_raw r=__nv_cvt_fp4x2_to_halfraw2((__nv_fp4x2_storage_t)b,__NV_E2M1); ...
+```
+**The hardware unpack is already in the kernel**, and that kernel is the one measuring 92 GB/s.
+The lever was banked at some point without the research doc being updated. Carrying it forward
+would have burned a cycle re-implementing what exists.
+
+### Finding 20 — the small-N GEMVs lose ~50% to WAVE QUANTISATION, and `ncu` says so directly
+
+`ncu` on `fp8_gemv_m1_kernel` at the `wq_a` shape (the 19% case):
+
+```
+Grid Size        128        Block Size 256      Waves Per SM  1.07
+Compute (SM) Throughput  41.45%      Memory Throughput 14.20% (= L2; see HARDWARE.md §3)
+"1 full wave and a partial wave of 8 thread blocks ... up to 50.0% of the total runtime"
+```
+
+The grid is `(N*32+255)/256` blocks — **128 for N=1024**. Against 20 SMs that is 1.07 waves: a
+full wave plus a tail of 8 blocks that runs almost the whole kernel duration again for 6% of the
+work. The pattern predicts the rest of the table exactly:
+
+| shape | N | grid blocks | waves | measured |
+|---|---:|---:|---:|---:|
+| `wkv` | 512 | 64 | **0.53** (under one wave!) | 54% |
+| `wq_a` | 1024 | 128 | **1.07** | 19% |
+| `wq_b` | 32768 | 4096 | ~34 (tail amortised) | 89% |
+| `wo_b` | 4096 | 512 | ~4.3 | 94% |
+
+Efficiency tracks wave count, not shape or bandwidth. **Fix: a grid-stride/persistent launch sized
+to an exact multiple of the SM count**, so there is no tail. Cheap, local, and gated by
+`tests/gate_fp8_gemv`.
+
+### Finding 21 — the MoE kernel runs ONE WARP PER BLOCK, capping occupancy at 50%
+
+`ncu` on `k_grouped_w4a8_e8m0_kernel`:
+
+```
+Grid Size 1,536    Block Size 32     <- one warp per block
+Registers/Thread 40                  Block Limit (registers) 48
+Theoretical Occupancy 50%            Achieved Occupancy 46.47%
+Compute (SM) Throughput 24.74%       Memory Throughput 37.25%
+Waves Per SM 3.20
+```
+
+Neither compute- nor bandwidth-saturated: **latency-bound with half the warp slots unusable**,
+because a 32-thread block consumes a whole block slot to hold a single warp. The kernel is
+`<<<grid, 32>>>` throughout (`tc_moe_gemm.cu:362`). Packing several warps per block — each taking a
+different n-block or tile — should lift theoretical occupancy toward 100% without touching the
+math, so it can be gated cosine-1.0 against the current output.
+
+**This is now the #1 lever**: MoE is 30.8% of `B_tok` at 38% efficiency, so `bytes × (1 − eff)` is
+the largest single term in the whole model.
+
+### Correction to Finding 15 — the code-level attribution was wrong; the mechanism is still open
+
+Finding 15 attributed the ~72 ms M≥2 verify penalty to the `M==1`/`bs==1` GEMV fast paths in
+`fp8_block_gemm.cu` and `mla_attn.cu` falling through to m16-tile mma. The microbenchmark now
+prices that directly:
+
+```
+MLA dense sum, M=1: 0.4112 ms/layer      M=2: 0.4418 ms/layer      (+7.4%)
+-> x43 layers = +1.3 ms   ... against a 72 ms penalty to explain
+```
+
+**The dense-GEMM fallback accounts for under 2% of it.** The step is real and reproducible, but its
+cause is not what I said. The remaining candidates, none yet measured:
+- **`ogroup` (`wo_a`, 33.5 MB/layer)** — its M≥2 fallback additionally allocates, runs a separate
+  `k_f2h` conversion pass, and frees, per layer per step (`mla_attn.cu:271-273`). Not benched.
+- **HC + 20-iteration Sinkhorn**, per token per layer — plausibly latency-bound and linear in M.
+- **sparse attention / compressor / indexer** at M=K.
+
+The layer-flavour split (Finding 14) already showed the growth is spread evenly across flavours,
+which points at something every layer does — HC/Sinkhorn and `ogroup` both qualify; the
+compressor and indexer do not. **Next: extend `gemm_bench` to `ogroup_gemm_fp8` and `hc_*` at
+M=1..5.** Logged as open rather than patched over: this is the third mechanism proposed for the
+verify excess, and the first two were wrong.
+
+### Standing priority order, now measurement-backed
+
+1. **MoE grouped GEMM occupancy** (Finding 21) — 30.8% of `B_tok` at 38% efficiency.
+2. **Wave quantisation in the small-N GEMVs** (Finding 20) — `wq_a`, `wkv`, and every other
+   small-N call; cheap and local.
+3. **DSpark draft head** (Finding 17) — ~6x off roofline, gates the whole speculative win.
+4. **The M≥2 verify penalty** (Finding 15, mechanism open) — bench `ogroup` and HC first.
+5. ~~MLA projection GEMV~~ — **retired**, already at 89–94%.
+6. ~~MXFP4 hardware unpack~~ — **retired**, already implemented (Finding 19).
