@@ -124,7 +124,10 @@ int main(int argc, char** argv){
     CU(cudaMalloc(&h0,(size_t)seqmax*d*4)); CU(cudaMalloc(&h,(size_t)seqmax*hc*d*4)); CU(cudaMalloc(&h2,(size_t)seqmax*hc*d*4));
     CU(cudaMalloc(&collapsed,(size_t)d*4)); CU(cudaMalloc(&logits,(size_t)VOCAB*4));
     // head weights (persistent)
-    const float *head_w=L.bf16("head.weight"), *norm_w=L.bf16("norm.weight");
+    // lm_head is BF16 on disk; do NOT dequantise it (LOOP_LOG Finding 26). Loader::bf16 would
+    // materialise 2.118 GB of f32 and read all of it every step. gemm_bf16w reads the bf16 natively.
+    const void  *head_bf = (const void*)W.get("head.weight").dev;
+    const float *norm_w  = L.bf16("norm.weight");
     const float *hc_fn=L.f32("hc_head_fn"), *hc_sc=L.f32("hc_head_scale"), *hc_bs=L.f32("hc_head_base");
     size_t head_mark=L.mark();                                   // keep head + freqs; per-layer dequant is above this
 
@@ -202,7 +205,7 @@ int main(int argc, char** argv){
     auto head_fwd=[&](const float* hstate, int* out_am){       // hc_head->norm->lm_head->argmax (1 token)
         hc_head(collapsed,hstate,hc_fn,hc_sc,hc_bs,1,hc,d,HC_EPS);
         rmsnorm(collapsed,collapsed,norm_w,1,d,EPS,true,0);
-        gemm_fp32(logits,collapsed,head_w,1,VOCAB,d,0); CU(cudaDeviceSynchronize());
+        gemm_bf16w(logits,collapsed,head_bf,1,VOCAB,d,0); CU(cudaDeviceSynchronize());
         std::vector<float> lg(VOCAB); CU(cudaMemcpy(lg.data(),logits,VOCAB*4,cudaMemcpyDeviceToHost));
         int am=0; for(int v=1;v<VOCAB;++v) if(lg[v]>lg[am]) am=v; *out_am=am; };
 
@@ -326,7 +329,7 @@ int main(int argc, char** argv){
             else         cblock_verify_step (vout,vin,d_ids+PS,CW[Lyr],PS,VK,HC_SINKHORN_ITERS,EPS,KV[Lyr]);
             std::swap(vin,vout); }
         hc_head(collK,vin,hc_fn,hc_sc,hc_bs,VK,hc,d,HC_EPS); rmsnorm(collK,collK,norm_w,VK,d,EPS,true,0);
-        gemm_fp32(logK,collK,head_w,VK,VOCAB,d,0); CU(cudaDeviceSynchronize());
+        gemm_bf16w(logK,collK,head_bf,VK,VOCAB,d,0); CU(cudaDeviceSynchronize());
         cudaEventRecord(t1); cudaEventSynchronize(t1); float vms=0; cudaEventElapsedTime(&vms,t0,t1);
         std::vector<float> lg((size_t)VK*VOCAB); CU(cudaMemcpy(lg.data(),logK,(size_t)VK*VOCAB*4,cudaMemcpyDeviceToHost));
         std::vector<int> vam(VK); for(int t=0;t<VK;++t){const float*r=&lg[(size_t)t*VOCAB];int a=0;for(int v=1;v<VOCAB;++v)if(r[v]>r[a])a=v;vam[t]=a;}
@@ -442,7 +445,10 @@ int main(int argc, char** argv){
         std::string LS="mtp."+std::to_string(NSTAGE-1)+".";
         const float* hh_fn=LH.f32(LS+"hc_head_fn");const float* hh_sc=LH.f32(LS+"hc_head_scale");const float* hh_ba=LH.f32(LS+"hc_head_base");
         const float* hnorm=LH.bf16(LS+"norm.weight");
-        const float* mw1=LH.bf16(LS+"markov_head.markov_w1.weight");const float* mw2=LH.bf16(LS+"markov_head.markov_w2.weight");
+        // markov tables are BF16 too, and w2 is re-read once per block position in the draft's AR
+        // loop (5x), so the f32 dequant cost 5 x 132 MB instead of 5 x 66 MB. Keep them native.
+        const void* mw1=(const void*)WH.get(LS+"markov_head.markov_w1.weight").dev;
+        const void* mw2=(const void*)WH.get(LS+"markov_head.markov_w2.weight").dev;
         const __nv_bfloat16* emb=(const __nv_bfloat16*)W.get("embed.weight").dev;
         { size_t fb,tb; cudaMemGetInfo(&fb,&tb); printf("[spec] head built. mem %.1f/%.1f GiB\n",(tb-fb)/1073741824.0,tb/1073741824.0); }
 
@@ -462,19 +468,28 @@ int main(int argc, char** argv){
         int NGEN=NGEN0;
         int cur=ids[s-1], cpos=PS;                 // cur = token at position cpos (=PS=s-1), not yet in cache
         std::vector<int> sgen; int nverify=0, timed_tok=0; float spec_ms=0; cudaEvent_t s0,s1; cudaEventCreate(&s0); cudaEventCreate(&s1);
+        // Per-phase attribution of the spec step (LOOP_LOG Finding 17: the draft is ~6x off its
+        // roofline and it is what keeps speculation at parity). DSV4_SPECPROF=1.
+        const bool specprof = getenv("DSV4_SPECPROF")!=nullptr;
+        cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
+        double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
         printf("[spec] decoding %d tokens (block=%d)...\n", NGEN, BLK);
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]
+            if(specprof) cudaEventRecord(p0);
             // rebuild head main-KV over the context
             for(int st=0;st<NSTAGE;++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctx, EPS);
+            if(specprof) cudaEventRecord(p1);
             // DRAFT: block [cur, noise x (BLK-1)]
             std::vector<int> bid(BLK,DSPARK_NOISE_TID); bid[0]=cur; CU(cudaMemcpy(dbid,bid.data(),BLK*4,cudaMemcpyHostToDevice));
             k_embed<<<((size_t)BLK*d+255)/256,256>>>(xemb,emb,dbid,BLK,d); k_hc_expand<<<((size_t)BLK*hc*d+255)/256,256>>>(xa,xemb,BLK,hc,d); CU(cudaDeviceSynchronize());
             float *cb=xa,*nb=xb;
             for(int st=0;st<NSTAGE;++st){ dspark_block_forward(nb,cb,dbid,mkv[st],anchor,mb[st],blk_cos+(size_t)ctx*hf,blk_sin+(size_t)ctx*hf,BLK,WINDOW,HC_SINKHORN_ITERS,EPS); std::swap(cb,nb); }
+            if(specprof) cudaEventRecord(p2);
             CU(cudaMemcpy(dfid,&cur,4,cudaMemcpyHostToDevice));
-            dspark_forward_head(dout,cb,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_w,mw1,mw2,1,BLK,hc,d,VOCAB,DSPARK_MARKOV_RANK,EPS); CU(cudaDeviceSynchronize());
+            dspark_forward_head(dout,cb,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,VOCAB,DSPARK_MARKOV_RANK,EPS); CU(cudaDeviceSynchronize());
+            if(specprof) cudaEventRecord(p3);
             std::vector<int> oo(BLK+1); CU(cudaMemcpy(oo.data(),dout,(BLK+1)*4,cudaMemcpyDeviceToHost));
             std::vector<int> draft(BLK); for(int i=0;i<BLK;++i) draft[i]=oo[1+i];     // proposals for cpos+1..cpos+BLK
             // VERIFY block [cur, draft[0..BLK-2]] at [cpos..cpos+BLK-1]
@@ -489,7 +504,7 @@ int main(int argc, char** argv){
                 std::swap(vin,vout);
                 if(Lyr==40) dspark_tap_pool(mh_v,vin,BLK,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_v,vin,BLK,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_v,vin,BLK,hc,d,2,3); }
             hc_head(collK,vin,hc_fn,hc_sc,hc_bs,BLK,hc,d,HC_EPS); rmsnorm(collK,collK,norm_w,BLK,d,EPS,true,0);
-            gemm_fp32(logK,collK,head_w,BLK,VOCAB,d,0); CU(cudaDeviceSynchronize());
+            gemm_bf16w(logK,collK,head_bf,BLK,VOCAB,d,0); CU(cudaDeviceSynchronize());
             std::vector<float> lg((size_t)BLK*VOCAB); CU(cudaMemcpy(lg.data(),logK,(size_t)BLK*VOCAB*4,cudaMemcpyDeviceToHost));
             std::vector<int> tam(BLK); for(int i=0;i<BLK;++i){const float*r=&lg[(size_t)i*VOCAB];int aa=0;for(int v=1;v<VOCAB;++v)if(r[v]>r[aa])aa=v;tam[i]=aa;}
             // ACCEPT longest matching prefix: draft[i]==tam[i] (target's token for pos cpos+1+i)
@@ -502,11 +517,25 @@ int main(int argc, char** argv){
                 for(int j=cpos;j<=cpos+acc;++j) if((j+1)%ratio==0) ++valid; KV[L].T=Tbefore[L]+valid; }   // drop rows from rejected drafts
             cpos += acc+1; cur = correction;
             cudaEventRecord(s1); cudaEventSynchronize(s1); float ms=0; cudaEventElapsedTime(&ms,s0,s1);
+            if(specprof){ cudaEventRecord(p4); CU(cudaDeviceSynchronize());
+                float a,b,c,e; cudaEventElapsedTime(&a,p0,p1); cudaEventElapsedTime(&b,p1,p2);
+                cudaEventElapsedTime(&c,p2,p3); cudaEventElapsedTime(&e,p3,p4);
+                if(nverify>0){ acc_kv+=a; acc_blk+=b; acc_head+=c; acc_ver+=e; ++nprof; } }
             if(nverify>0){ spec_ms+=ms; timed_tok+=acc+1; } ++nverify;   // exclude round 0 (warmup: head repack)
             printf("  verify %d: accepted %d/%d + correction -> +%d tokens (%.1f ms)  cpos=%d\n", nverify, acc, BLK-1, acc+1, ms, cpos);
         }
         double avg_acc=(double)sgen.size()/nverify;
         double ms_per_tok = timed_tok>0 ? spec_ms/timed_tok : 0;
+        if(specprof && nprof){
+            const double tot=(acc_kv+acc_blk+acc_head+acc_ver)/nprof;
+            printf("\n[specprof] per verify round, mean of %d (ms):\n", nprof);
+            printf("[specprof]   draft: main_kv  %7.2f  (%4.1f%%)\n", acc_kv/nprof,  100*acc_kv /nprof/tot);
+            printf("[specprof]   draft: 3 blocks %7.2f  (%4.1f%%)\n", acc_blk/nprof, 100*acc_blk/nprof/tot);
+            printf("[specprof]   draft: fwd_head %7.2f  (%4.1f%%)  <- host AR loop over %d positions\n",
+                   acc_head/nprof, 100*acc_head/nprof/tot, DSPARK_BLOCK);
+            printf("[specprof]   verify 43 layer %7.2f  (%4.1f%%)\n", acc_ver/nprof, 100*acc_ver/nprof/tot);
+            printf("[specprof]   TOTAL           %7.2f\n", tot);
+        }
         printf("\n[spec] generated %d tokens over %d verifies: mean tokens/verify = %.2f (block=%d, max %d)\n", (int)sgen.size(), nverify, avg_acc, BLK, BLK);
         printf("[spec] tokens:"); for(int i=0;i<(int)sgen.size() && i<40;++i) printf(" %d",sgen[i]); printf("\n");
         printf("[spec] SPEC-DECODE: %.1f ms/tok = %.2f tok/s  (vs base M=1 %.1f ms/tok = %.2f tok/s -> %.2fx)\n",

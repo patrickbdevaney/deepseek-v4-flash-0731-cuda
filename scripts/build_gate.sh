@@ -8,4 +8,5 @@ nvcc -O2 -std=c++17 -arch=sm_110a -I include \
 echo "built build/gate_units"
 # CPU-only gates (no GPU): chat encoder byte-exactness + OpenAI API shaping.
 g++ -O1 -std=c++17 -I include tests/gate_encoding.cpp -o build/gate_encoding && echo "built build/gate_encoding"
+nvcc -O3 -std=c++17 -arch=sm_110a -I include tests/gate_bf16w.cu kernels/compressor.cu kernels/dscratch.cu kernels/mla_attn.cu kernels/indexer.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu -o build/gate_bf16w && echo "built build/gate_bf16w"
 g++ -O1 -std=c++17 -I include tests/gate_api.cpp      -o build/gate_api      && echo "built build/gate_api"

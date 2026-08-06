@@ -1,5 +1,6 @@
 // dspark_real.cu — real DSpark head composable pieces. See dspark_real.h / DSPARK_HEAD_BUILD.md.
 #include "dspark_real.h"
+#include <cuda_bf16.h>
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"      // rmsnorm, act_quant_fp8
 #include "compressor.h"    // gemm_fp32
@@ -21,6 +22,11 @@ void dspark_main_x(float* main_x, const float* main_hidden, const uint8_t* main_
 }
 
 // gather markov_w1[token] -> markov_embed[n, rank]  (rows of the rank-256 embedding table)
+// BF16 table variant — the markov embedding rows are read natively (Finding 26).
+__global__ void k_gather_rows_bf16(float* out, const __nv_bfloat16* table, const int* ids, int n, int rank){
+    size_t i=blockIdx.x*(size_t)blockDim.x+threadIdx.x; if(i>=(size_t)n*rank) return; int t=i/rank, j=i%rank;
+    out[i]=__bfloat162float(table[(size_t)ids[t]*rank + j]);
+}
 __global__ void k_gather_rows(float* out, const float* table, const int* ids, int n, int rank){
     size_t i=blockIdx.x*(size_t)blockDim.x+threadIdx.x; if(i>=(size_t)n*rank) return;
     int t=i/rank, r=i%rank; out[i]=table[(size_t)ids[t]*rank + r];
@@ -28,10 +34,10 @@ __global__ void k_gather_rows(float* out, const float* table, const int* ids, in
 
 // Markov head: embed = markov_w1[token] (rank); logits_bias = embed @ markov_w2^T  ([n,rank]x[vocab,rank]->[n,vocab]).
 void dspark_markov(float* logits_bias, float* markov_embed, const int* token_ids,
-                   const float* markov_w1, const float* markov_w2, int n, int vocab, int rank,
+                   const void* markov_w1, const void* markov_w2, int n, int vocab, int rank,
                    cudaStream_t stream){
-    k_gather_rows<<<((size_t)n*rank+255)/256,256,0,stream>>>(markov_embed, markov_w1, token_ids, n, rank);
-    gemm_fp32(logits_bias, markov_embed, markov_w2, n, vocab, rank, stream);      // C[n,vocab] = E[n,rank] @ W2[vocab,rank]^T
+    k_gather_rows_bf16<<<((size_t)n*rank+255)/256,256,0,stream>>>(markov_embed, (const __nv_bfloat16*)markov_w1, token_ids, n, rank);
+    gemm_bf16w(logits_bias, markov_embed, markov_w2, n, vocab, rank, stream);      // C[n,vocab] = E[n,rank] @ W2[vocab,rank]^T
     CU(cudaStreamSynchronize(stream));
 }
 
@@ -51,7 +57,7 @@ __global__ void k_add_bias(float* logits, const float* bias, int n, int vocab){ 
 }
 void dspark_forward_head(int* output_ids, const float* x_block, const int* first_ids,
                          const float* hc_head_fn, const float* hc_head_scale, const float* hc_head_base,
-                         const float* norm, const float* lm_head, const float* markov_w1, const float* markov_w2,
+                         const float* norm, const void* lm_head, const void* markov_w1, const void* markov_w2,
                          int s, int block, int hc, int d, int vocab, int rank, float eps, cudaStream_t stream){
     const int N=s*block;
     float *collapsed,*logits,*bias,*membed; int *cur;
@@ -60,7 +66,7 @@ void dspark_forward_head(int* output_ids, const float* x_block, const int* first
     // hc_head (hc 4->1) -> norm -> lm_head  over all N=s*block block-positions
     hc_head(collapsed, x_block, hc_head_fn, hc_head_scale, hc_head_base, N, hc, d, 1e-6f, stream);
     rmsnorm(collapsed, collapsed, norm, N, d, eps, true, stream);
-    gemm_fp32(logits, collapsed, lm_head, N, vocab, d, stream);            // [s,block,vocab]
+    gemm_bf16w(logits, collapsed, lm_head, N, vocab, d, stream);            // [s,block,vocab]
     CU(cudaStreamSynchronize(stream));
     // host AR loop: out[:,0]=first_ids; for i: markov(out[:,i]) bias into logits[:,i]; out[:,i+1]=argmax
     std::vector<int> out((size_t)s*(block+1)); std::vector<int> fid(s);

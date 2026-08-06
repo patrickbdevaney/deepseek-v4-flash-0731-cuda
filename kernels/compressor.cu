@@ -1,5 +1,7 @@
 // compressor.cu — KV Compressor gated-pooling core, correctness-first (Gate K: ref/gen_units gen_compressor).
 #include "compressor.h"
+#include <cuda_bf16.h>
+#include <stdint.h>
 #include "dscratch.h"
 
 // C[M,N] = A[M,K] @ B[N,K]^T. One warp per (m,n).
@@ -15,6 +17,53 @@ __global__ void gemm_fp32_kernel(float* __restrict__ C, const float* __restrict_
 }
 void gemm_fp32(float* C, const float* A, const float* B, int M, int N, int K, cudaStream_t stream) {
     dim3 grid(N, M); gemm_fp32_kernel<<<grid, 32, 0, stream>>>(C, A, B, M, N, K);
+}
+
+// ---------------------------------------------------------------------------------------------
+// BF16-WEIGHT GEMV: C[M,N] = A[M,K] (f32) @ B[N,K]^T with B read NATIVELY as bf16.
+//
+// LOOP_LOG Finding 26. `lm_head` [129280, 4096] and the DSpark markov heads [129280, 256] ship as
+// BF16 but were being materialised to f32 by `Loader::bf16` and then fed to gemm_fp32. That
+// doubled both the resident footprint and, more importantly, the bytes read every single step:
+// lm_head alone went 1059 -> 2118 MB, ~19 ms of a 108 ms decode. The markov head is worse in the
+// draft, where it is re-read once per block position (5x).
+//
+// Two defects fixed together, since they are one code path:
+//   1. read bf16 directly (halves the bytes, frees 2.1 GiB of headroom)
+//   2. several warps per block — gemm_fp32 launched <<<dim3(N,M), 32>>>, i.e. 646,400 one-warp
+//      blocks for lm_head, capping occupancy at 50% exactly as Finding 21 did for the MoE.
+//
+// bf16x2 loads need 4-byte alignment; B is a mapped safetensors tensor (>=8-byte offsets) and the
+// row stride n*K*2 is a multiple of 4 for any even K, but it is checked at runtime anyway —
+// Finding 25 is the reason that is not optional here.
+__global__ void gemm_bf16w_kernel(float* __restrict__ C, const float* __restrict__ A,
+                                  const __nv_bfloat16* __restrict__ B, int M, int N, int K, int vec2) {
+    const int n = blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5);
+    const int m = blockIdx.y;
+    if (m >= M || n >= N) return;
+    const int lane = threadIdx.x & 31;
+    const float* a = A + (size_t)m * K;
+    const __nv_bfloat16* b = B + (size_t)n * K;
+    float acc = 0.f;
+    if (vec2) {
+        const __nv_bfloat162* b2 = (const __nv_bfloat162*)b;
+        const int n2 = K >> 1;
+        for (int k = lane; k < n2; k += 32) {
+            const float2 bv = __bfloat1622float2(b2[k]);
+            acc += a[2*k] * bv.x + a[2*k+1] * bv.y;
+        }
+    } else {
+        for (int k = lane; k < K; k += 32) acc += a[k] * __bfloat162float(b[k]);
+    }
+    #pragma unroll
+    for (int o = 16; o > 0; o >>= 1) acc += __shfl_down_sync(0xffffffff, acc, o);
+    if (lane == 0) C[(size_t)m * N + n] = acc;
+}
+void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K, cudaStream_t stream) {
+    const int wpb = 4, threads = 32*wpb;
+    const int vec2 = ((K & 1) == 0) && ((((uintptr_t)Bbf16) & 3) == 0);
+    dim3 grid((N + wpb - 1)/wpb, M);
+    gemm_bf16w_kernel<<<grid, threads, 0, stream>>>(C, A, (const __nv_bfloat16*)Bbf16, M, N, K, vec2);
 }
 // device-conditional gemm (CUDA-graph emit): launch stays static but the block early-exits when this step is
 // NOT a group-completion (so the expensive K-loop only runs on commit steps ~ every `ratio` tokens).
