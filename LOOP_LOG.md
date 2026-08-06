@@ -647,3 +647,100 @@ verify excess, and the first two were wrong.
 4. **The M≥2 verify penalty** (Finding 15, mechanism open) — bench `ogroup` and HC first.
 5. ~~MLA projection GEMV~~ — **retired**, already at 89–94%.
 6. ~~MXFP4 hardware unpack~~ — **retired**, already implemented (Finding 19).
+
+### Optimization #1 — MoE grouped GEMM: warps-per-block 1 -> 4. GATED, measured on the bench.
+
+Applied Finding 21. `k_grouped_w4a8_e8m0_kernel` and its float-scale twin now derive
+`n_block = blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5)` and launch `<<<grid, 32*wpb>>>`;
+`MOE_WPB` (default 4) restores the old behaviour at 1 for a reproducible A/B. The warps were
+already independent (no `__shared__`, no `__syncthreads`), so this is **pure launch geometry** —
+the per-warp math is byte-identical.
+
+**Correctness first:** Gate K re-run — `moe batched`, `moe device_route`, `moe batched+TC` all
+**cosine 1.0000000**, `fp4_gemm` unchanged. `Gate K (units): PASS`.
+
+**Occupancy (ncu), the mechanism:**
+
+| | before (wpb=1) | after (wpb=4) |
+|---|---|---|
+| Block size | 32 (1 warp) | 128 (4 warps) |
+| Theoretical occupancy | 50% | **100%** |
+| Achieved occupancy | 46.47% | **85.34%** |
+| Compute (SM) throughput | 24.74% | 45.62% |
+| Duration (isolated launch) | 511.74 us | **279.68 us** |
+
+**Throughput (gemm_bench, same process, A/B by env):**
+
+| M | wpb=1 | wpb=4 | speed-up |
+|---:|---:|---:|---:|
+| 1 | 111.9 GB/s | 121.6 | 1.09x |
+| 3 | 113.3 | 128.3 | 1.13x |
+| 5 | 116.7 | 130.5 | 1.12x |
+| 8 | 118.8 | 131.5 | 1.11x |
+
+`wpb=2` matches `wpb=4`; `wpb=8` is marginally worse. Default set to 4.
+
+**The two measurements disagree and I do not yet know which transfers.** `ncu`'s isolated launch
+says 1.83x; the bench's hot A/B loop says 1.09-1.13x. The likely reason is that the bench re-reads
+the same 25 MB of expert weights 30 times, so the baseline enjoys cache reuse the real decode never
+gets — in the full model each step streams ~1.1 GB of expert weights across 43 layers, far beyond
+any cache, which is closer to `ncu`'s cold case. **The full-model run is the arbiter**; recorded as
+a genuine open question rather than quoting the flattering number.
+
+### Finding 22 — I violated the single-tenant rule and nearly hard-hung the box. Now enforced in code.
+
+A launch chained as `build … | head -3 && sync && … && setsid nohup ./build/decode … &` appeared to
+fail — `~/opt1.log` did not exist when checked, because `head -3` had SIGPIPE'd and the build was
+still running behind the `&`. I relaunched. **Both launches then succeeded**, and two processes each
+mapping 100.4 GiB drove the machine to `available: 0`, `free: 565 MB`, swap in use, load average 9.4.
+This is precisely the condition that forced a physical power-cycle on the prior project.
+
+Recovered by `kill -9` on both PIDs; memory returned to 117 GiB available with no reboot.
+
+**Three lessons, the third being the one that matters:**
+1. Do not chain a launch behind `| head` — SIGPIPE makes a *successful* pipeline look failed.
+2. Never compile a heavy TU while a full-model load is in flight; the `g++` run competing for the
+   last GiB is what turned "tight" into "zero".
+3. **A hard rule written only in a document is not a control.** The single-tenant rule has been in
+   `HARDWARE.md` §4 and `STATUS.md` from the start, and I still broke it — under exactly the
+   circumstance (an ambiguous failure) where care is hardest. So it is now mechanical:
+   `scripts/run_model.sh` takes an `flock` on `/tmp/dsv4-fullmodel.lock`, refuses a second launch
+   with the offending PID printed, refuses to start below 105 GiB available, and always
+   `setsid nohup`s. **All full-model launches go through it from here.**
+
+---
+
+## 2026-08-06 — Phase 6: the chat encoder is byte-exact against DeepSeek's own goldens
+
+`include/encoding_dsv4.h` ports `encoding/encoding_dsv4.py` to C++ (no Python on the hot path).
+`tests/gate_encoding.cpp` runs it against the four golden vectors shipped in the checkpoint:
+
+```
+[vector 1, thinking]   2390 bytes byte-exact -> PASS     (tools + DSML tool-call block)
+[vector 2, thinking]    342 bytes byte-exact -> PASS     (multi-turn, drop_thinking)
+[vector 3, thinking]   3313 bytes byte-exact -> PASS     (Chinese, developer role, tools)
+[vector 4, chat    ]   2552 bytes byte-exact -> PASS     (Chinese, chat mode, tables)
+[roundtrip] BOS + <think> present -> PASS
+[effort] low+prefix==high, prefix present, absent in chat -> PASS
+Gate ENCODING: 6 passed, 0 failed -> PASS
+```
+
+**Two non-obvious things were required to get byte-exactness**, both in JSON serialisation of the
+embedded tool schemas — the schemas go into the prompt *verbatim*, so their formatting is
+load-bearing:
+
+1. **`nlohmann::json` sorts object keys** (it is backed by `std::map`), while Python's `json.dumps`
+   preserves insertion order. Switched to `nlohmann::ordered_json`. Symptom was
+   `{"description":...,"name":...}` against the golden's `{"name": ..., "description": ...}`.
+2. **Python's `json.dumps` default separators are `", "` and `": "` — with spaces.** nlohmann emits
+   `,` and `:`. Wrote a small recursive `to_json` that reproduces Python's spacing and delegates
+   scalars to `dump()` (which already escapes correctly and emits raw UTF-8, i.e.
+   `ensure_ascii=False`).
+
+Neither would have been caught by a "looks right" review; both were caught instantly by a
+byte-exact gate against vendor-supplied goldens. Vectors 3 and 4 also confirm UTF-8 is handled
+end-to-end.
+
+The `[effort]` assertion additionally pins the property `CHAT_FORMAT.md` §2.2 flags as a
+prefix-cache hazard: `high` output equals `low` output plus the prefix, at the *front*, and has no
+effect at all in chat mode.

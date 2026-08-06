@@ -20,7 +20,10 @@
 
 namespace dsv4enc {
 
-using json = nlohmann::json;
+// ordered_json, NOT json: nlohmann's default `json` is backed by std::map and therefore SORTS
+// object keys, while Python's json.dumps preserves insertion order. The tool schemas are embedded
+// in the prompt verbatim, so key order is load-bearing — sorting them fails the byte-exact gate.
+using json = nlohmann::ordered_json;
 
 // ---- special tokens (verbatim from encoding_dsv4.py) ----
 inline constexpr const char* BOS               = "<｜begin▁of▁sentence｜>";
@@ -62,8 +65,30 @@ inline constexpr const char* DEFAULT_REASONING_EFFORT = "low";
 
 // ---- helpers ----
 
-// json.dumps(value, ensure_ascii=False) — nlohmann dumps non-ASCII raw by default, which matches.
-inline std::string to_json(const json& v) { return v.dump(); }
+// Mimic Python's json.dumps(value, ensure_ascii=False) EXACTLY.
+// Two differences from nlohmann's dump() that both break the byte-exact gate:
+//   1. Python's default separators are ", " and ": " (with spaces); nlohmann emits "," and ":".
+//   2. Key order — handled by using ordered_json above.
+// Scalars are delegated to nlohmann's dump(), which already escapes correctly and emits raw UTF-8
+// (i.e. ensure_ascii=False).
+inline std::string to_json(const json& v) {
+    if (v.is_object()) {
+        std::string s = "{";
+        bool first = true;
+        for (auto it = v.begin(); it != v.end(); ++it) {
+            if (!first) s += ", ";
+            first = false;
+            s += json(it.key()).dump() + ": " + to_json(it.value());
+        }
+        return s + "}";
+    }
+    if (v.is_array()) {
+        std::string s = "[";
+        for (size_t i = 0; i < v.size(); ++i) { if (i) s += ", "; s += to_json(v[i]); }
+        return s + "]";
+    }
+    return v.dump();
+}
 
 inline std::string replace_all(std::string s, const std::string& from, const std::string& to) {
     if (from.empty()) return s;

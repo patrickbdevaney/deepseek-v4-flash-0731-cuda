@@ -4,6 +4,7 @@
 // OUR adaptation: (a) fp8-e4m3 act → fp16 with per-128 act scale folded in; (b) fp4 weight path unchanged;
 // (c) gemma's per-k-tile fp8 weight-scale → our per-32 e8m0 (exp2(byte-127)), pre-expanded to fp16 per-k-tile.
 // *** UNGATED — must pass bit-exact/cosine vs fp4_gemm (tests/gate_tc_moe.cu) before it is trusted / used. ***
+#include <cstdlib>
 #include <cuda_fp16.h>
 #include <cuda_fp4.h>
 #include <cuda_fp8.h>
@@ -228,7 +229,14 @@ __global__ void k_grouped_w4a8_kernel(float* out, const uint8_t* const* wptr, co
     const uint8_t* wprE = wptr[e]; const float* b_s = sptr[e];
     int off_b=(int)((uintptr_t)wprE & 15); int k0f=off_b>>2; unsigned shf=(off_b&3)*8;   // per-expert alignment
     int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
-    int n_block=blockIdx.x; if((long)n_block*8>=N) return; int n0=n_block*8;
+    // OCCUPANCY (LOOP_LOG Finding 21): this launched <<<grid,32>>> — one warp per block. A
+    // 32-thread block still consumes a whole block slot, so half the SM's warp slots were unusable
+    // (ncu: theoretical occupancy 50%, achieved 46%, Compute 24.7% / Memory 37.3% = latency-bound,
+    // not saturated). The warps are fully independent here (no __shared__, no __syncthreads), so
+    // pack several per block, each taking its own n-block. Pure launch geometry: the per-warp math
+    // is byte-identical, so this gates cosine-1.0 against the previous output.
+    int n_block = blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5);
+    if((long)n_block*8>=N) return; int n0=n_block*8;
     float c[4]={0,0,0,0}; int kg8=K/128, Ks32=K/32;
     const uint8_t* wb = wprE + (long)n_block*kg8*512;
     const __half* xg0 = x16all + (size_t)(row0+gid)*K, *xg8 = x16all + (size_t)(row0+gid+8)*K;
@@ -325,7 +333,14 @@ __global__ void k_grouped_w4a8_e8m0_kernel(float* out, const uint8_t* const* wpt
     const uint8_t* wprE = wptr[e]; const uint8_t* b_s = sptr[e];       // b_s = e8m0 bytes [N, K/32]
     int off_b=(int)((uintptr_t)wprE & 15); int k0f=off_b>>2; unsigned shf=(off_b&3)*8;
     int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
-    int n_block=blockIdx.x; if((long)n_block*8>=N) return; int n0=n_block*8;
+    // OCCUPANCY (LOOP_LOG Finding 21): this launched <<<grid,32>>> — one warp per block. A
+    // 32-thread block still consumes a whole block slot, so half the SM's warp slots were unusable
+    // (ncu: theoretical occupancy 50%, achieved 46%, Compute 24.7% / Memory 37.3% = latency-bound,
+    // not saturated). The warps are fully independent here (no __shared__, no __syncthreads), so
+    // pack several per block, each taking its own n-block. Pure launch geometry: the per-warp math
+    // is byte-identical, so this gates cosine-1.0 against the previous output.
+    int n_block = blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5);
+    if((long)n_block*8>=N) return; int n0=n_block*8;
     float c[4]={0,0,0,0}; int kg8=K/128, Ks32=K/32;
     const uint8_t* wb = wprE + (long)n_block*kg8*512;
     const __half* xg0 = x16all + (size_t)(row0+gid)*K, *xg8 = x16all + (size_t)(row0+gid+8)*K;
@@ -355,16 +370,25 @@ __global__ void k_grouped_w4a8_e8m0_kernel(float* out, const uint8_t* const* wpt
     if(gid+8<me && n0+cn  <N) out[(size_t)(row0+gid+8)*N + n0+cn ]=c[2];
     if(gid+8<me && n0+cn+1<N) out[(size_t)(row0+gid+8)*N + n0+cn+1]=c[2+1];
 }
+// Warps per block for the grouped MoE GEMMs. 1 (the old value) caps theoretical occupancy at 50%.
+// Env-overridable so the A/B is reproducible: MOE_WPB=1 restores the previous behaviour exactly.
+static int moe_wpb(){
+    static int w = [](){ const char* e=getenv("MOE_WPB"); int v = e?atoi(e):4;
+                         if(v<1) v=1; if(v>8) v=8; return v; }();
+    return w;
+}
 void tc_fp4_grouped_gemm_e8m0(float* out, const __half* x16all, const uint8_t* const* wptr_d, const uint8_t* const* sptr_d,
         const int* off_d, const int* tile_e, const int* tile_row0, const int* ntiles_d,
         int maxtiles, int N, int K, cudaStream_t s){
-    dim3 grid(N/8, maxtiles);
-    k_grouped_w4a8_e8m0_kernel<<<grid, 32, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K);
+    const int wpb = moe_wpb(), nb = N/8;
+    dim3 grid((nb + wpb - 1)/wpb, maxtiles);
+    k_grouped_w4a8_e8m0_kernel<<<grid, 32*wpb, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K);
 }
 // Grouped W4A8: out[total,N] = per-tile (expert wptr[e]) mma over x16all rows. maxtiles = host upper bound on tiles.
 void tc_fp4_grouped_gemm(float* out, const __half* x16all, const uint8_t* const* wptr_d, const float* const* sptr_d,
         const int* off_d, const int* tile_e, const int* tile_row0, const int* ntiles_d,
         int maxtiles, int N, int K, cudaStream_t s){
-    dim3 grid(N/8, maxtiles);
-    k_grouped_w4a8_kernel<<<grid, 32, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K);
+    const int wpb = moe_wpb(), nb = N/8;
+    dim3 grid((nb + wpb - 1)/wpb, maxtiles);
+    k_grouped_w4a8_kernel<<<grid, 32*wpb, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K);
 }
