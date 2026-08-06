@@ -26,6 +26,7 @@
 #include "mla_attn.h"
 #include "compressor.h"
 #include "dscratch.h"
+#include "dprof.h"
 #include "dspark_real.h"   // DSpark head: main_x, tap_pool, forward_head, markov
 #include "dspark_attn.h"   // dspark_main_kv, dspark_block_forward
 #include "yarn.h"
@@ -351,6 +352,7 @@ int main(int argc, char** argv){
         // (compressor + DSA indexer) and ABSENT from the 2 pure-sliding layers, which have neither.
         // Timing per flavour separates them directly: pure-sliding is the control.
         if(getenv("DSV4_KSWEEP")){
+            dprof_init();
             std::vector<cudaEvent_t> ev(N_LAYERS+1);
             for(auto& e: ev) cudaEventCreate(&e);
             const double cv_model[6]={0,1.000,1.296,1.582,1.856,2.120};
@@ -372,6 +374,7 @@ int main(int argc, char** argv){
                     else     cblock_verify_step(b,a,d_ids+PS,CW[L],PS,K,HC_SINKHORN_ITERS,EPS,KV[L]);
                     cudaEventRecord(ev[L+1]); std::swap(a,b); }
                 CU(cudaDeviceSynchronize());
+                { char tg[32]; snprintf(tg,sizeof tg,"K=%d",K); dprof_report(tg); }
                 double tot=0, ts=0, t128=0, t4=0;
                 for(int L=0; L<N_LAYERS; ++L){ float dt; cudaEventElapsedTime(&dt,ev[L],ev[L+1]);
                     tot+=dt; int r=compress_ratio(L); (r==0?ts:(r==128?t128:t4)) += dt; }

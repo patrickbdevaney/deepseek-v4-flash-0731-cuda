@@ -1098,3 +1098,82 @@ speculation from 1.00x to only ~1.10x.
 **The draft head is no longer the blocker. Finding 15 is** — the ~70 ms of unattributed M>=2 verify
 cost is worth 1.00x -> ~1.4x on speculation and is 84% of the spec round. That is where the next
 work belongs, and it needs instrumentation inside the layer rather than a fourth hypothesis.
+
+---
+
+## 2026-08-06 — FINDING 15 IS CLOSED. The M>=2 verify penalty is the ATTENTION GLUE.
+
+Three hypotheses had been refuted (MoE expert-union by code inspection, DSA by the layer-flavour
+split, ogroup/HC by direct bench) and I had explicitly refused to offer a fourth guess, saying the
+next step was instrumentation. This is that instrumentation.
+
+`include/dprof.h` + `kernels/dprof.cu`: named-phase GPU timing. Events are recorded into a
+preallocated pool and **not synchronised until the report**, so the instrumented path stays
+asynchronous — a sync per phase would have manufactured exactly the stalls being hunted, which is
+the trap `dspark_forward_head` had fallen into. Enabled with `DSV4_DPROF=1`, compiled to a branch
+otherwise.
+
+### Level 1 — the verify step by sub-op, summed over all 43 layers
+
+| phase | K=1 | K=2 | K=5 | K1→K2 | K1→K5 |
+|---|---:|---:|---:|---:|---:|
+| hc_pre (attn) | 2.55 | 2.77 | 3.76 | 1.09x | 1.47x |
+| rmsnorm (attn) | 0.75 | 0.74 | 0.79 | 0.99x | 1.05x |
+| **ATTENTION** | **44.24** | **114.78** | **128.38** | **2.59x** | **2.90x** |
+| hc_post (attn) | 0.28 | 0.30 | 0.44 | 1.07x | 1.57x |
+| hc_pre (ffn) | 3.70 | 3.78 | 5.59 | 1.02x | 1.51x |
+| rmsnorm (ffn) | 0.76 | 0.77 | 0.76 | 1.01x | 1.00x |
+| MoE | 43.42 | 73.16 | 110.44 | 1.68x | 2.54x |
+| hc_post (ffn) | 0.25 | 0.30 | 0.44 | 1.20x | 1.76x |
+| kv xin copy | 0.19 | 0.18 | 0.19 | 0.95x | 1.00x |
+| TOTAL | 96.13 | 196.77 | 250.79 | 2.05x | 2.61x |
+
+**ATTENTION jumps 44.24 -> 114.78 ms at K=2 — +70.5 ms — then is nearly flat to K=5 (128.38).**
+That is the entire missing penalty, and it is a step, not a per-position cost. Everything else
+behaves: MoE grows 2.54x against a ~3.7x byte model (correlated routing makes the real expert union
+*cheaper* than modelled, as suspected), and the HC/norm/copy phases are flat.
+
+Attention weight bytes are **K-invariant** — the same 4599 MB are read once whether verifying 1
+token or 5. So the +70.5 ms is not bandwidth. It is work that scales with M.
+
+### Level 2 — inside attention (the 2 pure-sliding layers, where `mla_verify_step` runs)
+
+| sub-op | K=1 | K=2 | K=5 | K1→K2 |
+|---|---:|---:|---:|---:|
+| `q_proj` (act_quant, wq_a, rmsnorm, act_quant, wq_b, rmsnorm, rope) | 0.55 | 1.53 | 1.54 | **2.78x** |
+| `kv_write` (wkv, rmsnorm, rope, act_quant) | 0.08 | 0.21 | 0.21 | **2.62x** |
+| **`sparse_attn`** | **0.05** | **0.05** | **0.06** | **1.00x** |
+| `ogroup` (rope⁻¹, ogroup_gemm, wo_b) | 1.03 | 3.11 | 3.13 | **3.02x** |
+| SUM | 1.71 | 4.90 | | 2.87x |
+
+```
+step per layer at K=2 = (4.90 - 1.71)/2 = 1.595 ms
+scaled to 43 layers   = 68.6 ms      vs the ~70 ms to explain   -> ACCOUNTED
+```
+
+**The penalty is the dense-projection + elementwise chains — `act_quant`, `rmsnorm`, `rope`,
+`kv-write` — around the GEMMs. And `sparse_attn` is 0.05 ms and completely FLAT (1.00x).**
+
+### What this corrects
+
+- **DSA is exonerated a fourth time, now directly rather than by inference.** The sparse attention
+  is 0.05 ms of a 96 ms step and does not grow with K at all. The directive's §4.3/§7 framing of
+  DSA verify cost as the project's central unknown was wrong for this engine, and I spent a
+  hypothesis on it too.
+- **My original Finding 15 attribution was half right.** I blamed the `M==1`-only GEMV fast paths
+  falling through to m16-tile mma, then retracted it when the bench priced `fp8_block_gemm`'s
+  M=1→M=2 step at only +7.4% (~1.3 ms over 43 layers). Both readings were incomplete: the GEMMs
+  alone really are nearly flat, but the **glue around them is not**, and I had never benched the
+  glue. The bench measured what I thought to measure, which is a different thing from what mattered.
+- The prior project's research doc named this exact lever — **T1.2, "fuse the attention/indexer/
+  compressor glue (RoPE + norm + quant + KV-write)", citing vLLM at 2-20x** — and ranked it second.
+  It was never taken. It is now empirically the single largest remaining item, and it is the same
+  class of defect as Findings 21/24/26b: correctness-first kernels launched at shapes that were
+  fine at M=1 and fall off a cliff at M>=2.
+
+### What it is worth
+
+`c_v(5)` is currently 2.61. Removing the 68.6 ms step takes the K=5 verify from 250.8 to ~182 ms,
+i.e. `c_v` -> ~1.9. At the measured acceptance `a = 3.12` that moves speculation from **1.00x to
+~1.6x**, and it also cuts the base decode's own attention glue. **This is now the top lever in the
+project**, ahead of the remaining MoE efficiency.

@@ -39,7 +39,12 @@ now only ~15.8% of a verify round; **the verify is 84.2%**, so zeroing the rest 
 move speculation only 1.00x -> ~1.10x.
 
 1. ~~DSpark draft head~~ — ~6x off its own roofline; gates the entire speculative win (Finding 17).
-2. **The M>=2 verify step penalty** — ~+0.70 c_v at K=2, mechanism still OPEN after two refuted
+2. ~~The M>=2 verify step penalty~~ — **ROOT-CAUSED (Finding 15 CLOSED)**. It is the attention
+   **glue** (`act_quant`/`rmsnorm`/`rope`/KV-write around the projections): `q_proj` 2.78x,
+   `kv_write` 2.62x, `ogroup` 3.02x from K=1 to K=2, while `sparse_attn` is FLAT at 1.00x. 68.6 ms
+   over 43 layers, accounting for the whole ~70 ms. **Fusing that chain is now the #1 lever**:
+   `c_v(5)` 2.61 -> ~1.9, speculation 1.00x -> ~1.6x, and it helps base decode too.
+   (superseded entry:) old M>=2 note — ~+0.70 c_v at K=2, mechanism still OPEN after two refuted
    hypotheses. Bench `ogroup_gemm_fp8` and the HC/Sinkhorn path before proposing a third.
 3. **MoE beyond occupancy** — still only ~51% of achievable after Opt #1.
 

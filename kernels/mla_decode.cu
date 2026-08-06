@@ -1,5 +1,6 @@
 // mla_decode.cu — M=1 KV-cache decode for a pure-sliding MLA layer. See mla_decode.h.
 #include "mla_decode.h"
+#include "dprof.h"
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"
 #include "deepseek_v4.h"
@@ -93,6 +94,7 @@ void mla_verify_step(float* out, const float* x, const MLAWeights& w, float* kvc
     q=(float*)dmalloc((size_t)K*Kd*4); o=(float*)dmalloc((size_t)K*Kd*4); og=(float*)dmalloc((size_t)K*OB*4);
     ogq=(uint8_t*)dmalloc((size_t)K*OB); ogs=(float*)dmalloc((size_t)K*(OB/128)*4);
 
+    dprof_begin(DP_A_QPROJ,stream);
     act_quant_fp8(xq, xs, x, K, DIM, 128, stream);
     fp8_block_gemm(qr, xq, xs, w.wq_a, w.wq_a_s, K, Q_LORA, DIM, stream);
     rmsnorm(qr, qr, w.q_norm, K, Q_LORA, EPS, true, stream);
@@ -100,17 +102,23 @@ void mla_verify_step(float* out, const float* x, const MLAWeights& w, float* kvc
     fp8_block_gemm(q, qrq, qrs, w.wq_b, w.wq_b_s, K, Kd, Q_LORA, stream);
     rmsnorm(q, q, nullptr, K*N_HEADS, HEAD_DIM, EPS, false, stream);
     rope_interleaved(q + NOPE_DIM, cosP, sinP, K*N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream);  // row t*N_HEADS+h -> cos row t
+    dprof_end(DP_A_QPROJ,stream);
     // new tokens' KV -> cache[pos..pos+K-1]
+    dprof_begin(DP_A_KV,stream);
     float* kvn = kvcache + (size_t)pos*HEAD_DIM;
     fp8_block_gemm(kvn, xq, xs, w.wkv, w.wkv_s, K, HEAD_DIM, DIM, stream);
     rmsnorm(kvn, kvn, w.kv_norm, K, HEAD_DIM, EPS, true, stream);
     rope_interleaved(kvn + NOPE_DIM, cosP, sinP, K, ROPE_DIM, false, HEAD_DIM, 1, stream);
     act_quant_fp8sim(kvn, K, NOPE_DIM, 64, HEAD_DIM, stream);
+    dprof_end(DP_A_KV,stream);
     // per-query window idxs
+    dprof_begin(DP_A_SPARSE,stream);
     int ncache = pos + K; int topk = (ncache < WINDOW) ? ncache : WINDOW;
     int* didx; didx=(int*)dmalloc((size_t)K*topk*4);
     k_verify_win_idx<<<((size_t)K*topk+63)/64,64,0,stream>>>(didx, pos, K, topk);
     sparse_attn(o, q, kvcache, w.attn_sink, didx, 1, K, N_HEADS, HEAD_DIM, ncache, topk, scale, stream);
+    dprof_end(DP_A_SPARSE,stream);
+    dprof_begin(DP_A_OGROUP,stream);
     rope_interleaved(o + NOPE_DIM, cosP, sinP, K*N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
     if(w.wo_a_native) ogroup_gemm_fp8(og, o, w.wo_a_fp8, w.wo_a_sc, K, O_GROUPS, O_LORA, GKd, stream);
     else              ogroup_gemm    (og, o, w.wo_a,                K, O_GROUPS, O_LORA, GKd, stream);
@@ -118,6 +126,7 @@ void mla_verify_step(float* out, const float* x, const MLAWeights& w, float* kvc
     fp8_block_gemm(out, ogq, ogs, w.wo_b, w.wo_b_s, K, DIM, OB, stream);
     dsync(stream);
     dfree(xq);dfree(xs);dfree(qr);dfree(qrq);dfree(qrs);dfree(q);dfree(o);dfree(og);dfree(ogq);dfree(ogs);dfree(didx);
+    dprof_end(DP_A_OGROUP,stream);
 }
 
 // ================= device-pos sliding decode (CUDA-graph capturable) =================
