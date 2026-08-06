@@ -24,10 +24,13 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 
 ## Next levers (measurement-backed, `LOOP_LOG.md` Findings 18-21)
 
-1. **DSpark draft head** — ~6x off its own roofline; gates the entire speculative win (Finding 17).
-2. **The M>=2 verify step penalty** — ~+0.70 c_v at K=2, mechanism still OPEN after two refuted
+1. **HC + Sinkhorn fusion** (Finding 23) — 9.4% of wall-clock for 1.2% of the bytes, ~7.8x off
+   roofline, M-invariant. 20 sequential Sinkhorn iterations over a 4x4; fuse into one kernel that
+   keeps it in registers. Worth ~9 ms/step (~1.09x) and entirely local.
+2. **DSpark draft head** — ~6x off its own roofline; gates the entire speculative win (Finding 17).
+3. **The M>=2 verify step penalty** — ~+0.70 c_v at K=2, mechanism still OPEN after two refuted
    hypotheses. Bench `ogroup_gemm_fp8` and the HC/Sinkhorn path before proposing a third.
-3. **MoE beyond occupancy** — still only ~51% of achievable after Opt #1.
+4. **MoE beyond occupancy** — still only ~51% of achievable after Opt #1.
 
 Retired: MLA projection GEMVs (already 89-94%), MXFP4 hardware unpack (already implemented),
 small-N GEMV wave quantisation (real mechanism, but the whole lever is <2% of `B_tok` — Opt #2).

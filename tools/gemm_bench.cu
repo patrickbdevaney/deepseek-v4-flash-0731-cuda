@@ -15,12 +15,15 @@
 #include "deepseek_v4.h"
 #include "fp8_block_gemm.h"
 #include "dscratch.h"
+#include "mla_attn.h"
+#include "hc.h"
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 using namespace dsv4;
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
@@ -43,16 +46,25 @@ static void report(std::vector<Row>& rows, double achievable_gbs) {
     }
 }
 
+// Take the MEDIAN of several timed trials, each preceded by its own warm-up.
+// A single mean-of-N was not robust at the small shapes: allocation/first-touch effects made
+// back-to-back runs of the same binary differ by 3.8x on a 4 MB weight (LOOP_LOG Opt #2).
 template <class F>
-static double timeit(F&& f, int reps) {
-    cudaEvent_t a,b; CU(cudaEventCreate(&a)); CU(cudaEventCreate(&b));
-    f(); CU(cudaDeviceSynchronize());                      // warm
-    CU(cudaEventRecord(a));
-    for (int i=0;i<reps;++i) f();
-    CU(cudaEventRecord(b)); CU(cudaEventSynchronize(b));
-    float ms; CU(cudaEventElapsedTime(&ms,a,b));
-    CU(cudaEventDestroy(a)); CU(cudaEventDestroy(b));
-    return ms/reps;
+static double timeit(F&& f, int reps, int trials = 5) {
+    for (int i=0;i<3;++i) f();
+    CU(cudaDeviceSynchronize());
+    std::vector<double> t;
+    for (int k=0;k<trials;++k) {
+        cudaEvent_t a,b; CU(cudaEventCreate(&a)); CU(cudaEventCreate(&b));
+        CU(cudaEventRecord(a));
+        for (int i=0;i<reps;++i) f();
+        CU(cudaEventRecord(b)); CU(cudaEventSynchronize(b));
+        float ms; CU(cudaEventElapsedTime(&ms,a,b));
+        CU(cudaEventDestroy(a)); CU(cudaEventDestroy(b));
+        t.push_back(ms/reps);
+    }
+    std::sort(t.begin(), t.end());
+    return t[t.size()/2];
 }
 
 int main(int argc, char** argv) {
@@ -152,6 +164,48 @@ int main(int argc, char** argv) {
         }
         printf("\nMoE is 30.8%% of B_tok. If this sits far below the MLA GEMMs' efficiency, the\n"
                "ROOFLINE.md §6 priority order (MLA #1, MoE #2) is inverted by measurement.\n");
+    }
+    // ---- the two remaining suspects for the M>=2 step penalty (LOOP_LOG Finding 15) ----
+    // The dense GEMMs were ruled out (+7.4% M=1->M=2, ~1.3 ms across 43 layers vs a ~72 ms penalty).
+    // The flavour split says it is something EVERY layer does, which leaves ogroup (its M>=2
+    // fallback allocates, runs a separate k_f2h pass, and frees) and HC + 20-iteration Sinkhorn.
+    {
+        const int G = O_GROUPS, R = O_LORA, Kd = DIM/O_GROUPS;   // wo_a: [G*R, DIM]
+        uint8_t* wo  = (uint8_t*)dalloc((size_t)G*R*DIM);
+        uint8_t* wos = (uint8_t*)dalloc((size_t)((G*R)/128+1)*(DIM/128+1));
+        printf("\n--- Finding 15 suspects: per-CALL cost vs M (ms) ---\n");
+        printf("%-22s %10s %10s %10s %10s %10s   per-layer x43\n","","M=1","M=2","M=3","M=5","M=8");
+        printf("%-22s","ogroup_gemm_fp8");
+        double og[6]={0};
+        for (int mi=0, M=1; mi<5; ++mi) {
+            M = (int[]){1,2,3,5,8}[mi];
+            float* o   = (float*)dalloc((size_t)M*G*Kd*4);
+            float* out = (float*)dalloc((size_t)M*DIM*4);
+            og[mi] = timeit([&]{ ogroup_gemm_fp8(out,o,wo,wos,M,G,R,Kd,0); }, 20);
+            printf(" %9.4f", og[mi]);
+            CU(cudaFree(o)); CU(cudaFree(out));
+        }
+        printf("   -> M=1 %.1f ms, M=5 %.1f ms\n", og[0]*43, og[3]*43);
+
+        const int hc = HC_MULT, d = DIM;
+        float* hcfn = (float*)dalloc((size_t)HC_MIX*hc*d*4);
+        float* hcsc = (float*)dalloc(3*4);
+        float* hcba = (float*)dalloc((size_t)HC_MIX*4);
+        printf("%-22s","hc_pre + sinkhorn");
+        double hp[6]={0};
+        for (int mi=0, M=1; mi<5; ++mi) {
+            M = (int[]){1,2,3,5,8}[mi];
+            float* x    = (float*)dalloc((size_t)M*hc*d*4);
+            float* y    = (float*)dalloc((size_t)M*d*4);
+            float* post = (float*)dalloc((size_t)M*hc*4);
+            float* comb = (float*)dalloc((size_t)M*hc*hc*4);
+            hp[mi] = timeit([&]{ hc_pre(y,post,comb,x,hcfn,hcsc,hcba,M,hc,d,HC_SINKHORN_ITERS,HC_EPS,0); }, 20);
+            printf(" %9.4f", hp[mi]);
+            CU(cudaFree(x)); CU(cudaFree(y)); CU(cudaFree(post)); CU(cudaFree(comb));
+        }
+        printf("   -> M=1 %.1f ms, M=5 %.1f ms (x2/layer: attn+ffn)\n", hp[0]*43*2, hp[3]*43*2);
+        printf("\nThe M>=2 penalty to explain is ~72 ms across 43 layers. Whichever of these jumps\n"
+               "at M=2 and stays flat to M=8 is the mechanism.\n");
     }
     return 0;
 }

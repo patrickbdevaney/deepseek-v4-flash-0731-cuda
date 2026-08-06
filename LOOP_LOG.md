@@ -816,3 +816,56 @@ available without changing behaviour.
 The revised standing order is in `OPTIMIZATION_LOG.md`: the DSpark draft head (Finding 17, ~6x off
 roofline and gating the whole speculative win) and the M>=2 step penalty (Finding 15, mechanism
 still open) are both worth far more than anything left in the dense GEMV path.
+
+### Finding 15, third pass — both remaining suspects MEASURED. Neither explains it. But HC is a new lever.
+
+Extended `gemm_bench` to `ogroup_gemm_fp8` and `hc_pre`+Sinkhorn, with a better method (median of 5
+trials, 3-call warm-up each) after Opt #2 showed the old mean-of-N was not robust at small shapes.
+
+```
+                          M=1      M=2      M=3      M=5      M=8      per-layer x43
+ogroup_gemm_fp8        0.0257   0.0626   0.0650   0.0700   0.0780     1.1 -> 3.0 ms
+hc_pre + sinkhorn      0.1272   0.1272   0.1291   0.1294   0.1310    10.9 -> 11.1 ms (x2/layer)
+```
+
+**`ogroup` has exactly the right shape** — 2.4x jump at M=2, then flat to M=8, which is the
+step-function signature Finding 15 describes, and its M≥2 fallback does allocate + run a separate
+`k_f2h` pass + free. **But the magnitude is wrong by a factor of ~45**: the step is
+`(0.0626-0.0257) x 43 = 1.6 ms` against a ~72 ms penalty, i.e. **2.2% of it**.
+
+**HC + Sinkhorn is flat across M** (0.1272 → 0.1310, +3%). Not the mechanism at all.
+
+**So Finding 15's mechanism is still open after three hypotheses** — MoE union (refuted by code),
+DSA (refuted by the flavour split), and now the dense/ogroup/HC path (refuted by direct
+measurement, all three contributing <2% each). What is left inside a layer and unmeasured: the
+sparse attention itself, the compressor/indexer forwards, and the MoE *dispatch* around the grouped
+GEMM (gather, act-quant, swiglu, scatter, the deterministic combine). Recording the elimination
+rather than proposing a fourth guess: the honest state is that ~70 ms of the M≥2 verify step is
+still unattributed, and the next step is instrumentation inside the layer, not another hypothesis.
+
+Worth noting the sweep also shows the excess **shrank** with Opt #1 — at K=5 it went from +34.6 ms
+to ~+23 ms — so part of the "penalty" was always MoE inefficiency scaling with `|union|`, not a
+fixed M≥2 cost.
+
+### Finding 23 (new lever, found while eliminating) — HC + Sinkhorn is ~8x off its roofline
+
+The elimination measurement turned up something more useful than the thing it was looking for:
+
+```
+HC cost   0.1272 ms/call x 2 calls/layer (attn + ffn) x 43 layers = 10.94 ms
+          = 9.4% of the 115.8 ms decode step
+HC bytes  135.28 MB -> 1.40 ms at the measured 96.7 GB/s
+          => ~7.8x off roofline, and completely M-invariant
+```
+
+Hyper-connections are only 1.2% of `B_tok` but **9.4% of wall-clock**. By the
+`bytes x (1 - efficiency)` rule this is now the **second** largest recoverable term after the MoE —
+worth ~9 ms/step, i.e. roughly another 1.09x on its own. The cause is almost certainly the
+**20 sequential Sinkhorn iterations** (`hc_sinkhorn_iters: 20` from config), each a tiny
+normalisation over a `[bs, 4, 4]` matrix — 20 dependent round-trips of trivial work, which is
+latency, not bandwidth. A single fused kernel keeping the 4x4 in registers across all 20 iterations
+is the obvious fix and it is entirely local.
+
+**This is the third time the measured ranking has disagreed with the byte-share ranking**
+(MLA over-ranked, small-N GEMVs over-ranked, HC under-ranked). The byte model predicts the *floor*
+extremely well — it nailed K=1 to 0.02 ms — but says nothing about which kernels reach it.
