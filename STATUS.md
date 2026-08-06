@@ -19,6 +19,9 @@ Last updated: 2026-08-06.
 | **L1** | loads to device, peak < ~105 GB | **PASS** — 100.400 GiB / 45,821 tensors, zero-copy, GPU read verified vs file bytes |
 | **G1–G8** | kernel gates + full AR forward | **PASS** — G1/G2/G5/G6/G7 via Gate K; **G3/G4/G8 via the full-model run**: "The capital of France is" → **" Paris. The capital of Spain is Madrid"** |
 | G9 | CUDA graph capture | ported, not yet re-gated on 0731 |
+| **D1** | DSpark spec-decode | **PASS** — embedded heads, memory-neutral, correct; at parity (0.97x) |
+| **ENCODING** | chat encoder byte-exact vs vendor goldens | **PASS** — 4/4 vectors + 2 property checks |
+| S1 | full server | in progress — encoder + OpenAI shaping done, HTTP layer pending |
 | D1 | DSpark decode tok/s + acceptance | not started |
 | S1 | multi-turn tool-calling session | not started |
 
@@ -41,9 +44,11 @@ Last updated: 2026-08-06.
 | `B_tok` | **11.202 GB/token** |
 | Achievable BW | **240 GB/s measured** (212 contended) — not the ~200 inherited |
 | AR wall | **21.42 tok/s** @ 240 GB/s · 24.37 @ 273 spec |
-| **MEASURED base AR decode (0731)** | **7.81 tok/s / 128.1 ms/tok = 87.5 GB/s = 36.4% of achievable** |
+| **MEASURED base AR decode (0731)** | **8.63 tok/s / 115.8 ms/tok = 96.7 GB/s = 40.3% of achievable** (after Opt #1; was 7.80) |
+| DSpark spec-decode | 8.42 tok/s (0.97x of base — draft head is the blocker, Finding 17) |
 | Prior 180B anchor, for comparison | 7.89 tok/s / 126.7 ms/tok — **transferred to within 1.1%** |
-| M=5 verify | 336.1 ms = **2.62×** an M=1 decode (model says 2.120×) — ~5.6 GB excess traffic |
+| M=5 verify | 300.5 ms = **2.60×** an M=1 decode (model says 2.120×) — mechanism OPEN (Finding 15) |
+| DSpark acceptance | **3.12 tokens/verify** of max 5 (α≈0.7) — acceptance is fine, cost is not |
 | Base AR band after kernel work | **15–19 tok/s** (70–80% of achievable) |
 | DSpark band (α-sensitive, k*≈2–3) | **22–36 tok/s**, centred ~28 |
 | KV at fp8 | 3.36 KiB/token → 3.21 GiB at 1M context; **~105 MiB at 32K** |

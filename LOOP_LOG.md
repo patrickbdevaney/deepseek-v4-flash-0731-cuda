@@ -744,3 +744,31 @@ end-to-end.
 The `[effort]` assertion additionally pins the property `CHAT_FORMAT.md` §2.2 flags as a
 prefix-cache hazard: `high` output equals `low` output plus the prefix, at the *front*, and has no
 effect at all in chat mode.
+
+### Optimization #1 — FULL-MODEL A/B: CONFIRMED, 7.80 -> 8.63 tok/s (1.107x)
+
+Run through the new `scripts/run_model.sh` guard (single tenant, cold cache, detached).
+
+| | before | after |
+|---|---:|---:|
+| **Warm M=1 decode** | 128.2 ms/tok = **7.80 tok/s** | 115.8 ms/tok = **8.63 tok/s** |
+| Effective bandwidth | 87.4 GB/s = 36.4% of achievable | **96.7 GB/s = 40.3%** |
+| 43-layer verify, K=1 | 115.94 ms | 103.17 ms |
+| M=5 verify | 337.0 ms | 300.5 ms |
+| Spec-decode | 129.1 ms/tok | 118.8 ms/tok |
+| Correctness | argmax 11111 | argmax 11111 — **GATE PASS** |
+
+**Speed-up 1.107x, and it resolves the open question I logged.** The bench had predicted
+1.09–1.13x and `ncu`'s isolated-launch duration had suggested 1.83x; I recorded that I did not know
+which would transfer. **The bench transferred; `ncu`'s isolated duration did not.** The reason is
+now clear in hindsight — `ncu` serialises and cold-starts a single launch, which exaggerates a
+latency-bound kernel's improvement, whereas in the real decode the MoE launches are pipelined with
+everything else. **Rule for this project: use `ncu` to find the *mechanism*, use `gemm_bench` to
+predict the *magnitude*, and use the full model to confirm.**
+
+Spec-decode is still 0.97x of base — but only because the base got faster too; in absolute terms it
+improved 129.1 → 118.8 ms/tok. Findings 16/17 are unchanged: the draft head remains the blocker.
+
+The K-sweep reconfirms Finding 14 on the faster kernels (`slide` 2.739x, `r128` 2.461x,
+`r4` 2.510x — DSA still not the driver) and the K≥2 step penalty persists at +0.700 at K=2, so
+Finding 15's mechanism remains open and is unaffected by this change.
