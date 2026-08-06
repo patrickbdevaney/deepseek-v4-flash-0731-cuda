@@ -14,7 +14,7 @@ Last updated: 2026-08-06.
 | **H1** | hardware recorded before anything else | **PASS** — `HARDWARE.md` |
 | **P0** | can cite the source file for every architectural constant | **PASS** — `MODEL_INVENTORY.md`, all from `docs/config.json` + 48 shard headers |
 | **R1** | `ROOFLINE.md` with measured `B_tok`, AR wall, anchors, `E_frac(k)`, DSA unknown flagged | **PASS** — `ROOFLINE.md` |
-| **A1** | oracle reproducible; `ARCH_DELTA` + `MODEL_INVENTORY` complete | **PARTIAL** — docs done; oracle identified (`~/dspark-cuda-reap-finetune/ref/`) but not yet re-run against 0731 weights |
+| **A1** | oracle reproducible; `ARCH_DELTA` + `MODEL_INVENTORY` complete | **PARTIAL** — docs done, checkpoint down + integrity-checked, chat format specced (`CHAT_FORMAT.md`); oracle identified (`~/dspark-cuda-reap-finetune/ref/`) but not yet re-run against 0731 weights |
 | L1 | loads to device, peak < ~105 GB, cached restart < 60 s | not started (blocked on download) |
 | G1–G9 | kernel gates | not started; **G1–G7 substantially pre-built and pre-gated** in the prior repo (see `ARCH_DELTA.md` §2) |
 | D1 | DSpark decode tok/s + acceptance | not started |
@@ -22,9 +22,14 @@ Last updated: 2026-08-06.
 
 ## In flight
 
-- **Checkpoint download**: `0xSero/DeepSeek-V4-Flash-0731-REAP` → `~/models/DeepSeek-V4-Flash-0731-REAP`,
-  running detached, log at `~/models/reap-0731-download.log`. 100.4 GiB total.
-  Disk at survey: 230 GiB free → ~130 GiB after. Verify `SHA256SUMS` on completion.
+- **Checkpoint download: COMPLETE.** All 48 shards + metadata at
+  `~/models/DeepSeek-V4-Flash-0731-REAP` (101 GiB on disk, 129 GiB free remaining), no
+  `.incomplete` files. `sha256sum -c SHA256SUMS` (79 entries) running detached →
+  `~/models/reap-0731-sha.log`.
+- **Local artifact cross-checked against the remotely-harvested headers**: 45,821 tensors both
+  sides, **keys identical, 0 dtype/shape mismatches**, byte total reconciles to
+  107,803,320,952. `python3 tools/inventory.py --model-dir ~/models/DeepSeek-V4-Flash-0731-REAP`.
+  The whole Phase-1 analysis is therefore validated against the real artifact, not just metadata.
 
 ## Headline numbers so far
 
