@@ -21,7 +21,8 @@ Last updated: 2026-08-06.
 | G9 | CUDA graph capture | ported, not yet re-gated on 0731 |
 | **D1** | DSpark spec-decode | **PASS** — embedded heads, memory-neutral, correct; at parity (0.97x) |
 | **ENCODING** | chat encoder byte-exact vs vendor goldens | **PASS** — 4/4 vectors + 2 property checks |
-| S1 | full server | in progress — encoder + OpenAI shaping done, HTTP layer pending |
+| **API** | OpenAI request/response shaping | **PASS** — 30/30, incl. type-preserving DSML round-trip |
+| S1 | full server | encoder + API shaping **done and gated**; HTTP transport + engine wiring pending |
 | D1 | DSpark decode tok/s + acceptance | not started |
 | S1 | multi-turn tool-calling session | not started |
 
