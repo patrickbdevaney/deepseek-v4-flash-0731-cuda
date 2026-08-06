@@ -972,3 +972,87 @@ Spec-decode is 117.0 ms/tok (0.92x of base) — it keeps losing ground as the ba
 as Finding 17 predicts: the draft head is a fixed ~119 ms cost that the base-path optimizations do
 not touch, so every base win makes speculation look worse. **The draft head is now unambiguously the
 top lever.**
+
+---
+
+## 2026-08-06 — Profiling the draft head, and finding the answer is somewhere else
+
+### Finding 26a — the spec step, attributed. The draft is 19.7%; the VERIFY is 80.3%.
+
+`DSV4_SPECPROF=1` adds CUDA-event timers around each phase of a verify round. Mean of 7 rounds:
+
+```
+draft: main_kv      0.55 ms  ( 0.1%)
+draft: 3 blocks    21.17 ms  ( 5.5%)
+draft: fwd_head    54.01 ms  (14.0%)   <- host AR loop over 5 block positions
+verify 43 layers  308.70 ms  (80.3%)
+TOTAL             384.43 ms
+```
+
+**This corrects Finding 17.** I had estimated the draft at ~119 ms by subtracting a standalone M=5
+verify (294 ms) from the spec round (425 ms). The verify *inside* the spec loop actually costs
+308.7 ms (it also rebuilds/rolls back KV), so the draft is **75.7 ms, not 119** — and it is 19.7%
+of the round, not 28%.
+
+What that means for the economics, at the measured acceptance `a = 3.12`:
+
+| scenario | ms/round | S |
+|---|---:|---:|
+| measured | 384.4 | **0.88x** (reported 0.93x) |
+| `fwd_head` halved | 357.4 | 0.95x |
+| **draft made entirely FREE** | 308.7 | **1.10x** |
+| verify at its byte-model `c_v = 2.12` | 305.5 | 1.11x |
+| both | 229.8 | **1.47x** |
+
+**Optimising the draft head to zero would only reach 1.10x.** The lever that matters is the verify —
+i.e. Finding 15, still unattributed after three refuted hypotheses. Recording this before doing the
+work, because the instinct to optimise the thing you were just looking at is exactly what the
+`bytes x (1 - efficiency)` rule keeps catching.
+
+### Finding 26b — but the draft's biggest term is a defect that ALSO costs the base path
+
+`dspark_forward_head` is a **host-driven** autoregressive loop over the 5 block positions. Per
+position it: copies a token id H2D, runs the markov GEMV, adds the bias, **syncs**, copies the full
+129,280-float logits row **D2H**, and does the **argmax on the CPU**. Five syncs, 2.6 MB of D2H, and
+five 129k-element host scans per draft.
+
+Underneath that, a bigger and simpler problem, found by reading `decode.cu:127`:
+
+```cpp
+const float *head_w = L.bf16("head.weight");     // BF16 [129280,4096] -> materialised as F32
+```
+
+`Loader::bf16` **dequantises to f32**. So `lm_head` occupies and is read as **2118 MB instead of
+1059 MB — every single decode step**, and the markov tables likewise (132 MB instead of 66 MB, and
+`markov_w2` is re-read once per block position, so 5x). On top of that `gemm_fp32` launches
+`<<<dim3(N,M), 32>>>` — **646,400 one-warp blocks** for `lm_head`, the same 50%-occupancy defect as
+Finding 21.
+
+Consequences, at the measured 113.5 GB/s:
+
+```
+lm_head  2118 MB -> 18.7 ms of a 108.4 ms decode step (17%)
+BF16-native would save ~9.3 ms AND free 2.1 GiB of headroom
+B_tok was modelled at 11,202 MB; the engine actually moves 12,261 MB
+  -> real efficiency is 47.3% of achievable, not 43.2%
+```
+
+**`ROOFLINE.md`'s `B_tok` measured the checkpoint, not the engine.** The byte model is right about
+what is *stored*; it silently assumed the engine reads weights in their stored dtype. It does not.
+
+**Fix (`gemm_bf16w`)**: read BF16 natively with `__nv_bfloat162` loads, four warps per block, and a
+runtime alignment check (Finding 25's lesson — this reads a mapped safetensors tensor). Wired into
+all three `lm_head` call sites (decode, verify, draft) and both markov tables.
+
+**Gated before measuring** (`tests/gate_bf16w.cu`) against the old path — the same weights
+dequantised to f32 and fed to `gemm_fp32`, which is exactly what the engine did before:
+
+```
+[lm_head M=1 ] cosine=1.000000000 max_abs=6.56e-07 rel=2.82e-07 argmax MATCH -> PASS
+[lm_head M=5 ] cosine=1.000000000 max_abs=7.15e-07 rel=2.90e-07 argmax MATCH -> PASS
+[markov  M=1 ] cosine=1.000000000 max_abs=7.45e-08 rel=1.01e-07 argmax MATCH -> PASS
+[markov  M=5 ] cosine=1.000000000 max_abs=8.94e-08 rel=1.26e-07 argmax MATCH -> PASS
+```
+
+BF16 -> F32 is lossless, so the only admissible difference is fp32 accumulation reassociation (the
+bf16x2 path pairs elements); `argmax MATCH` is the property that actually matters for greedy decode.
