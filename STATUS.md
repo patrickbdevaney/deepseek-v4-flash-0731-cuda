@@ -45,8 +45,8 @@ Last updated: 2026-08-06.
 | `B_tok` | **11.202 GB/token** |
 | Achievable BW | **240 GB/s measured** (212 contended) — not the ~200 inherited |
 | AR wall | **21.42 tok/s** @ 240 GB/s · 24.37 @ 273 spec |
-| **MEASURED base AR decode (0731)** | **9.26 tok/s / 108.0 ms/tok = 103.7 GB/s = 43.2% of achievable** (Opt #1 + #3; was 7.80) |
-| DSpark spec-decode | 8.55 tok/s (0.92x of base — the draft head is a fixed cost, so every base win widens the gap) |
+| **MEASURED base AR decode (0731)** | **9.51 tok/s / 105.2 ms/tok = 116.6 GB/s = 48.6% of achievable** (Opts #1/#3/#4; was 7.80 = **1.219x**) |
+| DSpark spec-decode | 9.48 tok/s = **1.00x of base** (was 0.93x). Draft head optimized 1.39x; the verify is now 84% of the round |
 | Prior 180B anchor, for comparison | 7.89 tok/s / 126.7 ms/tok — **transferred to within 1.1%** |
 | M=5 verify | 300.5 ms = **2.60×** an M=1 decode (model says 2.120×) — mechanism OPEN (Finding 15) |
 | DSpark acceptance | **3.12 tokens/verify** of max 5 (α≈0.7) — acceptance is fine, cost is not |

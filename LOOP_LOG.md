@@ -1056,3 +1056,45 @@ dequantised to f32 and fed to `gemm_fp32`, which is exactly what the engine did 
 
 BF16 -> F32 is lossless, so the only admissible difference is fp32 accumulation reassociation (the
 bf16x2 path pairs elements); `argmax MATCH` is the property that actually matters for greedy decode.
+
+### Optimization #5 — device-side draft AR loop. Draft 75.7 -> 54.7 ms; speculation reaches parity.
+
+`dspark_forward_head`'s greedy loop over the 5 block positions ran on the **host**: per position it
+synced, copied the whole 129,280-float logits row D2H, and scanned it on the CPU. Five syncs,
+2.6 MB of D2H and five 129k host scans per draft, stalling an otherwise fully asynchronous kernel
+chain. The dependency (position `i+1` needs the argmax of position `i`) is real — but it is a
+**device** dependency; nothing needs to reach the host until the block is done.
+
+Moved entirely on-device: `k_seed_first` / `k_pick` / `k_argmax_row` (block-reduction argmax) /
+`k_store`, and removed the `cudaStreamSynchronize` that `dspark_markov` was doing internally.
+
+**Correctness — the strongest available check:** the draft tokens are the thing that must not move,
+because a different draft changes acceptance and makes the comparison meaningless. The generated
+sequence is **byte-identical** to the host-loop run:
+
+```
+11111 16 455 6102 294 16603 344 29168 16 455 6102 294 29585 344 76405 16 455 6102 294 14251 344 16235 16 455 6102
+```
+and `mean tokens/verify = 3.12` is unchanged.
+
+| phase | before Opt #4 | after #4 | after #5 |
+|---|---:|---:|---:|
+| draft `main_kv` | 0.55 | 0.51 | 0.56 |
+| draft 3 blocks | 21.17 | 20.83 | 21.71 |
+| **draft `fwd_head`** | **54.01** | 39.18 | **32.38** |
+| verify 43 layers | 308.70 | 293.03 | 291.80 |
+| **round total** | **384.43** | 353.54 | **346.45** |
+| spec-decode vs base | 0.93x | 0.98x | **1.00x** |
+
+**Draft head: 75.7 -> 54.7 ms (1.39x); `fwd_head` alone 54.0 -> 32.4 (1.67x).**
+Speculation is now at exact parity (105.4 vs 105.2 ms/tok) instead of losing 7%.
+
+**Where the draft stands now.** `fwd_head` at 32.4 ms against a ~11.9 ms byte model (lm_head at M=5
+plus 5x `markov_w2`) is still ~2.7x off — the five markov GEMV -> add-bias -> argmax chains are
+latency-linked and each is far too small to fill the device. But **the verify is now 84.2% of the
+round**, so further draft work has very little leverage: even reducing `fwd_head` to zero would move
+speculation from 1.00x to only ~1.10x.
+
+**The draft head is no longer the blocker. Finding 15 is** — the ~70 ms of unattributed M>=2 verify
+cost is worth 1.00x -> ~1.4x on speculation and is 84% of the spec round. That is where the next
+work belongs, and it needs instrumentation inside the layer rather than a fourth hypothesis.
