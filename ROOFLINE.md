@@ -261,15 +261,20 @@ Speedup `S(k) = a(k)/c_v(k)`, with `a(k) = Σ_{j=1..k} α^j + 1`:
   **inside this band** and is consistent with it. Good corroboration, weakly weighted.
 
 **Two caveats on this table, both flagged for empirical resolution in Phase 5:**
-1. It assumes verify is bandwidth-bound and that the grouped MoE reads **each activated expert
-   exactly once**. The prior project measured `c_v(5) = 2.6×` against a modelled 2.12× —
-   the gap is unexplained and is the *first* thing to profile. Their own research names
-   "expert-union dilation" as the leading suspect and flags an unresolved action: audit whether
-   `k_grouped_w4a8` dedups by expert.
-2. It assumes verify has the same bandwidth *efficiency* as decode. At 32% of peak we are partly
-   compute-bound, and M=k verify has strictly better arithmetic intensity than M=1 — so `c_v`
-   may come in **better** than modelled. This cuts in our favour and is worth measuring before
-   pessimising the plan.
+1. ~~It assumes the grouped MoE reads each activated expert exactly once~~ — **AUDITED AND
+   CONFIRMED** (`LOOP_LOG.md` Finding 13). `k_build_tiles` groups rows by expert and each tile
+   reads that expert's weights once; at M=5 no expert exceeds 5 rows so it is exactly one read
+   per activated expert, giving the `|union| ≈ 28` the model assumes. **The inherited
+   "expert-union dilation" hypothesis is refuted.** `c_v(5) = 2.62×` was reproduced here
+   (336.1 / 128.1 ms) and the ~64 ms excess lies elsewhere — see caveat 2.
+2. It prices **weight traffic only**, and says nothing about work that scales with M while
+   weight traffic does not. This caveat originally guessed that better arithmetic intensity at
+   M=k would make `c_v` come in **better** than modelled. **That guess was wrong** — measured
+   `c_v(5)` is 2.62× against 2.120× modelled. With the MoE ruled out (caveat 1), the leading
+   explanation is the **DSA indexer + sparse attention**, which run a top-512 selection and an
+   irregular gather *per query position*: 5 positions cost ~5× the compute while re-reading the
+   same weights once. At 36% of achievable bandwidth we are already substantially
+   compute/latency-bound, so that term is exposed rather than hidden under the memory stream.
 
 ### The DSA verify-cost unknown — flagged, unresolved
 
@@ -280,9 +285,12 @@ overlap determines whether that gather is paid once or k times, and sparse gathe
 irregular access patterns that fight coalescing.
 
 **This has no analog in `gemma-cuda-hybrid` or `laguna-s1-cuda-server`, and — importantly — the
-prior 180B project never isolated it either.** It stays an explicit unknown. Resolution:
-instrument the indexer/sparse-attention kernels separately at M=1 vs M=k in Phase 5 before
-attributing any shortfall to general inefficiency.
+prior 180B project never isolated it either.** It stays an explicit unknown, but it is no longer
+merely hypothetical: with the MoE hypothesis refuted (caveat 1), **DSA is now the prime suspect
+for the whole 2.62× vs 2.120× gap.** Resolution: per-kernel wall-clock at M=1 vs M=5 plus `ncu`
+`Compute (SM) Throughput` (the metric that is honest on Thor — `HARDWARE.md` §3) on the
+indexer/sparse-attention kernels. If those scale ~5× while the MLA and MoE GEMMs stay flat, the
+fix is a batched indexer that shares selection work across verify positions.
 
 ---
 

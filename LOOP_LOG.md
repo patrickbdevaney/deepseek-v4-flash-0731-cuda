@@ -342,3 +342,53 @@ If the dedup lands, `c_v(5)` goes 2.62 → ~2.12 and, at unchanged acceptance, t
 `S(k)` table's k=2–3 optimum sharpens. Note the run already reports **1.91x if all 5 accepted**,
 which is the ceiling, not the expectation — realised speed-up depends on the acceptance rate α,
 still unmeasured.
+
+### Finding 13 — the inherited "MoE expert-union dilation" hypothesis is REFUTED by code inspection
+
+`ROOFLINE.md` §5 carried forward the prior project's leading explanation for `c_v(5) = 2.6x`,
+together with its explicit unresolved action: *"audit whether `k_grouped_w4a8` dedups by expert"*.
+
+**Audit done. It does.** `kernels/tc_moe_gemm.cu`:
+
+- `k_build_tiles` (:213) walks the counting-sort offsets and, for each expert `e`, emits
+  `ceil(rows_e / 16)` tiles carrying `(tile_e = e, tile_row0)`.
+- `k_grouped_w4a8_e8m0_kernel` (:319) reads `wptr[e]` **once per tile**, and partitions that
+  expert's weight across `gridDim.x = N/8` n-blocks by byte range (`wb = wprE + n_block*kg8*512`),
+  so every weight byte is read exactly once per tile.
+- At M=5 no expert receives more than 5 gathered rows, so `ceil(rows_e/16) == 1` — **exactly one
+  weight read per activated expert.**
+- The `g_moe_gemv` alternative (a scalar-nibble GEMV) is **off by default** (`src/decode.cu:96`,
+  needs `MOE_GEMV=1`), so M=1 and M=K take the *same* deduplicated tile path.
+
+Expert reads therefore go 6 (M=1) → `|union|` ≈ 28 (M=5), which is precisely the
+`E[|union|](5) = 27.83` the model assumes. **The MoE is behaving exactly as `ROOFLINE.md` §5
+prices it. It is not the source of the excess.**
+
+**So where does the ~64 ms / ~5.6 GB-equivalent excess come from?** The remaining candidate is the
+term the model does *not* price and that this project flagged from the start as its one real blind
+spot: **work that scales with M while weight traffic does not** — the DSA lightning indexer and
+sparse attention, which run a top-512 selection and an irregular gather **per query position**, so
+5 positions cost ~5x the *compute* while re-reading the same weights once.
+
+`ROOFLINE.md` §5 caveat 2 guessed this would cut in our favour (better arithmetic intensity at
+M=k). **That guess looks wrong**, and in hindsight it was the optimistic reading: at 36% of
+achievable bandwidth we are substantially compute/latency-bound already, so a 5x compute term is
+not hidden under the memory stream — it is exposed.
+
+**Consequence for the priority order.** `ROOFLINE.md` §6 demoted DSA to #6 *on weight bandwidth*
+while explicitly keeping it on the list because "its latency contribution is unmeasured and its
+verify-step behaviour is the project's one real blind spot". That caveat is now carrying the
+weight: **for the speculative path specifically, DSA is the prime suspect, not the MoE.** Base-AR
+priorities (MLA #1, MXFP4 MoE GEMV #2) are unaffected — this is a verify-step finding.
+
+**Next measurement, and it is now cheap to get right.** Per-kernel wall-clock at M=1 vs M=5,
+plus `ncu`'s `Compute (SM) Throughput` on the indexer/sparse-attention kernels — which is the
+metric that IS honest on Thor (Finding 9). If indexer+sparse-attn time scales ~5x while the MoE
+and MLA GEMMs stay flat, the diagnosis is confirmed and the fix is a batched indexer that shares
+selection work across verify positions.
+
+**Minor, found in passing:** `kernels/moe.cu:231` calls `tc_ensure_repacked` for all
+`nr = 160` experts × 3 matrices on *every* MoE invocation. It is idempotent (a host-side
+`std::set<void*>` probe, `tc_moe_gemm.cu:193`), so it does no device work after warm-up — but it
+is 480 host-side set lookups per layer, ~20,640 per decode step, on the critical path. Order ~1 ms
+of the 128 ms step. Worth hoisting, not urgent, and logged so it is not rediscovered.
