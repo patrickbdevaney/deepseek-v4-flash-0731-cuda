@@ -1,0 +1,495 @@
+{
+  "backbone_layers": 43,
+  "dspark_mtp_target_layers": [
+    40,
+    41,
+    42
+  ],
+  "kept_experts_per_layer": 160,
+  "original_experts_per_layer": 256,
+  "prior_observation_model": "deepseek-ai/DeepSeek-V4-Flash",
+  "prior_observation_revision": "60d8d70770c6776ff598c94bb586a859a38244f1",
+  "prior_observation_snapshot": {
+    "all_experts_observed": true,
+    "available_rows_used": 21289,
+    "category_counts": {
+      "agentic_tool_trajectory": 2253,
+      "code_generation": 4096,
+      "reasoning_code": 2676,
+      "reasoning_math": 4072,
+      "reasoning_science": 4096,
+      "tool_calling": 4096
+    },
+    "readme_advertised_full_rows": 24576,
+    "repo_id": "0xSero/deepseek-v4-flash-reap-observations-v2",
+    "snapshot_label": "partial-v2-21289"
+  },
+  "prior_plan_sha256": "2837dc8cd0f7512c111bd3a2c9c41278f715ded5965eb01889652ef8e465e1b0",
+  "rewrite": {
+    "shard_count": 48,
+    "shards": [
+      {
+        "ordinal": 1,
+        "output_bytes": 1059061856,
+        "shard": "model-00001-of-00048.safetensors",
+        "source_bytes": 1059061856,
+        "status": "pass",
+        "tensor_bytes": 1059061760,
+        "tensor_count": 1
+      },
+      {
+        "ordinal": 2,
+        "output_bytes": 2282013568,
+        "shard": "model-00002-of-00048.safetensors",
+        "source_bytes": 3566321192,
+        "status": "pass",
+        "tensor_bytes": 2281905496,
+        "tensor_count": 989
+      },
+      {
+        "ordinal": 3,
+        "output_bytes": 2282013568,
+        "shard": "model-00003-of-00048.safetensors",
+        "source_bytes": 3566321192,
+        "status": "pass",
+        "tensor_bytes": 2281905496,
+        "tensor_count": 989
+      },
+      {
+        "ordinal": 4,
+        "output_bytes": 2311921648,
+        "shard": "model-00004-of-00048.safetensors",
+        "source_bytes": 3596229272,
+        "status": "pass",
+        "tensor_bytes": 2311812184,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 5,
+        "output_bytes": 2284460968,
+        "shard": "model-00005-of-00048.safetensors",
+        "source_bytes": 3568768976,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 6,
+        "output_bytes": 2305716768,
+        "shard": "model-00006-of-00048.safetensors",
+        "source_bytes": 3590024776,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 7,
+        "output_bytes": 2284460968,
+        "shard": "model-00007-of-00048.safetensors",
+        "source_bytes": 3568768976,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 8,
+        "output_bytes": 2305716768,
+        "shard": "model-00008-of-00048.safetensors",
+        "source_bytes": 3590024776,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 9,
+        "output_bytes": 2284460968,
+        "shard": "model-00009-of-00048.safetensors",
+        "source_bytes": 3568768976,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 10,
+        "output_bytes": 2305716768,
+        "shard": "model-00010-of-00048.safetensors",
+        "source_bytes": 3590024776,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 11,
+        "output_bytes": 2284460968,
+        "shard": "model-00011-of-00048.safetensors",
+        "source_bytes": 3568768976,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 12,
+        "output_bytes": 2305717768,
+        "shard": "model-00012-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 13,
+        "output_bytes": 2284461960,
+        "shard": "model-00013-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 14,
+        "output_bytes": 2305717768,
+        "shard": "model-00014-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 15,
+        "output_bytes": 2284461960,
+        "shard": "model-00015-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 16,
+        "output_bytes": 2305717768,
+        "shard": "model-00016-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 17,
+        "output_bytes": 2284461960,
+        "shard": "model-00017-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 18,
+        "output_bytes": 2305717768,
+        "shard": "model-00018-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 19,
+        "output_bytes": 2284461960,
+        "shard": "model-00019-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 20,
+        "output_bytes": 2305717768,
+        "shard": "model-00020-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 21,
+        "output_bytes": 2284461960,
+        "shard": "model-00021-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 22,
+        "output_bytes": 2305717768,
+        "shard": "model-00022-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 23,
+        "output_bytes": 2284461960,
+        "shard": "model-00023-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 24,
+        "output_bytes": 2305717768,
+        "shard": "model-00024-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 25,
+        "output_bytes": 2284461960,
+        "shard": "model-00025-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 26,
+        "output_bytes": 2305717768,
+        "shard": "model-00026-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 27,
+        "output_bytes": 2284461960,
+        "shard": "model-00027-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 28,
+        "output_bytes": 2305717768,
+        "shard": "model-00028-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 29,
+        "output_bytes": 2284461960,
+        "shard": "model-00029-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 30,
+        "output_bytes": 2305717768,
+        "shard": "model-00030-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 31,
+        "output_bytes": 2284461960,
+        "shard": "model-00031-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 32,
+        "output_bytes": 2305717768,
+        "shard": "model-00032-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 33,
+        "output_bytes": 2284461960,
+        "shard": "model-00033-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 34,
+        "output_bytes": 2305717768,
+        "shard": "model-00034-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 35,
+        "output_bytes": 2284461960,
+        "shard": "model-00035-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 36,
+        "output_bytes": 2305717768,
+        "shard": "model-00036-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 37,
+        "output_bytes": 2284461960,
+        "shard": "model-00037-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 38,
+        "output_bytes": 2305717768,
+        "shard": "model-00038-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 39,
+        "output_bytes": 2284461960,
+        "shard": "model-00039-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 40,
+        "output_bytes": 2305717768,
+        "shard": "model-00040-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 41,
+        "output_bytes": 2284461960,
+        "shard": "model-00041-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 42,
+        "output_bytes": 2305717768,
+        "shard": "model-00042-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 43,
+        "output_bytes": 2284461960,
+        "shard": "model-00043-of-00048.safetensors",
+        "source_bytes": 3568770544,
+        "status": "pass",
+        "tensor_bytes": 2284352472,
+        "tensor_count": 993
+      },
+      {
+        "ordinal": 44,
+        "output_bytes": 2305717768,
+        "shard": "model-00044-of-00048.safetensors",
+        "source_bytes": 3590026352,
+        "status": "pass",
+        "tensor_bytes": 2305607384,
+        "tensor_count": 1000
+      },
+      {
+        "ordinal": 45,
+        "output_bytes": 1059332516,
+        "shard": "model-00045-of-00048.safetensors",
+        "source_bytes": 1059332516,
+        "status": "pass",
+        "tensor_bytes": 1059332116,
+        "tensor_count": 5
+      },
+      {
+        "ordinal": 46,
+        "output_bytes": 2326148888,
+        "shard": "model-00046-of-00048.safetensors",
+        "source_bytes": 3610455184,
+        "status": "pass",
+        "tensor_bytes": 2326043608,
+        "tensor_count": 992
+      },
+      {
+        "ordinal": 47,
+        "output_bytes": 2275805664,
+        "shard": "model-00047-of-00048.safetensors",
+        "source_bytes": 3560111960,
+        "status": "pass",
+        "tensor_bytes": 2275700696,
+        "tensor_count": 989
+      },
+      {
+        "ordinal": 48,
+        "output_bytes": 2408468964,
+        "shard": "model-00048-of-00048.safetensors",
+        "source_bytes": 3692775244,
+        "status": "pass",
+        "tensor_bytes": 2408362476,
+        "tensor_count": 996
+      }
+    ],
+    "tensor_bytes": 107803320952,
+    "tensor_count": 45821
+  },
+  "router_alignment": {
+    "hash_tid2eid_equal_fraction": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "identity_nearest_all": true,
+    "layers": 43,
+    "same_index_cos_mean_min": 0.9923683404922485,
+    "same_index_cos_min_global": 0.9460793733596802
+  },
+  "runtime_validation": {
+    "coding_probe": "return a + b",
+    "cuda_graphs_enabled": true,
+    "engine": "vllm",
+    "engine_version": "0.25.2.dev0+g752a3a504.d20260714",
+    "exact_probe": "PRUNED_OK",
+    "hardware": "NVIDIA DGX Spark GB10",
+    "max_model_len": 8192,
+    "moe_backend": "flashinfer_b12x",
+    "mtp_enabled": false,
+    "request_side_output_token_cap": false,
+    "status": "pass",
+    "timestamp_utc": "2026-07-31T17:47:52.628092+00:00"
+  },
+  "source_model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "source_revision": "9e165c30e2704aec5d9d593cce3eebd58bbef1cb",
+  "status": "runtime_validation_pass"
+}

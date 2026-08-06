@@ -1,0 +1,48 @@
+{
+  "backbone_layers": 43,
+  "built_at_unix": 1785518256,
+  "dspark_mtp_target_layers": [
+    40,
+    41,
+    42
+  ],
+  "hash_routed_layers": [
+    0,
+    1,
+    2
+  ],
+  "kept_experts_per_layer": 160,
+  "method": "REAP transferred ranking with router identity alignment",
+  "original_experts_per_layer": 256,
+  "prior_observation_model": "deepseek-ai/DeepSeek-V4-Flash",
+  "prior_observation_revision": "60d8d70770c6776ff598c94bb586a859a38244f1",
+  "prior_observation_snapshot": {
+    "all_experts_observed": true,
+    "available_rows_used": 21289,
+    "category_counts": {
+      "agentic_tool_trajectory": 2253,
+      "code_generation": 4096,
+      "reasoning_code": 2676,
+      "reasoning_math": 4072,
+      "reasoning_science": 4096,
+      "tool_calling": 4096
+    },
+    "readme_advertised_full_rows": 24576,
+    "repo_id": "0xSero/deepseek-v4-flash-reap-observations-v2",
+    "snapshot_label": "partial-v2-21289"
+  },
+  "prior_plan_sha256": "2837dc8cd0f7512c111bd3a2c9c41278f715ded5965eb01889652ef8e465e1b0",
+  "router_alignment": {
+    "hash_tid2eid_equal_fraction": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "identity_nearest_all": true,
+    "layers": 43,
+    "same_index_cos_mean_min": 0.9923683404922485,
+    "same_index_cos_min_global": 0.9460793733596802
+  },
+  "source_model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "source_revision": "9e165c30e2704aec5d9d593cce3eebd58bbef1cb"
+}
