@@ -17,20 +17,25 @@
 // Any kernel here that accumulates into its output rather than assigning it, or that writes fewer
 // rows than it later reads, would inherit that and produce different numbers run to run.
 //
-// MEASURED (Finding 60): on 8 byte-identical sweep points, zeroing these buffers moves the count of
-// distinct FIRST-verify margin vectors from 8/8 to 5/8. So this is a REAL contributor to the
-// engine's nondeterminism, not a theory. It is free at the measurement that matters, because decode
-// runs entirely out of the arena and never touches these allocations -- only prefill does, and
-// prefill time is not a reported quantity.
+// CLAIM RETRACTED (Finding 61). This was adopted on "zeroing moves distinct first-verify margin
+// vectors from 8/8 to 5/8", read as evidence of an uninitialised read. tests/gate_scratch_init then
+// tested the thing directly — same weights, same input, scratch filled with 0x00 vs 0xFF vs 0x3C,
+// arena included — and compressed_attn_forward is bitwise IDENTICAL at every length 1..29. The
+// prefill chain does not read uninitialised scratch. The 8/8 -> 5/8 was a 5-cycle in the engine
+// (Finding 61) sampled 8 times, not a change caused by zeroing: with the sharper instrument the
+// engine produces the SAME hash sequence zeroed and unzeroed.
 //
-// THIS MASKS A BUG, IT DOES NOT FIX ONE. Some kernel in the prefill path reads its output buffer
-// before writing it. Zeroing makes the engine reproducible-ish and removes the nondeterminism this
-// particular defect contributes; it does not identify the kernel. Finding that kernel is still open,
-// and the remaining 5/8 says there is a second, non-memory source as well.
+// Kept ON anyway, and only because it is free: decode runs entirely out of the arena and never
+// touches these allocations, so this costs the measured number nothing and removes a whole class of
+// future doubt. It is NOT a fix for anything, and nothing should be attributed to it.
 static inline cudaError_t zalloc(void** p, size_t n){
     static const bool z = getenv("NO_ZERO_SCRATCH") == nullptr;   // DEFAULT ON, see below
     cudaError_t e = cudaMalloc(p, n);
-    if(e == cudaSuccess && z && n) cudaMemset(*p, 0, n);
+    if(e != cudaSuccess || !n) return e;
+    const int idx = g_scratch_alloc_seq++;
+    if(idx == 0) g_scratch_first_addr = (unsigned long long)*p;
+    if(g_scratch_poison_idx == -1 || g_scratch_poison_idx == idx) cudaMemset(*p, g_scratch_poison_val, n);
+    else if(z)                                                    cudaMemset(*p, 0, n);
     return e;
 }
 

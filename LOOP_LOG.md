@@ -3137,3 +3137,62 @@ fix — use ≥3 replicates per cell and compare means.
 
 Splits ON mean **18.09** vs splits OFF **17.54** over 36 matched points = **+3.1 %**. That supersedes
 the +2.5 % single-point figure, and it is the number to quote.
+
+---
+
+## Finding 61 — N1 localised to one function call, and it is NOT what Finding 60 said it was
+
+Finding 60 called this "nondeterminism". It is not. **The engine produces the SAME sequence of prefill
+states on every run** — hashes `d75b8bc5… / 1515183c… / 33a81742… / 876ecdcc… / a78519f8…` reproduce
+byte for byte across six separate runs, with concurrency on and off, with the arena zeroed and not,
+with the caches zeroed and not. It is a **deterministic 5-cycle**: point 0 == point 5, 1 == 6, 2 == 7.
+
+### Where it is
+
+`DSV4_HASH=1` hashes `main_x`/`mh_pre` at every sweep point; `DSV4_HASH=2` hashes the hidden state
+after every one of the 43 layers; and an input hash covers `h0` (post-embed) and `h` (post-hc_expand).
+
+- **The input to layer 0 is bit-identical at every point** (`h0=de51597d…`, `h=ca0416b3…`, always).
+- **Layer 0's output already differs** — all 43 layers differ, the first one included. Layer 0 is
+  `compress_ratio==0`, a pure sliding layer: `hc_pre → rmsnorm → mla_cache_kv → mla_forward →
+  hc_post → moe_forward`.
+- **The weights are intact** (1 MB of layer 0's `wq_a` hashes constant at every point), so this is
+  not an out-of-bounds write corrupting the model.
+- **Scratch addresses are constant** (`scratch0=0x32f9d0000` at every point), so it is not the
+  allocator handing out different alignments.
+- `h` alternates between two buffers with **period 2** (the 43 odd swaps), and the cycle is **5**, so
+  the swap is not it either.
+
+**Identical inputs, identical weights, identical addresses → different output, on a fixed 5-cycle.**
+
+### The clue that should be pulled next
+
+**It does not happen at `NGEN0=20`. It happens at `NGEN0=60`.** At 20, four consecutive identical
+points give one hash. So the effect requires the PREVIOUS point's decode to have run far enough, and
+whatever it leaves behind is not any buffer that has been zeroed. `seqmax` also differs between the
+two (51 vs 91), so buffer *sizes* are a live variable and not only their contents.
+
+### Eliminated, each with a measurement
+
+| hypothesis | test | verdict |
+|---|---|---|
+| the intra-layer concurrency (Findings 55-57) | prefill hash sequence with all three splits OFF | **identical, byte for byte.** Fully exonerated at the sharpest available resolution. |
+| uninitialised prefill scratch | `tests/gate_scratch_init` (new): same weights/input, scratch poisoned 0x00 vs 0xFF vs 0x3C, arena included, lengths 1..29 | bitwise identical everywhere — **no uninitialised read** |
+| the arena | `DSV4_ARENA_ZERO=1` + hash | identical hash sequence |
+| persistent KV / `xin` / `main_x` / `mh_pre` | `DSV4_ZERO_CACHES=1` + hash | identical hash sequence |
+| MoE | `gate_units`: 32 repeats of the decode configuration on one input | 0 differ, bit-exact |
+| allocator addresses | `scratch0` traced per point | constant |
+| weight corruption from an OOB decode write | 1 MB weight hash per point | constant |
+| `tc_ensure_repacked` rewriting expert weights lazily | code | guarded by `if(!g_moe_gemv)`; the engine takes the GEMV path, which reads original fp4 |
+
+### Retraction
+
+Finding 60 recorded "zeroing the prefill scratch moves 8/8 distinct margin vectors to 5/8, so it is a
+REAL contributor". **That is withdrawn.** The unit gate shows the prefill chain is poison-independent,
+and the engine emits the same hash sequence zeroed and unzeroed — 8/8 → 5/8 was a 5-cycle sampled 8
+times, not an effect of zeroing. `NO_ZERO_SCRATCH` stays default-on only because it is free (decode
+never touches those buffers) and the comment in both files now says it fixes nothing.
+
+The measurement lesson is the same one Finding 60 raised, applied to my own result: **a count of
+distinct values over 8 samples is not evidence about a mechanism.** The hash sequence is, because it
+is exact and reproducible.

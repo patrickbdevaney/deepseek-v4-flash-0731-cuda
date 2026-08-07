@@ -11,6 +11,10 @@ cudaEvent_t  g_side_join  = nullptr;
 cudaStream_t g_side2      = nullptr;
 cudaEvent_t  g_side2_fork = nullptr;
 cudaEvent_t  g_side2_join = nullptr;
+int           g_scratch_poison_idx = -2;
+unsigned char g_scratch_poison_val = 0;
+int           g_scratch_alloc_seq   = 0;
+unsigned long long g_scratch_first_addr = 0;
 void arena_init(size_t cap){
     if(g_arena){ cudaFree(g_arena); }
     cudaMalloc((void**)&g_arena, cap); g_arena_cap = cap; g_arena_off = 0; g_arena_hwm = 0; g_arena_on = true;

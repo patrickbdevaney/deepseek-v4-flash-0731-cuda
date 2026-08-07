@@ -251,6 +251,34 @@ static bool gate_moe(const std::string& dir) {
       float t0=tm(false,false), t1=tm(true,false), t2=tm(true,true);
       printf("[moe A/B] per-token %.3f ms | batched %.3f ms (%.2fx) | batched+TC %.3f ms (%.2fx)\n", t0,t1,t0/t1,t2,t0/t2);
       w.batched=false; w.use_tc=false; }
+    // DETERMINISM (LOOP_LOG Finding 60). The engine produces different numbers on byte-identical
+    // input — 36 identical sweep points give 36 distinct first-verify margin vectors — and the
+    // prefill attention chain has been cleared by tests/gate_scratch_init at every length 1..29. The
+    // MoE is the only kernel on the decode path with an atomic: k_moe_scatter takes each (token,
+    // expert) pair's position within its expert's run from atomicAdd(&cursor[e],1), so the ORDER of
+    // rows inside a group is race-determined. The argument that this is still bit-exact is that
+    // `allslot` is i%na, not the atomic position, so k_scatter_ts writes a fixed (token,slot)
+    // destination and k_reduce_ts sums the slots in a fixed order. That argument has never been
+    // TESTED, and it is exactly the kind of claim that is true of the code someone read and false of
+    // the code that runs. Run the decode configuration repeatedly on one input and compare bitwise.
+    { w.batched=true; w.device_route=true; w.use_tc=true;      // the configuration decode actually sets
+      float* od; CU(cudaMalloc(&od,(size_t)n*dim*4));
+      std::vector<float> ref((size_t)n*dim), cur((size_t)n*dim);
+      moe_forward(od,x,nullptr,w,n); CU(cudaDeviceSynchronize());
+      CU(cudaMemcpy(ref.data(),od,ref.size()*4,cudaMemcpyDeviceToHost));
+      int ndet=0; size_t worst=0;
+      for(int it=0; it<32; ++it){
+          CU(cudaMemset(od,0xA5,(size_t)n*dim*4));
+          moe_forward(od,x,nullptr,w,n); CU(cudaDeviceSynchronize());
+          CU(cudaMemcpy(cur.data(),od,cur.size()*4,cudaMemcpyDeviceToHost));
+          size_t nd=0; for(size_t i=0;i<ref.size();++i) if(memcmp(&ref[i],&cur[i],4)!=0) ++nd;
+          if(nd){ ++ndet; if(nd>worst) worst=nd; }
+      }
+      bool detok = (ndet==0);
+      printf("[moe determinism] 32 repeats of the DECODE config on one input: %d differ (worst %zu/%zu elements) -> %s\n",
+             ndet, worst, ref.size(), detok?"PASS":"FAIL — moe_forward is not reproducible");
+      ok = ok && detok;
+      w.batched=false; w.device_route=false; w.use_tc=false; cudaFree(od); }
     printf("[moe] n=%d dim=%d inter=%d nr=%d na=%d  |y|max=%.4f max_abs=%.5f max_rel=%.5f -> %s\n",
            n,dim,inter,nr,na,mx,e.max_abs,e.max_rel,ok?"PASS":"FAIL");
     return ok;

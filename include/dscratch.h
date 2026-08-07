@@ -55,6 +55,19 @@ void dsync_at(cudaStream_t s, const char* file, int line);
 void dprobe_at(cudaStream_t s, const char* file, int line);
 #define dprobe(s) dprobe_at((s), __FILE__, __LINE__)
 
+// N1 LOCALISATION (Finding 60). Zeroing the prefill's raw cudaMalloc scratch moved 8/8 distinct
+// first-verify margin vectors to 5/8, so SOMETHING in that path reads its output before writing it —
+// but zeroing masks the bug instead of naming the kernel. These let a unit gate POISON scratch with
+// two different bit patterns and diff the outputs: if a forward is sensitive to the poison, it reads
+// uninitialised memory, and poisoning ONE allocation at a time says which.
+//   g_scratch_poison_idx: -2 = normal (zero, the adopted default), -1 = poison every allocation,
+//                         >=0 = poison only the allocation with that sequence number, zero the rest
+//   g_scratch_alloc_seq : incremented by every scratch allocation; reset by the gate before a forward
+extern int      g_scratch_poison_idx;
+extern unsigned char g_scratch_poison_val;
+extern int      g_scratch_alloc_seq;
+extern unsigned long long g_scratch_first_addr;  // address of allocation #0 since the last reset
+
 void arena_init(size_t cap);   // allocate the slab once, set g_arena_on
 void arena_reset();            // g_arena_off = 0 (call at the top of each layer's work)
 

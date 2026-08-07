@@ -679,6 +679,7 @@ int main(int argc, char** argv){
         // the prefill, not after it — the previous point may have left a different prompt there.
         CU(cudaMemcpy(d_ids,pids.data(),(size_t)ps*4,cudaMemcpyHostToDevice));
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
+        g_scratch_alloc_seq = 0;   // so scratch0 names layer 0's first prefill allocation
         // N1 DIAGNOSTIC (DSV4_ZERO_CACHES=1). Finding 60. A sweep point resets `T` and re-prefills,
         // but the KV caches, `xin`, `main_x` and `mh_pre` are persistent cudaMalloc buffers that are
         // never cleared — so every point starts holding the PREVIOUS point's tail, and a read past
@@ -698,7 +699,43 @@ int main(int argc, char** argv){
             CU(cudaDeviceSynchronize());
         }
         k_embed<<<((size_t)PSp*d+255)/256,256>>>(h0,emb,d_ids,PSp,d); k_hc_expand<<<((size_t)PSp*hc*d+255)/256,256>>>(h,h0,PSp,hc,d); CU(cudaDeviceSynchronize());
+        if(getenv("DSV4_HASH")){
+            std::vector<float> hv0((size_t)PSp*hc*d), hv0b((size_t)PSp*d);
+            CU(cudaMemcpy(hv0.data(),h,hv0.size()*4,cudaMemcpyDeviceToHost));
+            CU(cudaMemcpy(hv0b.data(),h0,hv0b.size()*4,cudaMemcpyDeviceToHost));
+            auto fnv=[](const std::vector<float>& v){ unsigned long long x=1469598103934665603ULL;
+                for(float f: v){ unsigned u; memcpy(&u,&f,4); for(int b=0;b<4;++b){ x^=(u>>(b*8))&0xff; x*=1099511628211ULL; } } return x; };
+            // WEIGHT INTEGRITY. Everything the prefill reads has now been shown bit-identical at
+            // every point, yet layer 0's OUTPUT differs — and the effect needs the previous point to
+            // have decoded far enough (NGEN0=60 reproduces, 20 does not). The remaining explanation
+            // is that the decode writes out of bounds and corrupts persistent state that the next
+            // prefill reads. Weights are the largest such state. Hash a slice of layer 0's own
+            // weights, which is what layer 0 reads first.
+            std::vector<uint8_t> wq((size_t)1<<20);
+            CU(cudaMemcpy(wq.data(), (const void*)BW[0].attn.wq_a, wq.size(), cudaMemcpyDeviceToHost));
+            unsigned long long wh=1469598103934665603ULL;
+            for(uint8_t b: wq){ wh^=b; wh*=1099511628211ULL; }
+            printf("[ihash] point %zu : h0(embed)=%016llx  h(hc_expand)=%016llx  hptr=%p  wq_a[0..1MB]=%016llx\n",
+                   bsi, fnv(hv0b), fnv(hv0), (void*)h, wh); fflush(stdout);
+        }
+        // N1 INPUT HASH. Layer 0 of the prefill already differs between byte-identical points, so the
+        // question is whether its INPUT differs (k_embed / k_hc_expand / d_ids) or whether the layer
+        // itself is nondeterministic. Hash h immediately after k_hc_expand, before any layer runs.
+        // N1 LAYER BISECTION (DSV4_HASH=2). The prefill's outputs cycle with period 5 across
+        // byte-identical sweep points while being reproducible run to run, and the scratch address
+        // is constant, so it is not the allocator. Hash the hidden state after EVERY layer: the
+        // first layer whose hash differs between two identical points names the kernel.
+        const int hashlvl = getenv("DSV4_HASH") ? atoi(getenv("DSV4_HASH")) : 0;
+        auto hlayer=[&](const float* dptr, size_t n)->unsigned long long {
+            std::vector<float> hv2v(n); cudaMemcpy(hv2v.data(),dptr,n*4,cudaMemcpyDeviceToHost);
+            unsigned long long v=1469598103934665603ULL;
+            for(size_t i=0;i<n;++i){ unsigned u; memcpy(&u,&hv2v[i],4);
+                for(int b=0;b<4;++b){ v^=(u>>(b*8))&0xff; v*=1099511628211ULL; } }
+            return v; };
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PSp); std::swap(h,h2);
+            if(hashlvl>=2){ CU(cudaDeviceSynchronize());
+                printf("[lhash] point %zu layer %2d ratio %3d : %016llx\n",
+                       bsi, Lyr, compress_ratio(Lyr), hlayer(h,(size_t)PSp*hc*d)); fflush(stdout); }
             if(Lyr==40) dspark_tap_pool(mh_pre,h,PSp,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_pre,h,PSp,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_pre,h,PSp,hc,d,2,3); }
         // GATE (in-run, every point). A compressed layer emits exactly floor(PSp/ratio) rows during
         // prefill, so KV[L].T is a direct readout of the length the prefill ACTUALLY ran at. This is
@@ -710,6 +747,30 @@ int main(int argc, char** argv){
                                "(the prefill ran at the wrong length)\n", bsi, promptSweep[bsi], PSp, r, L, KV[L].T, PSp/r);
                 return 3; } }
         dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PSp, d, EPS); CU(cudaDeviceSynchronize());
+        // N1 BISECTION (DSV4_HASH=1). Finding 60 says the FIRST verify of every sweep point produces
+        // a different margin vector on byte-identical input. Unit gates have since cleared the two
+        // obvious suspects — tests/gate_scratch_init shows the prefill attention chain is
+        // poison-independent and reproducible at every length 1..29, and gate_units shows
+        // moe_forward bit-identical over 32 repeats of the decode configuration. So the divergence is
+        // either in the in-situ prefill (which those gates do not run: 43 real layers, real weights,
+        // hc, MoE and attention composed) or downstream in the draft.
+        //
+        // Hashing the prefill's own outputs separates those two cases in ONE run, which is the whole
+        // point: `main_x` and `mh_pre` are everything the draft consumes from the prefill. Identical
+        // hashes at identical points => the prefill is fine and the draft is the source; differing
+        // hashes => the composition is nondeterministic even though its parts gate clean.
+        if(getenv("DSV4_HASH")){
+            auto h64=[&](const float* dptr, size_t n)->unsigned long long {
+                std::vector<float> hv(n); CU(cudaMemcpy(hv.data(),dptr,n*4,cudaMemcpyDeviceToHost));
+                unsigned long long x=1469598103934665603ULL;                 // FNV-1a over the raw bits
+                for(size_t i=0;i<n;++i){ unsigned u; memcpy(&u,&hv[i],4);
+                    for(int b=0;b<4;++b){ x^=(u>>(b*8))&0xff; x*=1099511628211ULL; } }
+                return x; };
+            printf("[hash] point %zu prompt %d PSp=%d : main_x=%016llx mh_pre=%016llx scratch0=%016llx\n",
+                   bsi, promptSweep[bsi], PSp,
+                   h64(main_x,(size_t)PSp*d), h64(mh_pre,(size_t)PSp*3*d), g_scratch_first_addr);
+            fflush(stdout);
+        }
         int NGEN=NGEN0;
         int cur=pids[ps-1], cpos=PSp;              // cur = token at position cpos (=PSp=ps-1), not yet in cache
         std::vector<int> sgen; int nverify=0, timed_tok=0; float spec_ms=0; cudaEvent_t s0,s1; cudaEventCreate(&s0); cudaEventCreate(&s1);
