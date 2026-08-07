@@ -1327,3 +1327,64 @@ capability claim and never re-tested, because "the compiler rejects it" felt lik
 capability claims deserve the same re-verification as performance claims — more, because they silently
 remove options rather than producing a wrong number. `scripts/arch_probe.sh` should be re-run after
 every CUDA toolkit update.
+
+---
+
+## 2026-08-06 — Finding 30: Thor DOES have FP4 tensor-core compute. I tested the wrong instruction family.
+
+The user pushed back on my "Thor has no FP4 tensor cores" conclusion. They were right and I was wrong.
+
+I had probed `mma.sync` — the Ampere-lineage family — on `sm_110a` and `sm_110f`, seen
+`Instruction 'mma with block scale' not supported`, seen it *compile* on `sm_121a`, and concluded
+Thor lacks FP4 while GB10 has it. **I never probed the `tcgen05` family, even though I had just
+established in Finding 29 that tcgen05 compiles and runs on this box.**
+
+```
+tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.scale_vec::4X   -> COMPILES on sm_110a
+SASS: UTCOMMA.4X gdesc[UR8], gdesc[UR8], tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR6], !UPT
+```
+Plus `.kind::mxf8f6f4.block_scale` and `.kind::f8f6f4` → `UTCQMMA`, and `.kind::f16` → `UTCHMMA`.
+
+### The two chips are mirror images
+
+| | `mma.sync` FP4 | `tcgen05` FP4 |
+|---|---|---|
+| **Thor `sm_110a`** | BLOCKED | **AVAILABLE** (`UTCOMMA.4X`) |
+| **GB10 `sm_121a`** | **AVAILABLE** | BLOCKED — `sm_121` has no `tcgen05` at all |
+
+Thor is **datacenter-lineage** Blackwell (tensor memory + `tcgen05`, SM100-like); GB10 is
+**consumer-lineage** (SM120-like). Both have hardware MXFP4/NVFP4 block-scaled matmul, reached
+through opposite instruction families. Probing only the family the *other* chip uses yields a
+confident and completely wrong "no FP4 here".
+
+### Why I got this wrong twice in a row
+
+Finding 29 corrected an inherited negative claim (`sm_110` vs `sm_110a`) and I wrote at the time
+that "negative capability claims deserve more re-verification than performance claims". Then I
+immediately produced a *new* negative capability claim from a single-family probe and called it
+"definitive" and "settled". The failure mode is identical to the one I had just documented: I
+proved absence within the search space I happened to look at, and reported absence in general.
+
+The correct discipline for a negative capability claim is to **enumerate the families that could
+provide the capability before concluding any of them lacks it.** For tensor-core matmul on Blackwell
+that means `mma.sync`, `wgmma`, and `tcgen05` — three families, and I checked one.
+
+### What it changes
+
+- **MXFP4 experts (28% of `B_tok`) can go into a hardware block-scaled MMA** instead of
+  `cvt` → FP16 → `mma.sync`, removing the conversion work entirely from the largest 4-bit surface.
+- The "permanent structural disadvantage vs DGX Spark" I wrote one commit earlier **does not exist.**
+  That paragraph was wrong and has been replaced.
+- `tcgen05` + TMA + FP4 together are exactly the CUTLASS/DeepGEMM SM100 kernel family. The entire
+  "arch-blocked, needs a rewrite" framing inherited from the prior project is void.
+
+### The gate that still stands
+
+**SASS emission proves ISA and assembler support, not silicon correctness.** `tcgen05` alloc/dealloc
+and TMA bulk copy are runtime-verified (Finding 29); a *complete* `mxf4nvf4` MMA is not — it needs
+tensor-memory allocation, matrix descriptors, and the scale-vector layout wired up before it will
+execute. **That runtime verification is the next step and it is the one that decides whether this is
+a real lever or a paper one.** Until it passes, this finding is "the instruction exists", not
+"the hardware does the math".
+
+`tools/tcgen05_probe.cu` + the extended `scripts/arch_probe.sh` now cover both families.

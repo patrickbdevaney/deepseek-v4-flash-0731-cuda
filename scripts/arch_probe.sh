@@ -18,3 +18,11 @@ done
 echo "=== runtime (does the silicon execute it?) ==="
 nvcc -gencode arch=compute_110a,code=sm_110a -o build/arch_probe_runtime tools/arch_probe_runtime.cu
 ./build/arch_probe_runtime
+
+echo "=== tcgen05 MMA kinds (the family Thor actually uses for FP4) ==="
+for P in K_F16 K_F8F6F4 K_MXF8F6F4 K_MXF4NVF4; do
+  printf "  %-14s " "$P"
+  nvcc -gencode arch=compute_110a,code=sm_110a -D$P -cubin -o /tmp/t5.cubin tools/tcgen05_probe.cu 2>/dev/null \
+    && echo "COMPILES  SASS: $(cuobjdump -sass /tmp/t5.cubin 2>/dev/null | grep -oE '[A-Z]*MMA[A-Z0-9.]*' | head -1)" \
+    || echo "BLOCKED"
+done

@@ -112,8 +112,26 @@ and re-deriving them is wasted time. Source: `~/dspark-cuda-reap-finetune/DECODE
 |---|---|---|
 | `tcgen05.*` (5th-gen TC / tensor memory) | **SUPPORTED — compiles AND runs** (`alloc`/`dealloc`/`mma`/`ld` all pass ptxas on `compute_110a`; alloc+dealloc verified at runtime) | **The inherited "not supported" claim was a TARGET-FLAG ERROR** — see the box below. DeepGEMM/CUTLASS SM100-class kernels are back on the table. |
 | `cp.async.bulk` / `.tensor` (**TMA**) | **SUPPORTED — compiles AND runs** (bulk copy with `mbarrier` completion verified at runtime) | Hardware-managed, swizzled, perfectly-coalesced global→shared transfer. This is the textbook fix for the B-operand coalescing loss in `LOOP_LOG` Finding 28. |
-| `mma` with **FP4/FP6 operands** | **GENUINELY BLOCKED** on `sm_110a` **and** `sm_110f` | FP4 is a **storage + conversion** format only on Thor. |
-| `mma` with **block scale** (`.kind::mxf4`) | **GENUINELY BLOCKED** on `sm_110a` **and** `sm_110f` — but **COMPILES on `sm_121a`/`sm_121f`** | **This is the permanent Thor-vs-GB10 gap.** DGX Spark feeds MXFP4 expert weights straight into a block-scaled `mma`; Thor must `cvt` FP4→FP16 first, then run an FP8/FP16 `mma`. On a model whose experts are 28% of per-token bytes, no kernel work closes this. |
+| `mma.sync` with **FP4/FP6 operands** or `.kind::mxf4` | **BLOCKED** on `sm_110a` and `sm_110f` | …but this is the WRONG FAMILY for Thor — see below. |
+| **`tcgen05.mma.kind::mxf4nvf4.block_scale.scale_vec::4X`** | **AVAILABLE.** Emits real SASS: `UTCOMMA.4X gdesc[UR8], gdesc[UR8], tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR6], !UPT` | **Thor HAS hardware MXFP4/NVFP4 block-scaled tensor-core matmul.** It is reached through the 5th-gen `tcgen05` path, not the Ampere-lineage `mma.sync` path. |
+| `tcgen05.mma.kind::mxf8f6f4.block_scale`, `.kind::f8f6f4`, `.kind::f16` | **AVAILABLE** | The whole tcgen05 mixed-precision family is present. |
+
+> ### Thor and GB10 have FP4 compute through OPPOSITE instruction families
+>
+> | | `mma.sync` FP4 | `tcgen05` FP4 |
+> |---|---|---|
+> | **Thor `sm_110a`** | BLOCKED | **AVAILABLE** (`UTCOMMA.4X`) |
+> | **GB10 `sm_121a`** | **AVAILABLE** | BLOCKED — `sm_121` has no `tcgen05` at all |
+>
+> Thor is **datacenter-lineage** Blackwell (tensor memory + `tcgen05`, SM100-like). GB10 is
+> **consumer-lineage** (SM120-like, `mma.sync` FP4). Testing only the family the *other* chip uses
+> produces a confident, wrong "this hardware has no FP4" — which is exactly the error made here
+> twice before this was pinned down. **Probe both families: `bash scripts/arch_probe.sh`.**
+>
+> **Not yet verified:** that a *complete* `mxf4nvf4` MMA executes correctly on the silicon. `tcgen05`
+> alloc/dealloc and TMA are runtime-verified; a full FP4 MMA needs tensor-memory allocation, matrix
+> descriptors and the scale-vector layout wired up. **SASS emission proves ISA + assembler support,
+> not silicon correctness.** That runtime gate is the next step, and it is the gate that matters.
 | `cp.async.cg.shared.global` | **OK** | Async weight streaming / software pipelining is available. |
 | `__nv_cvt_fp4x2_to_halfraw2` (HW FP4×2 → half2 unpack) | **OK** | The fast MXFP4 dequant primitive works. This is the top unexploited lever (see `ROOFLINE.md` §6). |
 | FP4 tensor-core **compute** | **BLOCKED** — re-confirmed on `compute_110a` with ptxas naming the feature explicitly | FP4 is a **storage/bandwidth** format only. FP8 `mma` is the compute ceiling. |
