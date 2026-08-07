@@ -107,7 +107,8 @@ int main(int argc, char** argv){
     int seqmax = s + (NDEC>NGEN0?NDEC:NGEN0) + BLKMAX + 8;   // room for spec block overshoot
     printf("[decode] loading %s ... s=%d NDEC=%d seqmax=%d\n", dir, s, NDEC, seqmax);
     st::WeightStore W(dir, key_map); Loader L(W);
-    printf("[decode] loaded %.2f GiB, %zu tensors\n", W.loadedGiB(), W.count());
+    printf("[decode] loaded %.2f GiB, %zu tensors  (weights in %s memory)\n",
+           W.loadedGiB(), W.count(), W.managed() ? "MANAGED device-preferred" : "mapped-host");
     const int half=ROPE_DIM/2, hc=HC_MULT, d=DIM;
     extern bool g_tc_fp8; g_tc_fp8=true; extern bool g_tc_ogroup; g_tc_ogroup=true;
     extern bool g_moe_grouped; g_moe_grouped=true; extern void tc_moe_clear_cache();

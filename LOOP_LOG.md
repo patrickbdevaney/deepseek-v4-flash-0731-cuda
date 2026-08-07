@@ -1827,3 +1827,65 @@ the byte model attributes all of a phase's time to its GEMMs when much of it is 
 moving almost nothing. **The next ranking pass must separate byte-carrying time from glue time.**
 Doing that on the K=1 profile splits base AR cleanly: ~59 ms carrying 8.67 GB (147 GB/s) and ~37 ms
 of glue carrying almost nothing — and the 37 ms is the larger of the two gaps to the 240 GB/s roof.
+
+## Finding 44 — the roofline the whole log was measured against is not the one the weights live on
+
+Every byte-carrying phase in the engine sat in a narrow band well under 240 GB/s, and the band was
+the same for kernels with nothing else in common (K=1, in situ): `cattn:ogroup` 170, `moe w13+w2`
+168, `lm_head` 183, `cattn:q_proj` 142. **A uniform ~70% across unrelated kernels is not a kernel
+property.** The one thing they share is where the weights live.
+
+`WeightStore` preads each shard into `cudaHostAlloc(cudaHostAllocMapped)` and hands kernels the
+`cudaHostGetDevicePointer` alias — zero-copy mapped host memory, chosen because the model is 100.4
+GiB in a 122 GiB unified pool and a device copy would double it. `ROOFLINE.md`'s 240 GB/s came from
+`bw_probe`, which measures a **`cudaMalloc`** buffer. `tools/alloc_probe` runs the same streaming
+kernel on the same bytes out of four allocators:
+
+| allocator | 4 GiB stream / strided | 16 GiB stream / strided |
+|---|---|---|
+| `cudaMalloc` (device) | 233.8 / 235.0 | 227.9 / 234.1 |
+| `cudaHostAlloc` Mapped — **where the weights were** | 180.2 / 194.3 | 184.8 / 215.7 |
+| `cudaMallocManaged` | 181.8 / 234.8 | 177.9 / 232.2 |
+| `cudaMallocManaged` + PreferredLocation + prefetch | 231.3 / 235.1 | 200.4 / 232.9 |
+
+Moved the weights to managed memory with the preferred location set to the device and the range
+prefetched (`DSV4_WEIGHTS=mapped` restores the old allocator; a failed managed allocation falls back
+automatically rather than dying after a ten-minute load).
+
+| | mapped | managed |
+|---|---|---|
+| base AR | 96.5 ms/tok | **92.8** |
+| base AR + CUDA graph | 85.4 | **81.3 (12.30 tok/s)** |
+| M=5 verify | 173.5 | **168.8** |
+| spec-decode | 14.76 tok/s | **15.49 tok/s (1.44x)** |
+
+**Predicted −11 ms, measured −3.7.** The 4 GiB probe says 1.21x on strided reads; the 16 GiB probe
+says 1.08x, and the engine's access pattern is strided, not streaming. Sizing a probe to the working
+set matters as much for the allocator as it did for the weights (Finding 41's HOT/COLD rows).
+
+**Two corrections to the log, both of which change future rankings:**
+
+1. **The achievable figure for this engine is ~233 GB/s strided out of managed memory, and was ~216
+   out of mapped.** Every "% of achievable" recorded against 240 before this was measured against a
+   ceiling the weights could not reach. The kernels were never as bad as the column implied — but
+   they are not at the roof either: 158-183 GB/s against 233 is 68-78%, so real headroom remains.
+2. **`B_tok`/BW puts the base-AR ceiling at 12.26 GB / 233 = 52.6 ms = 19.0 tok/s.** Graph-captured
+   base AR is 81.3 ms = 12.30 tok/s, i.e. 65% of it.
+
+## CUDA graph re-gate (G9)
+
+The full-step 43-layer capture behind `GRAPH=1` had not been re-gated since any of this work.
+**92.8 -> 81.3 ms/tok, 1.14x, GATE PASS, tokens identical.** That is ~11.5 ms of launch overhead in
+a step with ~600 launches, and it is the first direct confirmation of the Finding 43 correction that
+glue — not GEMM bandwidth — is the larger of the two gaps to the roof. The verify path is a
+comparable kernel chain and is not yet captured.
+
+## Session cumulative
+
+| | start | now |
+|---|---|---|
+| base AR | 9.98 tok/s | 10.78 (12.30 with graph) |
+| spec-decode | 10.04 tok/s | **15.49 tok/s** |
+| speculation vs base | 0.98x | 1.44x |
+| M=5 verify | 279.4 ms | 168.8 ms |
+| c_v | 2.88 | 1.82 |
