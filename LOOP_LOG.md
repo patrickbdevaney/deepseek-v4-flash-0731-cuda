@@ -3385,3 +3385,55 @@ removing bytes buys nothing. Amortisation only pays where the weight stream is t
 priority order — it is what marked half the verify "closed" — and it was never checked against the
 engine. The check cost one counter and one run. Anywhere else this project reasons from modelled bytes
 rather than measured ones deserves the same treatment.
+
+---
+
+## Finding 65 — Finding 64 shipped the wrong RB: rows-per-expert is not `bs`, and the histogram is skewed to 1
+
+**ADOPTED. Spec 19.22 → 19.31 tok/s; K=5 verify 141.53 → 138.04 ms; cumulative over Finding 64's
+starting point: verify 152.14 → 138.04 (−9.3 %), spec 17.81 → 19.13 (+7.4 %) on the DPROF/KSWEEP
+control, 19.31 clean. Output byte-identical to the pre-F64 kernel; all gates PASS.**
+
+Finding 64 chose `RB = smallest power of two ≥ bs`, reasoning that an expert can serve at most `bs`
+rows. True but useless: it is an upper bound, not the distribution. Measured (`DSV4_MOEUNION=1`, now
+also reporting the rows-per-expert histogram) at K=5:
+
+```
+union 17.53 experts over 30 rows;  max rows/expert = 5
+me=1: ~70 %   me<=2: ~88 %   me<=3: ~95 %   me=4,5: the tail
+```
+
+**Roughly seven in ten experts serve exactly one row**, so `RB=8` allocated `acc[8][BN]` — 16
+accumulators live — to hold a single row's worth of work. That is precisely the occupancy trap
+Finding 28 recorded on the fp8 GEMV, and I cited it in the F64 comment while walking into it.
+
+`ncu` on the measured grouping (`tools/ncu_target.cu` now builds 18 experts over 30 rows instead of 30
+one-row experts, which is why it could not see this before):
+
+| RB | time | registers | occupancy |
+|---|---|---|---|
+| 1 | 441.9 µs | 55 | 71.4 % |
+| **2** | **423.8 µs** | 62 | 63.1 % |
+| 4 | 434.4 µs | 68 | 55.3 % |
+| 8 | 497.3 µs | 85 | **39.4 %** ← what F64 shipped, *worse than RB=1* |
+
+In situ, `RB=1 at bs==1 else 2`:
+
+| config | spec | base AR | ksweep K=5 | `moe:w1w3` | `moe:w2` |
+|---|---|---|---|---|---|
+| pre-F64 | 17.81 | 12.39 | 152.14 | 54.46 | 23.60 |
+| F64 (RB by bs) | 19.01 | 12.64 | 141.53 | 44.54 | 23.88 |
+| **F65 (RB=1/2)** | **19.13** | **12.68** | **138.04** | **43.24** | **21.36** |
+
+Note `moe:w2` finally moves here (23.88 → 21.36, −10.6 %) where F64 left it flat: its problem was
+never bytes, it was that the RB=8 register pressure cost more than the amortisation returned at
+`K=inter=2048`.
+
+**The transferable point: an upper bound is not a distribution.** `bs` bounds rows-per-expert, and
+sizing a register array from it was wrong by 4x on the common case. Any future kernel parameter that
+scales a live register array should be fitted to the measured histogram, not to the worst case — and
+the histogram is now printed by the same instrument that measures the union.
+
+A second-order lesson for the probes: `ncu_target` had been modelling 30 experts of one row each,
+which for a row-amortised kernel is the one shape where amortisation cannot show up at all. **A probe
+that models the worst case measures a kernel the engine never runs.**

@@ -50,6 +50,9 @@ struct MoEWeights {
 // x:[bs,dim] fp32, input_ids:[bs] i32 (for hash routing) -> out:[bs,dim] fp32.
 extern long long g_moe_union_sum;   // DSV4_MOEUNION=1: summed distinct experts per call
 extern int       g_moe_union_calls;
+extern long long g_moe_rows_sum;
+extern int       g_moe_rows_max;
+extern long long g_moe_rows_hist[10];
 
 void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeights& w,
                  int bs, cudaStream_t stream = 0);

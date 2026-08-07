@@ -100,6 +100,9 @@ bool g_moe_gemv=false;      // decode: M=1 fp4 GEMV on ORIGINAL fp4 (no repack, 
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 long long g_moe_union_sum = 0;
 int       g_moe_union_calls = 0;
+long long g_moe_rows_sum = 0;
+int       g_moe_rows_max = 0;
+long long g_moe_rows_hist[10] = {0,0,0,0,0,0,0,0,0,0};
 
 __global__ void compute_scores_kernel(float* sc, const float* x, const float* gw, int bs, int dim, int nr){
     int i = blockIdx.x*blockDim.x+threadIdx.x; if(i>=bs*nr) return;
@@ -279,8 +282,13 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         if(getenv("DSV4_MOEUNION")){
             std::vector<int> ho(nr+1); CU(cudaStreamSynchronize(stream));
             CU(cudaMemcpy(ho.data(), off_d, (size_t)(nr+1)*4, cudaMemcpyDeviceToHost));
-            int u=0; for(int e=0;e<nr;++e) if(ho[e+1]>ho[e]) ++u;
+            int u=0, mx=0; long long rows=0;
+            for(int e=0;e<nr;++e){ int me_=ho[e+1]-ho[e]; if(me_>0){ ++u; rows+=me_; if(me_>mx) mx=me_; } }
             g_moe_union_sum += u; g_moe_union_calls += 1;
+            g_moe_rows_sum += rows; if(mx>g_moe_rows_max) g_moe_rows_max = mx;
+            // Which RB the row-amortised GEMV should use is decided by rows-per-EXPERT, not by bs:
+            // acc[RB][BN] is live regardless of the real row count (the Finding 28 occupancy trap).
+            for(int e=0;e<nr;++e){ int me_=ho[e+1]-ho[e]; if(me_>0 && me_<=8) g_moe_rows_hist[me_]++; else if(me_>8) g_moe_rows_hist[9]++; }
         }
         // -- tile descriptors (device) --
         int *tile_e,*tile_row0,*ntiles_d; tile_e=(decltype(tile_e))dmalloc(maxm*4); tile_row0=(decltype(tile_row0))dmalloc(maxm*4); ntiles_d=(decltype(ntiles_d))dmalloc(4);

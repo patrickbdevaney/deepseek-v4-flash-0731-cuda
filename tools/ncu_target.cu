@@ -24,7 +24,7 @@ using namespace dsv4;
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 extern bool g_tc_fp8;
 void tc_fp4_grouped_gemm_e8m0(float*, const __half*, const uint8_t* const*, const uint8_t* const*,
-        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t, int);
+        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
 // The path the ENGINE takes: moe_forward picks the GEMV whenever the expert scales are native e8m0
 // (g_moe_gemv defaults on). Profiling only the mma kernel would have measured a path decode does
 // not use -- the same class of mistake as the stale GEMV_MK bench row in Finding 41.
@@ -51,9 +51,20 @@ int main(int argc, char** argv){
         CU(cudaMemcpy(sptr,hs.data(),nr*sizeof(void*),cudaMemcpyHostToDevice));
         for(int M : {1,5}){
             if(which>=0 && which!=(M==1?0:1)) continue;
-            const int U = (6*M<nr)?6*M:nr;                       // distinct-expert worst case
+            // MEASURED grouping, not the worst case (LOOP_LOG Finding 64). DSV4_MOEUNION=1 says the
+            // K=5 verify activates 17.53 distinct experts over 30 rows, i.e. ~1.71 rows each — not 30
+            // experts of 1 row. That distinction is the whole point now: with the row-amortised kernel
+            // the weight is read once per EXPERT, so profiling 1-row experts measures a shape the
+            // engine does not run and hides the amortisation entirely.
+            const int ROWS = 6*M;                                 // bs*na rows to place
+            const int U    = (M==1) ? 6 : 18;                     // measured distinct experts
             std::vector<int> hoff(nr+1,0);
-            for(int ex=0;ex<=nr;++ex) hoff[ex] = (ex<=U)? ex : U;
+            { int placed=0;
+              for(int ex=0; ex<=nr; ++ex){
+                  hoff[ex] = placed;
+                  if(ex<U){ int take = (ROWS-placed) - (U-1-ex);  // spread ROWS over U experts, >=1 each
+                            if(take>2) take=2; if(take<1) take=1; placed+=take; } }
+              hoff[nr] = placed; }
             int *off_d,*tile_e,*tile_row0,*ntiles_d;
             CU(cudaMalloc(&off_d,(nr+1)*4)); CU(cudaMemcpy(off_d,hoff.data(),(nr+1)*4,cudaMemcpyHostToDevice));
             CU(cudaMalloc(&tile_e,(U+8)*4)); CU(cudaMalloc(&tile_row0,(U+8)*4)); CU(cudaMalloc(&ntiles_d,4));
@@ -63,7 +74,7 @@ int main(int argc, char** argv){
             float* xs=(float*)dalloc((size_t)U*(dim/128)*4);
             float* out=(float*)dalloc((size_t)U*inter*4);
             CU(cudaDeviceSynchronize());
-            printf("[ncu] moe M=%d U=%d w=%.1f MB\n", M, U, U*(double)w13n/1e6);
+            printf("[ncu] moe M=%d U=%d rows=%d w=%.1f MB (rows/expert %.2f)\n", M, U, ROWS, U*(double)w13n/1e6, (double)ROWS/U);
             tc_fp4_grouped_gemv_e8m0(out,xq,xs,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U+8,inter,dim, 0, M);  // engine default
             CU(cudaDeviceSynchronize());
             tc_fp4_grouped_gemm_e8m0(out,x16,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U+8,inter,dim,0);    // mma, for comparison

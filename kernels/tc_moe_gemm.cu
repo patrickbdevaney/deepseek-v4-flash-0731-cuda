@@ -396,8 +396,16 @@ void tc_fp4_grouped_gemv_e8m0(float* out, const uint8_t* Xq, const float* Xs, co
     // measured as a 2.9% base-AR regression (12.56 -> 12.19 tok/s) when RB was pinned at 8. Pick the
     // smallest power of two that covers `rows_hint` (= bs), so base AR gets the original kernel
     // byte-for-byte and the K=5 verify gets one weight load per expert.
-    const char* e_=getenv("MOE_RB"); int RB = e_ ? atoi(e_)
-                 : (rows_hint<=1?1: rows_hint<=2?2: rows_hint<=4?4:8);
+    // RB follows ROWS PER EXPERT, which is NOT bs. Measured with DSV4_MOEUNION=1 at K=5: the union is
+    // 17.53 experts over 30 rows and the distribution is heavily skewed — ~70% of experts serve
+    // exactly ONE row, ~88% serve <=2, and the maximum is 5. So the rows an expert actually has are
+    // far below bs, and sizing RB from bs over-allocates acc[RB][BN], which is live regardless of the
+    // real row count (the Finding 28 occupancy trap). ncu on the measured grouping, 1.67 rows/expert:
+    //     RB=1  441.9 us  55 reg  71.4% occ      RB=4  434.4 us  68 reg  55.3% occ
+    //     RB=2  423.8 us  62 reg  63.1% occ      RB=8  497.3 us  85 reg  39.4% occ   <- what F64 shipped
+    // and in situ the K=5 verify goes 141.53 -> 139.72 ms moving RB 8 -> 2 (moe:w2 23.88 -> 21.33).
+    // At bs=1 every expert has exactly one row, so RB=1 is both optimal and the original kernel.
+    const char* e_=getenv("MOE_RB"); int RB = e_ ? atoi(e_) : (rows_hint<=1 ? 1 : 2);
     if(RB!=1&&RB!=2&&RB!=4&&RB!=8) RB=8;
     switch(RB){
         case 1: k_grouped_fp4_gemv_e8m0<1><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;

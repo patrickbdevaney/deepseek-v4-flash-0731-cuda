@@ -16,15 +16,15 @@ Rules of the road:
 
 ## 1. Where the time actually goes
 
-Current baseline (prompt 0, clocks pinned, post-Finding-62): **18.13 tok/s speculative**,
-**12.56 tok/s base AR** (79.6 ms/tok), **12.52 graphed**. `evidence/final2.log`.
+Current baseline (prompt 0, clocks pinned, post-Finding-65): **19.31 tok/s speculative**,
+**12.58 tok/s base AR** (79.5 ms/tok). `evidence/final4.log`.
 
 The K=5 verify is **157.0 ms** and splits into two populations that behave completely differently
 (`evidence/pinned.log`, `DSV4_DPROF=1 DSV4_KSWEEP=1`):
 
 | group | ms | % | bytes | GB/s | headroom |
 |---|---|---|---|---|---|
-| routed MoE — `moe:w1w3` 44.5 + `moe:w2` 23.9 | **68.4** | 46 % | 10.08 GB after F64 | ~150 | **F64 took 20 % off `w1w3`; `w2` is issue-bound, not bytes** |
+| routed MoE — `moe:w1w3` 43.2 + `moe:w2` 21.4 | **64.6** | 47 % | 10.08 GB | ~156 | **F64/F65 took 21 % off `w1w3` and 10 % off `w2`; still only ~67 % of roofline** |
 | `cattn:ogroup` | 20.9 | 13 % | 2.75 GB | ~131 | some |
 | `cattn:q_proj` | 19.4 | 12 % | 1.55 GB | ~80 | some |
 | `cattn:indexer` (21 layers) | 9.1 | 6 % | — | — | some |
@@ -59,7 +59,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **intra-layer concurrency, 3 fork sites** | **+3.1 %** (36 matched points) | 55, 56, 57 |
 | **clock pinning (`jetson_clocks`)** | **+3.0 % steady, +20.7 % cold** | 60 |
 | **ogroup row-tile fix** | correctness, not speed — see §6 | **62** |
-| **MoE row amortisation (RB by batch)** | **+6.0 % spec, +2.0 % base AR** | **64** |
+| **MoE row amortisation, RB fitted to the rows histogram** | **+7.4 % spec, +2.3 % base AR; verify −9.3 %** | **64, 65** |
 
 ---
 
@@ -107,6 +107,8 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | B2 | **split-K on the small-N GEMMs** (`wkv [512,4096]` at 48 GB/s, `wq_a [1024,4096]` at 87) | ~1–2 % | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse independent small GEMMs into one launch** (`wq_a`+`wkv` share `xq/xs`) | ~1–2 % | Strictly better than two streams — bigger grid, no barrier, no SM/L2 contention. Needs a 2-weight grouped kernel; the MoE already has the machinery (`tc_fp4_grouped_gemv_e8m0`). Bit-exact. |
 | B4 | **the ~12 ms of glue** (`hc_pre` ×2, rmsnorm, router/group/act/combine) | ≤5 % | Moves almost no bytes; pure launch/latency floor. The verify-graph result (1.05x) caps what graphing can return here. Sinkhorn is *already* one fused kernel — do not "fuse" it again. |
+| B6 | **skip the funnel-shift when the expert weight pointer is 16B-aligned** | ~2-4 % of MoE | `k_grouped_fp4_gemv_e8m0` loads BOTH `wa` and `wa+16` per (lane,kb,u) and funnel-shifts, because mapped safetensors pointers are only 4-byte aligned (F41). That is 2x the load instructions and 8 extra registers per BN. If `wptr[e] & 15 == 0` the second load is pure waste — measure how many experts are actually aligned before building the fast path. |
+| B7 | **occupancy of the MoE GEMV** | up to ~30 % of `w1w3` | Even at the optimum RB=2 it runs 62 registers / 63 % occupancy / 155 GB/s = 67 % of roofline. The register budget is dominated by the funnel pair (B6) and `acc[RB][BN]`. B6 is the cheapest way in. |
 | B5 | **FP4 for the MLA/dense weights** | moves the byte floor ~1.2x | Assessed and **not done**: it is pure weight transform, trivial on Thor, but costs accuracy and the constraint is *no additional quantization*. Requires an explicit decision to relax that. |
 
 ## 5. Open — speculation (18.13 tok/s, acceptance ~2.9 of 5)
