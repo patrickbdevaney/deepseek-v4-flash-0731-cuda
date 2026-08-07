@@ -346,6 +346,12 @@ __global__ void k_grouped_w4a8_e8m0_kernel(float* out, const uint8_t* const* wpt
     const __half* xg0 = x16all + (size_t)(row0+gid)*K, *xg8 = x16all + (size_t)(row0+gid+8)*K;
     const uint8_t* bsr = b_s + (long)(n0+gid)*Ks32;
     bool m0=gid<me, m8=(gid+8)<me;
+    // NEGATIVE RESULT (IMPLEMENTATION_PLAN Tier-1 #2, reverted). Software-pipelining this loop —
+    // prefetching iteration g+1's two uint4 weight loads while consuming g — measured WORSE:
+    // 101.7 -> 102.9 ms/tok on the full model, and 121.6 -> 118.0 GB/s on the bench. The loop
+    // already issues A and B together (ILP=2), and the prefetch costs 8 extra registers against a
+    // Block-Limit-Registers of 48, which loses more in occupancy than it gains in latency hiding.
+    // The ILP lever that DID pay was on the dense GEMV (Opt #7), which was genuinely at ILP=1.
     for(int g=0; g<kg8; ++g){
         const uint8_t* wa = wb + (long)g*512 + lane*16 - off_b;
         uint4 A=__ldcs((const uint4*)wa), B=__ldcs((const uint4*)(wa+16));
