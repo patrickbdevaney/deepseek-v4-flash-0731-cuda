@@ -94,25 +94,56 @@ __attribute__((unused)) static int gemv_m1_full_grid(int threads){
 // (uint-vectorized) and dots it against ALL M activation rows -> the weight bandwidth is amortized M× with no
 // wasted rows (vs the m16-tile TC which wastes 16-M rows). Bandwidth-bound. Gated cosine vs fp8_block_gemm.
 #define GEMV_MK_MAXM 16
-__global__ void fp8_gemv_mk_kernel(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
-                                   const uint8_t* __restrict__ B, const float* __restrict__ bs, int M, int N, int K){
+// M=K GEMV, TEMPLATED on M (LOOP_LOG Finding 28).
+//
+// The untemplated version declared `float acc[GEMV_MK_MAXM]` = 16 registers regardless of the real
+// M, which capped occupancy and is why the prior project's A/B rejected it (334 -> 362 ms). With M
+// a compile-time constant the accumulator is exactly M registers, and the reason to want this path
+// at all is the access pattern:
+//
+//   this GEMV     : lane L reads B[n*K + kb*128 + L*4]  -> 32 lanes x 4B = 128 CONTIGUOUS bytes
+//   tc_fp8 m16    : lane L reads B[(n0+L/4)*K + ...]    -> 8 rows strided by K, 32B each
+//
+// Cold (which is always, in situ — every layer's weights come from a 100 GiB working set) the m16
+// tile costs ~3x the GEMV; hot, L2 hides it entirely, which is why the isolated bench missed this
+// for so long. See gemm_bench's HOT vs COLD rows.
+template<int MM>
+__global__ void fp8_gemv_mkT_kernel(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
+                                    const uint8_t* __restrict__ B, const float* __restrict__ bs, int N, int K){
     int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; if(warp>=N) return; int n=warp; int lane=threadIdx.x&31; int KB=K/128;
     const uint8_t* Brow=B+(size_t)n*K; const float* bsr=bs+(size_t)(n/128)*KB;
-    float acc[GEMV_MK_MAXM];
+    float acc[MM];
     #pragma unroll
-    for(int m=0;m<GEMV_MK_MAXM;++m) acc[m]=0.f;
+    for(int m=0;m<MM;++m) acc[m]=0.f;
     for(int kb=0; kb<KB; ++kb){
         int base=kb*128+lane*4; unsigned bv=*(const unsigned*)(Brow+base); float wsc=bsr[kb];
         float b0=dec_e4m3(bv&0xff)*wsc, b1=dec_e4m3((bv>>8)&0xff)*wsc, b2=dec_e4m3((bv>>16)&0xff)*wsc, b3=dec_e4m3((bv>>24)&0xff)*wsc;
-        for(int m=0; m<M; ++m){
+        #pragma unroll
+        for(int m=0; m<MM; ++m){
             unsigned av=*(const unsigned*)(A+(size_t)m*K+base); float asc=as[(size_t)m*KB+kb];
             acc[m]+=(dec_e4m3(av&0xff)*b0 + dec_e4m3((av>>8)&0xff)*b1 + dec_e4m3((av>>16)&0xff)*b2 + dec_e4m3((av>>24)&0xff)*b3)*asc;
         }
     }
-    for(int m=0; m<M; ++m){ float a=acc[m];
+    #pragma unroll
+    for(int m=0; m<MM; ++m){ float a=acc[m];
         #pragma unroll
         for(int o=16;o>0;o>>=1) a+=__shfl_down_sync(0xffffffff,a,o);
         if(lane==0) C[(size_t)m*N+n]=a; }
+}
+// dispatch to the right instantiation; returns false if M is outside the templated set.
+static bool fp8_gemv_mkT(float* C, const uint8_t* A, const float* as, const uint8_t* B, const float* bs,
+                         int M, int N, int K, cudaStream_t s){
+    const int threads=256, blocks=(N*32+threads-1)/threads;
+    switch(M){
+        case 2: fp8_gemv_mkT_kernel<2><<<blocks,threads,0,s>>>(C,A,as,B,bs,N,K); return true;
+        case 3: fp8_gemv_mkT_kernel<3><<<blocks,threads,0,s>>>(C,A,as,B,bs,N,K); return true;
+        case 4: fp8_gemv_mkT_kernel<4><<<blocks,threads,0,s>>>(C,A,as,B,bs,N,K); return true;
+        case 5: fp8_gemv_mkT_kernel<5><<<blocks,threads,0,s>>>(C,A,as,B,bs,N,K); return true;
+        case 6: fp8_gemv_mkT_kernel<6><<<blocks,threads,0,s>>>(C,A,as,B,bs,N,K); return true;
+        case 7: fp8_gemv_mkT_kernel<7><<<blocks,threads,0,s>>>(C,A,as,B,bs,N,K); return true;
+        case 8: fp8_gemv_mkT_kernel<8><<<blocks,threads,0,s>>>(C,A,as,B,bs,N,K); return true;
+        default: return false;
+    }
 }
 // Global toggle: route dense fp8 GEMMs through the native FP8 tensor core (tc_fp8_gemm, ~18x). Default OFF so
 // gates use this warp-per-output oracle (bit-exact). forward.cu sets it true for decode. All our fp8 GEMM
@@ -137,8 +168,13 @@ void fp8_block_gemm(float* C, const uint8_t* A_fp8, const float* a_s,
     // small-M M=K GEMV (env GEMV_MK=1): A/B'd SLOWER than TC at M>=2 (334->362 ms verify) — TC reads the weight
     // ONCE *and* does the M×N compute via mma, while this GEMV does M scalar dots/weight-read. Kept as a gated
     // reference/negative result; the M=1 GEMV above still wins (trivial compute at M=1). Default OFF for M>=2.
-    if (g_tc_fp8 && M >= 2 && M <= GEMV_MK_MAXM && (K % 128 == 0) && getenv("GEMV_MK")!=nullptr) {
-        int threads=256; fp8_gemv_mk_kernel<<<(N*32+threads-1)/threads, threads, 0, stream>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K); return; }
+    // small-M: the templated GEMV reads B fully coalesced, which beats the m16 tile on COLD
+    // weights by ~3x (Finding 28). TC_MK=1 forces the old m16 path for A/B.
+    // Threshold from the COLD A/B (gemm_bench): GEMV beats the m16 tile 2.0x at M=2 and 1.49x at
+    // M=3, is a wash at M=5 (1.04x) and LOSES at M=8 (0.72x) — it does M scalar dots per weight
+    // read, so it goes ALU-bound as M grows. Adopt only where it clearly wins.
+    if (g_tc_fp8 && M >= 2 && M <= 4 && (K % 128 == 0) && getenv("TC_MK")==nullptr) {
+        if (fp8_gemv_mkT(C, A_fp8, a_s, B_fp8, b_s, M, N, K, stream)) return; }
     if (g_tc_fp8 && (N % 8 == 0) && (K % 128 == 0)) { tc_fp8_gemm(C, A_fp8, a_s, B_fp8, b_s, M, N, K, stream); return; }
     dim3 grid(N, M);
     fp8_block_gemm_kernel<<<grid, 32, 0, stream>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K);

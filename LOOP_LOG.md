@@ -1177,3 +1177,99 @@ scaled to 43 layers   = 68.6 ms      vs the ~70 ms to explain   -> ACCOUNTED
 i.e. `c_v` -> ~1.9. At the measured acceptance `a = 3.12` that moves speculation from **1.00x to
 ~1.6x**, and it also cuts the base decode's own attention glue. **This is now the top lever in the
 project**, ahead of the remaining MoE efficiency.
+
+---
+
+## 2026-08-06 — Finding 28: the glue was NOT the cause either. It is COLD-WEIGHT COALESCING.
+
+Finding 15 closed with "the M>=2 penalty is the attention glue". **That was still wrong**, and the
+bench said so in seconds — which is why the fast harness was worth building.
+
+### The glue is innocent
+
+| op (real per-layer shape) | M=1 | M=2 | M1→M2 |
+|---|---:|---:|---:|
+| `act_quant_fp8 [M,4096]` | 0.0042 | 0.0042 | 1.00x |
+| `act_quant_fp8 [M,1024]` | 0.0041 | 0.0041 | 1.00x |
+| `rmsnorm [M,1024]` | 0.0062 | 0.0062 | 1.00x |
+| `rmsnorm [M*64,512]` | 0.0043 | 0.0062 | 1.45x |
+| `rope [M*64,64]` | 0.0044 | 0.0041 | 0.94x |
+| `act_quant_fp8sim` | 0.0041 | 0.0041 | 1.00x |
+| **glue step, summed** | | | **0.0017 ms/layer -> 0.1 ms over 43** |
+
+**0.1 ms of a ~70 ms penalty.** The elementwise chain does nothing.
+
+### The real cause: the isolated bench was HOT, and in situ is always COLD
+
+`q_proj`/`ogroup` are GEMM + glue, and the glue is flat, so it had to be the GEMMs — but the bench
+had priced `fp8_block_gemm`'s M=1→M=2 step at +7.4%. The bench looped 40x on **one** 33 MB weight.
+In situ every layer's weights come from a 100 GiB working set and are **always cold**. Rotating over
+12 copies (402 MB, far beyond any cache):
+
+| `wq_b [32768,1024]` | M=1 | M=2 | M=5 | M1→M2 |
+|---|---:|---:|---:|---:|
+| **HOT** (one weight reused) | 0.1744 | 0.1230 | 0.1603 | **0.71x** |
+| **COLD** (12 rotating) | 0.1986 | **0.6199** | 0.6042 | **3.12x** |
+
+**3.12x cold, 0.71x hot — from the same code.** That matches the in-situ `q_proj` 2.78x and
+`ogroup` 3.02x. The measurement, not the mechanism, had been wrong all along.
+
+### Why cold hurts the m16 tile: B access coalescing
+
+```
+fp8_gemv_m1 : lane L reads B[n*K + kb*128 + L*4]   -> 32 lanes x 4B = 128 CONTIGUOUS bytes
+tc_fp8 m16  : lane L reads B[(n0 + L/4)*K + ...]   -> 8 rows STRIDED BY K, 32B from each
+```
+The GEMV issues one fully-coalesced 128 B request per warp; the m16 tile issues eight 32 B requests
+scattered 1024 B apart. Hot, L2 absorbs it. Cold, it is ~3x the DRAM transactions for the same bytes.
+
+**This also explains, retroactively, why Opt #2 (wave quantisation) measured as noise**: at those
+shapes I was measuring a hot loop too.
+
+### Fix applied, and its honest limit
+
+Templated `fp8_gemv_mkT_kernel<M>` — the M=K GEMV with `acc[M]` sized at compile time instead of
+`acc[GEMV_MK_MAXM]`=16, which is why the prior project's A/B rejected it (registers capped
+occupancy). Same coalesced B access as the M=1 GEMV. Gate K PASS.
+
+Cold A/B against the m16 tile:
+
+| M | GEMV | m16 | |
+|---:|---:|---:|---|
+| 2 | 0.2680 | 0.5354 | **2.00x faster** |
+| 3 | 0.3589 | 0.5331 | **1.49x** |
+| 5 | 0.5176 | 0.5384 | 1.04x — a wash |
+| 8 | 0.7721 | 0.5522 | **0.72x — slower** |
+
+Adopted for **M = 2..4 only**, where it clearly wins (`TC_MK=1` forces the old path). The GEMV does
+M scalar dots per weight read, so it goes ALU-bound as M grows; by M=8 the tile's compute density
+wins back what its access pattern loses.
+
+**This does not move our operating point.** Base decode is M=1 (untouched by construction — the
+dispatch is `M >= 2`), and the verify runs at K=5 where the two paths are within 4%. It is banked
+because it is strictly better for M=2..4 and it pins the mechanism.
+
+**The correct fix is to repack B for the fp8 m16 path**, exactly as the FP4 grouped MoE path already
+does (`tc_ensure_repacked` -> `(N/8)*(K/128)*512` mma-order layout, which is why that kernel's B
+reads *are* contiguous). That would give the tile's compute density AND the GEMV's coalescing, and
+should recover most of the ~70 ms at K=5. It is the single largest remaining item and it is a
+known-good pattern already in this repo — but it is a real kernel rewrite plus a repack pass, not a
+threshold change, so it is scoped rather than started.
+
+### Where the decode number now stands
+
+| optimization | base decode |
+|---|---|
+| ported as-is | 7.80 tok/s |
+| #1 MoE occupancy | 8.63 |
+| #3 HC/Sinkhorn warp-parallel | 9.26 |
+| #4 BF16-native lm_head/markov | **9.51** |
+| #2 wave quantisation | reverted (negative) |
+| #5 device draft AR loop | no base effect (draft only) |
+| #6 small-M coalesced GEMV | **no base effect by construction (M>=2 only)** |
+
+**The base number has stopped moving** for the levers found so far: at M=1 the large MLA GEMMs are
+already at 89-94% of achievable and the glue is flat. The two remaining measured gaps are the MoE
+(~55% of achievable after Opt #1) and the m16 B-repack (M>=2 only, so it buys verify/draft, not
+base). Further base gains require attacking the MoE beyond occupancy — a different kernel, not
+another launch-geometry tweak.

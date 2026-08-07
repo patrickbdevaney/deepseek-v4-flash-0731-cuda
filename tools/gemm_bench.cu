@@ -224,5 +224,82 @@ int main(int argc, char** argv) {
         printf("\nThe M>=2 penalty to explain is ~72 ms across 43 layers. Whichever of these jumps\n"
                "at M=2 and stays flat to M=8 is the mechanism.\n");
     }
+    // ---- COLD-WEIGHT test: does the hot-loop bench hide the M>=2 step? ----
+    // In situ each layer's weights are read ONCE from a 100 GiB working set — always cold. The
+    // bench loops 40x on one 33 MB weight, which L2/DRAM row buffers can partly serve. Rotate over
+    // enough copies that every call reads memory it has not just touched.
+    {
+        const int NCOPY = 12;                       // 12 x 33.5 MB = 402 MB, far beyond any cache
+        const int N = N_HEADS*HEAD_DIM, K = Q_LORA; // wq_b [32768, 1024]
+        const size_t wb = (size_t)N*K;
+        std::vector<uint8_t*> W(NCOPY); std::vector<float*> S(NCOPY);
+        for (int i=0;i<NCOPY;++i){ W[i]=(uint8_t*)dalloc(wb); S[i]=(float*)dalloc((size_t)(N/128+1)*(K/128+1)*4); }
+        printf("\n--- wq_b [32768,1024]: HOT (one weight, reused) vs COLD (%d rotating copies) ---\n", NCOPY);
+        printf("%-14s %9s %9s %9s %9s %9s %8s\n","","M=1","M=2","M=3","M=5","M=8","M1->M2");
+        for (int cold=0; cold<3; ++cold){
+            // cold==2: same cold rotation but with the M=K GEMV the prior project rejected on a
+            // HOT/in-situ A/B (334->362 ms). If the m16 tile is re-reading B ~3x when cold, a GEMV
+            // that reads each weight row exactly once should now win.
+            if (cold==2) setenv("GEMV_MK","1",1); else unsetenv("GEMV_MK");
+            printf("%-14s", cold==0?"HOT ":(cold==1?"COLD":"COLD+GEMV_MK"));
+            double t[5]; int idx=0;
+            for (int M : {1,2,3,5,8}){
+                uint8_t* A=(uint8_t*)dalloc((size_t)M*K); float* as=(float*)dalloc((size_t)M*(K/128)*4);
+                float* C=(float*)dalloc((size_t)M*N*4);
+                int c=0;
+                double ms=timeit([&]{ int i = cold ? (c++ % NCOPY) : 0;
+                                      fp8_block_gemm(C,A,as,W[i],S[i],M,N,K,0); }, 24);
+                t[idx++]=ms; printf(" %9.4f", ms);
+                CU(cudaFree(A)); CU(cudaFree(as)); CU(cudaFree(C));
+            }
+            printf(" %7.2fx\n", t[1]/t[0]);
+        }
+        for (int i=0;i<NCOPY;++i){ CU(cudaFree(W[i])); CU(cudaFree(S[i])); }
+    }
+
+    // ---- the ATTENTION GLUE (LOOP_LOG Finding 15 closure): act_quant / rmsnorm / rope ----
+    // These are the chains that step 2.6-3.0x from K=1 to K=2 in situ while the GEMMs stay flat.
+    // Shapes are the real per-layer ones from mla_verify_step.
+    {
+        printf("\n--- attention glue, per CALL vs M (ms) ---\n");
+        printf("%-30s %9s %9s %9s %9s %9s %8s\n","op (real shape)","M=1","M=2","M=3","M=5","M=8","M1->M2");
+        auto row = [&](const char* nm, auto fn){
+            double t[5]; int i=0;
+            for (int M : {1,2,3,5,8}) t[i++] = fn(M);
+            printf("%-30s %9.4f %9.4f %9.4f %9.4f %9.4f %7.2fx\n", nm, t[0],t[1],t[2],t[3],t[4], t[1]/t[0]);
+            return t[1]-t[0];
+        };
+        float* cosT = (float*)dalloc((size_t)4096*(ROPE_DIM/2)*4);
+        float* sinT = (float*)dalloc((size_t)4096*(ROPE_DIM/2)*4);
+        double step = 0;
+        step += row("act_quant_fp8 [M,4096]", [&](int M){
+            float* x=(float*)dalloc((size_t)M*DIM*4); uint8_t* q=(uint8_t*)dalloc((size_t)M*DIM);
+            float* sc=(float*)dalloc((size_t)M*(DIM/128)*4);
+            double r=timeit([&]{ act_quant_fp8(q,sc,x,M,DIM,128,0); },50);
+            CU(cudaFree(x));CU(cudaFree(q));CU(cudaFree(sc)); return r; });
+        step += row("act_quant_fp8 [M,1024] q_lora", [&](int M){
+            float* x=(float*)dalloc((size_t)M*Q_LORA*4); uint8_t* q=(uint8_t*)dalloc((size_t)M*Q_LORA);
+            float* sc=(float*)dalloc((size_t)M*(Q_LORA/128)*4);
+            double r=timeit([&]{ act_quant_fp8(q,sc,x,M,Q_LORA,128,0); },50);
+            CU(cudaFree(x));CU(cudaFree(q));CU(cudaFree(sc)); return r; });
+        step += row("rmsnorm [M,1024] q_norm", [&](int M){
+            float* x=(float*)dalloc((size_t)M*Q_LORA*4); float* w=(float*)dalloc((size_t)Q_LORA*4);
+            double r=timeit([&]{ rmsnorm(x,x,w,M,Q_LORA,1e-6f,true,0); },50);
+            CU(cudaFree(x));CU(cudaFree(w)); return r; });
+        step += row("rmsnorm [M*64,512] per-head", [&](int M){
+            float* x=(float*)dalloc((size_t)M*N_HEADS*HEAD_DIM*4);
+            double r=timeit([&]{ rmsnorm(x,x,nullptr,M*N_HEADS,HEAD_DIM,1e-6f,false,0); },50);
+            CU(cudaFree(x)); return r; });
+        step += row("rope [M*64,64]", [&](int M){
+            float* q=(float*)dalloc((size_t)M*N_HEADS*HEAD_DIM*4);
+            double r=timeit([&]{ rope_interleaved(q+NOPE_DIM,cosT,sinT,M*N_HEADS,ROPE_DIM,false,HEAD_DIM,N_HEADS,0); },50);
+            CU(cudaFree(q)); return r; });
+        step += row("act_quant_fp8sim [M,448]", [&](int M){
+            float* kv=(float*)dalloc((size_t)M*HEAD_DIM*4);
+            double r=timeit([&]{ act_quant_fp8sim(kv,M,NOPE_DIM,64,HEAD_DIM,0); },50);
+            CU(cudaFree(kv)); return r; });
+        printf("\nglue M=1->M=2 step, summed: %.4f ms/layer  ->  x43 = %.1f ms\n", step, step*43);
+        printf("(the whole M>=2 verify penalty to explain is ~70 ms over 43 layers)\n");
+    }
     return 0;
 }
