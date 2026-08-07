@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
             const double wb = (double)U * w13n;               // one read per activated expert
 
             extern void tc_fp4_grouped_gemm_e8m0(float*,const __half*,const uint8_t* const*,const uint8_t* const*,
-                                                 const int*,const int*,const int*,const int*,int,int,int,cudaStream_t,int);
+                                                 const int*,const int*,const int*,const int*,int,int,int,cudaStream_t);
             extern void tc_fp4_grouped_gemv_e8m0(float*,const uint8_t*,const float*,const uint8_t* const*,const uint8_t* const*,
                                                  const int*,const int*,const int*,const int*,int,int,int,cudaStream_t,int);
             double ms_mma = timeit([&]{ tc_fp4_grouped_gemm_e8m0(out,x16,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U,inter,dim,0); }, reps);

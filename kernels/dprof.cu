@@ -20,6 +20,8 @@ const char* kName[DP_N] = {
     "  attn:q_proj",  "  attn:kv_write", "  attn:sparse", "  attn:ogroup", "  attn:misc",
     "  cattn:q_proj", "  cattn:compress", "  cattn:indexer", "  cattn:sparse", "  cattn:ogroup",
     "  moe:router", "  moe:group", "  moe:w1w3", "  moe:act", "  moe:w2", "  moe:combine", "  moe:shared",
+    "    q:aq(x)", "    q:wq_a", "    q:rms+aq", "    q:wq_b", "    q:tail", "    q:kv_join",
+    "    o:rope", "    o:wo_a", "    o:wo_b",
 };
 } // namespace
 

@@ -31,6 +31,12 @@ enum DProfId {
     DP_C_QPROJ, DP_C_COMPRESS, DP_C_INDEXER, DP_C_SPARSE, DP_C_OGROUP,
     // inside MoE — 44% of the step and, until now, entirely unattributed
     DP_M_ROUTER, DP_M_GROUP, DP_M_W13, DP_M_ACT, DP_M_W2, DP_M_COMBINE, DP_M_SHARED,
+    // Third level, inside cattn:q_proj and cattn:ogroup — the two worst-efficiency big items left
+    // (1.63 GB in 19.85 ms = 35% of roofline, and 2.75 GB in 21.52 = 55%). Each bundles 4-6 kernels
+    // plus, for q_proj, the C1 kv-fork join, so the region total says nothing about which part is
+    // slow. 22.6 ms of the 144.6 ms verify sits behind these marks.
+    DP_Q_AQX, DP_Q_WQA, DP_Q_RMSAQ, DP_Q_WQB, DP_Q_TAIL, DP_Q_KVJOIN,
+    DP_O_ROPE, DP_O_WOA, DP_O_WOB,
     DP_N
 };
 

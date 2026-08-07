@@ -248,7 +248,9 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
     xq=(uint8_t*)dmalloc((size_t)K*DIM); xs=(float*)dmalloc((size_t)K*(DIM/128)*4);
     qr=(float*)dmalloc((size_t)K*Q_LORA*4); qrq=(uint8_t*)dmalloc((size_t)K*Q_LORA); qrs=(float*)dmalloc((size_t)K*(Q_LORA/128)*4);
     dprof_begin(DP_C_QPROJ,stream);
+    dprof_begin(DP_Q_AQX,stream);
     act_quant_fp8(xq,xs,xK,K,DIM,128,stream);
+    dprof_end(DP_Q_AQX,stream);
     // C1 (Finding 55/56). The kv chain consumes `xq/xs` and nothing else — it is independent of the
     // whole wq_a -> rmsnorm -> act_quant -> wq_b chain that follows, and `wkv [512,4096]` is the
     // WORST shape on overlap_probe: 47.8 GB/s standalone at M=5 against 150.4 on four streams
@@ -269,12 +271,25 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
         act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,ks);
         cudaEventRecord(g_side2_join,ks);
     }
+    dprof_begin(DP_Q_WQA,stream);
     fp8_block_gemm(qr,xq,xs,a.wq_a,a.wq_a_s,K,Q_LORA,DIM,stream);
+    dprof_end(DP_Q_WQA,stream);
+    // Two elementwise kernels on <=20 KB. If this mark is large it is dependent-kernel exposure, not
+    // work, and fusing rmsnorm into act_quant is worth building; if it is small, q:wq_a is the GEMM
+    // and fusion is not the lever. 0.4% vs 4% turns on this number.
+    dprof_begin(DP_Q_RMSAQ,stream);
     rmsnorm(qr,qr,a.q_norm,K,Q_LORA,eps,true,stream);
     act_quant_fp8(qrq,qrs,qr,K,Q_LORA,128,stream);
+    dprof_end(DP_Q_RMSAQ,stream);
+    dprof_begin(DP_Q_WQB,stream);
     fp8_block_gemm(qOut,qrq,qrs,a.wq_b,a.wq_b_s,K,Kd,Q_LORA,stream);
+    dprof_end(DP_Q_WQB,stream);
+    dprof_begin(DP_Q_TAIL,stream);
     rmsnorm(qOut,qOut,nullptr,K*N_HEADS,HEAD_DIM,eps,false,stream);
     rope_interleaved(qOut+NOPE_DIM,cosP,sinP,K*N_HEADS,ROPE_DIM,false,HEAD_DIM,N_HEADS,stream);
+    dprof_end(DP_Q_TAIL,stream);
+    // How much of this region is the main stream WAITING on the C1 kv fork rather than doing work.
+    dprof_begin(DP_Q_KVJOIN,stream);
     if(kvsplit){ cudaStreamWaitEvent(stream,g_side2_join,0); }        // win_kv is read by the caller
     else {
         fp8_block_gemm(kvn,xq,xs,a.wkv,a.wkv_s,K,HEAD_DIM,DIM,stream);
@@ -282,6 +297,7 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
         rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,stream);
         act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,stream);
     }
+    dprof_end(DP_Q_KVJOIN,stream);
     dprof_end(DP_C_QPROJ,stream);
     // The indexer needs act_quant(rmsnorm(wq_a @ x)) — byte-for-byte what `qrq/qrs` already hold.
     // It used to rebuild them from x: act_quant(x) + the whole wq_a GEMM (4.19 MB/layer) + rmsnorm
@@ -300,11 +316,17 @@ static void finish_attn(const CompressedAttnWeights& w, const float* q, const fl
     sparse_attn(o,q,kv_all,a.attn_sink,comb,1,K,N_HEADS,HEAD_DIM,ntot,topk,scale,stream);
     dprof_end(DP_C_SPARSE,stream);
     dprof_begin(DP_C_OGROUP,stream);
+    dprof_begin(DP_O_ROPE,stream);
     rope_interleaved(o+NOPE_DIM,cosP,sinP,K*N_HEADS,ROPE_DIM,true,HEAD_DIM,N_HEADS,stream);
+    dprof_end(DP_O_ROPE,stream);
+    dprof_begin(DP_O_WOA,stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og,o,a.wo_a_fp8,a.wo_a_sc,K,O_GROUPS,O_LORA,GKd,stream);
     else              ogroup_gemm    (og,o,a.wo_a,               K,O_GROUPS,O_LORA,GKd,stream);
     act_quant_fp8(ogq,ogs,og,K,OB,128,stream);
+    dprof_end(DP_O_WOA,stream);
+    dprof_begin(DP_O_WOB,stream);
     fp8_block_gemm(out,ogq,ogs,a.wo_b,a.wo_b_s,K,DIM,OB,stream);
+    dprof_end(DP_O_WOB,stream);
     dprof_end(DP_C_OGROUP,stream);
     dfree(o);dfree(og);dfree(ogq);dfree(ogs);
 }

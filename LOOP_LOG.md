@@ -3477,3 +3477,64 @@ On a warp-uniform load the coalescer had already merged lane L's and lane L+1's 
 sectors, so the second load was never costing DRAM traffic — only an instruction that the hardware was
 already pipelining. Replacing a coalesced load with a shuffle chain trades a free thing for a costly
 one. Check whether the redundancy actually reaches memory before removing it.
+
+---
+
+## Finding 67 — `wq_a` runs at 26 GB/s because the m16 tile's warp count is N/8, and three fixes for it all failed
+
+No adoption. Four measurements, three retired levers, and one diagnosis worth keeping.
+
+### The diagnosis
+
+Third-level dprof marks (new: `q:aq(x)`, `q:wq_a`, `q:rms+aq`, `q:wq_b`, `q:tail`, `q:kv_join`,
+`o:rope`, `o:wo_a`, `o:wo_b`) split the two worst-efficiency regions:
+
+| mark | ms | bytes | GB/s | % roofline |
+|---|---|---|---|---|
+| `q:aq(x)` | 0.41 | — | — | 10 µs/layer |
+| **`q:wq_a`** | **6.58** | 0.17 GB | **26** | **11 %** |
+| `q:rms+aq` | 0.64 | — | — | 8 µs/kernel |
+| `q:wq_b` | 11.67 | 1.38 GB | 117 | 50 % |
+| `o:wo_a` | 11.14 | 1.38 GB | 124 | 53 % |
+| `o:wo_b` | 9.24 | 1.38 GB | 149 | 64 % |
+| `q:kv_join` | **0.05** | — | — | C1's fork is fully hidden |
+
+**`tc_fp8_gemm` launches `grid.x = N/(8W)` blocks of `W` warps, so its total warp count is `N/8`
+regardless of `W`** — the adaptive-`W` heuristic moves warps between blocks and never creates any. At
+N=1024 that is **128 warps** on a device with ~1000 slots. `wq_b` (N=32768 → 4096 warps) reaches 117
+GB/s; `wq_a` reaches 26. The efficiency of every fp8 GEMM here is predicted by `N/8`.
+
+This also kills the fusion idea before it was built: `q:rms+aq` is **0.64 ms for two kernels over 41
+layers**, i.e. ~8 µs each. Fusing rmsnorm into act_quant is worth at most 0.4 %, not the 4 % a
+"tiny kernels are the problem" story would have implied. One extra mark decided that.
+
+### Three fixes, all retired with measurements
+
+1. **Align the weights so the `uint4` fast path fires.** Every fp8 GEMM selects `uint4` vs 4×`unsigned`
+   staging on `((uintptr_t)B & 15)==0`, and Finding 66 showed that is **never** true in the engine
+   (offsets are 8 or 12 mod 16) while **always** true in `gemm_bench` (cudaMalloc). A per-shard pad
+   makes 99.06 % of tensors 16-byte aligned — implemented, and it bought **nothing** (`q:wq_a` 6.58 →
+   6.52, spec 19.13 → 18.59). The bench had already answered this and I misread it: its `m16+smem B+4`
+   column is 0.0518 vs 0.0484 aligned. **Alignment is worth 7 %, not 3.3x.**
+2. **Route everything through the M=K GEMV** (`GEMV_MK_MAXM=5`), which puts one warp per output *row*.
+   `q:wq_a` 6.58 → 5.85, but `q:wq_b` 11.67 → **21.26** and `o:wo_b` 9.24 → **20.56**. TOTAL 144.94 →
+   176.15. It is a crossover in N, not a better kernel.
+3. **Route only small N through the GEMV.** At `N<=2048` the win was swamped: TOTAL → 151.39, driven by
+   **`moe:w1w3` +4.80 ms** — a mark that does not use `fp8_block_gemm` at all. The threshold had caught
+   the *shared expert* (N=2048), which runs on a side stream concurrently with the routed MoE, so
+   slowing the hidden op extended the kernel it hides behind. At `N<=1024` the MoE recovered (43.85)
+   and `q:wq_a` still gained 0.87 ms — but `q:rms+aq` rose 0.64 → 2.41 and TOTAL was still worse
+   (147.23, ksweep 141.29). **Retired.**
+
+**The transferable rule from (3): anything that changes a kernel running on a side stream must be
+priced against the MAIN stream, not against itself.** The Finding 56 table said overlap returns 20-32 %
+of a hidden op's cost; it says equally that *slowing* a hidden op costs the partner, and here that
+cost was 4x the gain being chased.
+
+### What survives
+
+`wq_a`'s 26 GB/s is real and the mechanism is understood. The remaining untried fix is **split-K** — a
+K-split multiplies the warp count directly rather than trading warps between blocks — and it is the
+only one of the four that attacks `N/8` itself. It is not bit-exact (the reduction order changes), so
+it needs a tolerance gate rather than an equality gate. Expected: `q:wq_a` 6.58 → ~1.7 ms if it reaches
+even 100 GB/s, i.e. ~3 % of the verify.
