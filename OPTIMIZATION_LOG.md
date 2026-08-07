@@ -32,8 +32,46 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 | After Opt #3 | 108.0 | 9.26 | 103.7 | 43.2% |
 | After Opt #4 | 105.2 | 9.51 | 116.6 | 48.6% |
 | After Opt #7 (ILP) | 101.7 | 9.83 | 120.6 | 50.2% |
-| After Opt #9 (half2) | **100.2** | **9.98** | **122.4** | **51.0%** |
-| **Cumulative** | **1.279x** | | | |
+| After Opt #9 (half2) | 100.2 | 9.98 | 122.4 | 51.0% |
+| After Opt #10 (gemm float4+ILP) | 99.9 | 10.01 | 122.7 | 51.1% |
+| After Opt #12 (rsqrt fused) | 99.3 | 10.07 | 123.5 | 51.4% |
+| After Opt #11 (ogroup uint32) | **96.9** | **10.32** | **126.5** | **52.7%** |
+| Opt #13-15 (MoE ptr tables, router float4, hash-layer selected scoring) | 97.4 | 10.27 | — | — |
+| **Cumulative** | **1.324x** | | | |
+
+Opts #13–#15 measured **no gain** (96.9 → 97.4 ms, inside the ±1 ms run-to-run band). Kept: they
+remove 258 H2D copies/token and 26x of router work on the hash layers, are strictly less work, and
+gate clean — but they are recorded here as **zero**, not as a win, because that is what was measured.
+
+### Measured sub-phase profile at K=1 (`~/dprof4.log`, 96.9 ms config)
+
+This is the first profile that covers all 43 layers and the inside of MoE. Achieved bandwidth is
+`phase_bytes / phase_ms`; the ceiling column is the on-box working-set curve for that phase's size.
+
+| phase | ms | % | bytes | achieved GB/s | vs ceiling |
+|---|---|---|---|---|---|
+| `cattn:ogroup` (41 layers) | 16.63 | 21.5% | 2.75 GB | 165 | 79% |
+| `moe:w1w3` | 12.40 | 16.0% | 2.44 GB | **196** | **94%** |
+| `cattn:q_proj` (41 layers) | 11.35 | 14.7% | 1.63 GB | 144 | 69% |
+| `moe:shared` | 7.55 | 9.7% | 1.08 GB | 143 | 69% |
+| `moe:w2` | 5.79 | 7.5% | 1.22 GB | **210** | **at ceiling** |
+| `hc_pre` ×2 | 4.74 | 6.1% | ~0.07 GB | latency-bound | — |
+| `moe:router` + `moe:group` | 4.00 | 5.2% | ~0.11 GB | latency-bound | — |
+| glue (`rmsnorm`, `hc_post`, `act`, `combine`, `sparse`, `kv xin`) | ~3.8 | 4.9% | small | latency-bound | — |
+| unattributed inside ATTENTION (compressor + DSA indexer) | 9.02 | 11.6% | — | **not instrumented** | — |
+| **unattributed outside the layer loop** (`lm_head`, head chain, host) | **20.1** | **20.6%** | ~1.1 GB | **never instrumented** | — |
+
+**This resets the base-AR ceiling.** The three largest weight-streaming phases are already at
+79–100% of achievable. The 126 GB/s *average* is not a bandwidth deficit spread evenly over the
+step — it is ~20 ms of latency-bound glue moving almost no bytes, plus 20 ms outside the layer loop
+that has never been measured at all. Eliminating every latency-bound phase entirely would reach
+~78 ms ≈ 12.8 tok/s. **Realistic base AR is 13–14 tok/s, not the ~17 previously claimed.**
+
+Two consequences:
+1. The remaining base-AR levers are **fusion and launch-count**, not bandwidth. Byte reduction on
+   `moe:w1w3`/`moe:w2` is worthless — they are already at the wall.
+2. The **20.1 ms outside the layer loop is now the single largest unexamined block in the engine**,
+   larger than any individual instrumented phase except `cattn:ogroup`. Instrument it next.
 
 Note the GB/s column now uses the **engine's** `B_tok` of 12,261 MB, not the checkpoint's 11,202 MB.
 `ROOFLINE.md` measured what is *stored*; Finding 26b showed the engine was reading `lm_head` at
