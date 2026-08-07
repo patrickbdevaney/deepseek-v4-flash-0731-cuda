@@ -155,11 +155,11 @@ int main(int argc, char** argv) {
             const double wb = (double)U * w13n;               // one read per activated expert
 
             extern void tc_fp4_grouped_gemm_e8m0(float*,const __half*,const uint8_t* const*,const uint8_t* const*,
-                                                 const int*,const int*,const int*,const int*,int,int,int,cudaStream_t);
+                                                 const int*,const int*,const int*,const int*,int,int,int,cudaStream_t,int);
             extern void tc_fp4_grouped_gemv_e8m0(float*,const uint8_t*,const float*,const uint8_t* const*,const uint8_t* const*,
-                                                 const int*,const int*,const int*,const int*,int,int,int,cudaStream_t);
+                                                 const int*,const int*,const int*,const int*,int,int,int,cudaStream_t,int);
             double ms_mma = timeit([&]{ tc_fp4_grouped_gemm_e8m0(out,x16,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U,inter,dim,0); }, reps);
-            double ms_gv  = timeit([&]{ tc_fp4_grouped_gemv_e8m0(out,xq,xs,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U,inter,dim,0); }, reps);
+            double ms_gv  = timeit([&]{ tc_fp4_grouped_gemv_e8m0(out,xq,xs,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U,inter,dim, 0, M); }, reps);
             printf("%-22s %5d %8d %10.2f %10.4f %9.1f %7.1f%%\n","grouped mma (default)",M,U,wb/1e6,ms_mma,wb/(ms_mma*1e-3)/1e9,100.0*(wb/(ms_mma*1e-3)/1e9)/ROOF);
             printf("%-22s %5d %8d %10.2f %10.4f %9.1f %7.1f%%\n","grouped GEMV (MOE_GEMV)",M,U,wb/1e6,ms_gv, wb/(ms_gv *1e-3)/1e9,100.0*(wb/(ms_gv *1e-3)/1e9)/ROOF);
             CU(cudaFree(x16)); CU(cudaFree(xq)); CU(cudaFree(xs)); CU(cudaFree(out));

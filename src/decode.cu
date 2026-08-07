@@ -520,6 +520,7 @@ int main(int argc, char** argv){
                 // both made `moe:w1w3` (67 ms, mostly 5-token prefill) exceed its own parent
                 // `MoE` (31 ms). Only the timed pass counts.
                 dprof_reset();
+                g_moe_union_sum=0; g_moe_union_calls=0;   // verify-only: the re-prefill above is bs=PS, not bs=K
                 cudaEventRecord(ev[0]);
                 for(int L=0; L<N_LAYERS; ++L){ arena_reset(); int r=compress_ratio(L);
                     if(r==0) block_verify_step (b,a,d_ids+PS,BW[L],PS,K,HC_SINKHORN_ITERS,EPS,KV[L]);
@@ -536,6 +537,10 @@ int main(int argc, char** argv){
                 dprof_end(DP_LM_HEAD,0);
                 CU(cudaDeviceSynchronize());
                 { char tg[32]; snprintf(tg,sizeof tg,"K=%d",K); dprof_report(tg); }
+                if(getenv("DSV4_MOEUNION") && g_moe_union_calls){
+                    printf("[union] K=%d : mean distinct experts per layer = %.2f  (%d calls, top-%d of %d)\n",
+                           K, (double)g_moe_union_sum/g_moe_union_calls, g_moe_union_calls, N_ACT, N_ROUTED);
+                    fflush(stdout); g_moe_union_sum=0; g_moe_union_calls=0; }
                 double tot=0, ts=0, t128=0, t4=0;
                 for(int L=0; L<N_LAYERS; ++L){ float dt; cudaEventElapsedTime(&dt,ev[L],ev[L+1]);
                     tot+=dt; int r=compress_ratio(L); (r==0?ts:(r==128?t128:t4)) += dt; }

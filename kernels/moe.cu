@@ -98,6 +98,8 @@ void tc_fp4_gemm(float*, const uint8_t*, const float*, const uint8_t*, const flo
 bool g_moe_grouped=false;   // STRUCTURAL_PLAN Step 1b: zero-sync grouped-GEMM MoE (removes off[] D2H, graph-capturable)
 bool g_moe_gemv=false;      // decode: M=1 fp4 GEMV on ORIGINAL fp4 (no repack, act stays fp8) — bandwidth-bound at small M
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
+long long g_moe_union_sum = 0;
+int       g_moe_union_calls = 0;
 
 __global__ void compute_scores_kernel(float* sc, const float* x, const float* gw, int bs, int dim, int nr){
     int i = blockIdx.x*blockDim.x+threadIdx.x; if(i>=bs*nr) return;
@@ -254,7 +256,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         void tc_fp4_grouped_gemm_e8m0(float*, const __half*, const uint8_t* const*, const uint8_t* const*,
                                  const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
         void tc_fp4_grouped_gemv_e8m0(float*, const uint8_t*, const float*, const uint8_t* const*, const uint8_t* const*,
-                                 const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
+                                 const int*, const int*, const int*, const int*, int, int, int, cudaStream_t, int);
         extern bool g_moe_gemv;
         const int maxm = bs*na;
         // -- device counting-sort grouping (off_d KEPT on device; NO D2H) --
@@ -266,6 +268,20 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         k_moe_count<<<(bs*na+63)/64,64,0,stream>>>(counts,idx,bs*na);
         k_moe_prefix<<<1,1,0,stream>>>(off_d,counts,nr);
         k_moe_scatter<<<(bs*na+63)/64,64,0,stream>>>(alltok_d,allwt_d,allslot_d,cursor,idx,wt,off_d,bs,na);
+        // EXPERT UNION (DSV4_MOEUNION=1). The claim "the routed MoE is at the memory roofline" — the
+        // single most load-bearing fact in the priority model, because it is 50% of the verify — rests
+        // on a MODELLED union of 29.9 distinct experts at K=5 (ROOFLINE.md's c_v), never a measured
+        // one. The measured TIME only scales 1.90/2.58/3.28/3.95 from K=1..5 where a no-overlap union
+        // would scale 2/3/4/5, so either the union is ~23.7 and the MoE is at 72% of roofline with
+        // real headroom, or it is ~30 and efficiency rises with K. Those differ by ~22 ms of the
+        // verify. `off_d` is the exclusive scan of per-expert row counts, so the number of e with
+        // off[e+1]>off[e] IS the union. One D2H per call, debug only.
+        if(getenv("DSV4_MOEUNION")){
+            std::vector<int> ho(nr+1); CU(cudaStreamSynchronize(stream));
+            CU(cudaMemcpy(ho.data(), off_d, (size_t)(nr+1)*4, cudaMemcpyDeviceToHost));
+            int u=0; for(int e=0;e<nr;++e) if(ho[e+1]>ho[e]) ++u;
+            g_moe_union_sum += u; g_moe_union_calls += 1;
+        }
         // -- tile descriptors (device) --
         int *tile_e,*tile_row0,*ntiles_d; tile_e=(decltype(tile_e))dmalloc(maxm*4); tile_row0=(decltype(tile_row0))dmalloc(maxm*4); ntiles_d=(decltype(ntiles_d))dmalloc(4);
         tc_build_tiles(tile_e,tile_row0,ntiles_d,off_d,nr,stream);
@@ -351,8 +367,8 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         const bool use_gemv = g_moe_gemv && w.e8m0_scales;
         dprof_begin(DP_M_W13,stream);
         if(use_gemv){                                          // fp4 GEMV on ORIGINAL fp4 (act stays fp8)
-            tc_fp4_grouped_gemv_e8m0(Gb,Xeq,Xes,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
-            tc_fp4_grouped_gemv_e8m0(Ub,Xeq,Xes,w3d,(const uint8_t* const*)s3d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
+            tc_fp4_grouped_gemv_e8m0(Gb,Xeq,Xes,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim, stream, bs);
+            tc_fp4_grouped_gemv_e8m0(Ub,Xeq,Xes,w3d,(const uint8_t* const*)s3d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim, stream, bs);
         } else if(w.e8m0_scales){
             tc_a_to_fp16(x16,Xeq,Xes,maxm,dim,stream);
             tc_fp4_grouped_gemm_e8m0(Gb,x16,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
@@ -368,7 +384,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         act_quant_fp8(Hqb,Hsb,Hb,maxm,inter,128,stream);
         dprof_end(DP_M_ACT,stream);
         dprof_begin(DP_M_W2,stream);
-        if(use_gemv)           tc_fp4_grouped_gemv_e8m0(OEb,Hqb,Hsb,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);
+        if(use_gemv)           tc_fp4_grouped_gemv_e8m0(OEb,Hqb,Hsb,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter, stream, bs);
         else if(w.e8m0_scales){tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm_e8m0(OEb,h16,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
         else                  {tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm(OEb,h16,w2d,(const float* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
         dprof_end(DP_M_W2,stream);

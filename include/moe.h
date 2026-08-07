@@ -48,5 +48,8 @@ struct MoEWeights {
     mutable void* dev_ptr_tables = nullptr;    // 6 * n_routed device pointers, laid out w1,w3,w2,s1,s3,s2
 };
 // x:[bs,dim] fp32, input_ids:[bs] i32 (for hash routing) -> out:[bs,dim] fp32.
+extern long long g_moe_union_sum;   // DSV4_MOEUNION=1: summed distinct experts per call
+extern int       g_moe_union_calls;
+
 void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeights& w,
                  int bs, cudaStream_t stream = 0);

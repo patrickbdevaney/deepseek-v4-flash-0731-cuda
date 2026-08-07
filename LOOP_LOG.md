@@ -3308,3 +3308,80 @@ Every cell's two replicates have **exactly** matching acceptance — 2.90/2.90, 
 **Timing still varies with sweep position** (p3 adaptive: 11.81 in replicate 1, 13.65 in replicate 2,
 same acceptance). Output determinism and timing determinism are different properties; F62 fixed the
 first. Keep putting A/B arms at adjacent positions.
+
+---
+
+## Finding 64 — the MoE was never at the roofline: it re-read every expert once per row, and the byte model that said otherwise was measuring the wrong thing
+
+**ADOPTED. 18.13 → 19.22 tok/s spec (+6.0 %); K=5 verify 152.1 → 141.5 ms (−7.0 %); `moe:w1w3`
+55.66 → 44.54 ms (−20 %). Output byte-identical, all gates PASS.**
+
+### The assumption that was wrong
+
+`LEVERS.md` opened with "the routed MoE is 50 % of the verify and it is at the memory roofline —
+kernel work cannot touch it". That rested on `ROOFLINE.md`'s `c_v` byte model, which puts the K=5
+expert union at **29.9 of a possible 30**, i.e. the five block positions share almost no experts. It
+was never measured. `DSV4_MOEUNION=1` (new: counts `e` with `off[e+1]>off[e]`, which *is* the union)
+measures it, verify-only:
+
+| K | modelled | **measured** |
+|---|---|---|
+| 1 | 6 | **6.00** (exactly top-6 — the instrument validates itself) |
+| 2 | ~11.7 | 9.67 |
+| 3 | ~17 | 12.58 |
+| 4 | ~22 | 15.16 |
+| 5 | **29.9** | **17.53** |
+
+Consecutive tokens share most of their experts. The model assumed they barely do.
+
+### What the measurement then exposed
+
+With the real union, the MoE appeared to be at **127 GB/s = 55 % of roofline** — 36 ms of headroom in
+the single largest block of the verify. That reading was also wrong, and the kernel says why:
+
+```
+for(int r=0;r<me;++r){            // rows this expert serves
+    for(int kb=lane; kb<nb32; kb+=32){
+        WAv[u]=__ldcs(...);       // <-- the weight load is INSIDE the row loop
+```
+
+**The weight loads sat inside the row loop**, so an expert serving `me` rows had its entire weight
+matrix re-read `me` times. Real traffic is `rows x expert_bytes` = 30 × 13.37 MB × 43 = **17.25 GB**,
+not `union x expert_bytes` = **10.08 GB**. So the kernel was at ~217 GB/s — genuinely near roofline —
+**for bytes it had no need to move**. Both the "at the roofline" claim and the "55 % of roofline"
+correction were artifacts of counting bytes the wrong way; only the kernel settles it.
+
+The `29.9` in the byte model happens to be close to `rows` (30), which is why the model matched the
+measured time for the whole project and never looked wrong.
+
+### The fix
+
+This is the **same "read B once, dot it against all M rows" transformation Findings 40/42/43 applied
+to `ogroup`, `lm_head` and `gemm_fp32`** — the MoE grouped GEMV never got it. Weights and scales are
+hoisted out of the row loop; `RB` rows accumulate against one load. Per-(row,n) accumulation order
+over `kb` is unchanged and the inner half2 block math is untouched, so it is **bit-exact**, and the
+model confirms it: base-AR tokens and verify argmax are identical to the previous kernel.
+
+`RB` is a template parameter, and it must **follow the batch**, which cost a measurement to learn:
+
+| | baseline (RB=1) | RB=8 always | **RB by batch** |
+|---|---|---|---|
+| spec tok/s | 17.81 | 18.48 | **19.01** |
+| base AR tok/s | 12.39 | **12.19** | **12.64** |
+| ksweep K=5 | 152.14 | 143.42 | **141.53** |
+
+At M=1 decode every expert serves exactly one row, so there is nothing to amortise and a large `RB`
+only holds 16 accumulators live — a **2.9 % base-AR regression**. `RB = smallest power of two ≥ bs`
+gives base AR the original kernel byte-for-byte and the verify one weight load per expert. `MOE_RB=n`
+overrides for A/B; `MOE_RB=1` is the old kernel exactly.
+
+`moe:w2` did **not** improve (23.63 → 23.88). Its K is `inter`=2048, so `nb32`=64 and each lane runs
+only two `kb` iterations — at that shape the kernel is issue/latency bound, not bandwidth bound, and
+removing bytes buys nothing. Amortisation only pays where the weight stream is the constraint.
+
+### The lesson
+
+**A byte model is a hypothesis, not a measurement.** This one was load-bearing for the entire
+priority order — it is what marked half the verify "closed" — and it was never checked against the
+engine. The check cost one counter and one run. Anywhere else this project reasons from modelled bytes
+rather than measured ones deserves the same treatment.

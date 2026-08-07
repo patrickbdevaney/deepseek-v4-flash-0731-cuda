@@ -24,7 +24,7 @@ The K=5 verify is **157.0 ms** and splits into two populations that behave compl
 
 | group | ms | % | bytes | GB/s | headroom |
 |---|---|---|---|---|---|
-| routed MoE — `moe:w1w3` 54.5 + `moe:w2` 23.6 | **78.1** | 50 % | 17.18 GB | **~240** | **none — at the roofline** |
+| routed MoE — `moe:w1w3` 44.5 + `moe:w2` 23.9 | **68.4** | 46 % | 10.08 GB after F64 | ~150 | **F64 took 20 % off `w1w3`; `w2` is issue-bound, not bytes** |
 | `cattn:ogroup` | 20.9 | 13 % | 2.75 GB | ~131 | some |
 | `cattn:q_proj` | 19.4 | 12 % | 1.55 GB | ~80 | some |
 | `cattn:indexer` (21 layers) | 9.1 | 6 % | — | — | some |
@@ -32,9 +32,13 @@ The K=5 verify is **157.0 ms** and splits into two populations that behave compl
 | `hc_pre` attn+ffn, `rmsnorm`, `moe:router/group/act/combine` | ~12.4 | 8 % | ~0 | — | latency-bound, not bytes |
 | `cattn:compress`, `cattn:sparse`, misc | ~4 | 3 % | — | — | already forked |
 
-**The single most important structural fact: the routed MoE is half the verify and it is already at
-the memory roofline.** It cannot be made faster by kernel work. Only reading fewer expert bytes helps,
-and that is an algorithmic change (verify width), not a CUDA one.
+**This table was WRONG for the whole project and Finding 64 fixed it.** The MoE was believed to be at
+the roofline on the strength of a *modelled* expert union of 29.9 at K=5; the measured union is
+**17.53** (`DSV4_MOEUNION=1`), and the kernel was re-reading each expert's weights once per row it
+served. Amortising that took `moe:w1w3` down 20 %. **Treat every remaining "at the roofline" claim in
+this repo as unverified until its bytes have been counted from the kernel, not from a model.**
+`moe:w2` is now issue-bound rather than bandwidth-bound (K=2048 gives each lane two `kb` iterations),
+so it did not move.
 
 Achievable bandwidth is **~233–240 GB/s** (`tools/bw_probe.cu`, 235.6 GB/s with clocks pinned), and
 `tools/footprint_probe.cu` proved it is reachable at scale — 230–246 GB/s at footprints from 0.5 GiB
@@ -55,6 +59,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **intra-layer concurrency, 3 fork sites** | **+3.1 %** (36 matched points) | 55, 56, 57 |
 | **clock pinning (`jetson_clocks`)** | **+3.0 % steady, +20.7 % cold** | 60 |
 | **ogroup row-tile fix** | correctness, not speed — see §6 | **62** |
+| **MoE row amortisation (RB by batch)** | **+6.0 % spec, +2.0 % base AR** | **64** |
 
 ---
 
@@ -114,7 +119,7 @@ MoE half is at the roofline, **the numerator is the better lever than the denomi
 | S1 | ~~re-fit the adaptive-width threshold~~ | **DONE, F63** | Re-run post-F62: adaptive is worth **+9-11 %** on the three prompts where it engages and a wash on the other two — not the +28 % prompt 2 showed on the garbage prefill. The threshold **1.0 / 1.5 / 1.75 remain not separable** (means 16.94/16.70/16.79 against a 15 % within-cell spread). 1.5 stays. Do not re-run without a reason to expect >5 % from a threshold move. |
 | S2 | **raise acceptance** | the biggest single multiplier | Acceptance 2.9 → 3.5 is +21 % at constant cycle. But the two obvious routes are dead: block size (F43) and draft refinement (F45). This needs a *different* idea — the MTP heads are what they are, and retraining is out of scope. |
 | S3 | **cascade / early-exit verify** | probably negative | Verifying 1–3 then 4–5 reads the 8.81 GB fixed weight set **twice**. That duplicated fixed cost (~92 ms) swamps the expert-union saving. Priced and rejected on arithmetic; do not implement without a byte model that beats it. |
-| S4 | **reduce the expert union at K=5** | up to 50 % of the verify | The union is ~29.9 of a possible 30 — the five positions share almost no experts. This is the largest single block of time in the engine and the only untried structural idea against it. Any scheme must keep the verify *exact*: biasing the **draft** toward expert-overlapping tokens is lossless by construction (the verify still corrects), but it would cost acceptance, so it is a trade, not a free win. |
+| S4 | **reduce the expert union at K=5** | smaller than believed | The union is **17.53** measured, not 29.9 — the five positions already share most of their experts, so there is far less to win here than the old model implied (F64). This is the largest single block of time in the engine and the only untried structural idea against it. Any scheme must keep the verify *exact*: biasing the **draft** toward expert-overlapping tokens is lossless by construction (the verify still corrects), but it would cost acceptance, so it is a trade, not a free win. |
 
 ### Pricing model for fork-style levers (fitted, F56/F57)
 

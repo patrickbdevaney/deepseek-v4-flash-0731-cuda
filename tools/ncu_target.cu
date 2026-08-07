@@ -24,12 +24,12 @@ using namespace dsv4;
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 extern bool g_tc_fp8;
 void tc_fp4_grouped_gemm_e8m0(float*, const __half*, const uint8_t* const*, const uint8_t* const*,
-        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
+        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t, int);
 // The path the ENGINE takes: moe_forward picks the GEMV whenever the expert scales are native e8m0
 // (g_moe_gemv defaults on). Profiling only the mma kernel would have measured a path decode does
 // not use -- the same class of mistake as the stale GEMV_MK bench row in Finding 41.
 void tc_fp4_grouped_gemv_e8m0(float*, const uint8_t*, const float*, const uint8_t* const*, const uint8_t* const*,
-        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
+        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t, int);
 __global__ void k_build_tiles(int*, int*, int*, const int*, int);
 
 static void* dalloc(size_t n){ void* p; CU(cudaMalloc(&p,n)); CU(cudaMemset(p,0x11,n)); return p; }
@@ -64,7 +64,7 @@ int main(int argc, char** argv){
             float* out=(float*)dalloc((size_t)U*inter*4);
             CU(cudaDeviceSynchronize());
             printf("[ncu] moe M=%d U=%d w=%.1f MB\n", M, U, U*(double)w13n/1e6);
-            tc_fp4_grouped_gemv_e8m0(out,xq,xs,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U+8,inter,dim,0);  // engine default
+            tc_fp4_grouped_gemv_e8m0(out,xq,xs,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U+8,inter,dim, 0, M);  // engine default
             CU(cudaDeviceSynchronize());
             tc_fp4_grouped_gemm_e8m0(out,x16,wptr,sptr,off_d,tile_e,tile_row0,ntiles_d,U+8,inter,dim,0);    // mma, for comparison
             CU(cudaDeviceSynchronize());

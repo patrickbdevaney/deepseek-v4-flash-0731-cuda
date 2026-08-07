@@ -278,6 +278,7 @@ void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d
 __constant__ float GEMV_E2M1[8] = {0.f,0.5f,1.f,1.5f,2.f,3.f,4.f,6.f};
 __device__ __forceinline__ float gv_fp4(uint8_t nib){ float m=GEMV_E2M1[nib&7]; return (nib&8)?-m:m; }
 __device__ __forceinline__ float gv_e4m3(uint8_t b){ __half_raw r=__nv_cvt_fp8_to_halfraw((__nv_fp8_storage_t)b,__NV_E4M3); return __half2float(*reinterpret_cast<__half*>(&r)); }
+template<int RB>
 __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, const uint8_t* const* sptr,
         const int* __restrict__ tile_e, const int* __restrict__ tile_row0, const int* __restrict__ ntiles,
         const int* __restrict__ off, const uint8_t* Xq, const float* Xs, int N, int K){
@@ -298,24 +299,32 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
     const uint8_t* Wn0 = wptr[e] + (size_t)nbase*(K/2);
     int nb32 = K/32;                                     // 32-weight blocks = 16 bytes each
     int off_b=(int)((uintptr_t)Wn0 & 15); int k0f=off_b>>2; unsigned shf=(off_b&3)*8;   // funnel-align
-    for(int r=0;r<me;++r){
-        const uint8_t* Aq = Xq + (size_t)(row0+r)*K;
-        const float*  As = Xs + (size_t)(row0+r)*(K/128);
-        float acc0=0.f, acc1=0.f;
+    // ROW AMORTISATION (LOOP_LOG Finding 64). The weight loads used to sit INSIDE this row loop, so
+    // an expert serving `me` rows had its whole weight matrix re-read `me` times. Actual traffic was
+    // therefore rows x expert_bytes, not union x expert_bytes: at K=5 that is 17.25 GB where 10.08
+    // would do, and it is why the MoE looked "at the roofline" (217 GB/s) while moving 1.71x the
+    // bytes it needs. The measured union is 6.00/9.67/12.58/15.16/17.53 at K=1..5 (DSV4_MOEUNION=1),
+    // NOT the 29.9 the ROOFLINE.md byte model assumed — the five block positions share most of their
+    // experts, and the model that said they do not is what hid this for the whole project.
+    //
+    // This is the same "read B once, dot it against all M rows" transformation Findings 40/42/43
+    // applied to ogroup, lm_head and gemm_fp32; the MoE grouped GEMV never got it. Weights and their
+    // scales are hoisted out of the row loop and RB rows are accumulated against one load. RB is a
+    // template parameter so RB=1 reproduces the old kernel exactly for A/B (MOE_RB=1).
+    //
+    // Registers are why RB is chunked rather than "all me rows": me can be up to 16 and a fixed
+    // acc[16][BN] would cost 32 accumulators live regardless of the real row count, which is exactly
+    // the occupancy trap Finding 28 hit on the fp8 GEMV. RB=8 covers the verify (me<=5 at K=5) in one
+    // chunk while holding 16 accumulators.
+    //
+    // Per-(row,n) accumulation order over kb is UNCHANGED and the inner half2 block math is
+    // untouched, so this is BIT-EXACT with the previous kernel, not merely close.
+    for(int rb=0; rb<me; rb+=RB){
+        const int rn = (me-rb < RB) ? (me-rb) : RB;
+        float acc[RB][BN];
+        #pragma unroll
+        for(int r=0;r<RB;++r){ acc[r][0]=0.f; acc[r][1]=0.f; }
         for(int kb=lane; kb<nb32; kb+=32){              // lane -> whole 32-weight block (16B), coalesced
-            float asc=As[kb/4];                          // act scale per-128 = per 4 of the 32-blocks
-            // activation loaded ONCE, reused across all BN output columns
-            uint4 a0 =*(const uint4*)(Aq+(size_t)kb*32);
-            uint4 a1 =*(const uint4*)(Aq+(size_t)kb*32+16);
-            const uint8_t* ab0=(const uint8_t*)&a0; const uint8_t* ab1=(const uint8_t*)&a1;
-            // MEMORY-LEVEL PARALLELISM (ncu, Finding 47). The weight loads used to be issued and
-            // consumed inside the same `u` iteration, so at most one pair was outstanding at a
-            // time. ncu on the real shape: `long_scoreboard` accounts for **20.44 of 24.35** warp
-            // cycles per issued instruction — 84% of all stall time is waiting on global loads —
-            // while Memory Throughput sits at 25% and IPC at 1.35 of 4. That is the signature of a
-            // latency-bound kernel with too few requests in flight, not a bandwidth-bound one.
-            // Issue all BN weight pairs and their scales first, consume after. Same arithmetic and
-            // same order, so bit-identical; it costs 4 uint4 of registers to double the MLP.
             uint4 WAv[BN], WBv[BN]; float wsv[BN];
             #pragma unroll
             for(int u=0; u<BN; ++u){
@@ -326,56 +335,76 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
                 WAv[u]=__ldcs((const uint4*)wa); WBv[u]=__ldcs((const uint4*)(wa+16));
                 wsv[u]=exp2f((float)Sn[kb]-127.f);
             }
-            #pragma unroll
-            for(int u=0; u<BN; ++u){
-                if(u>=nact) break;
-                const float ws=wsv[u];
-                uint4 w16=tcm_funnel16(WAv[u],WBv[u],k0f,shf);
-                const uint8_t* wb=(const uint8_t*)&w16;
-                // HALF2 DEQUANT (LOOP_LOG Finding 31). The scalar path below cost ~96 ops per 16 B
-                // of weight: 32 __constant__ LUT lookups + 32 fp8->float converts + 32 scalar FMAs.
-                // The hardware does both conversions two-at-a-time — `cvt.rn.f16x2.e2m1x2` and
-                // `cvt.rn.f16x2.e4m3x2` — and `__hfma2` does two MACs. That is ~32 ops per 16 B,
-                // 3x fewer, which is what the issue-rate budget (126 G warp-inst/s) requires to
-                // reach streaming bandwidth.
-                // PRECISION: accumulate in half2 only WITHIN a 32-element block, then widen to
-                // float and accumulate across blocks in f32. Half has ~11 mantissa bits and the
-                // products are O(1), so 32 accumulations is well inside its range — but this is
-                // NOT bit-exact with the f32 path, hence the tolerance gate.
-                __half2 acc2 = __floats2half2_rn(0.f, 0.f);
+            for(int r=0;r<rn;++r){
+                const uint8_t* Aq = Xq + (size_t)(row0+rb+r)*K;
+                const float*  As = Xs + (size_t)(row0+rb+r)*(K/128);
+                const float asc=As[kb/4];                // act scale per-128 = per 4 of the 32-blocks
+                uint4 a0 =*(const uint4*)(Aq+(size_t)kb*32);
+                uint4 a1 =*(const uint4*)(Aq+(size_t)kb*32+16);
+                const uint8_t* ab0=(const uint8_t*)&a0; const uint8_t* ab1=(const uint8_t*)&a1;
                 #pragma unroll
-                for(int j=0;j<16;++j){
-                    const uint8_t byte = wb[j];
-                    const uint8_t lo = (j<8)? ab0[2*j]   : ab1[2*(j-8)];
-                    const uint8_t hi = (j<8)? ab0[2*j+1] : ab1[2*(j-8)+1];
-                    __half2 w2 = tcm_fp4x2(byte);                                  // HW: 2 fp4 -> half2
-                    __half2_raw ar = __nv_cvt_fp8x2_to_halfraw2(                   // HW: 2 fp8 -> half2
-                        (__nv_fp8x2_storage_t)((unsigned short)lo | ((unsigned short)hi << 8)), __NV_E4M3);
-                    acc2 = __hfma2(*reinterpret_cast<__half2*>(&ar), w2, acc2);
+                for(int u=0; u<BN; ++u){
+                    if(u>=nact) break;
+                    const float ws=wsv[u];
+                    uint4 w16=tcm_funnel16(WAv[u],WBv[u],k0f,shf);
+                    const uint8_t* wb=(const uint8_t*)&w16;
+                    // Dequant is REDONE per row rather than cached: it is ALU on a memory-bound
+                    // kernel, and holding the dequantised half2 values across the row loop is the
+                    // register blow-up Finding 43 already measured as a loss on the ogroup twin.
+                    __half2 acc2 = __floats2half2_rn(0.f, 0.f);
+                    #pragma unroll
+                    for(int j=0;j<16;++j){
+                        const uint8_t byte = wb[j];
+                        const uint8_t lo = (j<8)? ab0[2*j]   : ab1[2*(j-8)];
+                        const uint8_t hi = (j<8)? ab0[2*j+1] : ab1[2*(j-8)+1];
+                        __half2 w2 = tcm_fp4x2(byte);
+                        __half2_raw ar = __nv_cvt_fp8x2_to_halfraw2(
+                            (__nv_fp8x2_storage_t)((unsigned short)lo | ((unsigned short)hi << 8)), __NV_E4M3);
+                        acc2 = __hfma2(*reinterpret_cast<__half2*>(&ar), w2, acc2);
+                    }
+                    const float sub = __low2float(acc2) + __high2float(acc2);
+                    acc[r][u] += sub * asc * ws;
                 }
-                const float sub = __low2float(acc2) + __high2float(acc2);
-                if(u==0) acc0 += sub * asc * ws; else acc1 += sub * asc * ws;
             }
         }
-        // reduce and store each of the BN output columns
-        #pragma unroll
-        for(int o=16;o>0;o>>=1) acc0+=__shfl_down_sync(0xffffffff,acc0,o);
-        #pragma unroll
-        for(int o=16;o>0;o>>=1) acc1+=__shfl_down_sync(0xffffffff,acc1,o);
-        if(lane==0){
-            out[(size_t)(row0+r)*N + nbase] = acc0;
-            if(nact>1) out[(size_t)(row0+r)*N + nbase+1] = acc1;
+        for(int r=0;r<rn;++r){
+            float a0v=acc[r][0], a1v=acc[r][1];
+            #pragma unroll
+            for(int o=16;o>0;o>>=1) a0v+=__shfl_down_sync(0xffffffff,a0v,o);
+            #pragma unroll
+            for(int o=16;o>0;o>>=1) a1v+=__shfl_down_sync(0xffffffff,a1v,o);
+            if(lane==0){
+                out[(size_t)(row0+rb+r)*N + nbase] = a0v;
+                if(nact>1) out[(size_t)(row0+rb+r)*N + nbase+1] = a1v;
+            }
         }
     }
 }
+
 void tc_fp4_grouped_gemv_e8m0(float* out, const uint8_t* Xq, const float* Xs, const uint8_t* const* wptr_d,
         const uint8_t* const* sptr_d, const int* off_d, const int* tile_e, const int* tile_row0, const int* ntiles_d,
-        int maxtiles, int N, int K, cudaStream_t s){
+        int maxtiles, int N, int K, cudaStream_t s, int rows_hint){
     // BN=2 output columns per warp -> half the warps. 128 threads/block matched the measured
     // optimum (BN=2 @128 thr = 242-249 GB/s; 256 thr was consistently worse at every BN).
     const int BN=2, warps_needed=(N+BN-1)/BN;
     int threads=128; dim3 grid((warps_needed*32+threads-1)/threads, maxtiles);
-    k_grouped_fp4_gemv_e8m0<<<grid, threads, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, Xq, Xs, N, K);
+    // RB = rows accumulated against ONE weight load (Finding 64). MOE_RB=1 restores the pre-Finding-64
+    // kernel, which re-read each expert's weights once per row it served; it is kept reachable because
+    // it is the A/B arm and the fallback, not because it is ever preferable.
+    // RB must follow the ROWS PER EXPERT, which is bounded by the batch. At M=1 decode every expert
+    // serves exactly one row, so there is nothing to amortise and a large RB only costs registers —
+    // measured as a 2.9% base-AR regression (12.56 -> 12.19 tok/s) when RB was pinned at 8. Pick the
+    // smallest power of two that covers `rows_hint` (= bs), so base AR gets the original kernel
+    // byte-for-byte and the K=5 verify gets one weight load per expert.
+    const char* e_=getenv("MOE_RB"); int RB = e_ ? atoi(e_)
+                 : (rows_hint<=1?1: rows_hint<=2?2: rows_hint<=4?4:8);
+    if(RB!=1&&RB!=2&&RB!=4&&RB!=8) RB=8;
+    switch(RB){
+        case 1: k_grouped_fp4_gemv_e8m0<1><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
+        case 2: k_grouped_fp4_gemv_e8m0<2><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
+        case 4: k_grouped_fp4_gemv_e8m0<4><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
+        default:k_grouped_fp4_gemv_e8m0<8><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
+    }
 }
 
 // NATIVE-e8m0 grouped GEMM: scale ptrs point to the ORIGINAL e8m0 scale BYTES (F8_E8M0) in the WeightStore —
