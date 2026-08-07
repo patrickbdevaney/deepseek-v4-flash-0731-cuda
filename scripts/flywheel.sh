@@ -84,6 +84,7 @@ fi
 log "selftest PASS"
 
 CYCLE=$(python3 -c "import json;print(json.load(open('$STATE'))['cycle'])")
+BASE_BEFORE=$(python3 -c "import json;print(json.load(open('$STATE'))['baseline'].get('spec_tok_s',0))")
 log "cycle $CYCLE starting; ${AVAIL} GiB free; HEAD $(git rev-parse --short HEAD)"
 BEFORE=$(git rev-parse HEAD)
 
@@ -98,17 +99,31 @@ READ FIRST, in this order:
   LOOP_LOG.md          — tail it. The "retired with a measurement" entries are binding: re-proposing
                          one of them is the single most expensive mistake available to you.
 
-THEN follow the phase in FLYWHEEL_STATE.json:
-  A EXPLOIT  — take queue[0]. Implement, gate, measure, adopt-or-reject ON THE NUMBER, log, commit.
-  B EXHAUST  — DSV4_KSWEEP=1 DSV4_DPROF=1 profile, re-rank by phase_ms x (1 - achieved/ceiling),
-               rewrite queue, record the top entry in phaseB_top_history, go to A next iteration.
-  C EXPLORE  — one structural item. Ends in a measured adopt/reject OR a written impossibility.
-  D RESEARCH — write RESEARCH_PROMPT_v<N+1>.md against the CURRENT measured residual, query the
-               arXiv API directly with WebFetch (export.arxiv.org/api/query?search_query=abs:"..."
-               +AND+abs:"...", sortBy=submittedDate) — it is complete, dated and not SEO-shaped,
-               unlike a web search. Fetch the abstracts of the top hits; an abstract usually states
-               losslessness and the headline number, which is enough to rank. Convert hits to levers
-               with falsification tests, refill the queue, go to A next iteration.
+THE LOOP IS A PIPELINE. Every lever moves through four stages, and a cycle advances exactly ONE
+lever by exactly ONE stage. `queue[0].stage` tells you where it is:
+
+  "candidate"   <- found by research, not yet built. YOUR JOB: implement it and write a unit gate
+                   that could actually fail. Do NOT measure end-to-end yet. -> stage "implemented"
+  "implemented" <- built and unit-gated. YOUR JOB: one full-model measurement, adopt or reject ON
+                   THE NUMBER. Gain >= 0.5% end-to-end -> stage "measured" and UPDATE
+                   baseline.spec_tok_s / base_tok_s. Otherwise drop it from the queue and append it
+                   to the retired-with-a-measurement list in LOOP_LOG.md. A negative result
+                   honestly measured is a GOOD cycle.
+  "measured"    <- adopted and paying. YOUR JOB: optimise it — the parameter sweep, the register
+                   count, the next constant factor — one change, one measurement. When two
+                   consecutive optimisation attempts return under 0.5%, mark it "done" and drop it.
+  "done"        <- remove from the queue.
+
+WHEN TO RESEARCH. If fewer than 2 entries have stage "candidate", spend this cycle on a Phase D
+pass instead of a lever: write RESEARCH_PROMPT_v<N+1>.md against the CURRENT measured residual,
+query the arXiv API directly with WebFetch (export.arxiv.org/api/query?search_query=abs:"..."
++AND+abs:"...", sortBy=submittedDate — complete, dated, not SEO-shaped, unlike a web search), fetch
+the abstracts of the top hits (an abstract usually states losslessness and the headline number,
+which is enough to rank), and push 3-5 new entries onto the queue with stage "candidate", each
+carrying the falsification test that would kill it. Then stop; the next cycle implements one.
+
+PHASE B (re-profile and re-rank) is still yours to call: run it when the queue is stale relative to
+a fresh `DSV4_KSWEEP=1 DSV4_DPROF=1` profile, and record the top residual in phaseB_top_history.
 
 RESEARCH IS NOT BLOCKED BY A BROKEN INSTRUMENT. Phase D produces CANDIDATE LEVERS, not numbers, so
 it does not need a working measurement to be worth doing — and it is the cheapest phase (no model
@@ -166,8 +181,12 @@ HARD INVARIANTS — every one of these was paid for with a wrong result in this 
 
 FINISH BY, in this order:
   a. appending your result to LOOP_LOG.md — including negative results, WITH the numbers
-  b. updating FLYWHEEL_STATE.json: cycle+1, phase, queue, counters, last_result, and
-     consecutive_sub_half_pct (increment if this lever moved end-to-end < 0.5%, else reset to 0)
+  b. updating FLYWHEEL_STATE.json: cycle+1, queue (with the advanced stage), last_result, and
+     consecutive_sub_half_pct (increment if this lever moved end-to-end < 0.5%, else reset to 0).
+     If and only if you MEASURED a real end-to-end gain this cycle, update baseline.spec_tok_s and
+     baseline.base_tok_s to the new numbers and set last_result.measured.end_to_end_pct. The harness
+     reads baseline to decide whether to publish, so a baseline you did not measure this cycle is
+     the Finding 33 failure mode with a network attached. Only move it on a number you just ran.
   c. writing your commit message to `.flywheel_commit_msg` (first line a subject, then a blank
      line, then the body). THE HARNESS COMMITS FOR YOU — do not run git yourself.
   d. appending 5-15 lines to FLYWHEEL_JOURNAL.md: what you did, the number, what you concluded,

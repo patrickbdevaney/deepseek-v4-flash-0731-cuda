@@ -20,7 +20,7 @@
       "id": "D-pass",
       "what": "Phase D research pass: arXiv against the CURRENT residual (instrument reliability + the 155 GB/s latency gap). Produces candidates only, adopts nothing.",
       "expect": "refill the queue",
-      "risk": "none \u2014 no build, no model run"
+      "risk": "none — no build, no model run"
     },
     {
       "id": "I2",
@@ -38,7 +38,7 @@
       "id": "D1",
       "what": "make DSV4_BLKSWEEP's adaptK field mean what it says",
       "expect": "no end-to-end movement; removes a demonstrated mislabelling",
-      "detail": "adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi] : (getenv(\"NO_ADAPTK\") ? 0.f : 1.5f) \u2014 an entry of 0 is indistinguishable from unset and falls through to the 1.5 default. The fix is a sentinel for 'unset' (e.g. -1) so 0 can mean 0; it must be re-gated with DSV4_PARSE_ONLY=1 and one within-run point. Cycle 3 avoided the trap by never requesting 0, so cycle 3 also contains NO fixed-width control.",
+      "detail": "adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi] : (getenv(\"NO_ADAPTK\") ? 0.f : 1.5f) — an entry of 0 is indistinguishable from unset and falls through to the 1.5 default. The fix is a sentinel for 'unset' (e.g. -1) so 0 can mean 0; it must be re-gated with DSV4_PARSE_ONLY=1 and one within-run point. Cycle 3 avoided the trap by never requesting 0, so cycle 3 also contains NO fixed-width control.",
       "note": "Finding 49 is NOT affected: ~/adaptk3.log was launched with NO_ADAPTK=1, which its per-point `adaptK=0.00` line confirms."
     },
     {
@@ -56,11 +56,11 @@
     }
   ],
   "halt": true,
-  "halt_reason": "Invariant 7. ~/cycle3.log faulted at point 11 with `cuda kernels/indexer.cu:91 an illegal memory access was encountered`, in the prefill of prompt 2 (s=18), and that same prompt is the one whose three identical-setting replicates produced three different token sequences. The base-AR gate PASSED (11111), the new per-point prefill-length gate PASSED at all 11 points, and the Finding 52 fix is a strict improvement (0/3 -> 2/3 non-canonical prompts reproducing byte-identically) \u2014 so this cycle's work is sound and committed. But a run that faults is a failed run, and I2 must be root-caused before anything is built on top of the multi-prompt harness. Clear this flag to proceed with I2's falsification test.",
+  "halt_reason": "Invariant 7. ~/cycle3.log faulted at point 11 with `cuda kernels/indexer.cu:91 an illegal memory access was encountered`, in the prefill of prompt 2 (s=18), and that same prompt is the one whose three identical-setting replicates produced three different token sequences. The base-AR gate PASSED (11111), the new per-point prefill-length gate PASSED at all 11 points, and the Finding 52 fix is a strict improvement (0/3 -> 2/3 non-canonical prompts reproducing byte-identically) — so this cycle's work is sound and committed. But a run that faults is a failed run, and I2 must be root-caused before anything is built on top of the multi-prompt harness. Clear this flag to proceed with I2's falsification test. NOTE: this halt blocks BUILDING and MODEL RUNS on top of an un-root-caused fault. It does NOT block the Phase-D research pass now sitting at queue[0], which needs neither — per the policy change committed in 469d9c2, D produces candidates, not numbers. Do D, then clear this flag for I2.",
   "halt_considered": "Yes, both ways. Nothing on the shipped configuration is implicated: the canonical prompt reproduces byte-identically twice at 16.83/16.90 tok/s and base AR at 10.33, and every prior number in this project was measured on that prompt with one prompt per process, where PSp == PS and the Finding 52 bug cannot fire. The halt is about not stacking a second fix on an un-root-caused fault, not about the engine being broken.",
   "last_result": {
     "cycle": 3,
-    "lever": "I1 (queue[0]) \u2014 root-caused, fixed, PARTIALLY discharged. Finding 52.",
+    "lever": "I1 (queue[0]) — root-caused, fixed, PARTIALLY discharged. Finding 52.",
     "measured": {
       "end_to_end_pct": 0.0,
       "run": "~/cycle3.log, 17 points requested, 11 ran, base-AR gate PASS (11111), new prefill-length gate PASS at all 11",
@@ -71,13 +71,13 @@
       "canonical_replicate_identical": true,
       "base_ar_tok_s": 10.33,
       "replicate_gate": {
-        "prompt0_s6": "PASS \u2014 identical sequence and identical verify trace",
-        "prompt1_s11": "PASS \u2014 identical sequence and identical verify trace, 15.45 / 15.45 tok/s",
-        "prompt3_s15": "PASS \u2014 identical sequence and identical verify trace, 11.10 / 11.11 tok/s",
-        "prompt2_s18": "FAIL \u2014 three different sequences at one setting, 11.05 / 14.62 / 16.36 tok/s"
+        "prompt0_s6": "PASS — identical sequence and identical verify trace",
+        "prompt1_s11": "PASS — identical sequence and identical verify trace, 15.45 / 15.45 tok/s",
+        "prompt3_s15": "PASS — identical sequence and identical verify trace, 11.10 / 11.11 tok/s",
+        "prompt2_s18": "FAIL — three different sequences at one setting, 11.05 / 14.62 / 16.36 tok/s"
       },
       "crash": "point 11 (prompt 2 again), cuda kernels/indexer.cu:91 illegal memory access, during prefill",
-      "adaptk_losslessness": "prompt 1 at adaptK 1.00 / 1.50 / 2.50 emitted the IDENTICAL 61-token sequence over 23 / 23 / 26 verifies at 14.76 / 15.45 / 14.51 tok/s \u2014 first direct measurement that adaptive verify width changes cost only, not output"
+      "adaptk_losslessness": "prompt 1 at adaptK 1.00 / 1.50 / 2.50 emitted the IDENTICAL 61-token sequence over 23 / 23 / 26 verifies at 14.76 / 15.45 / 14.51 tok/s — first direct measurement that adaptive verify width changes cost only, not output"
     },
     "artifacts": [
       "LOOP_LOG.md Finding 52",

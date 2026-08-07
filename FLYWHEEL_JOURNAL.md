@@ -108,3 +108,56 @@ Two process notes for the observer: I ran `git rm --cached` on the deleted tool 
 the harness owns git (harmless — it stages the same deletion `git add -A` would), and I overwrote
 `tools/encode_prompt.py` before checking that a quarantined cycle had already committed a better
 version. Restored it verbatim from HEAD and re-ran its gates.
+
+## Cycle 3 — 2026-08-07 — I1 root-caused and fixed. 2 of 3 non-canonical prompts now reproduce. 0.0% end-to-end. HALT.
+
+I took queue[0] (I1, make one process run the same sweep point twice and get the same answer) and
+found the cause by reading code, before spending the run — which is the right order and it is the
+first time this loop has managed it.
+
+- **Finding 52.** `run_layer` (src/decode.cu:265) is a `[&]` lambda; its prefill branch passed `PS`.
+  Lambda name lookup is lexical, so that bound to line 96's `argv[2].size()-1`. The sweep loop then
+  declared its own `PS` for the point's prompt — a shadow the callee cannot see. **Every sweep point
+  prefilled the KV caches to the argv prompt's length** while everything else used the point's.
+  It predicts cycle 2's signature with no free parameters, including why prompt 0 was the one that
+  always reproduced: it *is* the argv prompt.
+- **Fix:** explicit `npre` parameter (8 call sites) + no shadowing at all in the sweep loop. A
+  parameter cannot be shadowed out from under the callee.
+- **New in-run gate, every point, before any measurement:** `KV[L].T == PSp/ratio` for all 21
+  compressed layers, because prefill emits exactly `floor(PSp/ratio)` compressed rows — so `T` reads
+  back the length the prefill *actually ran at*. Under the old code it would have read 1 instead of
+  4. **PASS at all 11 points.** This is the assertion whose absence cost cycle 2 its whole run.
+- **Result (`~/cycle3.log`, base-AR gate PASS 11111, base AR 10.33 tok/s):** replicate pairs
+  separated by a different-length prompt, hashed over the emitted tokens *and* the full per-verify
+  decision trace. Prompt 0 (s=6) **identical**, 16.83 / 16.90 tok/s. Prompt 1 (s=11) **identical**,
+  15.45 / 15.45. Prompt 3 (s=15) **identical**, 11.10 / 11.11. Cycle 2 had **0 of 3**; this is 2 of 3
+  plus canonical, and they are byte-identical, not merely close.
+- **What still fails:** prompt 2 (s=18) — three points at one setting gave three different sequences
+  and 11.05 / 14.62 / 16.36 tok/s — and the run then **died in that same prompt's 12th prefill**,
+  `cuda kernels/indexer.cu:91 an illegal memory access`. Both symptoms are on the only prompt whose
+  length equals SMAX. `mh_pre = (SMAX-1)*3*d*4` is the one zero-slack buffer in that path, but that
+  is a lead, not a cause, and I did not spend a second run guessing.
+- **Bonus worth keeping:** prompt 1 at adaptK 1.00 / 1.50 / 2.50 emitted the **identical 61-token
+  sequence** over 23 / 23 / 26 verifies at 14.76 / **15.45** / 14.51 tok/s. Finding 49 argued
+  adaptive verify width is lossless; this measures it. Not adopted — one prompt, and D1 means there
+  is still no fixed-width control in any run.
+
+**HALT set (invariant 7): a run that faults is a failed run.** Nothing on the shipped path is
+implicated — the canonical prompt reproduced twice byte-identically at the baseline — so the halt is
+about not stacking a second fix on an un-root-caused fault.
+
+**Next iteration.** The queue head is now an externally-inserted Phase-D research pass, which needs
+no build and no model run and is compatible with the halt. After it, **I2**, whose first action is a
+falsification test that costs no extra run: append a prompt longer than 18 ids so `SMAX > 18` and
+re-run the same 9 gate points. If prompt 2 then reproduces, the defect is "the prompt of length
+SMAX" and the zero-slack buffer is the place to look; if it does not, SMAX is a coincidence. A
+3-point sweep under `compute-sanitizer` would locate the fault directly and does not need NGEN0=60.
+
+**Process note for the observer.** A commit landed out-of-band at 03:48 while this cycle was still
+working: `469d9c2 "flywheel: research is not blocked by a broken instrument"`. Its message describes
+only the Phase-D policy change, but its diff also swept my in-flight working tree — `src/decode.cu`,
+`LOOP_LOG.md` and `FLYWHEEL_STATE.json`. **Nothing was lost, but cycle 3's Finding 52 fix and log are
+committed under a message that does not mention them.** `.flywheel_commit_msg` holds the correct
+cycle-3 message; the harness's commit at exit will apply it to `FLYWHEEL_JOURNAL.md` alone. If the
+harness commits mid-cycle by design, it should either wait for the executor to exit or use
+`.flywheel_commit_msg`, or history will keep attributing work to the wrong commit.
