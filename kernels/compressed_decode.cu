@@ -156,12 +156,11 @@ void compressed_decode_step_indexer(float* out, const float* x_full, int pos, co
     const float *cosP = a.cosT + (size_t)pos*half, *sinP = a.sinT + (size_t)pos*half;
     const float* xt = x_full + (size_t)pos*DIM;
 
-    uint8_t *xq,*qrq,*ogq,*iqrq; float *xs,*qrs,*ogs,*iqrs,*qr,*q,*o,*og,*qidx,*qtmp,*iw,*iscore;
+    uint8_t *xq,*qrq,*ogq; float *xs,*qrs,*ogs,*qr,*q,*o,*og,*qidx,*qtmp,*iw,*iscore;
     xq=(decltype(xq))dmalloc(DIM); xs=(decltype(xs))dmalloc((DIM/128)*4);
     qr=(decltype(qr))dmalloc(Q_LORA*4); qrq=(decltype(qrq))dmalloc(Q_LORA); qrs=(decltype(qrs))dmalloc((Q_LORA/128)*4);
     q=(decltype(q))dmalloc(Kd*4); o=(decltype(o))dmalloc(Kd*4); og=(decltype(og))dmalloc(OB*4);
     ogq=(decltype(ogq))dmalloc(OB); ogs=(decltype(ogs))dmalloc((OB/128)*4);
-    iqrq=(decltype(iqrq))dmalloc(Q_LORA); iqrs=(decltype(iqrs))dmalloc((Q_LORA/128)*4);
     qidx=(decltype(qidx))dmalloc(QD*4); qtmp=(decltype(qtmp))dmalloc(QD*4); iw=(decltype(iw))dmalloc(nH*4);
 
     act_quant_fp8(xq, xs, xt, 1, DIM, 128, stream);
@@ -190,8 +189,8 @@ void compressed_decode_step_indexer(float* out, const float* x_full, int pos, co
     }
     int Tn = *T, nwin = pos+1;
     // --- DSA indexer scoring for the single query -> top-k compressed idxs (mirrors indexer_forward, m=1) ---
-    act_quant_fp8(iqrq, iqrs, qr, 1, Q_LORA, 128, stream);
-    fp8_block_gemm(qidx, iqrq, iqrs, w.idx_wq_b, w.idx_wq_b_s, 1, QD, Q_LORA, stream);
+    // `qrq/qrs` above are act_quant(qr, Q_LORA, 128) — the identical call, on an unmodified `qr`.
+    fp8_block_gemm(qidx, qrq, qrs, w.idx_wq_b, w.idx_wq_b_s, 1, QD, Q_LORA, stream);
     rope_interleaved(qidx + (idx_hd - rd), cosP, sinP, nH, rd, false, idx_hd, nH, stream);
     hadamard(qtmp, qidx, nH, idx_hd, stream);
     act_quant_fp4sim(qtmp, nH, idx_hd, 32, idx_hd, stream);
@@ -223,7 +222,7 @@ void compressed_decode_step_indexer(float* out, const float* x_full, int pos, co
 
     dsync(stream);
     dfree(xq);dfree(xs);dfree(qr);dfree(qrq);dfree(qrs);dfree(q);dfree(o);dfree(og);
-    dfree(ogq);dfree(ogs);dfree(iqrq);dfree(iqrs);dfree(qidx);dfree(qtmp);dfree(iw);
+    dfree(ogq);dfree(ogs);dfree(qidx);dfree(qtmp);dfree(iw);
     dfree(iscore);dfree(dtop);dfree(kv_all);dfree(comb);
 }
 
@@ -231,6 +230,7 @@ void compressed_decode_step_indexer(float* out, const float* x_full, int pos, co
 // Process K tokens at [pos..pos+K-1] in ONE forward: GEMMs at M=K (weights read once), compressor emits any
 // groups completing in the block, per-query combined idxs (window ⊕ compressed). ≡ K sequential decode steps.
 static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, int pos, float* qOut, float* win_kv,
+                      uint8_t** qrq_out, float** qrs_out,
                       float eps, cudaStream_t stream){
     const auto& a=w.attn; const int half=ROPE_DIM/2, Kd=N_HEADS*HEAD_DIM;
     const float *cosP=a.cosT+(size_t)pos*half, *sinP=a.sinT+(size_t)pos*half;
@@ -251,7 +251,12 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
     rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,stream);
     act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,stream);
     dprof_end(DP_C_QPROJ,stream);
-    dfree(xq);dfree(xs);dfree(qr);dfree(qrq);dfree(qrs);
+    // The indexer needs act_quant(rmsnorm(wq_a @ x)) — byte-for-byte what `qrq/qrs` already hold.
+    // It used to rebuild them from x: act_quant(x) + the whole wq_a GEMM (4.19 MB/layer) + rmsnorm
+    // + act_quant, four kernels and 88 MB of redundant weight traffic across the 21 indexer layers,
+    // under a comment calling the recompute "cheap". Hand them out instead; the caller frees.
+    if(qrq_out){ *qrq_out=qrq; *qrs_out=qrs; } else { dfree(qrq); dfree(qrs); }
+    dfree(xq);dfree(xs);dfree(qr);
 }
 static void finish_attn(const CompressedAttnWeights& w, const float* q, const float* kv_all, const int* comb,
                         int K, int pos, int ntot, int topk, float* out, float eps, cudaStream_t stream){
@@ -276,7 +281,7 @@ void compressed_verify_step_strided(float* out, const float* x_full, int pos, in
                                     float* win_kv, float* comp_kv, int* T, int ratio, float eps, cudaStream_t stream){
     const int Kd=N_HEADS*HEAD_DIM;
     float* q; q=(float*)dmalloc((size_t)K*Kd*4);
-    build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, eps, stream);
+    build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, nullptr, nullptr, eps, stream);
     dprof_begin(DP_C_COMPRESS,stream);
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){                         // emit groups completing in the block
         compressor_emit_group(comp_kv+(size_t)(*T)*HEAD_DIM, x_full, j/ratio, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,
@@ -301,7 +306,8 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     const auto& a=w.attn; const int half=ROPE_DIM/2, Kd=N_HEADS*HEAD_DIM, nH=w.index_n_heads, ihd=w.index_head_dim, QD=nH*ihd, rd=ROPE_DIM;
     const float wscale=rsqrtf((float)ihd)*rsqrtf((float)nH); const float *cosP=a.cosT+(size_t)pos*half, *sinP=a.sinT+(size_t)pos*half;
     float* q; q=(float*)dmalloc((size_t)K*Kd*4);
-    build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, eps, stream);
+    uint8_t* iqrq=nullptr; float* iqrs=nullptr;
+    build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, &iqrq, &iqrs, eps, stream);
     dprof_begin(DP_C_COMPRESS,stream);
     // emit main + indexer compressed rows for groups completing in the block
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){ int g=j/ratio; int t=*T;
@@ -310,15 +316,9 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     dprof_end(DP_C_COMPRESS,stream);
     int Tf=*T, nwin=pos+K;
     dprof_begin(DP_C_INDEXER,stream);
-    // indexer scoring for K queries: qidx = fp4sim(hadamard(rope(idx_wq_b(qr)))) — recompute qr (cheap) at M=K
-    uint8_t *iqrq; float *iqrs,*qr2,*qidx,*qtmp,*iw,*iscore;
-    // qr again (needed for indexer); recompute from x
-    uint8_t* xq2; float* xs2; xq2=(uint8_t*)dmalloc((size_t)K*DIM); xs2=(float*)dmalloc((size_t)K*(DIM/128)*4);
-    act_quant_fp8(xq2,xs2,x_full+(size_t)pos*DIM,K,DIM,128,stream);
-    qr2=(float*)dmalloc((size_t)K*Q_LORA*4); fp8_block_gemm(qr2,xq2,xs2,a.wq_a,a.wq_a_s,K,Q_LORA,DIM,stream); rmsnorm(qr2,qr2,a.q_norm,K,Q_LORA,eps,true,stream);
-    iqrq=(uint8_t*)dmalloc((size_t)K*Q_LORA); iqrs=(float*)dmalloc((size_t)K*(Q_LORA/128)*4);
+    // qidx = fp4sim(hadamard(rope(idx_wq_b(qr)))). `iqrq/iqrs` came out of build_qKV above.
+    float *qidx,*qtmp,*iw,*iscore;
     qidx=(float*)dmalloc((size_t)K*QD*4); qtmp=(float*)dmalloc((size_t)K*QD*4); iw=(float*)dmalloc((size_t)K*nH*4);
-    act_quant_fp8(iqrq,iqrs,qr2,K,Q_LORA,128,stream);
     fp8_block_gemm(qidx,iqrq,iqrs,w.idx_wq_b,w.idx_wq_b_s,K,QD,Q_LORA,stream);
     rope_interleaved(qidx+(ihd-rd),cosP,sinP,K*nH,rd,false,ihd,nH,stream);
     hadamard(qtmp,qidx,K*nH,ihd,stream); act_quant_fp4sim(qtmp,K*nH,ihd,32,ihd,stream);
@@ -340,7 +340,7 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     k_comb_verify<<<((size_t)K*topk+63)/64,64,0,stream>>>(dcomb, dtop, K, topk, wmax, topkc, pos);
     finish_attn(w, q, kv_all, dcomb, K, pos, ntot, topk, out, eps, stream);
     dsync(stream);
-    dfree(q);dfree(xq2);dfree(xs2);dfree(qr2);dfree(iqrq);dfree(iqrs);dfree(qidx);dfree(qtmp);dfree(iw);dfree(iscore);dfree(dtop);dfree(kv_all);dfree(dcomb);
+    dfree(q);dfree(iqrq);dfree(iqrs);dfree(qidx);dfree(qtmp);dfree(iw);dfree(iscore);dfree(dtop);dfree(kv_all);dfree(dcomb);
 }
 
 // ================= device-pos compressed decode (CUDA-graph capturable) =================
@@ -431,10 +431,9 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     const auto& a=w.attn; const int Kd=N_HEADS*HEAD_DIM, GKd=Kd/O_GROUPS, OB=O_GROUPS*O_LORA;
     const int nH=w.index_n_heads, ihd=w.index_head_dim, QD=nH*ihd, rd=ROPE_DIM; const float scale=1.f/sqrtf((float)HEAD_DIM);
     const float wscale=rsqrtf((float)ihd)*rsqrtf((float)nH);
-    uint8_t *xq,*qrq,*ogq,*iqrq; float *xs,*qrs,*ogs,*qr,*q,*o,*og,*kvs,*qidx,*qtmp,*iw,*isc; int *win,*sel,*comb;
+    uint8_t *xq,*qrq,*ogq; float *xs,*qrs,*ogs,*qr,*q,*o,*og,*kvs,*qidx,*qtmp,*iw,*isc; int *win,*sel,*comb;
     xq=(uint8_t*)dmalloc(DIM); xs=(float*)dmalloc((DIM/128)*4); qr=(float*)dmalloc(Q_LORA*4); qrq=(uint8_t*)dmalloc(Q_LORA); qrs=(float*)dmalloc((Q_LORA/128)*4);
     q=(float*)dmalloc(Kd*4); o=(float*)dmalloc(Kd*4); og=(float*)dmalloc(OB*4); ogq=(uint8_t*)dmalloc(OB); ogs=(float*)dmalloc((OB/128)*4); kvs=(float*)dmalloc(HEAD_DIM*4);
-    iqrq=(uint8_t*)dmalloc(Q_LORA); float* iqrs=(float*)dmalloc((Q_LORA/128)*4);
     qidx=(float*)dmalloc((size_t)QD*4); qtmp=(float*)dmalloc((size_t)QD*4); iw=(float*)dmalloc((size_t)nH*4); isc=(float*)dmalloc((size_t)Tmax*4);
     int wtop=WINDOW, topk_c=(w.index_topk<Tmax)?w.index_topk:Tmax;
     win=(int*)dmalloc((size_t)wtop*4); sel=(int*)dmalloc((size_t)topk_c*4); comb=(int*)dmalloc((size_t)(wtop+topk_c)*4);
@@ -450,7 +449,7 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     emit_group_dp(idx_kvc, xin, d_pos, d_T, d_g, ratio, w.idx_c_wkv,w.idx_c_wgate,w.idx_c_ape,w.idx_c_norm,w.cc_cos,w.cc_sin,DIM,ihd,true,1,eps,stream);
     k_advance_T<<<1,1,0,stream>>>(d_T,d_pos,ratio);
     // indexer scoring for the single query -> select main-compressed rows
-    act_quant_fp8(iqrq,iqrs,qr,1,Q_LORA,128,stream); fp8_block_gemm(qidx,iqrq,iqrs,w.idx_wq_b,w.idx_wq_b_s,1,QD,Q_LORA,stream);
+    fp8_block_gemm(qidx,qrq,qrs,w.idx_wq_b,w.idx_wq_b_s,1,QD,Q_LORA,stream);   // qrq/qrs == act_quant(qr): same call, unmodified qr
     rope_interleaved_dp(qidx+(ihd-rd),a.cosT,a.sinT,nH,rd,false,ihd,nH,d_pos,stream); hadamard(qtmp,qidx,nH,ihd,stream); act_quant_fp4sim(qtmp,nH,ihd,32,ihd,stream);
     gemm_fp32(iw,x,w.idx_weights_proj,1,nH,DIM,stream); k_iw_scale<<<(nH+63)/64,64,0,stream>>>(iw,wscale,nH);
     index_score(isc,qtmp,idx_kvc,iw,1,Tmax,nH,ihd,stream); k_mask_scores<<<(Tmax+63)/64,64,0,stream>>>(isc,d_T,Tmax);
@@ -464,5 +463,5 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     act_quant_fp8(ogq,ogs,og,1,OB,128,stream); fp8_block_gemm(out,ogq,ogs,a.wo_b,a.wo_b_s,1,DIM,OB,stream);
     dsync(stream);
     dfree(xq);dfree(xs);dfree(qr);dfree(qrq);dfree(qrs);dfree(q);dfree(o);dfree(og);dfree(ogq);dfree(ogs);dfree(kvs);
-    dfree(iqrq);dfree(iqrs);dfree(qidx);dfree(qtmp);dfree(iw);dfree(isc);dfree(win);dfree(sel);dfree(comb);
+    dfree(qidx);dfree(qtmp);dfree(iw);dfree(isc);dfree(win);dfree(sel);dfree(comb);
 }

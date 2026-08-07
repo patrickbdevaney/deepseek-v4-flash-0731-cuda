@@ -1940,3 +1940,38 @@ Raising block size does not help (Finding 43: the accept sequence is identical a
 So 35+ requires either a REAP-repair fine-tune of the MTP heads (S3 — a training task, outside a
 pure-CUDA inference server) or fewer bytes, i.e. quantising MLA (41% of `B_tok`), which the
 project's non-negotiables forbid. **Both are decisions for the user, not defaults to adopt.**
+
+## Finding 46 — the indexer was rebuilding `qr` from scratch, and the verify has no launch gap to graph
+
+**Redundant recompute.** `compressed_verify_step_indexer` needs `act_quant(rmsnorm(wq_a @ x))` for the
+indexer's query projection. `build_qKV` had just computed exactly that and freed it. The verify
+rebuilt it from `x`: `act_quant(x)` + the whole `wq_a` GEMM + `rmsnorm` + `act_quant` — four kernels
+and **4.19 MB of redundant weight traffic per layer across the 21 indexer layers**, under a comment
+calling the recompute "cheap". The two M=1 decode paths had the same defect in a smaller form: a
+second `act_quant_fp8(qr, Q_LORA, 128)` producing bytes identical to the `qrq/qrs` computed twenty
+lines earlier on an unmodified `qr`. Hand the buffers out of `build_qKV` instead.
+
+| phase (K=5, ms) | before | after |
+|---|---|---|
+| `cattn:indexer` | 10.74 | **9.27** |
+| `ATTENTION` | 65.17 | **62.43** |
+| dprof TOTAL | 175.42 | **170.59** |
+| base AR | 92.9 | 92.1 (graph 80.4 = 12.44 tok/s) |
+| spec-decode | 15.32 | 15.27 — **inside the 15.3-15.5 band** |
+
+Real but ~0.7% of the cycle, i.e. below the noise floor of a single end-to-end run.
+
+**And the profile retires verify-path graph capture (G2) before it was written.** The K=5 dprof
+TOTAL is 170.59 against a measured verify of 168.5 — **the marks account for ~101% of the step, so
+there is essentially no time between phases in the verify.** Compare base AR at K=1: TOTAL ~83
+against 92.1 measured, a ~9 ms between-phase gap, and the CUDA graph recovered 11.7 ms. The graph's
+win on base AR was almost entirely that between-layer host work (arena reset, per-layer setup); the
+verify does not have it. Scaling the residual ~2.7 ms of within-phase recovery by the verify's
+larger size puts a verify graph at **~2-3% for a device-pos rewrite of every verify kernel.** Not
+worth it at this position in the queue. Requeue only if the between-phase gap reappears.
+
+**Phase A stopping rule reached.** The last three levers measured +0.4% (ogroup NR), ~0% (fp32 M=K,
+inside noise) and +0.7% (this one). Glue fusion is exhausted as a percentage lever: per-call glue
+costs 4-12 us against phases of 8-25 ms, and the remaining fusions (rmsnorm+act_quant, rmsnorm+rope)
+would remove ~4 launches/layer for an estimated 0.5-0.8 ms in the graph-captured path. What is left
+above 1% is kernel bandwidth — the MoE at 177 GB/s and `cattn:ogroup` at 121 — not launch count.
