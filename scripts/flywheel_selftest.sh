@@ -57,7 +57,7 @@ DISK=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
 echo "[selftest] gates build and pass"
 if bash scripts/build_gate.sh >/dev/null 2>&1; then ok "gates build"
 else no "scripts/build_gate.sh fails — the agent would inherit a broken tree"; fi
-for g in gate_units gate_bf16w gate_ogroup_gemv gate_tc_fp8_smem; do
+for g in gate_units gate_bf16w gate_ogroup_gemv gate_tc_fp8_smem gate_forkjoin_graph; do
   [ -x "build/$g" ] || continue
   if ./build/$g 2>&1 | grep -qi FAIL; then no "build/$g FAILS before the cycle starts"
   else ok "build/$g"; fi

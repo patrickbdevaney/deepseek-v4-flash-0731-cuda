@@ -37,3 +37,18 @@ void dsync_at(cudaStream_t s, const char* file, int line);
 
 void arena_init(size_t cap);   // allocate the slab once, set g_arena_on
 void arena_reset();            // g_arena_off = 0 (call at the top of each layer's work)
+
+// INTRA-LAYER CONCURRENCY (LOOP_LOG Finding 55). A decode-sized kernel cannot saturate this memory
+// system on its own — tools/overlap_probe.cu measures wkv [512,4096] at M=5 running 47.8 GB/s alone
+// and 150.4 GB/s when four independent copies run on four streams, and wq_a at 86.4 -> 194.2. The
+// engine issues one kernel at a time down a serialised layer chain, so every small kernel leaves
+// 1.4-3.2x of the memory system idle. Where a layer contains two genuinely independent chains, they
+// belong on two streams.
+//
+// One secondary stream, created ONCE inside arena_init so it can never be created during a graph
+// capture (that is illegal and would kill the base-AR graph). Callers fork with g_side_fork and
+// join with g_side_join, which is the capturable fork/join pattern. `g_side` is null when
+// arena_init was never called — every gate that links these kernels without an arena keeps working
+// on the single-stream path, which is also the NO_MOESPLIT=1 fallback.
+extern cudaStream_t g_side;
+extern cudaEvent_t  g_side_fork, g_side_join;

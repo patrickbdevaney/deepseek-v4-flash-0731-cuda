@@ -2792,3 +2792,143 @@ should not spend a 15-minute checkpoint load on a hypothesis a unit gate can kil
 gate that replays N cycles of the indexer's malloc/free pattern at ascending `s` in a pool sized to
 leave ~11 GiB free. If free memory is flat across points, the accumulation frame dies and the next
 suspect is `arena_reset` / the per-point head rebuild.
+
+---
+
+## Finding 55 — a decode-sized kernel cannot saturate this memory system, and the engine only ever runs one
+
+This closes the "uniform ~1.9x" that four cycles wrote down as unexplained.
+
+### The gap, re-measured on the current baseline
+
+Every per-op number in this log came from `evidence/dprof5.log`, which was taken at **14.36 tok/s** —
+before managed weights, the graph re-gate and adaptive verify width. So the whole priority model was
+running on numbers ~17 % stale. Re-measured today (`~/dprof6.log`, 17.05 tok/s spec / 10.30 base, first
+token 11111 → GATE PASS), the K=5 verify is **163.95 ms** and splits into two populations that behave
+completely differently:
+
+| group | ms | bytes | GB/s | % of 233 achievable |
+|---|---|---|---|---|
+| routed MoE (`w1w3` 49.03 + `w2` 22.35) | **71.4** | 17.18 GB | **241** | **~100 % — at the roofline** |
+| everything else | **92.6** | 8.81 GB | **95** | 41 % |
+
+The routed MoE is *done*. It is one launch with ~60k warps of work and it saturates DRAM. Nothing in
+the second group does: `cattn:ogroup` 21.78, `cattn:q_proj` 17.33, `moe:shared` 10.37, `cattn:indexer`
+9.36, `cattn:compress` 8.40, `lm_head` 6.47, plus ~14 ms of glue that moves almost no bytes at all.
+
+### Two explanations eliminated first
+
+- **Working-set size** — `tools/footprint_probe.cu` (new). Read a *fixed* 1 GiB out of regions from
+  0.5 GiB to 64 GiB, both allocators, engine-shaped strided access: **230–246 GB/s everywhere**.
+  Streaming out of a 111 GiB managed pool costs nothing, and the roofline is real and reachable at
+  scale. A whole class of TLB/SMMU/page-locality hypotheses is dead.
+- **Launch overhead** — already dead: the `VERIFYGRAPH` experiment, 2788 graph nodes, **1.05x**.
+
+And the mechanism this log had written down for the bench-vs-in-situ gap is **wrong**: `gemm_bench`'s
+`timeit` launches its reps back-to-back on **stream 0**, which is stream-ordered, so the bench does not
+overlap anything either. Finding 47's "the bench relaunches on rotating weights so launches overlap"
+should be read as "the bench's weights are partly L2-resident" — its own HOT-vs-COLD row is already
+1.73x at M=5.
+
+### The actual cause, measured
+
+`tools/overlap_probe.cu` (new). Same kernel, same shapes, same total bytes, ≥1 GB of rotating cold
+weights per lane; the only variable is whether W independent copies share one stream or get one each:
+
+| shape, M=5 | 1 stream | 4 streams | |
+|---|---|---|---|
+| `wkv  [512,4096]`   | 47.8 GB/s | **150.4** | **3.15x** |
+| `wq_a [1024,4096]`  | 86.4 | **194.2** | **2.25x** |
+| `wo_b [4096,8192]`  | 144.2 | 196.1 | 1.36x |
+| `wq_b [32768,1024]` | 165.0 | 173.5 | 1.04x — already saturated |
+
+**A decode-sized kernel does not have enough concurrent misses in flight to cover DRAM latency.** The
+smaller the output, the worse it is, and the effect vanishes exactly where the kernel gets big enough
+(`wq_b`, 32768 rows). The engine runs one kernel at a time down a serialised layer chain, so it leaves
+1.4–3.2x of the memory system idle for most of every layer. That is the uniform gap, it is not a
+property of any kernel, and no amount of per-kernel tuning can reach it.
+
+**The lever this creates: where a layer holds two genuinely independent chains, run them on two
+streams.** Note the asymmetry that decides which pairs are worth it — overlap buys nothing against a
+kernel that is *already* saturated, and everything against one that is not.
+
+### Two things tried and NOT adopted, both retired with a measurement
+
+- **`__ldcs` on the ogroup weight stream** (the policy the roofline-achieving MXFP4 GEMV uses). ncu
+  said the kernel was latency-bound, `long_scoreboard` 7.33/issue, `lts__t_sector_hit_rate` 65.6 %
+  where activation-only reuse predicts ~84 % — i.e. the weight stream looked like it was evicting the
+  0.7 MB `o`. Marking it evict-first **cut the stall ratio to 3.46 and made the kernel slower**:
+  242.8 → 280.4 µs (ncu), 0.1968–0.2041 → 0.2565 ms (`gemm_bench`, M=5/NR=4, band from 3 runs). The hit
+  rate *fell* to 61.8, so the weight line was not the evictor. Do not re-queue a cache-hint change here
+  without a hit-rate measurement showing L2 is the binding resource.
+- **Shared-memory staging of `o` in the ogroup M=K GEMV** (`ogroup_gemv_mk_smem_kernel`, kept behind
+  `OG_SMEM=1`). All 8 warps of a block read *identical* activation float4s, so the traffic is 8x
+  redundant within the block; staging removes that, and it is **bit-exact at M=2,3,5,8,12,16** (the
+  gate checks exact equality, not cosine). It still does not win: NR=2 improves 0.264 → 0.200 but the
+  engine runs NR=4, where it is a 40 % *regression* (0.199 → 0.280), and its best point after doubling
+  the chunk size to halve the barrier count lands at 0.1996–0.2012 against the incumbent's
+  0.1968–0.2041. **A wash.** The `__syncthreads` pair forces the 8 warps into lockstep and destroys
+  exactly the skew that was hiding latency — which is the same lesson as above, from the other side:
+  traffic was not the binding resource, overlap was.
+
+### Standing corrections this finding forces
+
+1. `evidence/dprof5.log` is **stale** (14.36 tok/s era). Use `~/dprof6.log`. Any ranking derived from
+   the old per-op table should be re-derived.
+2. The routed MoE is **at the roofline**. It cannot be made faster by kernel work; only by moving
+   fewer expert bytes, which is an algorithmic change (verify width), not a CUDA one.
+3. `gemm_bench` ranks kernels **against each other on one stream**. It cannot see the concurrency
+   effect at all, so it systematically under-values anything that makes a kernel bigger or lets two
+   run together. Do not use it to price this class of change.
+
+---
+
+## Finding 56 — the first exploitation of Finding 55: the shared expert was never dependent on the routed ones
+
+**ADOPTED.** `moe:shared` 10.37 → **0.27 ms**; K=5 verify 157.98 → **155.22 ms**; spec **17.05 → 17.32
+tok/s**, base AR **10.30 → 10.50**. Token sequence byte-identical, `MATCH 5/5` verify-equivalence gate
+PASS, first-token gate PASS (11111).
+
+### What it is
+
+The shared expert reads only `x` and writes only its own buffers. It never depended on the routed
+experts — it was merely *issued after them on the same stream*, and so paid the full standalone price
+of its bytes: 574 MB in 10.37 ms = **55 GB/s**, next to a routed grouped GEMV moving 17.18 GB at
+**241 GB/s**, i.e. at the roofline. Finding 55 says a kernel that slow is latency-starved, not
+bandwidth-starved, so its traffic should be nearly free if folded into a stream that is already
+saturated. It forks onto `g_side` at the top of `moe_forward` and joins at the combine.
+
+Two preconditions, both of which are why this had not been done before:
+
+- **Its own buffers.** The shared path used to reuse the routed path's `Xeq/Xes/Gb/Ub/Hb/Hqb/Hsb/OEb`.
+  Running both on those concurrently is a race that still returns plausible numbers. The new buffers
+  are `bs` rows, not `maxm` — ~236 KB at bs=5 against a 512 MB arena.
+- **Graph capture.** The base-AR path captures all 43 layers into one graph (worth 1.26x).
+  `tests/gate_forkjoin_graph.cu` (new, in the suite and the selftest) reproduces exactly this pattern
+  — 43 record/wait pairs on ONE event pair — with trivial kernels, and checks the *result*, not just
+  that capture succeeded: 172 nodes, eager == graph == expected. Two seconds instead of a 15-minute
+  load to find out. The events must be `cudaEventDisableTiming` and both stream and events are created
+  in `arena_init`, which is guaranteed to run before any capture.
+
+### The bug in the first attempt, kept because it is the general trap
+
+The first version recorded `g_side_fork` immediately *before* the shared expert's code — which is
+*after* the entire routed path is already enqueued on `stream`. The side stream dutifully waited for
+all of it and overlapped nothing. Measured: `moe:shared` 10.37 → **10.48**, TOTAL 163.95 → **166.51**.
+Exactly no effect, and it would have read as "Finding 55 does not transfer to the engine".
+
+**An event records a POINT IN THE STREAM, and that point has to precede the work you want to overlap
+with.** Fork placement is the whole change; the code that runs on the side stream is identical either
+way. Any future fork/join in this engine should be checked against this first.
+
+### What it cost, and why the gain is 1.7 % and not 5 %
+
+The pure byte model says folding 574 MB into a 241 GB/s stream costs +2.3 ms, so the saving should be
+10.37 − 2.3 ≈ 8 ms. Measured, the routed GEMVs went **+6.68 ms** (`w1w3` 49.03 → 54.79, `w2` 22.35 →
+23.27) and the net saving was **2.78 ms**. The shared expert is FP8 and its GEMVs are small; run
+concurrently they compete for SMs and L2, not only for DRAM bytes. **Overlap is not free against a
+saturated kernel — it is only cheaper than serialising.** Price the next pair with that, not with the
+byte model, which over-predicted by ~3x here.
+
+Corroborated three independent ways, all moving together: dprof TOTAL −1.7 %, ksweep K=5 −1.7 %,
+end-to-end spec +1.6 % and base AR +1.9 %.

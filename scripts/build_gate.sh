@@ -10,6 +10,12 @@ echo "built build/gate_units"
 g++ -O1 -std=c++17 -I include tests/gate_encoding.cpp -o build/gate_encoding && echo "built build/gate_encoding"
 nvcc -O3 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include tests/gate_bf16w.cu kernels/compressor.cu kernels/dscratch.cu kernels/mla_attn.cu kernels/indexer.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu -o build/gate_bf16w && echo "built build/gate_bf16w"
 g++ -O1 -std=c++17 -I include tests/gate_api.cpp      -o build/gate_api      && echo "built build/gate_api"
+# Gate FORKJOIN_GRAPH — the side-stream fork/join (Finding 55) must survive CUDA-graph capture, 43
+# times on one event pair, or the base-AR graph that is worth 1.26x silently stops capturing. Two
+# seconds here instead of a 15-minute checkpoint load to find out.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_forkjoin_graph.cu kernels/dscratch.cu -o build/gate_forkjoin_graph
+echo "built build/gate_forkjoin_graph"
 # Gate OGGEMV — the M=1 fp8 ogroup GEMV (Finding 35). Not covered by gate_ogroup, which tests the
 # f32 bs=8 tensor-core path; this is a different kernel carrying ~22% of the decode step.
 nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \

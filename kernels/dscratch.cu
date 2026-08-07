@@ -4,9 +4,23 @@ bool   g_arena_on  = false;
 char*  g_arena     = nullptr;
 size_t g_arena_off = 0;
 size_t g_arena_cap = 0;
+cudaStream_t g_side       = nullptr;
+cudaEvent_t  g_side_fork  = nullptr;
+cudaEvent_t  g_side_join  = nullptr;
 void arena_init(size_t cap){
     if(g_arena){ cudaFree(g_arena); }
     cudaMalloc((void**)&g_arena, cap); g_arena_cap = cap; g_arena_off = 0; g_arena_on = true;
+    // Created here, once, because arena_init runs long before any cudaStreamBeginCapture and
+    // creating a stream or an event during capture is illegal. cudaEventDisableTiming is required:
+    // a timing-enabled event used purely for ordering forces a host-visible timestamp and cannot be
+    // captured into a graph.
+    if(!g_side){
+        if(cudaStreamCreateWithFlags(&g_side, cudaStreamNonBlocking) != cudaSuccess) g_side = nullptr;
+        if(cudaEventCreateWithFlags(&g_side_fork, cudaEventDisableTiming) != cudaSuccess ||
+           cudaEventCreateWithFlags(&g_side_join, cudaEventDisableTiming) != cudaSuccess){
+            g_side = nullptr;                       // no events -> no safe fork/join; stay serial
+        }
+    }
 }
 void arena_reset(){ g_arena_off = 0; }
 

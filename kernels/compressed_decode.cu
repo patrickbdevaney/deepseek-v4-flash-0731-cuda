@@ -318,12 +318,31 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     const float wscale=rsqrtf((float)ihd)*rsqrtf((float)nH); const float *cosP=a.cosT+(size_t)pos*half, *sinP=a.sinT+(size_t)pos*half;
     float* q; q=(float*)dmalloc((size_t)K*Kd*4);
     uint8_t* iqrq=nullptr; float* iqrs=nullptr;
+    // CONCURRENT COMPRESSOR (LOOP_LOG Finding 55, ATTN_SPLIT=1). The two compressor emits read
+    // `x_full` and nothing else — they never depended on build_qKV, they were just issued after it
+    // on the same stream. In situ at K=5 that costs the full 8.40 ms of `cattn:compress` next to
+    // 17.33 ms of `cattn:q_proj`, and neither saturates memory alone (overlap_probe: wq_a 86.4 ->
+    // 194.2 GB/s at 4 streams). The join is before the indexer, which is the first consumer of
+    // `idx_ckv`, and before kv_all, which is the first consumer of `comp_kv`.
+    //
+    // The arena is safe across the two streams for the same reason it is safe within one: every
+    // dmalloc happens on the HOST in program order, so build_qKV's scratch and the emits' scratch
+    // are disjoint ranges. What would NOT be safe is reusing a buffer, which is why the shared
+    // expert needed its own (see moe.cu).
+    // MEASURED AND ADOPTED (Finding 56): cattn:compress 8.56 -> 0.51 ms, cattn:q_proj 17.03 -> 23.85
+    // (it absorbs the traffic, exactly as the shared expert did), K=5 verify 155.22 -> 153.48 ms,
+    // spec 17.32 -> 17.48 tok/s, base AR 10.50 -> 10.68, token sequence byte-identical.
+    // NO_ATTN_SPLIT=1 restores the serial order for A/B.
+    const bool asplit = g_side && !getenv("NO_ATTN_SPLIT");
+    cudaStream_t cs = asplit ? g_side : stream;
+    if(asplit){ cudaEventRecord(g_side_fork,stream); cudaStreamWaitEvent(cs,g_side_fork,0); }
     build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, &iqrq, &iqrs, eps, stream);
     dprof_begin(DP_C_COMPRESS,stream);
     // emit main + indexer compressed rows for groups completing in the block
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){ int g=j/ratio; int t=*T;
-        compressor_emit_group(comp_kv+(size_t)t*HEAD_DIM, x_full, g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,ROPE_DIM,eps,false,stream);
-        compressor_emit_group(idx_ckv+(size_t)t*ihd, x_full, g, ratio, w.idx_c_wkv,w.idx_c_wgate,w.idx_c_ape,w.idx_c_norm,w.cc_cos,w.cc_sin,DIM,ihd,true,ROPE_DIM,eps,true,stream); ++(*T); }
+        compressor_emit_group(comp_kv+(size_t)t*HEAD_DIM, x_full, g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,ROPE_DIM,eps,false,cs);
+        compressor_emit_group(idx_ckv+(size_t)t*ihd, x_full, g, ratio, w.idx_c_wkv,w.idx_c_wgate,w.idx_c_ape,w.idx_c_norm,w.cc_cos,w.cc_sin,DIM,ihd,true,ROPE_DIM,eps,true,cs); ++(*T); }
+    if(asplit){ cudaEventRecord(g_side_join,cs); cudaStreamWaitEvent(stream,g_side_join,0); }
     dprof_end(DP_C_COMPRESS,stream);
     int Tf=*T, nwin=pos+K;
     dprof_begin(DP_C_INDEXER,stream);

@@ -341,6 +341,17 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel
         #pragma unroll
         for(int r=0;r<NR;++r){
             const int rr = (gr0+r<total) ? (gr0+r) : gr0;   // tail warps: duplicate, store is masked
+            // NEGATIVE RESULT, retired with a measurement (this cycle). ncu said this kernel is
+            // latency-bound (long_scoreboard 7.33/issue) with lts__t_sector_hit_rate 65.6%, where
+            // activation-only reuse predicts ~84% — i.e. the 33.6 MB weight stream looked like it
+            // was evicting the 0.7 MB `og` from L2. Marking the weight load evict-first with
+            // __ldcs, the policy the roofline-achieving MXFP4 expert GEMV uses, DID cut the stall
+            // ratio to 3.46 — and made the kernel SLOWER: 242.8 -> 280.4 us on one ncu launch and
+            // 0.2001 -> 0.2565 ms in gemm_bench at M=5/NR=4. __ldg on `og` on top of it was worse
+            // still. The sector hit rate fell (65.6 -> 61.8) rather than rose, so the weight line
+            // was not the evictor; dropping it evict-first just costs the 4 sectors of the 128-byte
+            // line their reuse across the warp. Do not re-queue a cache-hint change here without a
+            // hit-rate measurement that says L2 is actually the binding resource.
             w[r]  = *(const uint32_t*)(wo+(size_t)rr*Kd+base);
             ws[r] = exp2f((float)wsc[(size_t)(rr/128)*scw + kb]-127.f);   // power of two: exact to fold
         }
@@ -367,13 +378,102 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel
             if(lane==0 && gr0+r<total) out[(size_t)m*total+gr0+r]=a; }
     }
 }
+// SMEM-STAGED ACTIVATION VARIANT of the kernel above. NO_OGSMEM=1 selects the plain one for A/B.
+//
+// The observation the NR trick did not go far enough on. In the kernel above, `base` is
+// kb*128 + lane*4 and `og` is o + g*Kd — neither depends on which WARP is running. So all 8 warps
+// of a block issue the SAME M float4 loads of `o`, every k-block: the activation traffic is 8x
+// redundant WITHIN the block, on top of the 4M/NR ratio the NR trick already addressed. Measured
+// per launch at M=5/NR=4: 33.6 MB of weight and 168 MB of `o`, against an `o` that is only 0.7 MB.
+// ncu agrees it is not bandwidth — long_scoreboard 7.33 stalls per issued instruction at 59% warp
+// occupancy — but 168 MB of redundant requests is what those warps are queued behind.
+//
+// Staging removes the redundancy instead of re-prioritising it (which is what __ldcs tried, and it
+// lost: see the note above). The block cooperatively loads KC k-blocks of every activation row into
+// shared memory once, then all 8 warps read their float4 from smem. Activation global traffic falls
+// 8x, to ~21 MB. Arithmetic, operand order and accumulation order are untouched, so this is
+// bit-identical to the kernel above and gates against it directly.
+//
+// Two structural requirements, both checked by the dispatch rather than assumed (Finding 41):
+//   (WPB*NR) | R    — so every warp in the block is in the same o-group `g` and shares the staged
+//                     rows. R = O_LORA = 1024 and WPB*NR is 8..64, so this holds for every NR.
+//   KC | (Kd/128)   — so no chunk runs off the end of the row. Kd/128 = 32.
+// A 128-bit smem load is serviced in 4 phases of 8 lanes = 32 banks exactly, so the float4 reads
+// below are conflict-free.
+template<int M, int NR>
+__global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_smem_kernel(
+        float* __restrict__ out, const float* __restrict__ o,
+        const uint8_t* __restrict__ wo, const uint8_t* __restrict__ wsc,
+        int G, int R, int Kd){
+    constexpr int WPB = 256/32;                                   // warps per block
+    constexpr int KC  = (M<=4) ? 16 : ((M<=8) ? 8 : 4);           // k-blocks staged per chunk
+    __shared__ __align__(16) float sh[M*KC*128];                  // <=16 KB, so 4 blocks/SM still fit
+    const int warpInBlk = threadIdx.x>>5, lane = threadIdx.x&31;
+    const int total = G*R, scw = Kd/128;
+    const int gr0 = (blockIdx.x*WPB + warpInBlk)*NR;
+    // One `g` for the whole block. No early return anywhere in this kernel: every thread must reach
+    // every __syncthreads, so out-of-range warps participate in the staging and are masked only at
+    // the store.
+    int gblk = (blockIdx.x*WPB*NR)/R; if(gblk > G-1) gblk = G-1;
+    const float* og = o + (size_t)gblk*Kd;
+    float acc[NR][M];
+    #pragma unroll
+    for(int r=0;r<NR;++r){
+        #pragma unroll
+        for(int m=0;m<M;++m) acc[r][m]=0.f; }
+    for(int kb0=0; kb0<scw; kb0+=KC){
+        for(int t=threadIdx.x; t<M*KC*32; t+=256){
+            const int m=t/(KC*32), q=t%(KC*32);
+            *(float4*)&sh[m*KC*128 + q*4] =
+                *(const float4*)(og + (size_t)m*G*Kd + (size_t)kb0*128 + q*4);
+        }
+        __syncthreads();
+        #pragma unroll
+        for(int kbl=0; kbl<KC; ++kbl){
+            const int kb=kb0+kbl, base=kb*128+lane*4;
+            uint32_t w[NR]; float ws[NR];
+            #pragma unroll
+            for(int r=0;r<NR;++r){
+                const int rr = (gr0+r<total) ? (gr0+r) : (total-1);   // tail warps: clamped, store masked
+                w[r]  = *(const uint32_t*)(wo+(size_t)rr*Kd+base);
+                ws[r] = exp2f((float)wsc[(size_t)(rr/128)*scw + kb]-127.f);
+            }
+            float4 o4[M];
+            #pragma unroll
+            for(int m=0;m<M;++m) o4[m]=*(const float4*)&sh[m*KC*128 + kbl*128 + lane*4];
+            #pragma unroll
+            for(int r=0;r<NR;++r){
+                const float d0=ogm_e4m3((uint8_t)(w[r]    ))*ws[r], d1=ogm_e4m3((uint8_t)(w[r]>> 8))*ws[r],
+                            d2=ogm_e4m3((uint8_t)(w[r]>>16))*ws[r], d3=ogm_e4m3((uint8_t)(w[r]>>24))*ws[r];
+                #pragma unroll
+                for(int m=0;m<M;++m){
+                    acc[r][m]=fmaf(o4[m].x,d0,acc[r][m]); acc[r][m]=fmaf(o4[m].y,d1,acc[r][m]);
+                    acc[r][m]=fmaf(o4[m].z,d2,acc[r][m]); acc[r][m]=fmaf(o4[m].w,d3,acc[r][m]);
+                }
+            }
+        }
+        __syncthreads();
+    }
+    #pragma unroll
+    for(int r=0;r<NR;++r){
+        #pragma unroll
+        for(int m=0;m<M;++m){ float a=acc[r][m];
+            #pragma unroll
+            for(int o2=16;o2>0;o2>>=1) a+=__shfl_down_sync(0xffffffff,a,o2);
+            if(lane==0 && gr0+r<total) out[(size_t)m*total+gr0+r]=a; }
+    }
+}
 // NR falls as M rises to keep NR*M accumulators in registers. NO_OGNR=1 pins NR=1, which is
 // exactly Finding 40's kernel, for A/B.
+#define OG_MK_LAUNCH(MM,NRV) do{ \
+    if(ogsmem) ogroup_gemv_mk_smem_kernel<MM,NRV><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    else       ogroup_gemv_mk_kernel     <MM,NRV><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+  }while(0)
 #define OG_MK_CASE(M) case M: \
-    if(ognr==8)      ogroup_gemv_mk_kernel<M,8><<<(nb+7)/8,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
-    else if(ognr==4) ogroup_gemv_mk_kernel<M,4><<<(nb+3)/4,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
-    else if(ognr==2) ogroup_gemv_mk_kernel<M,2><<<(nb+1)/2,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
-    else             ogroup_gemv_mk_kernel<M,1><<<nb,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); break;
+    if(ognr==8)      OG_MK_LAUNCH(M,8); \
+    else if(ognr==4) OG_MK_LAUNCH(M,4); \
+    else if(ognr==2) OG_MK_LAUNCH(M,2); \
+    else             OG_MK_LAUNCH(M,1); break;
 // fp8-native TC ogroup: o(f32)->f16 + fused fp8 wo_a decode in the mma. No per-token wo16 conversion.
 void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const uint8_t* wo_sc,
                      int bs, int G, int R, int Kd, cudaStream_t stream){
@@ -410,6 +510,27 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         if(ognr!=1 && ognr!=2 && ognr!=4 && ognr!=8) ognr = 4;
         while(ognr>1 && (R % ognr)!=0) ognr >>= 1;
         const int threads=256; const size_t nb=((size_t)G*R*32+threads-1)/threads;
+        // SMEM staging of `o` (see ogroup_gemv_mk_smem_kernel). DEFAULT OFF — opt in with OG_SMEM=1.
+        //
+        // MEASURED, NOT ADOPTED. It does exactly what it claims to the traffic (8x less activation
+        // reading) and it is bit-exact at every M, but on the real shape [8 x 1024, 4096] at M=5,
+        // 12 rotating copies, it does not beat the kernel it replaces:
+        //     NR=1   0.320 -> 0.293      NR=2   0.264 -> 0.200
+        //     NR=4   0.199 -> 0.280      NR=8   0.341 -> 0.554
+        // The engine runs NR=4 at M=5, where this is a 40% REGRESSION; its best point (NR=2, after
+        // doubling KC to halve the barrier count) lands at 0.1996-0.2012 against the incumbent's
+        // 0.1968-0.2041. That is a wash, not a win. The mechanism is visible in the NR column: the
+        // __syncthreads pair per chunk forces the 8 warps into lockstep and destroys the skew that
+        // was hiding load latency, and the more work each warp holds (higher NR) the more that
+        // costs. Traffic was not the binding resource; overlap was.
+        // Kept reachable because it is the only variant that removes the intra-block redundancy,
+        // and a future double-buffered version would start here.
+        // The two structural preconditions are CHECKED, not assumed: every warp in a block must
+        // land in the same o-group, and the staged chunk must divide the row. Both hold for this
+        // model's shape, but a shape that broke either would read `o` for the wrong group and
+        // still return a plausible number.
+        const bool ogsmem = (getenv("OG_SMEM")!=nullptr)
+                         && ((R % ((threads/32)*ognr)) == 0) && (((Kd/128) % 8) == 0);
         switch(bs){ OG_MK_CASE(2)  OG_MK_CASE(3)  OG_MK_CASE(4)  OG_MK_CASE(5)
                     OG_MK_CASE(6)  OG_MK_CASE(7)  OG_MK_CASE(8)  OG_MK_CASE(9)
                     OG_MK_CASE(10) OG_MK_CASE(11) OG_MK_CASE(12) OG_MK_CASE(13)

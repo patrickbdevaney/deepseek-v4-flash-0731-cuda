@@ -157,3 +157,33 @@ gone. That is the point of the column.
 | full-step CUDA graph re-gate, base AR only | 92.5 ms/tok | 79.3 (12.61 tok/s) | `evidence/graph_regate.log` | `d52e5fd` |
 | adaptive verify width, lossless (Finding 49) | 3694 ms/61 tok | 3616 (+2.1%) | `evidence/adaptk3.log` | `df199a4` |
 | **baseline at handover to the autonomous loop** | — | **16.86 spec / 12.61 base** | `evidence/adaptk3.log` | `99dda26` |
+| **MoE shared expert forked to a side stream (Finding 56)** | 17.05 spec | **17.32** | `evidence/moesplit2.log` | (this cycle) |
+| **compressor emits forked to a side stream (Finding 56)** | 17.32 | **17.48** | `evidence/attnsplit.log` | (this cycle) |
+| **baseline after intra-layer concurrency** | 16.86 (recorded) / 17.05 (same-day control) | **17.44-17.48 spec / 12.52 base graphed** | `evidence/attnsplit.log`, `evidence/graphsplit.log` | (this cycle) |
+
+### Finding 55/56 — what the concurrency lever is, and how to price the next one
+
+`tools/overlap_probe.cu` established that a decode-sized kernel cannot saturate this memory system on
+its own: at M=5, `wkv [512,4096]` runs **47.8 GB/s alone and 150.4 GB/s** when four independent copies
+share the device (3.15x); `wq_a` 86.4 -> 194.2 (2.25x); and the effect vanishes exactly where the
+kernel is already big enough (`wq_b [32768,1024]`, 1.04x). The engine issues one kernel at a time down
+a serialised layer chain, so every small kernel was leaving 1.4-3.2x of memory idle. That, not any
+per-kernel defect, is the "uniform ~1.9x" four cycles recorded as unexplained.
+
+Two independent chains have now been forked onto a side stream, and both show the SAME signature:
+
+| pair | hidden work | before | after | where the cost reappeared | net |
+|---|---|---|---|---|---|
+| shared expert ∥ routed experts | `moe:shared` | 10.37 ms | **0.27** | routed GEMVs +6.68 | **-2.78 ms** |
+| compressor emits ∥ `build_qKV` | `cattn:compress` | 8.56 ms | **0.51** | `cattn:q_proj` +6.82 | **-1.74 ms** |
+
+**Price the next pair off that table, not off the byte model.** The byte model predicted ~8 ms for the
+first pair and delivered 2.8: overlap against an already-saturated kernel is only *cheaper* than
+serialising, not free, because the two kernels also compete for SMs and L2. Expect to recover roughly
+**20-25 % of the hidden op's standalone cost**, and prefer pairs where the partner is NOT saturated.
+
+Remaining candidates, ranked by the standalone cost that could be hidden (current K=5, `evidence/attnsplit.log`):
+`cattn:indexer` 9.25 (partner: nothing independent — it needs both `iqrq` and `idx_ckv`) ·
+`lm_head` 6.47 (runs after all 43 layers; nothing left to overlap with) ·
+`wkv` inside `build_qKV` (independent of the `wq_a->wq_b` chain, and it is the worst shape on the
+probe at 47.8 GB/s standalone) · the ~14 ms of glue kernels that move almost no bytes.

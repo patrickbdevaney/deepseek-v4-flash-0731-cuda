@@ -96,17 +96,29 @@ int main(){
         unsetenv("NO_OGNR"); ogroup_gemm_fp8(Cnr,dob,dw,dsc,M,G,R,Kd,0);
         setenv("NO_OGNR","1",1); ogroup_gemm_fp8(C1,dob,dw,dsc,M,G,R,Kd,0);
         unsetenv("NO_OGNR");
+        // SMEM STAGING (ogroup_gemv_mk_smem_kernel). The staged kernel loads the SAME activation
+        // float4s from shared memory instead of re-reading them per warp, in the same operand and
+        // accumulation order, so it is bit-identical BY CONSTRUCTION — and therefore the gate is
+        // exact equality, not a cosine. A cosine here would pass a kernel that had silently staged
+        // the wrong o-group for some warp, which is precisely the failure the (WPB*NR)|R guard is
+        // there to prevent; bitwise equality will not.
+        float* Csm; CU(cudaMalloc(&Csm,(size_t)M*rows*4));
+        setenv("OG_SMEM","1",1); ogroup_gemm_fp8(Csm,dob,dw,dsc,M,G,R,Kd,0);
+        unsetenv("OG_SMEM");
         for(int m=0;m<M;++m) ogroup_gemm(Coracle+(size_t)m*rows, dob+(size_t)m*G*Kd, dwf,1,G,R,Kd,0);
         CU(cudaDeviceSynchronize());
-        std::vector<float> vnr((size_t)M*rows), v1((size_t)M*rows), vo((size_t)M*rows);
+        std::vector<float> vnr((size_t)M*rows), v1((size_t)M*rows), vo((size_t)M*rows), vsm((size_t)M*rows);
         CU(cudaMemcpy(vnr.data(),Cnr,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
         CU(cudaMemcpy(v1.data(),C1,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
         CU(cudaMemcpy(vo.data(),Coracle,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
+        CU(cudaMemcpy(vsm.data(),Csm,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
+        size_t nbit=0; for(size_t i=0;i<vnr.size();++i) if(vnr[i]!=vsm[i]) ++nbit;
         Cmp p=compare(vnr,v1), q=compare(vnr,vo);
-        bool o2 = ok(p) && ok(q); mkok = mkok && o2;
-        printf("[oggemv M=%-2d NR vs NR=1] cos=%.9f rms=%.1e %-4s | vs f32 oracle cos=%.9f rms=%.1e %-4s\n",
-               M, p.cos,p.rms_rel, ok(p)?"PASS":"FAIL", q.cos,q.rms_rel, ok(q)?"PASS":"FAIL");
-        cudaFree(dob); cudaFree(Cnr); cudaFree(C1); cudaFree(Coracle);
+        bool o2 = ok(p) && ok(q) && (nbit==0); mkok = mkok && o2;
+        printf("[oggemv M=%-2d NR vs NR=1] cos=%.9f rms=%.1e %-4s | vs f32 oracle cos=%.9f rms=%.1e %-4s | smem bit-exact %zu diffs %-4s\n",
+               M, p.cos,p.rms_rel, ok(p)?"PASS":"FAIL", q.cos,q.rms_rel, ok(q)?"PASS":"FAIL",
+               nbit, nbit==0?"PASS":"FAIL");
+        cudaFree(dob); cudaFree(Cnr); cudaFree(C1); cudaFree(Coracle); cudaFree(Csm);
     }
     bool pass = ok(a) && ok(b) && ok(c) && mkok;
     printf("\nGate OGGEMV: %s\n", pass?"PASS":"FAIL");

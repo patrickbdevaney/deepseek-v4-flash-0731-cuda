@@ -296,6 +296,42 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         Gb=(decltype(Gb))dmalloc((size_t)maxm*inter*4); Ub=(decltype(Ub))dmalloc((size_t)maxm*inter*4); Hb=(decltype(Hb))dmalloc((size_t)maxm*inter*4);
         Hqb=(decltype(Hqb))dmalloc((size_t)maxm*inter); Hsb=(decltype(Hsb))dmalloc((size_t)maxm*(inter/128)*4); OEb=(decltype(OEb))dmalloc((size_t)maxm*dim*4);
         float* OEbts=(float*)dmalloc((size_t)bs*na*dim*4);   // deterministic per-(token,slot) combine buffer
+
+        // -- shared expert, FORKED BEFORE the routed path (LOOP_LOG Finding 55) --
+        //
+        // The shared expert reads only `x` and writes only its own buffers, so it never depended on
+        // the routed experts — it was merely issued after them on the same stream, and paid the
+        // full price of its bytes: 10.37 ms for 574 MB = 55 GB/s in situ at K=5, alongside a routed
+        // grouped GEMV running 17.18 GB at 241 GB/s, i.e. AT the roofline. A kernel that slow is
+        // latency-starved, not bandwidth-starved (overlap_probe), so folding its traffic into an
+        // already-saturated stream should cost ~2.4 ms instead of 10.37.
+        //
+        // THE FORK MUST BE RECORDED HERE, not next to the shared code. The first version of this
+        // change recorded g_side_fork immediately before the shared chain — which is *after* the
+        // whole routed path is already enqueued on `stream`, so the side stream dutifully waited
+        // for all of it and overlapped nothing. Measured: moe:shared 10.37 -> 10.48 ms, TOTAL
+        // 163.95 -> 166.51, i.e. exactly no effect. An event records a POINT IN THE STREAM, and the
+        // point has to precede the work you want to overlap with.
+        //
+        // Separate buffers are the other precondition: the shared path used to reuse the routed
+        // path's Xeq/Xes/Gb/Ub/Hb/Hqb/Hsb/OEb, and running both on those concurrently is a race
+        // that still returns plausible numbers. These are bs rows, not maxm -- ~236 KB at bs=5.
+        const bool split = g_side && !getenv("NOSHARED") && !getenv("NO_MOESPLIT");
+        float *sXes=nullptr,*sGb,*sUb,*sHb,*sHsb,*sOEb=nullptr; uint8_t *sXeq,*sHqb;
+        if(split){
+            sXeq=(decltype(sXeq))dmalloc((size_t)bs*dim); sXes=(decltype(sXes))dmalloc((size_t)bs*(dim/128)*4);
+            sGb=(decltype(sGb))dmalloc((size_t)bs*inter*4); sUb=(decltype(sUb))dmalloc((size_t)bs*inter*4);
+            sHb=(decltype(sHb))dmalloc((size_t)bs*inter*4); sHqb=(decltype(sHqb))dmalloc((size_t)bs*inter);
+            sHsb=(decltype(sHsb))dmalloc((size_t)bs*(inter/128)*4); sOEb=(decltype(sOEb))dmalloc((size_t)bs*dim*4);
+            cudaEventRecord(g_side_fork,stream); cudaStreamWaitEvent(g_side,g_side_fork,0);
+            act_quant_fp8(sXeq,sXes,x,bs,dim,128,g_side);
+            fp8_block_gemm(sGb,sXeq,sXes,w.sw1,w.sw1s,bs,inter,dim,g_side);
+            fp8_block_gemm(sUb,sXeq,sXes,w.sw3,w.sw3s,bs,inter,dim,g_side);
+            swiglu_kernel<<<((size_t)bs*inter+63)/64,64,0,g_side>>>(sHb,sGb,sUb,bs*inter,w.swiglu_limit,1.f);
+            act_quant_fp8(sHqb,sHsb,sHb,bs,inter,128,g_side);
+            fp8_block_gemm(sOEb,sHqb,sHsb,w.sw2,w.sw2s,bs,dim,inter,g_side);
+            cudaEventRecord(g_side_join,g_side);
+        }
         // -- routed experts: gather -> quant -> fp16 -> grouped gate/up -> swiglu -> quant -> fp16 -> grouped down -> scatter --
         k_gather_x<<<((size_t)maxm*dim+255)/256,256,0,stream>>>(Xe,x,alltok_d,maxm,dim);
         act_quant_fp8(Xeq,Xes,Xe,maxm,dim,128,stream);
@@ -342,8 +378,34 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         k_reduce_ts<<<((size_t)bs*dim+255)/256,256,0,stream>>>(out,OEbts,bs,dim,na);
         dprof_end(DP_M_COMBINE,stream);
         // -- shared expert (fp8, all bs tokens, weight 1) --
+        //
+        // CONCURRENT WITH THE ROUTED PATH (LOOP_LOG Finding 55). The shared expert reads only `x`
+        // and writes only its own buffers, so it never depended on the routed experts — it was
+        // merely issued after them on the same stream. That cost the full price of its bytes:
+        // measured in situ at K=5, moe:shared is 10.37 ms for 574 MB = 55 GB/s, while the routed
+        // grouped GEMV alongside it runs 17.18 GB at 241 GB/s, i.e. AT the roofline. Folding the
+        // shared expert's traffic into a stream that is already saturated costs ~2.4 ms of extra
+        // time instead of 10.37, because the memory system was never the thing the shared expert
+        // was waiting on — latency was.
+        //
+        // The buffers below are SEPARATE allocations, which is the whole reason this could not be
+        // done before: the shared path used to reuse Xeq/Xes/Gb/Ub/Hb/Hqb/Hsb/OEb, the routed
+        // path's scratch, and running the two concurrently on those would be a race that still
+        // returns plausible numbers. They cost bs (not maxm) rows -- ~236 KB at bs=5 against a
+        // 512 MB arena.
+        //
+        // Arithmetic, operand order and accumulation order are untouched, and `accum` still runs on
+        // the main stream AFTER k_scatter_ts/k_reduce_ts have written `out`, so the result is
+        // bit-identical to the serial version. The join is what guarantees that, and it is also
+        // what keeps the side stream's writes from outliving the layer's arena_reset.
+        // JOIN. `out` already holds the routed sum on the main stream; add the shared branch there,
+        // in the same order as the serial version, so the result is bit-identical. The join is also
+        // what keeps the side stream's writes from outliving this layer's arena_reset.
         dprof_begin(DP_M_SHARED,stream);
-        if(!getenv("NOSHARED")){
+        if(split){
+            cudaStreamWaitEvent(stream,g_side_join,0);
+            accum_kernel<<<((size_t)bs*dim+63)/64,64,0,stream>>>(out,sOEb,bs*dim);
+        } else if(!getenv("NOSHARED")){
             act_quant_fp8(Xeq,Xes,x,bs,dim,128,stream);
             fp8_block_gemm(Gb,Xeq,Xes,w.sw1,w.sw1s,bs,inter,dim,stream);
             fp8_block_gemm(Ub,Xeq,Xes,w.sw3,w.sw3s,bs,inter,dim,stream);
