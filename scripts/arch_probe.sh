@@ -3,7 +3,7 @@
 #
 # CRITICAL FLAG NOTE (LOOP_LOG Finding 29): you MUST target the ARCH-SPECIFIC virtual arch.
 #   -arch=sm_110   -> compute_110  -> tcgen05 BLOCKED   <-- the prior project's conclusion came from here
-#   -arch=sm_110a  -> compute_110a -> tcgen05 OK        (but building an EXECUTABLE this way also
+#   -gencode arch=compute_110a,code=sm_110a  -> compute_110a -> tcgen05 OK        (but building an EXECUTABLE this way also
 #                                                        emits compute_110 PTX, which fails)
 #   -gencode arch=compute_110a,code=sm_110a             <-- correct for executables: SASS only
 set -e

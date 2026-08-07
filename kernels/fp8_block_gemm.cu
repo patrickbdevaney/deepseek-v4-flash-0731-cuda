@@ -63,14 +63,40 @@ __global__ void fp8_gemv_m1_kernel(float* __restrict__ C, const uint8_t* __restr
     for (int n = warp0; n < N; n += stride) {
         const uint8_t* Brow = B + (size_t)n*K; const float* bsr = bs + (size_t)(n/128)*KB;
         float acc = 0.f;
-        for (int kb = 0; kb < KB; ++kb){
-            int base = kb*128 + lane*4;                       // 32 lanes * 4 = 128 contiguous bytes
-            unsigned av = *(const unsigned*)(A + base);        // 4 fp8 activations
-            unsigned bv = *(const unsigned*)(Brow + base);     // 4 fp8 weights
-            float sub = 0.f;
+        // MEMORY-LEVEL PARALLELISM (research/GB10_COMPARISON.md). The original loop issued ONE
+        // 4-byte load per iteration and consumed it immediately — ILP = 1. Measured on this box:
+        // a streaming loop at ILP=1 sustains 110-132 GB/s; at ILP>=2 it sustains 224-237. Our whole
+        // engine measured 116.6 GB/s, which is squarely the ILP=1 number. Little's Law again: one
+        // outstanding request per warp cannot cover DRAM latency no matter how well it coalesces.
+        // Unroll by 4 and issue all eight loads before consuming any, so four independent misses
+        // are in flight per warp.
+        // Accumulation order across kb is UNCHANGED (0,1,2,3,4,...), so this stays bit-exact.
+        auto dot4 = [](unsigned av, unsigned bv) {
+            float s = 0.f;
             #pragma unroll
-            for (int i = 0; i < 4; ++i) sub += dec_e4m3((av>>(i*8))&0xff) * dec_e4m3((bv>>(i*8))&0xff);
-            acc += sub * as[kb] * bsr[kb];
+            for (int i = 0; i < 4; ++i) s += dec_e4m3((av>>(i*8))&0xff) * dec_e4m3((bv>>(i*8))&0xff);
+            return s;
+        };
+        const int KB4 = KB & ~3;
+        int kb = 0;
+        for (; kb < KB4; kb += 4){
+            const int b0 = (kb+0)*128 + lane*4, b1 = (kb+1)*128 + lane*4,
+                      b2 = (kb+2)*128 + lane*4, b3 = (kb+3)*128 + lane*4;
+            // all loads issued before any use -> 8 outstanding requests per warp
+            unsigned bv0 = *(const unsigned*)(Brow + b0), bv1 = *(const unsigned*)(Brow + b1),
+                     bv2 = *(const unsigned*)(Brow + b2), bv3 = *(const unsigned*)(Brow + b3);
+            unsigned av0 = *(const unsigned*)(A + b0), av1 = *(const unsigned*)(A + b1),
+                     av2 = *(const unsigned*)(A + b2), av3 = *(const unsigned*)(A + b3);
+            acc += dot4(av0,bv0) * as[kb+0] * bsr[kb+0];
+            acc += dot4(av1,bv1) * as[kb+1] * bsr[kb+1];
+            acc += dot4(av2,bv2) * as[kb+2] * bsr[kb+2];
+            acc += dot4(av3,bv3) * as[kb+3] * bsr[kb+3];
+        }
+        for (; kb < KB; ++kb){
+            int base = kb*128 + lane*4;
+            unsigned av = *(const unsigned*)(A + base);
+            unsigned bv = *(const unsigned*)(Brow + base);
+            acc += dot4(av,bv) * as[kb] * bsr[kb];
         }
         #pragma unroll
         for (int o = 16; o > 0; o >>= 1) acc += __shfl_down_sync(0xffffffff, acc, o);
