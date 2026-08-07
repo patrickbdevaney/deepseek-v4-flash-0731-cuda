@@ -1513,3 +1513,44 @@ again — i.e. run the MTP blocks through the same half2 kernel (they already do
 acceptance, or fine-tune the head against the half2 target. The REAP-repair fine-tune already on
 the plan would subsume this, since it retrains the head against whatever the target actually
 computes.
+
+---
+
+## 2026-08-06 — Finding 32: BF16-native compressor. Fewer bytes, SLOWER. The axis only pays when the kernel is bandwidth-bound.
+
+The compressor `wkv`/`wgate` (and the indexer's) ship as BF16 and were being expanded to f32 by
+`Loader::bf16` — 526 MB/step read as 1052. Exactly the defect the `lm_head` fix (Opt #4) cured, with
+the same template. `research/MLA_DECODE.md` ranked it **#1 at ~+5%**, and my own byte model agreed.
+
+Implemented: `gemm_bf16w` path in `compressor_forward` / `compressor_emit_group`, native BF16
+pointers in `decode.cu`.
+
+**Correct**: gate PASS, generated tokens byte-identical, resident memory **108.1 → 107.6 GiB**.
+**And slower: 100.2 → 103.5 ms/tok (9.98 → 9.66 tok/s).**
+
+### Why the byte model was wrong here
+
+The same reason the MoE GEMV was slow before half2: **`gemm_fp32` is a warp-per-output-column scalar
+dot product, and it is compute-bound, not bandwidth-bound.** Going to BF16 halves the bytes but adds
+a `__bfloat1622float2` per pair of elements on top of the existing FMA — more ALU per byte, on a
+kernel whose limit was already ALU.
+
+**The general rule this establishes, and it retro-explains three earlier results:**
+
+> Reducing bytes only helps a kernel that is bandwidth-bound. On a compute/issue-bound kernel it is
+> neutral at best and negative when the narrower format needs conversion.
+
+- `lm_head` BF16 (Opt #4, **+2.7%**) — that GEMM *was* bandwidth-bound (2118 MB in one call, the
+  largest single read in the step), so the bytes mattered.
+- MoE GEMV pre-half2 — flat at 108 GB/s across M=1..8, compute-bound; BN=2 blocking gave +19% on the
+  kernel and **0 end-to-end** until the inner loop was fixed.
+- This compressor — compute-bound, so the byte saving is a loss.
+
+**Corrected ordering for every remaining byte lever:** measure whether the consuming kernel is
+bandwidth- or compute-bound *first*. If compute-bound, fix the inner loop (half2/vectorised dequant)
+**before** narrowing the format — then the byte reduction pays on top. The compressor is now a
+strong candidate for a half2 rewrite of `gemm_fp32` itself, after which this change should be
+re-tried and should win.
+
+Left in the tree behind `COMP_BF16=1` (default **off**) so the re-try after a `gemm_fp32` rewrite is
+one env var away, and the −0.5 GiB memory saving is available if headroom ever binds.

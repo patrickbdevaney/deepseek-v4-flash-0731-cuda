@@ -107,6 +107,7 @@ int main(int argc, char** argv){
     // every M measured: 314.6 vs 121.5 GB/s at M=1, 232.2 vs 125.7 at M=2, 230.3 vs 130.9 at M=8.
     // MOE_MMA=1 restores the m16 tile for A/B.
     extern bool g_moe_gemv; g_moe_gemv=(getenv("MOE_MMA")==nullptr);
+    extern bool g_compressor_bf16; g_compressor_bf16=(getenv("COMP_BF16")!=nullptr);  // Finding 32: OFF by default — measured SLOWER
 
     // freqs over seqmax
     std::vector<void*> keep;
@@ -181,13 +182,16 @@ int main(int argc, char** argv){
         } else {
             CompressedBlockWeights& b=CW[Lyr]; fill_attn(lp,b.attn.attn,true);
             std::string p=lp+"attn.";
-            b.attn.mc_wkv=L.bf16(p+"compressor.wkv.weight");b.attn.mc_wgate=L.bf16(p+"compressor.wgate.weight");
+            // native BF16 (Finding 32) — do NOT dequantise; ~526 MB/step
+            b.attn.mc_wkv=(const float*)W.get(p+"compressor.wkv.weight").dev;
+            b.attn.mc_wgate=(const float*)W.get(p+"compressor.wgate.weight").dev;
             b.attn.mc_ape=L.f32(p+"compressor.ape");b.attn.mc_norm=L.bf16(p+"compressor.norm.weight");
             b.attn.cc_cos=(ratio==4)?cc4c:cc128c;b.attn.cc_sin=(ratio==4)?cc4s:cc128s;
             if(ratio==4){
                 b.attn.idx_wq_b=L.raw(p+"indexer.wq_b.weight");b.attn.idx_wq_b_s=L.scale(p+"indexer.wq_b.scale");
                 b.attn.idx_weights_proj=L.bf16(p+"indexer.weights_proj.weight");
-                b.attn.idx_c_wkv=L.bf16(p+"indexer.compressor.wkv.weight");b.attn.idx_c_wgate=L.bf16(p+"indexer.compressor.wgate.weight");
+                b.attn.idx_c_wkv=(const float*)W.get(p+"indexer.compressor.wkv.weight").dev;   // native BF16 (Finding 32)
+                b.attn.idx_c_wgate=(const float*)W.get(p+"indexer.compressor.wgate.weight").dev;
                 b.attn.idx_c_ape=L.f32(p+"indexer.compressor.ape");b.attn.idx_c_norm=L.bf16(p+"indexer.compressor.norm.weight");
             }
             b.attn.index_n_heads=INDEX_N_HEADS;b.attn.index_head_dim=INDEX_HEAD_DIM;b.attn.index_topk=INDEX_TOPK;

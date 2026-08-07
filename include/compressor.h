@@ -8,6 +8,7 @@
 void gemm_fp32(float* C, const float* A, const float* B, int M, int N, int K, cudaStream_t stream = 0);
 // C[M,N] = A[M,K](f32) @ B[N,K]^T with B read natively as BF16 (no f32 dequant). See LOOP_LOG
 // Finding 26: lm_head and the markov heads ship BF16 and were being doubled to f32 before every use.
+extern bool g_compressor_bf16;   // wkv/wgate are BF16 storage when true
 void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K, cudaStream_t stream = 0);
 void gemm_fp32_cond(float* C, const float* A, const float* B, int M, int N, int K, const int* d_pos, int ratio, cudaStream_t stream = 0);
 

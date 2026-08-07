@@ -1,5 +1,7 @@
 // compressor.cu — KV Compressor gated-pooling core, correctness-first (Gate K: ref/gen_units gen_compressor).
 #include "compressor.h"
+// When true, `wkv`/`wgate` pointers are BF16 storage, not f32. Set once at engine init.
+bool g_compressor_bf16 = false;
 #include <cuda_bf16.h>
 #include <stdint.h>
 #include "dscratch.h"
@@ -147,8 +149,13 @@ void compressor_forward(float* out, const float* x, const float* wkv, const floa
     int coff = overlap ? 2 : 1, groups = s / ratio, od = coff * d;
     float *kv, *score;
     kv=(decltype(kv))dmalloc( (size_t)s * od * 4); score=(decltype(score))dmalloc( (size_t)s * od * 4);
-    gemm_fp32(kv, x, wkv, s, od, dim, stream);
-    gemm_fp32(score, x, wgate, s, od, dim, stream);
+    // BF16-NATIVE (LOOP_LOG Finding 32): wkv/wgate ship as BF16 and were being expanded to f32 by
+    // Loader::bf16, doubling 526 MB/step to 1052. gemm_bf16w reads them natively. Same defect class
+    // as the lm_head fix (Opt #4); same proven template.
+    if (g_compressor_bf16) { gemm_bf16w(kv, x, (const void*)wkv, s, od, dim, stream);
+                             gemm_bf16w(score, x, (const void*)wgate, s, od, dim, stream); }
+    else                   { gemm_fp32 (kv, x, wkv, s, od, dim, stream);
+                             gemm_fp32 (score, x, wgate, s, od, dim, stream); }
     if (overlap) compressor_pool_overlap(out, kv, score, ape, groups, ratio, d, stream);
     else         compressor_pool(out, kv, score, ape, groups, ratio, d, stream);
     rmsnorm(out, out, norm_w, groups, d, eps, true, stream);
@@ -176,8 +183,10 @@ void compressor_emit_group(float* out_row, const float* x, int g, int ratio, con
     float *kv,*score,*pooled;
     kv=(decltype(kv))dmalloc((size_t)ntok*od*4); score=(decltype(score))dmalloc((size_t)ntok*od*4);
     pooled=(decltype(pooled))dmalloc((size_t)(localg+1)*d*4);
-    gemm_fp32(kv, xg, wkv, ntok, od, dim, stream);
-    gemm_fp32(score, xg, wgate, ntok, od, dim, stream);
+    if (g_compressor_bf16) { gemm_bf16w(kv, xg, (const void*)wkv, ntok, od, dim, stream);
+                             gemm_bf16w(score, xg, (const void*)wgate, ntok, od, dim, stream); }
+    else                   { gemm_fp32 (kv, xg, wkv, ntok, od, dim, stream);
+                             gemm_fp32 (score, xg, wgate, ntok, od, dim, stream); }
     if(overlap) compressor_pool_overlap(pooled, kv, score, ape, localg+1, ratio, d, stream);
     else        compressor_pool(pooled, kv, score, ape, 1, ratio, d, stream);
     float* prow = pooled + (size_t)localg*d;                 // the target group's pooled row
