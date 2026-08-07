@@ -3437,3 +3437,43 @@ the histogram is now printed by the same instrument that measures the union.
 A second-order lesson for the probes: `ncu_target` had been modelling 30 experts of one row each,
 which for a row-amortised kernel is the one shape where amortisation cannot show up at all. **A probe
 that models the worst case measures a kernel the engine never runs.**
+
+---
+
+## Finding 66 — B6 retired twice: the expert pointers are never aligned, and shuffling the funnel partner is worse than loading it
+
+Two negative results on the same lever, both cheap, neither costing a model run.
+
+**B6 as stated is impossible.** `k_grouped_fp4_gemv_e8m0` loads both `wa` and `wa+16` and funnel-shifts
+because the weight pointer is misaligned; the obvious fast path is "skip it when aligned". Scanning
+`docs/hdrs` (all 48 shard headers, 45,821 tensors) says that never happens:
+
+```
+ALL tensors,    data_offsets[0] mod 16:  {0: 296, 4: 2, 8: 44400, 12: 1123}
+EXPERT tensors, data_offsets[0] mod 16:  {8: 43470, 12: 966}      <- none at 0
+```
+
+Every expert tensor is misaligned, ~98 % of them by exactly 8 bytes. The fast path would never fire.
+Note this also updates Finding 41's standing caveat: the misalignment is not 4-byte-arbitrary, it is a
+**constant 8**, because every tensor in this checkpoint has a size that is a multiple of 16 and the
+data blob starts 8 bytes off.
+
+**B6' — supply the partner by warp shuffle — is worse than the load it removes.** Lane L's second load
+is bit-for-bit lane L+1's first load, so a `__shfl_down` should give it for free on a kernel that is
+latency-bound on exactly those loads. Measured on the corrected `ncu_target` grouping at RB=2:
+
+| | time | registers | occupancy | global ld requests | long_scoreboard |
+|---|---|---|---|---|---|
+| two loads (shipped) | **423.8 µs** | 62 | 63.1 % | 1,058,816 | 3.90 |
+| shuffled partner | 650.6 µs | 67 | 55.7 % | 1,058,816 | 9.81 |
+
+**+54 % slower, and the request count did not move at all.** Lane 31 has no partner in the warp so it
+still needs a real load, and that load is *predicated*, not branched away — the warp executes both the
+shuffle chain and the load path. Four `__shfl_down` per `uint4` per operand is 8 extra instructions per
+`kb` buying nothing, and they consume the same issue slots the loads were waiting on.
+
+**The transferable point: "these two values are identical" does not imply "the second one is free".**
+On a warp-uniform load the coalescer had already merged lane L's and lane L+1's requests into the same
+sectors, so the second load was never costing DRAM traffic — only an instruction that the hardware was
+already pipelining. Replacing a coalesced load with a shuffle chain trades a free thing for a costly
+one. Check whether the redundancy actually reaches memory before removing it.

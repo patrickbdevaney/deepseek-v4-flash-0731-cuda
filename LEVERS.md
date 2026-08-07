@@ -82,6 +82,8 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | small-M fp8 GEMV as default at M≥2 | loses 1.5–2.3x to the smem-staged m16 tile (F41) |
 | wave-quantisation on the M=1 GEMV | two schemes, both worse or in the noise (Opt #2) |
 | software-pipelining the MoE tile loop | reverted, no gain (tc_moe_gemm.cu:407) |
+| B6: skip the funnel when the weight pointer is 16B-aligned | **it never is.** Across all 48 shard headers, 43,470 of 44,436 expert tensors sit at `data_offset%16 == 8` and 966 at 12 — **none at 0**. The fast path could not fire (F66) |
+| B6': supply the funnel partner by warp shuffle instead of a second load | lane L's `wa+16` IS lane L+1's `wa`, so it looked free. Measured **423.8 -> 650.6 us** at RB=2, stalls 3.90 -> 9.81, registers 62 -> 67: lane 31 still needs a real load and it is *predicated*, not branched away, so the warp pays for both paths plus 8 shuffles per kb (F66) |
 | `__ldcs` evict-first on the ogroup weight stream | stall ratio 7.33 → 3.46 **and slower**: 0.197 → 0.257 ms. L2 hit rate *fell*; the weight line was not the evictor (F55) |
 | smem staging of `o` in the ogroup M=K GEMV | bit-exact, 8x less activation traffic, and **a wash** at the NR the engine uses. The barrier destroys the warp skew that was hiding latency. Kept behind `OG_SMEM=1` (F55) |
 
@@ -107,7 +109,6 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | B2 | **split-K on the small-N GEMMs** (`wkv [512,4096]` at 48 GB/s, `wq_a [1024,4096]` at 87) | ~1–2 % | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse independent small GEMMs into one launch** (`wq_a`+`wkv` share `xq/xs`) | ~1–2 % | Strictly better than two streams — bigger grid, no barrier, no SM/L2 contention. Needs a 2-weight grouped kernel; the MoE already has the machinery (`tc_fp4_grouped_gemv_e8m0`). Bit-exact. |
 | B4 | **the ~12 ms of glue** (`hc_pre` ×2, rmsnorm, router/group/act/combine) | ≤5 % | Moves almost no bytes; pure launch/latency floor. The verify-graph result (1.05x) caps what graphing can return here. Sinkhorn is *already* one fused kernel — do not "fuse" it again. |
-| B6 | **skip the funnel-shift when the expert weight pointer is 16B-aligned** | ~2-4 % of MoE | `k_grouped_fp4_gemv_e8m0` loads BOTH `wa` and `wa+16` per (lane,kb,u) and funnel-shifts, because mapped safetensors pointers are only 4-byte aligned (F41). That is 2x the load instructions and 8 extra registers per BN. If `wptr[e] & 15 == 0` the second load is pure waste — measure how many experts are actually aligned before building the fast path. |
 | B7 | **occupancy of the MoE GEMV** | up to ~30 % of `w1w3` | Even at the optimum RB=2 it runs 62 registers / 63 % occupancy / 155 GB/s = 67 % of roofline. The register budget is dominated by the funnel pair (B6) and `acc[RB][BN]`. B6 is the cheapest way in. |
 | B5 | **FP4 for the MLA/dense weights** | moves the byte floor ~1.2x | Assessed and **not done**: it is pure weight transform, trivial on Thor, but costs accuracy and the constraint is *no additional quantization*. Requires an explicit decision to relax that. |
 
