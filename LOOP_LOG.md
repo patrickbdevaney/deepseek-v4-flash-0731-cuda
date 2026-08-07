@@ -3077,3 +3077,63 @@ this class of error, and Finding 49 is a worked example: 7x.
 
 **Quote the canonical number as the canonical number, and gate any acceptance/width lever on the
 multi-prompt sweep.** `17.6 tok/s` is prompt 0; the engine's range on varied prompts is 11.5-19.0.
+
+---
+
+## Finding 60 — the engine is nondeterministic on identical input, it always was, and it costs 2.2x
+
+The single most consequential measurement this cycle, found by accident while looking for a
+warm-up ramp. **36 sweep points that are byte-identical in every parameter** (same prompt, same
+adaptK, same block size, same process, back to back):
+
+```
+tok/s      10.04 ... 22.52     mean 18.09     sd 3.12 (17%)
+acceptance 1.40 ... 3.33       20 distinct values in 36 points
+tokens     19 distinct sequences in 36 points, diverging as early as index 2
+margins    36 distinct verify-1 margin vectors in 36 points
+```
+
+**The FIRST verify of every point already differs**, so this is not accumulated drift — the draft
+forward produces different numbers on identical inputs and identical state.
+
+### What it is NOT (each eliminated with a measurement, not an argument)
+
+| hypothesis | test | result |
+|---|---|---|
+| the new intra-layer concurrency | 36-point control with `NO_MOESPLIT=1 NO_ATTN_SPLIT=1 NO_KV_SPLIT=1` | **identical pathology**: 19 sequences, 20 acceptances, same 1.4-3.33 range. Pre-existing. |
+| MoE atomics | grep | the only `atomicAdd` scatter is in the **non-batched** path, which decode does not take (`w.batched && w.device_route`) |
+| stale window read in the draft | `dspark_attn.cu:29` | `nwin = min(t+1, win)` clamps correctly |
+| uninitialised arena scratch | new `DSV4_ARENA_ZERO=1` (zeroes to the high-water mark on every `arena_reset`) | **still nondeterministic**: 8 points → 8 distinct verify-1 margins. Arena exonerated. |
+
+Remaining suspects, in order: the **prefill's raw `cudaMalloc` scratch** (`compressed_attn_forward`
+allocates 17 buffers per layer per call and never zeroes them — the arena analogue that this cycle
+did NOT test), the persistent `cudaMalloc` buffers read before written (`mh_pre` is written only for
+`PSp` of `SMAX-1` rows), and genuine FP non-associativity from scheduling-dependent reduction order.
+
+### Why it matters more than any remaining kernel lever
+
+Acceptance swinging 1.40-3.33 on identical input **is** the tok/s swinging 10.0-22.5. The engine's
+mean is 18.1 while its own good draws are 21-22. Nothing in the kernel work left on the table is
+worth anything close to that.
+
+It also invalidates a measurement practice this project has used throughout: **a single sweep point
+is a ±17 % measurement on a sensitive prompt.** Every single-point A/B in this log carries that error
+bar unless the two arms were adjacent. The `blksweep` replicate machinery added this cycle is the
+fix — use ≥3 replicates per cell and compare means.
+
+### Two things that are NOT the cause but are worth having
+
+- **Clock pinning (`jetson_clocks`) is a real, free gain.** The GPU idles at 315 MHz of 1386 and the
+  **memory controller at 2750 MHz of 4266** under `nvhost_podgov`/`bpmp-bwmgr`. Paired at matched
+  sweep positions: **rep1 +6.4 %, rep2 +3.5 %, rep3 +3.0 %**, and the cold base-AR window (measured
+  right after load, before the governor ramps) goes **10.48 → 12.65 tok/s, +20.7 %**. Streaming
+  roofline is unchanged (235.6 GB/s) because a long probe ramps the governor by itself — which is
+  exactly why this was invisible to every roofline measurement ever taken here.
+- **The "ramp" is mostly not DVFS.** Pinning only moves rep3/rep1 from 1.143 to 1.107. The residual
+  is the nondeterminism above, not a warm-up: with 36 identical points the sequence is noisy, not
+  monotone.
+
+### Best estimate of this cycle's concurrency work, from the paired 36-point data
+
+Splits ON mean **18.09** vs splits OFF **17.54** over 36 matched points = **+3.1 %**. That supersedes
+the +2.5 % single-point figure, and it is the number to quote.

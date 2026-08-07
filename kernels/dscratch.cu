@@ -3,6 +3,7 @@
 bool   g_arena_on  = false;
 char*  g_arena     = nullptr;
 size_t g_arena_off = 0;
+size_t g_arena_hwm = 0;   // high-water mark, so the zeroing diagnostic need not clear all 512 MB
 size_t g_arena_cap = 0;
 cudaStream_t g_side       = nullptr;
 cudaEvent_t  g_side_fork  = nullptr;
@@ -12,7 +13,7 @@ cudaEvent_t  g_side2_fork = nullptr;
 cudaEvent_t  g_side2_join = nullptr;
 void arena_init(size_t cap){
     if(g_arena){ cudaFree(g_arena); }
-    cudaMalloc((void**)&g_arena, cap); g_arena_cap = cap; g_arena_off = 0; g_arena_on = true;
+    cudaMalloc((void**)&g_arena, cap); g_arena_cap = cap; g_arena_off = 0; g_arena_hwm = 0; g_arena_on = true;
     // Created here, once, because arena_init runs long before any cudaStreamBeginCapture and
     // creating a stream or an event during capture is illegal. cudaEventDisableTiming is required:
     // a timing-enabled event used purely for ordering forces a host-visible timestamp and cannot be
@@ -32,7 +33,24 @@ void arena_init(size_t cap){
         }
     }
 }
-void arena_reset(){ g_arena_off = 0; }
+// DIAGNOSTIC (DSV4_ARENA_ZERO=1). The engine is nondeterministic across sweep points on identical
+// input — 36 identical points give 19 distinct token sequences and 36 distinct first-verify margin
+// vectors — and it is NOT the concurrency work (a splits-off control reproduces it exactly), NOT
+// atomics (the only atomicAdd is in the unused non-batched MoE path), and NOT a stale-window read
+// (dspark_attn clamps nwin to t+1). The remaining candidate is scratch that some kernel reads before
+// writing: `dmalloc` hands out raw bump-allocated memory and never zeroes it, so any buffer that is
+// accumulated into rather than assigned inherits whatever the previous layer or point left there —
+// which differs run to run and point to point.
+//
+// Zeroing only the high-water mark keeps this cheap enough to actually run: the arena is 512 MB but
+// a decode layer touches a small fraction of it. If determinism returns under this flag, the bug is
+// an uninitialised read and the next step is to find WHICH buffer by bisecting; if it does not, the
+// arena is exonerated and the search moves to the persistent (cudaMalloc) buffers.
+void arena_reset(){
+    static const bool zero = getenv("DSV4_ARENA_ZERO") != nullptr;
+    if(zero && g_arena && g_arena_hwm) cudaMemsetAsync(g_arena, 0, g_arena_hwm, 0);
+    g_arena_off = 0;
+}
 
 // See the comment on dsync() in dscratch.h. Drains the thread's last-error slot so a launch failure
 // is named where it happened instead of surfacing at the next unrelated CU(). Reports every time,

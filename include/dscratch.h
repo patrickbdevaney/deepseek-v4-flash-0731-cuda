@@ -9,10 +9,11 @@
 #include <cstdlib>
 extern bool   g_arena_on;
 extern char*  g_arena;
-extern size_t g_arena_off, g_arena_cap;
+extern size_t g_arena_off, g_arena_cap, g_arena_hwm;
 
 static inline void* dmalloc(size_t n){
     if(g_arena_on){ n=(n+255)&~((size_t)255); void* p=g_arena+g_arena_off; g_arena_off+=n;
+        if(g_arena_off>g_arena_hwm) g_arena_hwm=g_arena_off;
         if(g_arena_off>g_arena_cap){ fprintf(stderr,"[dscratch] arena overflow %zu>%zu\n",g_arena_off,g_arena_cap); abort(); }
         return p; }
     void* p; cudaMalloc(&p,n); return p;

@@ -1,5 +1,5 @@
 {
-  "cycle": 6,
+  "cycle": 7,
   "phase": "A",
   "consecutive_sub_half_pct": 0,
   "phaseB_top_history": [
@@ -7,68 +7,57 @@
     "moe-latency"
   ],
   "baseline": {
-    "spec_tok_s": 17.48,
-    "spec_tok_s_band": "17.44-17.48 over two independent runs of the adopted config",
+    "spec_tok_s": 17.61,
+    "spec_tok_s_note": "canonical prompt 0, single point. See warning below: a single sweep point is a +/-17% measurement on a sensitive prompt (Finding 60).",
+    "concurrency_gain_paired": "splits ON 18.09 vs OFF 17.54 over 36 MATCHED identical points = +3.1%. This is the defensible number for the cycle-6/7 concurrency work.",
+    "base_tok_s_nograph_pinned": 12.65,
+    "base_tok_s_nograph_governed": 10.48,
     "base_tok_s_graphed": 12.52,
-    "base_tok_s_nograph": 10.68,
-    "verify_k5_ms": 153.48,
-    "source_log": "evidence/attnsplit.log (17.48) and evidence/graphsplit.log (17.44, graph gate PASS)",
-    "same_day_control": "evidence/dprof6.log = 17.05 spec / 10.30 base, measured this cycle with NO changes. The recorded 16.86 came from evidence/adaptk3.log on a previous day; quote the gain against 17.05, not 16.86.",
-    "measured": "2026-08-07",
-    "note": "Two intra-layer concurrency changes adopted (Finding 56). Token sequence byte-identical to the control across every run; MATCH 5/5 verify-equivalence and first-token 11111 gates PASS in all four runs; the full 43-layer CUDA graph still captures and its own argmax gate passes."
+    "verify_k5_ms": 150.56,
+    "prompt_range": "11.5 to 21.1 tok/s across 5 prompts -- prompt 0 is NOT representative",
+    "source_log": "evidence/c1.log, evidence/pinned.log, evidence/rampshape.log, evidence/rampctl.log",
+    "measured": "2026-08-07"
   },
   "queue": [
     {
-      "id": "C1",
+      "id": "N1",
       "stage": "candidate",
-      "what": "fork `wkv` off the wq_a->wq_b chain inside build_qKV. It is the WORST shape on overlap_probe (47.8 GB/s standalone at M=5, 150.4 at 4 streams = 3.15x) and it is independent of the q chain once act_quant(x) has run. Partner is cattn:q_proj, which is NOT saturated -- the favourable case per the Finding 56 pricing table.",
-      "falsify": "the pricing table says expect ~20-25% of the hidden op's standalone cost. wkv standalone is ~1.8 ms over 41 layers, so this is worth ~0.4-0.5 ms = 0.3%. If the measurement lands materially above that the pricing model is wrong and should be refit BEFORE the next pair.",
-      "note": "CAUTION: there is exactly ONE side stream and ONE event pair. ATTN_SPLIT already forks inside compressed_verify_step_indexer; a wkv fork inside build_qKV would NEST inside it and reuse the same event objects. Either add a second stream/event pair or restructure so the two forks are siblings, not nested. A nested reuse of g_side_fork is a silent correctness bug, not a compile error."
+      "priority": "HIGHEST",
+      "what": "Finding 60: the engine is nondeterministic on identical input. 36 identical sweep points give 19 distinct token sequences, acceptance 1.40-3.33, tok/s 10.04-22.52, and 36 distinct FIRST-verify margin vectors. Mean 18.1 against its own good draws of 21-22. Nothing left in kernel work is worth close to this.",
+      "falsify": "ELIMINATED ALREADY, do not re-test: the new concurrency (splits-off control reproduces it exactly), MoE atomics (only in the unused non-batched path), a stale draft-window read (nwin is clamped), and uninitialised ARENA scratch (DSV4_ARENA_ZERO=1 does not fix it). NEXT: zero the PREFILL's raw cudaMalloc scratch -- compressed_attn_forward allocates 17 buffers per layer per call and never zeroes them, and that is the one analogue of the arena test that was not run. Then check mh_pre, which is written for only PSp of SMAX-1 rows.",
+      "note": "the base AR argmax gate passes every run (11111) and MATCH 5/5 holds, so the MAIN model is stable at M=1 and M=5; it is the DRAFT path whose margins move."
+    },
+    {
+      "id": "P1",
+      "stage": "measured, adopt as operating requirement",
+      "what": "jetson_clocks. GPU idles at 315/1386 MHz and the MEMORY CONTROLLER at 2750/4266 MHz under a governor. Paired at matched sweep positions: rep1 +6.4%, rep2 +3.5%, rep3 +3.0%; cold base-AR window 10.48 -> 12.65 (+20.7%). Roofline probes never saw this because a long probe ramps the governor by itself.",
+      "falsify": "n/a -- measured. Needs to be written into HARDWARE.md and run_model.sh, and every future measurement must state whether clocks were pinned."
     },
     {
       "id": "I3",
-      "stage": "candidate",
-      "what": "the illegal memory access reported at kernels/indexer.cu:96. NEW INFORMATION this cycle: line 96 is `CUI(cudaStreamSynchronize(stream))` -- the error COLLECTION point, not the fault site, and it is the FIRST real sync in the whole layer's attention path (compressed_attn.cu launches from line 36 onward with only no-op dsyncs before it). So :91 and :96 were always the same sync, and NOTHING has ever localised the faulting kernel. Both prior cycles' framings were built on reading the line number as a location.",
-      "falsify": "add a DSV4_SYNCPROBE=1 mode that makes dsync() a real checked sync in the prefill path only (decode timing untouched), so the next model run names the exact launch. Do this BEFORE any further hypothesis about what accumulates.",
-      "note": "not reproduced this cycle: four full-model runs completed cleanly, all with short sweeps. It needs the multi-point sweep to trigger."
-    },
-    {
-      "id": "D1",
-      "stage": "candidate",
-      "what": "adaptK=0 in a sweep entry falls through to the 1.5 default, so fixed-width is not expressible per sweep point and no run since Finding 49 has contained a fixed-width control",
-      "falsify": "a :0 entry still reports an effective adaptK of 1.5"
+      "stage": "parked, not reproducible",
+      "what": "the indexer fault. Finding 58: :91 and :96 are the SAME cudaStreamSynchronize and were never a location. Accumulation refuted by direct measurement (free memory RISES 10.360 -> 11.608 GiB over 17 points). Three faithful 17-point reruns (probe on, probe off, and at the faulting run's own 111.6 GiB headroom) all 17/17 clean.",
+      "falsify": "DSV4_SYNCPROBE=1 is in place and names the faulting launch. Do not spend another cycle hypothesising without a reproduction."
     }
   ],
   "halt": false,
   "halt_reason": "",
   "halt_considered": "Halt is set, but it does not block the next cycle: I3's first action is a unit-level allocator gate and Phase D is explicitly not blocked by a broken instrument. Do NOT spend a checkpoint load on I3 before the unit gate answers.",
   "last_result": {
-    "cycle": 6,
-    "lever": "Findings 55 + 56 -- root-caused the uniform ~1.9x as single-kernel memory under-saturation, then exploited it twice.",
+    "cycle": 7,
+    "lever": "C1 adopted (Finding 57); D1 fixed, which produced Finding 59; I3 refuted and parked (Finding 58); Finding 60 found.",
     "measured": {
-      "end_to_end_pct": "+2.5% spec (17.05 -> 17.48), +3.7% base AR non-graph (10.30 -> 10.68), -2.8% K=5 verify cost (157.98 -> 153.48 ms)",
-      "mechanism_confirmed": "moe:shared 10.37 -> 0.27 ms; cattn:compress 8.56 -> 0.51 ms",
-      "gates": "first-token 11111 PASS and MATCH 5/5 PASS in all four runs; token sequence byte-identical to control; full 43-layer CUDA graph captures and passes its own argmax gate (12.52 tok/s)"
+      "c1": "cattn:q_proj 23.85 -> 19.99 ms, ksweep K=5 153.48 -> 152.26, spec 17.48 -> 17.61, tokens identical",
+      "adaptive_vs_fixed": "first fixed-width control since Finding 49: adaptive is +9.5/+28.0/+7.9/+12.2% on prompts 1-4 and a WASH on the canonical prompt 0 it was fitted on. Byte-identical output on all 5 prompts -- losslessness properly tested for the first time.",
+      "adaptK_threshold": "1.0 / 1.5 / 1.75 are NOT separable: means 16.94 / 16.70 / 16.79 over 3 replicates x 4 prompts against a within-cell spread of 15%. 1.5 retained. Do not re-run without more replicates."
     },
     "negative_results": [
-      "__ldcs on the ogroup weight stream: cut long_scoreboard 7.33 -> 3.46 and made it SLOWER (0.199 -> 0.257 ms). L2 hit rate fell, so the weight line was not the evictor. Retired.",
-      "smem staging of `o` in the ogroup M=K GEMV: bit-exact at every M, 8x less activation traffic, and a WASH at the NR the engine uses (0.1996-0.2012 vs 0.1968-0.2041). Kept behind OG_SMEM=1. The barrier destroys the warp skew that was hiding latency.",
-      "working-set size does NOT cost bandwidth: footprint_probe gives 230-246 GB/s at 0.5 GiB and at 64 GiB, both allocators. A whole class of TLB/SMMU hypotheses is dead and the roofline is confirmed reachable at scale.",
-      "the first fork/join attempt recorded the fork event AFTER the work it meant to overlap: exactly zero effect (moe:shared 10.37 -> 10.48). Kept in the code comment as the general trap."
-    ],
-    "artifacts": [
-      "LOOP_LOG.md Findings 55 and 56",
-      "OPTIMIZATION_LOG.md (3 rows + the pricing table)",
-      "tools/footprint_probe.cu",
-      "tools/overlap_probe.cu",
-      "tests/gate_forkjoin_graph.cu",
-      "evidence/dprof6.log",
-      "evidence/moesplit.log",
-      "evidence/moesplit2.log",
-      "evidence/attnsplit.log",
-      "evidence/graphsplit.log"
+      "adaptK threshold sweep inconclusive -- between-threshold differences (1.4%) are far below within-cell spread (15%)",
+      "DSV4_ARENA_ZERO does not restore determinism: the arena is exonerated",
+      "clock pinning does NOT explain the replicate ramp (1.143 -> 1.107 only)",
+      "the indexer fault does not reproduce in three faithful reruns"
     ]
   },
   "counter_note": "consecutive_sub_half_pct 6 -> 7, incremented because this cycle moved end-to-end 0.0%. It remains MISLEADING and the next executor should read it as such: cycles 2, 3, 4 and 5 were instrument and correctness repair, not levers, so the counter does not count three consecutive LEVERS under 0.5%. The Phase-A stopping rule must not be treated as fired on this number alone. It is now four cycles since a performance lever was measured, and that is the real signal: once I3 is closed, the loop owes itself either a Phase B re-profile or a D pass.",
-  "note_for_executor": "halt cleared. Baseline moved to 17.48 spec. THE PRIORITY MODEL CHANGED THIS CYCLE: the routed MoE (43% of the verify) is AT the roofline at 241 GB/s and cannot be improved by kernel work -- only by moving fewer expert bytes, which is an algorithmic change. Everything else runs at ~95 GB/s not because the kernels are bad but because only one runs at a time (Finding 55). Rank the next lever by 'what independent chain can be forked', and price it with the Finding 56 table (expect ~20-25% of the hidden op's standalone cost), NOT with the byte model, which over-predicted 3x. Also: evidence/dprof5.log is STALE (14.36 tok/s era) -- any ranking derived from it must be re-derived from evidence/attnsplit.log. And gemm_bench cannot see this effect at all, so do not use it to price concurrency work."
+  "note_for_executor": "PRIORITY INVERTED THIS CYCLE. Stop ranking kernel levers: the routed MoE is at the roofline, the concurrency lever's large wins are taken (+3.1% paired), and what remains in that class is sub-1% per pair. The dominant term is now N1, nondeterminism: identical input gives tok/s 10.04-22.52 because acceptance swings 1.40-3.33. Four causes are already eliminated WITH MEASUREMENTS -- do not re-test them. MEASUREMENT RULE, now mandatory: a single sweep point is a +/-17% measurement. Use >=3 replicates per cell and compare means, or put the two arms of an A/B at ADJACENT sweep positions. Several numbers in this log predating cycle 7 do not meet that bar. Pin clocks (jetson_clocks) for every measurement and say so in the writeup."
 }

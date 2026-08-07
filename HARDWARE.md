@@ -161,3 +161,28 @@ and re-deriving them is wasted time. Source: `~/dspark-cuda-reap-finetune/DECODE
 - `--runtime nvidia` Docker containers **wedge the device** on this box (stuck `runc` processes
   in uninterruptible D-state; `docker rm -f` hangs). Plain `docker run` works. All CUDA here
   compiles and runs on the host; only CPU-torch oracle work goes in a container.
+
+## Clocks are governed, and every measurement in this repo before 2026-08-07 was taken ungoverned
+
+`jetson_clocks` is **not** applied by default on this box. Idle state, measured:
+
+| clock | idle | max | governor |
+|---|---|---|---|
+| `gpu-gpc-0` | 315 MHz | 1386 MHz | `nvhost_podgov` |
+| `bwmgr` (memory controller) | **2750 MHz** | **4266 MHz** | `bpmp-bwmgr` |
+
+The memory clock matters here because this engine is bandwidth-bound end to end. Pinning with
+`sudo jetson_clocks` is worth, paired at matched sweep positions: **+6.4 % / +3.5 % / +3.0 %** across
+the three replicates of a 36-point sweep, and **+20.7 %** on the base-AR window (10.48 → 12.65 tok/s)
+because that window is measured immediately after load, before the governor has ramped.
+
+**This is invisible to a roofline probe.** `bw_probe` reads 235.6 GB/s pinned and ~240 ungoverned —
+a probe that streams for twenty passes ramps the governor by itself, so the clock state never showed
+up in any roofline number this project has taken. It shows up in short, cold, dependent work, which
+is exactly what decode is.
+
+    sudo jetson_clocks --store /tmp/clocks_before.conf   # then --restore /tmp/clocks_before.conf
+    sudo jetson_clocks
+
+**Every future measurement must state whether clocks were pinned.** Comparing a pinned run against an
+unpinned one is a 3-20 % error depending on where in the run the number was taken.
