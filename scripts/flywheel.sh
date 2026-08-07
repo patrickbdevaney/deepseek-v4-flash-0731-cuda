@@ -82,6 +82,11 @@ if ! bash "$ROOT/scripts/flywheel_selftest.sh" > "$ROOT/.flywheel_selftest.txt" 
     halt "environment selftest failed — see .flywheel_selftest.txt"
 fi
 log "selftest PASS"
+# keep the guard installed; .git/hooks is not versioned, so a clone or a `git init` loses it
+if [ ! -x "$ROOT/.git/hooks/pre-commit" ] || ! cmp -s "$ROOT/scripts/hooks/pre-commit" "$ROOT/.git/hooks/pre-commit"; then
+    cp "$ROOT/scripts/hooks/pre-commit" "$ROOT/.git/hooks/pre-commit" 2>/dev/null && chmod +x "$ROOT/.git/hooks/pre-commit"
+    log "installed pre-commit guard"
+fi
 
 CYCLE=$(python3 -c "import json;print(json.load(open('$STATE'))['cycle'])")
 BASE_BEFORE=$(python3 -c "import json;print(json.load(open('$STATE'))['baseline'].get('spec_tok_s',0))")
@@ -235,10 +240,10 @@ log "agent exited rc=$RC"
 if [ -n "$(git status --porcelain)" ]; then
     MSG="$ROOT/.flywheel_commit_msg"
     if [ -s "$MSG" ]; then
+        # FLYWHEEL_COMMIT=1 tells the pre-commit hook this is the legitimate in-cycle commit; every
+        # other commit is refused while the lock is held (see scripts/hooks/pre-commit).
         git add -A
-        git -c user.name="flywheel" -c user.email="flywheel@localhost" commit -q -F "$MSG" \
-            -m "" --cleanup=verbatim 2>/dev/null \
-          || git add -A && git commit -q -F "$MSG"
+        FLYWHEEL_COMMIT=1 git commit -q -F "$MSG"
         log "committed cycle $CYCLE: $(head -1 "$MSG")"
         : > "$MSG"
     elif [ "$RC" -ne 0 ]; then

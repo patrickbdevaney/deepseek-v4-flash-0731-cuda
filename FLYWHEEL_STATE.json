@@ -17,6 +17,13 @@
   },
   "queue": [
     {
+      "id": "I2",
+      "stage": "candidate",
+      "what": "illegal memory access at kernels/indexer.cu:91 during prefill of the s=18 prompt (the only prompt whose length equals SMAX). Cycle 3 halted on it. Lead, not cause: mh_pre = (SMAX-1)*3*d*4 is the zero-slack buffer on that path.",
+      "falsify": "append a prompt longer than 18 ids so SMAX>18 and re-run the same 9 gate points; if prompt 2 stops faulting the defect is 'the prompt of length SMAX', if it still faults SMAX is a coincidence. compute-sanitizer on 3 points locates it directly and needs no NGEN0=60.",
+      "note": "cleared halt 2026-08-07 by the user; the fault is REAL and deterministic, not flaky \u2014 it is queued, not dismissed."
+    },
+    {
       "id": "D-pass",
       "stage": "research",
       "what": "Phase D: arXiv against the CURRENT residual \u2014 (a) instrument reliability under repeated identical settings, (b) the 155 GB/s vs 234 GB/s memory-LATENCY gap at batch 1 on integrated LPDDR5X. Produces candidates only.",
@@ -35,8 +42,8 @@
       "falsify": "a :0 entry still reports an effective adaptK of 1.5"
     }
   ],
-  "halt": true,
-  "halt_reason": "Invariant 7. ~/cycle3.log faulted at point 11 with `cuda kernels/indexer.cu:91 an illegal memory access was encountered`, in the prefill of prompt 2 (s=18), and that same prompt is the one whose three identical-setting replicates produced three different token sequences. The base-AR gate PASSED (11111), the new per-point prefill-length gate PASSED at all 11 points, and the Finding 52 fix is a strict improvement (0/3 -> 2/3 non-canonical prompts reproducing byte-identically) \u2014 so this cycle's work is sound and committed. But a run that faults is a failed run, and I2 must be root-caused before anything is built on top of the multi-prompt harness. Clear this flag to proceed with I2's falsification test. NOTE: this halt blocks BUILDING and MODEL RUNS on top of an un-root-caused fault. It does NOT block the Phase-D research pass now sitting at queue[0], which needs neither \u2014 per the policy change committed in 469d9c2, D produces candidates, not numbers. Do D, then clear this flag for I2.",
+  "halt": false,
+  "halt_reason": "",
   "halt_considered": "Yes, both ways. Nothing on the shipped configuration is implicated: the canonical prompt reproduces byte-identically twice at 16.83/16.90 tok/s and base AR at 10.33, and every prior number in this project was measured on that prompt with one prompt per process, where PSp == PS and the Finding 52 bug cannot fire. The halt is about not stacking a second fix on an un-root-caused fault, not about the engine being broken.",
   "last_result": {
     "cycle": 3,

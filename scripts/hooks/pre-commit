@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# pre-commit — refuse to commit while a flywheel cycle is in flight.
+#
+# Cycle 3 caught this: a commit landed out-of-band at 03:48 while the executor was mid-cycle, and
+# because it used `git add -A` it swept the agent's in-progress working tree into a commit whose
+# message described something else entirely. Nothing was lost, but history attributed the agent's
+# Finding 52 work to an unrelated policy change. The executor respects the lock; humans and other
+# sessions did not, because nothing made them.
+#
+# The harness sets FLYWHEEL_COMMIT=1 for its own commit, which happens after the agent exits and
+# while it legitimately holds the lock.
+[ "${FLYWHEEL_COMMIT:-0}" = "1" ] && exit 0
+if ! flock -n /tmp/dsv4-flywheel.lock true 2>/dev/null; then
+    cat >&2 <<'MSG'
+REFUSED: a flywheel cycle is running.
+
+Committing now would sweep the executor's in-progress working tree into your commit (`git add -A`
+takes everything), and the cycle's own commit message would then land on an empty diff. Wait for it
+to finish:
+
+    until flock -n /tmp/dsv4-flywheel.lock true; do sleep 30; done
+
+or stop the loop first with `touch FLYWHEEL_STOP`. To override deliberately: FLYWHEEL_COMMIT=1 git commit ...
+MSG
+    exit 1
+fi
+exit 0
