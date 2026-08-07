@@ -205,8 +205,7 @@ the M=1 step speeds the verify by the same factor.
 | F3 | Fuse the indexer chain | ~9 ms | `cattn:indexer` is 10.7 ms for ~1 ms of bytes |
 | M1 | MoE GEMV 177 -> 210+ GB/s | ~10 ms | bench hits 233 hot; in situ 177 — cold/TLB or issue rate, not yet separated |
 | S4 | Reduced draft vocabulary + `d2t` | ~5 ms | draft `lm_head` is 1.06 GB; needs a principled token subset, not an invented one |
-| A1 | Intra-expert activation sparsity | +11-17% | training-free, runtime-only |
-| A6 | CUTLASS `reg_reconfig.h` missing `1100` clause | 1.74x on FMHA upstream | two lines, local patch |
+| R1 | Re-fit `adaptK` across a multi-prompt within-run A/B | validates the shipped 1.5 | blocked on `tools/encode_prompt.cpp` (unbuilt) + a prompt index in `DSV4_BLKSWEEP` |
 
 ### Retired with a measurement (do not re-queue)
 
@@ -215,7 +214,18 @@ routing · speculation trees · draft/verify pipelining · 2:4 sparsity · MLA w
 FlashMLA port · MoE g-loop pipelining · wave-quantisation clamp (Opt #2) · BF16-native compressor
 (Finding 32) · shared-A fp8 GEMV (Finding 41: slower at every M) · **block size > 5 (Finding 43:
 identical accept sequence at 5 and 8)** · **draft refinement (Finding 45: acceptance 3.00 -> 2.08 —
-the MTP heads are trained with the noise token as placeholder, so real tokens are off-distribution)**.
+the MTP heads are trained with the noise token as placeholder, so real tokens are off-distribution)**
+· **A6, the CUTLASS `reg_reconfig.h` `1100` patch (Finding 50: retired on code evidence, not a
+number — no engine TU includes `cutlass_moe.h`, the only callers of `cutlass_nvfp4_gemm` are that
+file's own self-tests, so `build/cutlass_moe.o` is linked and never launched; the patch would change
+an object that never runs)**.
+
+**Moved out of Phase A rather than retired: A1, intra-expert activation sparsity** (Finding 50). It
+is not lossless, `research/MOE_DECODE.md:98` already priced MXFP4's 32-element blocks as blocking
+sub-block skips (only `w3` of the three expert matrices is skippable — `w2`'s neuron axis is its
+K axis, and `w1` must be read in full to compute the gate that selects neurons), and §2 rule 1 says
+byte reduction does not pay on a phase Finding 47 measured latency-bound. It belongs in §4 as a
+structural exploration with a user decision attached, not at the head of the exploit queue.
 
 ## 4. Phase-C explorations (structural)
 
@@ -225,6 +235,10 @@ the MTP heads are trained with the noise token as placeholder, so real tokens ar
 - Persistent-kernel / megakernel decode: one launch per token instead of ~600.
 - Fusing the entire attention glue chain (`act_quant`/`rmsnorm`/`rope`/KV-write) into layer-scope kernels.
 - Cluster/DSMEM (Thor has them; GB10 does not) for cross-block reduction in HC and the router.
+- **Intra-expert activation sparsity (A1)**, if and only if the user accepts a lossy change: gate on
+  w1's own output, skip w3 rows for inactive neurons (w2 is unskippable at MXFP4 block-32
+  granularity), and *first* answer the prior question — whether removing bytes moves a phase that
+  ncu says is latency-bound. Needs an accuracy harness this repo does not have.
 
 ---
 

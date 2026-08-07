@@ -7,11 +7,22 @@
 #
 # AUTHORITY THIS SCRIPT GRANTS THE AGENT (read this before enabling the timer):
 #   - edit sources under this repo, build, run unit gates, run ONE full-model measurement
-#   - commit LOCALLY
-# AUTHORITY IT DOES NOT GRANT:
-#   - `git push` (the observer pushes after review — an autonomous loop must not publish)
-#   - anything outside this repo except the model dir (read-only) and ~/*.log
-#   - a second concurrent full-model run (scripts/run_model.sh already flocks)
+#   - commit LOCALLY, and run sudo (needed for drop_caches between model loads)
+# AUTHORITY IT DOES NOT GRANT — enforced by `.claude/settings.json` deny rules, which are honoured
+# even under bypassPermissions (verified empirically: sudo runs, `git push` is refused):
+#   - `git push` / `git remote` (the observer publishes after review)
+#   - `crontab` (the loop must not reschedule itself), shutdown/reboot/systemctl, mkfs/dd
+#   - `curl`/`wget` (research goes through WebFetch, which is auditable in the transcript)
+#   - any write under the model directory
+#   - any edit to `.claude/settings.json` or `scripts/flywheel*.sh` — the loop cannot widen its
+#     own permissions or disable its own guards
+#
+# PERMISSION MODE. The first cron-fired cycle ran under `acceptEdits` and produced 13 tool errors in
+# ~20 calls: compound commands ("the following parts require approval"), reads of /proc (outside the
+# allowed working directories), and outright "this command requires approval". An unattended agent
+# cannot answer a prompt, so every one of those is a dead turn. bypassPermissions + a deny list
+# moves the boundary from "ask about everything" to "refuse a named few", which is the only shape
+# that works headless.
 #
 # HALT CONDITIONS — the loop stops itself and waits for a human:
 #   - any unit gate fails
@@ -57,6 +68,14 @@ if [ "$AVAIL" -lt 110 ]; then sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >
 AVAIL=$(free -g | awk '/^Mem:/{print $7}')
 [ "$AVAIL" -ge 105 ] || halt "only ${AVAIL} GiB available after reclaim; a full-model load needs ~105"
 
+# Prove the environment before spending agent turns in it. Cycle 1 burned a whole iteration
+# discovering Bash was not approved; that class of failure is checked here, once, cheaply.
+if ! bash "$ROOT/scripts/flywheel_selftest.sh" > "$ROOT/.flywheel_selftest.txt" 2>&1; then
+    tail -30 "$ROOT/.flywheel_selftest.txt"
+    halt "environment selftest failed — see .flywheel_selftest.txt"
+fi
+log "selftest PASS"
+
 CYCLE=$(python3 -c "import json;print(json.load(open('$STATE'))['cycle'])")
 log "cycle $CYCLE starting; ${AVAIL} GiB free; HEAD $(git rev-parse --short HEAD)"
 BEFORE=$(git rev-parse HEAD)
@@ -81,6 +100,20 @@ THEN follow the phase in FLYWHEEL_STATE.json:
                arXiv API directly (export.arxiv.org/api/query, sorted by submittedDate), convert
                hits to levers with falsification tests, refill the queue, go to A next iteration.
 
+YOUR JOB IS CUDA, MEASUREMENT AND RESEARCH. NOTHING ELSE. The harness has already, before you
+started: verified nvcc/g++/the GPU/a trivial sm_110a compile-and-launch, built and run every unit
+gate, reclaimed page cache, confirmed ~105+ GiB is free, and confirmed no other model process is
+running. It will commit your work after you exit. So:
+  - Do NOT run git (no add, commit, push, checkout). Write `.flywheel_commit_msg`; the harness does
+    the rest. Read-only `git log`/`git diff`/`git show` for context is fine and allowed.
+  - Do NOT run sudo, touch the crontab, or manage processes. If you think you need to, you have
+    misread the task — say so in the journal and halt instead.
+  - Do NOT re-verify the toolchain. It was checked this minute; .flywheel_selftest.txt has the
+    output if you want to see it.
+Spend every turn on: reading the profile, writing a kernel or a gate, running a measurement,
+reading a paper. If you find yourself debugging the environment, something is wrong with the
+HARNESS — record that in the journal and halt, so it gets fixed once instead of every cycle.
+
 HARD INVARIANTS — every one of these was paid for with a wrong result in this project:
  1. ONE change per measurement. If you change two things you have measured neither.
  2. Gate BEFORE you measure speed. Unit gate on the exact kernel at the exact M decode uses.
@@ -94,6 +127,15 @@ HARD INVARIANTS — every one of these was paid for with a wrong result in this 
  5. All full-model runs go through scripts/run_model.sh. Exactly ONE per iteration. The canonical
     prompt is "0,671,6102,294,8760,344" and the expected first token is 11111. Use NGEN0=60 for
     speculation numbers — 24-token runs understate steady state by ~10%.
+    A run takes 10-20 minutes and run_model.sh DETACHES, so the launching command returns at once
+    and your Bash tool caps at 600s. Do not try to wait in one call, and do not poll with bare
+    sleeps. Use the helper, which is built for exactly this and tells you which case you are in:
+        scripts/run_model.sh ~/cycleN.log ./build/decode ~/models/DeepSeek-V4-Flash-0731-REAP \
+            "0,671,6102,294,8760,344" 8 "" 60
+        scripts/await_log.sh ~/cycleN.log 'SPEC-DECODE|GATE FAIL|cuda .*:'
+    await_log.sh exits 0 = found (it prints the lines), 2 = still running so CALL IT AGAIN,
+    3 = the run died without matching (it prints the tail; treat as a failure and investigate).
+    Expect to call it 2-3 times. Each call is one turn; you have plenty.
  6. Report bands, not points. Cross-run noise is +/-1%. A within-run A/B (sweep several settings in
     one checkpoint load, as DSV4_BLKSWEEP does) is worth far more than several separate runs.
  7. If a gate fails or a run prints GATE FAIL: STOP. Set halt=true with the reason in
@@ -108,7 +150,8 @@ FINISH BY, in this order:
   a. appending your result to LOOP_LOG.md — including negative results, WITH the numbers
   b. updating FLYWHEEL_STATE.json: cycle+1, phase, queue, counters, last_result, and
      consecutive_sub_half_pct (increment if this lever moved end-to-end < 0.5%, else reset to 0)
-  c. `git add -A && git commit` with a message that states what was measured and what it means
+  c. writing your commit message to `.flywheel_commit_msg` (first line a subject, then a blank
+     line, then the body). THE HARNESS COMMITS FOR YOU — do not run git yourself.
   d. appending 5-15 lines to FLYWHEEL_JOURNAL.md: what you did, the number, what you concluded,
      and what the next iteration should do. This is what the human observer reads.
 
@@ -128,7 +171,7 @@ LIVE="$ROOT/.flywheel_last_run.jsonl"
 set +e
 claude -p "$PROMPT" \
   --output-format stream-json --verbose --include-partial-messages \
-  --permission-mode acceptEdits \
+  --permission-mode bypassPermissions \
   --max-turns "$TURNS" \
   --add-dir "$HOME" \
   --append-system-prompt "You are running headless and unattended on a Jetson Thor. Never run git push. Never run a second full-model process. Prefer stopping and recording a halt over guessing." \
@@ -144,6 +187,23 @@ for ln in open(sys.argv[1]):
         except Exception: pass
 PY
 log "agent exited rc=$RC"
+
+# ---- commit on the agent's behalf --------------------------------------------------------------
+# Clerical work belongs to the harness, not to the agent's turn budget. The agent writes a message;
+# we stage and commit. Nothing is pushed — that stays a human decision.
+if [ -n "$(git status --porcelain)" ]; then
+    MSG="$ROOT/.flywheel_commit_msg"
+    if [ -s "$MSG" ]; then
+        git add -A
+        git -c user.name="flywheel" -c user.email="flywheel@localhost" commit -q -F "$MSG" \
+            -m "" --cleanup=verbatim 2>/dev/null \
+          || git add -A && git commit -q -F "$MSG"
+        log "committed cycle $CYCLE: $(head -1 "$MSG")"
+        : > "$MSG"
+    else
+        log "WARNING: working tree dirty but no .flywheel_commit_msg — leaving uncommitted for review"
+    fi
+fi
 
 # ---- postflight ------------------------------------------------------------------------------
 # Enforce the invariants the agent was asked to respect, rather than trusting that it did.

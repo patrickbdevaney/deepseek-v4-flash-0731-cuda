@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(crontab:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(systemctl:*)",
+      "Bash(mkfs:*)",
+      "Bash(dd:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf /home/patrickd/models:*)",
+      "Bash(sudo rm:*)",
+      "Write(/home/patrickd/models/**)",
+      "Edit(/home/patrickd/models/**)",
+      "Write(//home/patrickd/deepseek-v4-flash-0731-cuda/.claude/**)",
+      "Edit(//home/patrickd/deepseek-v4-flash-0731-cuda/.claude/**)",
+      "Write(//home/patrickd/deepseek-v4-flash-0731-cuda/scripts/flywheel*.sh)",
+      "Edit(//home/patrickd/deepseek-v4-flash-0731-cuda/scripts/flywheel*.sh)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git remote:*)",
+      "Bash(git checkout:*)",
+      "Bash(git reset:*)",
+      "Bash(git rebase:*)",
+      "Bash(git clean:*)"
+    ]
+  }
+}

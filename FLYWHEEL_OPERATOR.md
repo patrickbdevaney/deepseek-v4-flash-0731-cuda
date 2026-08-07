@@ -13,6 +13,22 @@ The split is the point: **the thing that makes changes cannot publish them, and 
 judges them cannot make them.** An autonomous loop that both edits and pushes has no check on a
 plausible-but-wrong result, and this project has produced several (Findings 33, 39, 47).
 
+## The worker needs Bash permission, and by default it does not have it
+
+**Read this before the first cycle.** The table above says the worker's authority is
+"edit / build / gate / ONE full-model run / commit locally". `scripts/flywheel.sh` passes
+`--permission-mode acceptEdits`, which grants only the first of those: it auto-approves **file
+edits** and leaves **Bash** to be approved interactively — and there is nobody there to approve it.
+Cycle 1 (2026-08-07) hit this and halted: `g++`, `./build/*`, `scripts/run_model.sh` and `git add`
+were all denied, while read-only inspection (`ls`, `grep`, `git status`) ran fine.
+
+This is the worst-shaped failure the loop has, because it is **silent and asymmetric**: the executor
+keeps full ability to write findings and loses all ability to verify them. See Finding 50.
+
+Grant the worker an allowlist covering `g++`, `nvcc`, `./build/*`, `scripts/*.sh` and `git`
+(*not* `git push`), or launch it with permissions skipped, and confirm before trusting a cycle:
+a cycle that reports a number it could not have run is the one thing the observer must catch.
+
 ## Stopping it
 
 ```bash

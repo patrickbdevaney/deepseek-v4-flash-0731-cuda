@@ -2225,3 +2225,104 @@ The difference is the generation length: `NGEN0=60` gives 18 verifies and mean 3
 where the 24-token runs gave 9 verifies and 3.00. **The short run was dominated by the early,
 less-repetitive part of the sequence and understated steady-state speculation by ~10%.** All
 speculative numbers before this one are low by roughly that much; base AR is unaffected.
+
+---
+
+## Finding 50 — cycle 1 measured nothing: the executor session cannot execute
+
+**HALT. No number in this entry, because no number could be produced.** The autonomous executor
+runs under `--permission-mode acceptEdits` (`scripts/flywheel.sh:131`). That mode auto-approves
+*file edits*. It does not auto-approve **Bash**. Read-only inspection (`ls`, `grep`, `sed`, `git
+status`, `git log`) runs sandboxed and is allowed; everything that writes or executes is denied:
+
+| attempted | result |
+|---|---|
+| `g++ -O2 -std=c++17 -I include tools/encode_prompt.cpp -o build/encode_prompt` | denied |
+| `g++ --version` | denied |
+| `./build/inspect_weights` | denied |
+| `git add -A` | denied |
+
+So this cycle could not build, could not run a unit gate, could not run `scripts/run_model.sh`, and
+**could not commit**. The artifacts below are written to the working tree and are UNCOMMITTED; a
+human must commit them, or re-run the loop with Bash permission and let cycle 2 do it.
+
+The design consequence is worth stating plainly, because it makes the loop's central promise void:
+**an executor that can edit files but not run them can still write findings — which is the single
+most dangerous failure mode this project has** (Finding 33: a config written up that had never been
+executed). The only safe behaviour available is to produce no numbers and halt, which is what this
+entry does. The fix is a permission decision, not a code change: give the executor an allowlist for
+`g++`/`nvcc`/`./build/*`/`scripts/*.sh`/`git`, or launch it with permissions skipped.
+
+### What could still be settled without executing: two queue dispositions, from code evidence
+
+Neither of these is a measurement, and neither is written as one. Both are *existence* questions,
+which source inspection can answer with the same authority as a run.
+
+**A6 — CUTLASS `reg_reconfig.h` missing `1100` clause — RETIRED, expected end-to-end value zero.**
+The lever is real upstream (`setmaxnreg` compiles out on Thor → register spills → 1.74x on FMHA,
+issue #3056 / PR #3308). It cannot pay here because **no CUTLASS kernel is ever launched by this
+engine.** Evidence:
+
+- `grep -rln cutlass --include=*.cu --include=*.h --include=*.cuh .` (excluding `ref/`) matches
+  exactly two files: `include/cutlass_moe.h` and `kernels/cutlass_moe.cu`.
+- The only callers of `cutlass_nvfp4_gemm` are inside `kernels/cutlass_moe.cu` itself (lines 136,
+  177 — its own self-tests). No engine translation unit includes `cutlass_moe.h`.
+- `scripts/build.sh` links `build/cutlass_moe.o` and its comment says "for the TC verify path", but
+  the verify path calls `block_verify_step` / `cblock_verify_step`, not the CUTLASS wrapper. The
+  object is linked and dead.
+- The only `setmaxnreg` in the tree is `tools/cap_probe.cu:104`, a capability probe.
+
+`reg_reconfig.h` is a header consumed only when CUTLASS templates are compiled, and only
+`cutlass_moe.cu` compiles them. Patching it changes one object file that never runs. **Retired for
+the decode path; it becomes live again only if the engine ever routes a GEMM through CUTLASS.**
+
+**A1 — intra-expert activation sparsity — REMOVED from the Phase-A queue, re-scoped to Phase C and
+to the user.** Three separate reasons, none of which needs a run:
+
+1. **It is not lossless.** Skipping neurons changes the logits. The queue entry's "runtime-only, no
+   artifact change" is true about the *weights* and false about the *outputs*. Every other lever
+   adopted this cycle-set was defended by exact-output equality (Finding 49 verified byte-identical
+   sequences). There is no accuracy harness in this repo to replace that argument with, and no
+   published sparsity-vs-accuracy curve for this checkpoint. That makes it a quality-cost decision,
+   which invariant 10 assigns to the user, not to the executor.
+2. **The MXFP4 layout bounds the realizable saving to ~1/3 of expert bytes, and our own notes
+   already said so.** `research/MOE_DECODE.md:98` lists it under "levers that are DEAD for us:
+   MXFP4's 32-element blocks make sub-block skipping impossible without breaking the scale layout."
+   Concretely: neuron *j* is a contiguous **row** of w1/w3 (skippable) but a **column** of w2, i.e.
+   an index inside w2's 32-element K-blocks (not skippable without unaligned scales). And the gate
+   that decides which neurons are inactive is w1's own output, so w1 must be read in full.
+   Only **w3** is skippable — one of the three expert matrices. `research/BYTE_REDUCTION.md`'s
+   +11–17% is priced against all 4,531 MB of expert bytes and does not carry that derate.
+3. **The ranking model says byte reduction is the wrong axis for this phase.** §2 rule 1: byte
+   reduction only pays on a bandwidth-bound kernel. Finding 47 measured the MoE phase
+   latency-bound — 25% memory throughput, 84% of stall cycles on `long_scoreboard`. A1 is a
+   pure byte-reduction lever aimed at the phase we have already measured as not byte-limited. This
+   is the exact shape of Finding 32 (BF16 compressor: ranked #1 at +5%, measured −3%).
+
+### The artifact this cycle did produce: `tools/encode_prompt.cpp` (UNBUILT, UNGATED)
+
+R1 — re-fit the adaptive-verify threshold across `scripts/prompt_suite.json` — is the queue entry
+Finding 49 itself asked for, and it is blocked on something mundane: `build/decode` takes token ids
+on argv, `prompt_suite.json` holds chat text for a *different* project (`gemma4-cuda-server`), and
+**inventing token ids is precisely the class of mistake the invariants forbid.** So the ids have to
+come from the checkpoint's own tokenizer.
+
+`tools/encode_prompt.cpp` is 45 lines that load `<ckpt>/tokenizer.json` via the in-tree
+`include/tokenizer.h` and print an argv-ready id list. It **gates itself first**: it encodes
+`The capital of France is` and refuses to print anything unless that returns
+`671,6102,294,8760,344`, the canonical prompt recorded in `scripts/run_model.sh`. That gate matters
+more than usual here, because `include/tokenizer.h` is a gemma-4 BPE tokenizer carried over from
+this codebase's ancestor and its hard-coded special ids (`bos_id=2`, `turn_start=105`) do **not**
+obviously match a DeepSeek checkpoint whose canonical prompt starts with id 0.
+
+**It has never been compiled and never been run. Its gate has never fired in either direction.**
+Cycle 2's first action should be to build it and run the gate — and if the gate FAILS, that is a
+result, not a setback: it would mean the in-tree tokenizer does not match this checkpoint, and R1
+needs a different id source before it can be attempted at all.
+
+R1 also needs a second, larger piece that this cycle did **not** write, deliberately: `build/decode`
+prefills exactly one prompt (`argv[2]`), so a multi-prompt within-run A/B needs the `DSV4_BLKSWEEP`
+entry syntax extended with a prompt index and the `bsi` loop re-prefilling per prompt (`PS`, `s`,
+`ids` become per-point; `mh_pre` must be sized at the longest prompt, it is currently `PS*3*d*4`).
+That is a ~20-line change to `src/decode.cu`, and **committing an uncompilable edit to the
+measurement harness would have been worse than committing nothing.** It is scoped, not done.

@@ -1,5 +1,5 @@
 {
-  "cycle": 0,
+  "cycle": 1,
   "phase": "A",
   "consecutive_sub_half_pct": 3,
   "phaseB_top_history": [
@@ -13,35 +13,49 @@
     "verify_ms": 167.5,
     "source_log": "~/adaptk3.log",
     "measured": "2026-08-07",
-    "note": "spec measured with NGEN0=60 (18 verifies). Short 24-token runs understate it ~10%."
+    "note": "spec measured with NGEN0=60 (18 verifies). Short 24-token runs understate it ~10%. UNCHANGED by cycle 1: cycle 1 measured nothing."
   },
   "queue": [
     {
-      "id": "A1",
-      "what": "intra-expert activation sparsity",
-      "expect": "+11-17%",
-      "risk": "runtime-only, no artifact change"
-    },
-    {
-      "id": "A6",
-      "what": "CUTLASS reg_reconfig.h missing 1100 clause",
-      "expect": "1.74x on FMHA upstream",
-      "risk": "two-line local patch"
+      "id": "R1",
+      "what": "re-fit adaptK across a multi-prompt within-run A/B",
+      "expect": "validate or re-fit the shipped 1.5 default; end-to-end movement expected ~0",
+      "risk": "threshold currently fitted on 18 verifies of ONE prompt",
+      "blocked_on": [
+        "build + run the self-gate in tools/encode_prompt.cpp (never compiled)",
+        "extend DSV4_BLKSWEEP entries with a prompt index; per-point ids/s/PS; size mh_pre at the longest prompt (~20 lines in src/decode.cu)"
+      ]
     },
     {
       "id": "S4",
       "what": "reduced draft vocabulary + d2t",
       "expect": "~5 ms of the 27 ms draft",
       "risk": "needs a principled token subset, NOT an invented one"
+    }
+  ],
+  "retired_this_cycle": [
+    {
+      "id": "A6",
+      "verdict": "retired, expected end-to-end value zero",
+      "evidence": "no engine TU includes cutlass_moe.h; the only callers of cutlass_nvfp4_gemm are inside kernels/cutlass_moe.cu's own self-tests (lines 136,177); build/cutlass_moe.o is linked but never launched; the only setmaxnreg in-tree is tools/cap_probe.cu:104. Code evidence, not a measurement."
     },
     {
-      "id": "R1",
-      "what": "re-fit adaptK across scripts/prompt_suite.json",
-      "expect": "validate the 1.5 default",
-      "risk": "threshold currently fitted on 18 verifies of one prompt"
+      "id": "A1",
+      "verdict": "removed from the Phase-A queue -> Phase C / user decision",
+      "evidence": "not lossless (changes logits, no accuracy harness in-repo); research/MOE_DECODE.md:98 already recorded MXFP4 32-element blocks as blocking sub-block skips, so only w3 of {w1,w2,w3} is skippable; and ranking-model rule 1 says byte reduction does not pay on the MoE phase, which Finding 47 measured latency-bound (25% memory throughput, 84% long_scoreboard)."
     }
   ],
   "halt": false,
   "halt_reason": "",
-  "last_result": null
+  "last_result": {
+    "cycle": 1,
+    "lever": "A1 (queue[0]) -> disposed by inspection; A6 likewise; R1 prepared, not run",
+    "measured": null,
+    "why_null": "no execute permission; invariant 3 forbids writing a number that was not run this iteration",
+    "artifacts": [
+      "LOOP_LOG.md Finding 50",
+      "tools/encode_prompt.cpp (NEW, unbuilt, ungated)"
+    ]
+  },
+  "counter_note": "consecutive_sub_half_pct left at 3 deliberately: cycle 1 measured no lever, so neither the increment nor the reset rule applies. The observer should note it is arguably stale in the other direction too - the last MEASURED lever (Finding 49) moved +2.1%, which by the reset rule would put it at 0. It was seeded at 3 by hand. Both clauses of the Phase-D trigger currently read as satisfied, but Phase D ran on 2026-08-07 and its output (A1/A6/S4) is what this queue is still consuming, so re-entering D would re-buy information already bought."
 }
