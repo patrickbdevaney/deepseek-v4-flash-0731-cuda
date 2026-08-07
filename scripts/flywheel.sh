@@ -42,6 +42,8 @@ exec 9>"$LOCK"
 flock -n 9 || { log "another iteration is running; exiting"; exit 0; }
 
 # ---- preflight -------------------------------------------------------------------------------
+# Kill switch that needs no JSON edit and no running session: `touch FLYWHEEL_STOP`.
+[ -f "$ROOT/FLYWHEEL_STOP" ] && { log "FLYWHEEL_STOP present; exiting"; exit 0; }
 [ -f "$STATE" ] || halt "no FLYWHEEL_STATE.json"
 python3 -c "import json;s=json.load(open('$STATE'));exit(1 if s.get('halt') else 0)" \
   || { log "state is halted: $(python3 -c "import json;print(json.load(open('$STATE')).get('halt_reason',''))")"; exit 0; }
