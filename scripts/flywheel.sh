@@ -169,13 +169,17 @@ LIVE="$ROOT/.flywheel_last_run.jsonl"
 : > "$CYCLE_JSONL"; ln -sf "$CYCLE_JSONL" "$LIVE"
 
 set +e
+# `< /dev/null` is load-bearing, not tidiness. Without it `claude -p` waits on stdin ("no stdin
+# data received in 3s"), and a detached or cron-launched process has no terminal to supply one --
+# the stream then aborts mid-turn with terminal_reason=aborted_streaming and
+# "[Request interrupted by user]" in the transcript. It cost two whole cycles to find.
 claude -p "$PROMPT" \
   --output-format stream-json --verbose --include-partial-messages \
   --permission-mode bypassPermissions \
   --max-turns "$TURNS" \
   --add-dir "$HOME" \
   --append-system-prompt "You are running headless and unattended on a Jetson Thor. Never run git push. Never run a second full-model process. Prefer stopping and recording a halt over guessing." \
-  >> "$CYCLE_JSONL" 2>&1
+  >> "$CYCLE_JSONL" 2>&1 < /dev/null
 RC=$?
 set -e
 # plain-text mirror of the final answer, for grepping without the renderer
