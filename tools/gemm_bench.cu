@@ -30,6 +30,8 @@ using namespace dsv4;
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 
 extern bool g_tc_fp8;
+void fp8_set_gemv_mk_maxm(int m);
+void tc_fp8_set_smem(int on);
 
 static void* dalloc(size_t n){ void* p; CU(cudaMalloc(&p,n)); CU(cudaMemset(p,0x11,n)); return p; }
 
@@ -236,12 +238,15 @@ int main(int argc, char** argv) {
         for (int i=0;i<NCOPY;++i){ W[i]=(uint8_t*)dalloc(wb); S[i]=(float*)dalloc((size_t)(N/128+1)*(K/128+1)*4); }
         printf("\n--- wq_b [32768,1024]: HOT (one weight, reused) vs COLD (%d rotating copies) ---\n", NCOPY);
         printf("%-14s %9s %9s %9s %9s %9s %8s\n","","M=1","M=2","M=3","M=5","M=8","M1->M2");
+        // The A/B knob. This block USED to `setenv("GEMV_MK",...)`, which nothing has read since the
+        // dispatch was rewritten — so the "COLD+GEMV_MK" row was measuring the default path and the
+        // "GEMV is a wash at M=5" number in fp8_block_gemm.cu was never actually a GEMV measurement.
+        //   cold 0: HOT, default dispatch      cold 1: COLD, m16 tile forced for all M>=2
+        //   cold 2: COLD, GEMV forced for M=2..8   <- the row the crossover comes from
         for (int cold=0; cold<3; ++cold){
-            // cold==2: same cold rotation but with the M=K GEMV the prior project rejected on a
-            // HOT/in-situ A/B (334->362 ms). If the m16 tile is re-reading B ~3x when cold, a GEMV
-            // that reads each weight row exactly once should now win.
-            if (cold==2) setenv("GEMV_MK","1",1); else unsetenv("GEMV_MK");
-            printf("%-14s", cold==0?"HOT ":(cold==1?"COLD":"COLD+GEMV_MK"));
+            if (cold==1) { setenv("TC_MK","1",1); fp8_set_gemv_mk_maxm(0); }
+            else         { unsetenv("TC_MK");     fp8_set_gemv_mk_maxm(cold==2 ? 8 : 4); }
+            printf("%-14s", cold==0?"HOT ":(cold==1?"COLD m16":"COLD GEMV"));
             double t[5]; int idx=0;
             for (int M : {1,2,3,5,8}){
                 uint8_t* A=(uint8_t*)dalloc((size_t)M*K); float* as=(float*)dalloc((size_t)M*(K/128)*4);
@@ -255,6 +260,46 @@ int main(int argc, char** argv) {
             printf(" %7.2fx\n", t[1]/t[0]);
         }
         for (int i=0;i<NCOPY;++i){ CU(cudaFree(W[i])); CU(cudaFree(S[i])); }
+    }
+
+    // ---- COLD crossover across the REAL verify shapes ----
+    // The wq_b sweep above is one shape and a big one. The dispatch cutoff has to hold for every
+    // shape decode issues, and the small-N ones have far less parallelism to hide latency with:
+    // N=512 gives only 8 blocks of the 64-row smem tile, i.e. 8 of 20 SMs. Print achieved GB/s so an
+    // under-occupied shape is visible as a low number rather than inferred from a ratio.
+    {
+        struct S2 { int N,K; const char* nm; } shp[] = {
+            {1024,4096,"wq_a   [1024,4096]"}, {4096,1024,"wq_b   [4096,1024]"},
+            { 512,4096,"wkv    [512,4096]"},  {4096,4096,"wo_b   [4096,4096]"},
+            {2048,4096,"sw1/3  [2048,4096]"}, {4096,2048,"sw2    [4096,2048]"},
+        };
+        printf("\n--- COLD crossover on the real verify shapes: ms (GB/s) ---\n");
+        printf("%-20s %-6s %14s %14s %14s %14s\n","shape","M","GEMV","m16 plain","m16+smem","m16+smem B+4");
+        for (auto& s : shp){
+            const size_t wb=(size_t)s.N*s.K;
+            const int NC = (int)std::max<size_t>(4, (size_t)(400ull<<20)/wb);   // >=400 MB rotation
+            std::vector<uint8_t*> W(NC); std::vector<float*> SS(NC);
+            for(int i=0;i<NC;++i){ W[i]=(uint8_t*)dalloc(wb+16); SS[i]=(float*)dalloc((size_t)(s.N/128+1)*(s.K/128+1)*4); }
+            for (int M : {1,2,3,5,8}){
+                uint8_t* A=(uint8_t*)dalloc((size_t)M*s.K); float* as=(float*)dalloc((size_t)M*(s.K/128)*4);
+                float* C=(float*)dalloc((size_t)M*s.N*4);
+                double t[4];
+                for (int variant=0; variant<4; ++variant){
+                    // 0: GEMV (m1 kernel at M=1, mkT at M>=2)   1: m16 register   2: m16 smem-staged
+                    if(variant==0){ setenv("TC_MK","",0); unsetenv("TC_MK"); fp8_set_gemv_mk_maxm(8); }
+                    else          { setenv("TC_MK","1",1); fp8_set_gemv_mk_maxm(0); }
+                    tc_fp8_set_smem(variant>=2);
+                    int c=0; const int boff = (variant==3) ? 4 : 0;   // real weights are only 4-byte aligned
+                    t[variant]=timeit([&]{ int i=c++%NC; fp8_block_gemm(C,A,as,W[i]+boff,SS[i],M,s.N,s.K,0); }, 24);
+                }
+                unsetenv("TC_MK"); fp8_set_gemv_mk_maxm(4); tc_fp8_set_smem(1);
+                printf("%-20s M=%-4d", s.nm, M);
+                for(int v=0;v<4;++v) printf(" %8.4f(%3.0f)", t[v], wb/t[v]/1e6);
+                printf("\n");
+                CU(cudaFree(A)); CU(cudaFree(as)); CU(cudaFree(C));
+            }
+            for(int i=0;i<NC;++i){ CU(cudaFree(W[i])); CU(cudaFree(SS[i])); }
+        }
     }
 
     // ---- the ATTENTION GLUE (LOOP_LOG Finding 15 closure): act_quant / rmsnorm / rope ----

@@ -16,6 +16,7 @@ bool g_inited = false;
 const char* kName[DP_N] = {
     "hc_pre  (attn)", "rmsnorm (attn)", "ATTENTION", "hc_post (attn)",
     "hc_pre  (ffn)",  "rmsnorm (ffn)",  "MoE",       "hc_post (ffn)", "kv xin copy",
+    "embed+expand",   "hc_head+norm",   "lm_head",   "argmax+D2H",
     "  attn:q_proj",  "  attn:kv_write", "  attn:sparse", "  attn:ogroup", "  attn:misc",
     "  cattn:q_proj", "  cattn:compress", "  cattn:indexer", "  cattn:sparse", "  cattn:ogroup",
     "  moe:router", "  moe:group", "  moe:w1w3", "  moe:act", "  moe:w2", "  moe:combine", "  moe:shared",
@@ -62,7 +63,7 @@ void dprof_report(const char* tag){
     // TOP-LEVEL ids only. The DP_A_*/DP_C_*/DP_M_* marks are NESTED inside DP_ATTN and DP_MOE, so
     // summing everything double-counts them and every "%" column shrinks by however much detail
     // happens to be instrumented. Percentages are of the real step.
-    double tot = 0; for (int i = 0; i <= DP_KV_XIN; ++i) tot += sum[i];
+    double tot = 0; for (int i = 0; i <= DP_ARGMAX; ++i) tot += sum[i];
     printf("\n[dprof] %s — verify step by sub-op, summed over all layers (%d marks)\n", tag, g_used);
     printf("[dprof] %-16s %10s %8s %10s\n", "phase", "ms", "%", "calls");
     for (int i = 0; i < DP_N; ++i)

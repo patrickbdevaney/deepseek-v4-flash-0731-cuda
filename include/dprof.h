@@ -17,6 +17,10 @@
 enum DProfId {
     DP_HC_PRE_ATTN = 0, DP_RMSNORM_ATTN, DP_ATTN, DP_HC_POST_ATTN,
     DP_HC_PRE_FFN, DP_RMSNORM_FFN, DP_MOE, DP_HC_POST_FFN, DP_KV_XIN,
+    // OUTSIDE the layer loop. Everything above sums to the "TOTAL" the report prints, and that
+    // total has been ~20 ms short of the measured step for the whole optimisation loop — the
+    // largest single unexamined block in the engine, simply because nothing timed it.
+    DP_EMBED, DP_HEAD_HC, DP_LM_HEAD, DP_ARGMAX,
     // second level: inside the attention phase (Finding 15 narrowed the M>=2 step to ATTENTION)
     // NOTE: these live in mla_decode.cu, which serves only the 2 pure-sliding (ratio==0) layers.
     // The other 41 go through compressed_decode.cu and were invisible here — extrapolating a

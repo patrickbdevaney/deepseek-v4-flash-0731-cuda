@@ -390,6 +390,15 @@ int main(int argc, char** argv){
                     if(r==0) block_verify_step (b,a,d_ids+PS,BW[L],PS,K,HC_SINKHORN_ITERS,EPS,KV[L]);
                     else     cblock_verify_step(b,a,d_ids+PS,CW[L],PS,K,HC_SINKHORN_ITERS,EPS,KV[L]);
                     cudaEventRecord(ev[L+1]); std::swap(a,b); }
+                // The head chain runs once per step and had never been timed. It is not in the
+                // per-layer event split above (TOT stays layer-only, so the c_v column keeps
+                // meaning what it has always meant); dprof reports it as its own top-level rows.
+                dprof_begin(DP_HEAD_HC,0);
+                hc_head(collK,a,hc_fn,hc_sc,hc_bs,K,hc,d,HC_EPS); rmsnorm(collK,collK,norm_w,K,d,EPS,true,0);
+                dprof_end(DP_HEAD_HC,0);
+                dprof_begin(DP_LM_HEAD,0);
+                gemm_bf16w(logK,collK,head_bf,K,VOCAB,d,0);
+                dprof_end(DP_LM_HEAD,0);
                 CU(cudaDeviceSynchronize());
                 { char tg[32]; snprintf(tg,sizeof tg,"K=%d",K); dprof_report(tg); }
                 double tot=0, ts=0, t128=0, t4=0;

@@ -156,6 +156,29 @@ __global__ void fp8_gemv_mkT_kernel(float* __restrict__ C, const uint8_t* __rest
         for(int o=16;o>0;o>>=1) a+=__shfl_down_sync(0xffffffff,a,o);
         if(lane==0) C[(size_t)m*N+n]=a; }
 }
+// NEGATIVE RESULT, retired with a measurement (Finding 41). A shared-A variant of the above —
+// decode A once per block into smem with the activation scale folded in, so the inner loop is one
+// fp8 decode of B plus M fmas — was SLOWER at every M: 0.347/0.438/0.621/0.940 ms at M=2/3/5/8 on
+// wq_b [32768,1024] vs 0.347/0.438/0.517/0.770 for the register version. The A decode is not the
+// binding constraint; a float4 smem read per m per k is 16 bytes where the fp8 global read was 4,
+// i.e. it trades L1 traffic for 4x the smem traffic. Do not re-queue it.
+// Largest M for which the small-M GEMV is preferred over the m16 tile. The templated kernels exist
+// up to M=8; whether they WIN up to M=8 is a measurement, not a guess, so the cutoff is a tunable
+// with a measured default (see OPTIMIZATION_LOG, "fp8 small-M crossover"). GEMV_MK_MAXM=<n> in the
+// environment moves it for A/B; TC_MK=1 disables the path entirely.
+// MEASURED DEFAULT = 1, i.e. the GEMV is used at M=1 only. Cold, on the six shapes decode issues,
+// the smem-staged m16 tile beats this GEMV at every M>=2 — at M=5 by 1.7-2.9x, and at M=2..4 (where
+// the GEMV used to be the default) by 1.5-2.3x. The GEMV is exactly linear in M; the tile is flat.
+// Kept reachable via GEMV_MK_MAXM=<n> because it is the only non-mma path at M>=2 and therefore the
+// fallback if an mma result is ever in doubt.
+static int g_gemv_mk_maxm = -1;
+void fp8_set_gemv_mk_maxm(int m){ g_gemv_mk_maxm = m > 8 ? 8 : m; }   // gemm_bench sweeps this
+static int gemv_mk_maxm(){
+    if (g_gemv_mk_maxm < 0) { const char* e = getenv("GEMV_MK_MAXM"); g_gemv_mk_maxm = e ? atoi(e) : 1;
+                              if (g_gemv_mk_maxm > 8) g_gemv_mk_maxm = 8; }
+    return g_gemv_mk_maxm;
+}
+#define GEMV_MK_MAXM_DISPATCH gemv_mk_maxm()
 // dispatch to the right instantiation; returns false if M is outside the templated set.
 static bool fp8_gemv_mkT(float* C, const uint8_t* A, const float* as, const uint8_t* B, const float* bs,
                          int M, int N, int K, cudaStream_t s){
@@ -196,10 +219,12 @@ void fp8_block_gemm(float* C, const uint8_t* A_fp8, const float* a_s,
     // reference/negative result; the M=1 GEMV above still wins (trivial compute at M=1). Default OFF for M>=2.
     // small-M: the templated GEMV reads B fully coalesced, which beats the m16 tile on COLD
     // weights by ~3x (Finding 28). TC_MK=1 forces the old m16 path for A/B.
-    // Threshold from the COLD A/B (gemm_bench): GEMV beats the m16 tile 2.0x at M=2 and 1.49x at
-    // M=3, is a wash at M=5 (1.04x) and LOSES at M=8 (0.72x) — it does M scalar dots per weight
-    // read, so it goes ALU-bound as M grows. Adopt only where it clearly wins.
-    if (g_tc_fp8 && M >= 2 && M <= 4 && (K % 128 == 0) && getenv("TC_MK")==nullptr) {
+    // Threshold from the COLD A/B (gemm_bench). This USED to read "GEMV beats the m16 tile 2.0x at
+    // M=2 ... a wash at M=5" and set the cutoff at M=4. That comparison was against the m16 tile
+    // BEFORE its B path was fixed (Finding 41); against the smem-staged tile the GEMV loses at every
+    // M>=2 on every shape, so the cutoff is now M=1. Left in place because the dispatch is what the
+    // env knob moves, and because M=1 still belongs to the GEMV above.
+    if (g_tc_fp8 && M >= 2 && M <= GEMV_MK_MAXM_DISPATCH && (K % 128 == 0) && getenv("TC_MK")==nullptr) {
         if (fp8_gemv_mkT(C, A_fp8, a_s, B_fp8, b_s, M, N, K, stream)) return; }
     if (g_tc_fp8 && (N % 8 == 0) && (K % 128 == 0)) { tc_fp8_gemm(C, A_fp8, a_s, B_fp8, b_s, M, N, K, stream); return; }
     dim3 grid(N, M);

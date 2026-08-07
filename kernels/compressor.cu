@@ -4,6 +4,7 @@
 bool g_compressor_bf16 = false;
 #include <cuda_bf16.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include "dscratch.h"
 
 // C[M,N] = A[M,K] @ B[N,K]^T. One warp per (m,n).
@@ -119,12 +120,81 @@ __global__ void gemm_bf16w_kernel(float* __restrict__ C, const float* __restrict
     for (int o = 16; o > 0; o >>= 1) acc += __shfl_down_sync(0xffffffff, acc, o);
     if (lane == 0) C[(size_t)m * N + n] = acc;
 }
+// M=K variant (LOOP_LOG Finding 42). The kernel above is one warp per OUTPUT ELEMENT with
+// grid(N/wpb, M), so at M>1 it reads the whole B matrix M times. For every other caller B is a few
+// MB and nobody noticed; for the lm_head B is [129280, 4096] bf16 = 1.06 GB, and the spec-decode
+// verify calls it at M=BLK. Five passes over 1.06 GB is 5.3 GB of DRAM per verify — more traffic
+// than any single MoE phase — to compute 5 rows.
+//
+// Same shape of fix as ogroup_gemv_mk (Finding 40): one warp per n, load the B row ONCE, dot it
+// against all MM activation rows. B traffic becomes 1x. A is re-read per warp, but A is MM*K*4 =
+// 80 KB at the verify shape — an L2 resident, not DRAM — so it trades 4.2 GB of DRAM for L2 hits.
+// V8=true reads 8 bf16 per B load (float4, needs a 16-byte-aligned base); V8=false reads 2 (one
+// unsigned, needs 4). Both variants exist because B here is a MAPPED tensor whose alignment nothing
+// guarantees — the same fact that crashed the fp8 staging kernel (Finding 41). Falling back to the
+// M=1 kernel when the base is only 4-byte aligned would silently give the M-times-B-traffic
+// behaviour this whole change exists to remove, which is the worst of the three outcomes.
+template<int MM, bool V8>
+__global__ void gemm_bf16w_mk_kernel(float* __restrict__ C, const float* __restrict__ A,
+                                     const __nv_bfloat16* __restrict__ B, int N, int K){
+    const int n = blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5);
+    if (n >= N) return;
+    const int lane = threadIdx.x & 31;
+    const __nv_bfloat16* b = B + (size_t)n*K;
+    float acc[MM];
+    #pragma unroll
+    for (int m=0;m<MM;++m) acc[m]=0.f;
+    if (V8) {
+        const float4* b4 = (const float4*)b;
+        const int n8 = K >> 3;
+        for (int k = lane; k < n8; k += 32) {
+            const float4 bv = b4[k];
+            const __nv_bfloat162* bp = (const __nv_bfloat162*)&bv;
+            const float2 p0=__bfloat1622float2(bp[0]), p1=__bfloat1622float2(bp[1]);
+            const float2 p2=__bfloat1622float2(bp[2]), p3=__bfloat1622float2(bp[3]);
+            #pragma unroll
+            for (int m=0;m<MM;++m){
+                const float4* a4 = (const float4*)(A + (size_t)m*K);
+                const float4 av0 = a4[2*k], av1 = a4[2*k+1];
+                // Same accumulation order as the M=1 vec2==2 path, so a single row is bit-identical.
+                float s0=fmaf(av0.x,p0.x,0.f), s1=fmaf(av0.y,p0.y,0.f), s2=fmaf(av0.z,p1.x,0.f), s3=fmaf(av0.w,p1.y,0.f);
+                s0=fmaf(av1.x,p2.x,s0); s1=fmaf(av1.y,p2.y,s1); s2=fmaf(av1.z,p3.x,s2); s3=fmaf(av1.w,p3.y,s3);
+                acc[m] += (s0+s1)+(s2+s3);
+            }
+        }
+    } else {
+        const __nv_bfloat162* b2 = (const __nv_bfloat162*)b;
+        const int n2 = K >> 1;
+        for (int k = lane; k < n2; k += 32) {
+            const float2 bv = __bfloat1622float2(b2[k]);
+            #pragma unroll
+            for (int m=0;m<MM;++m){
+                const float* a = A + (size_t)m*K;
+                acc[m] += a[2*k]*bv.x + a[2*k+1]*bv.y;
+            }
+        }
+    }
+    #pragma unroll
+    for (int m=0;m<MM;++m){ float a=acc[m];
+        #pragma unroll
+        for (int o=16;o>0;o>>=1) a += __shfl_down_sync(0xffffffff,a,o);
+        if (lane==0) C[(size_t)m*N + n] = a; }
+}
 void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K, cudaStream_t stream) {
     const int wpb = 4, threads = 32*wpb;
     // 2 = float4 (8 bf16) path, 1 = bf16x2 path, 0 = scalar. B rows are 16-byte aligned iff the
     // base is and K*2 is a multiple of 16, i.e. K%8==0; A rows likewise need K*4 %16 == 0.
     const int vec2 = (((K & 7) == 0) && ((((uintptr_t)Bbf16) & 15) == 0) && ((((uintptr_t)A) & 15) == 0)) ? 2
                    : ((((K & 1) == 0) && ((((uintptr_t)Bbf16) & 3) == 0)) ? 1 : 0);
+    // M=K path: only when the vectorised alignment holds (it is the only variant implemented) and
+    // only up to M=8, past which MM accumulators plus 2 float4 A loads per m stop paying.
+    if (vec2 >= 1 && M >= 2 && M <= 8 && getenv("NO_BF16MK")==nullptr) {
+        const int blocks = (N + wpb - 1)/wpb; const bool v8 = (vec2 == 2);
+        #define BFMK(MM) case MM: if(v8) gemm_bf16w_mk_kernel<MM,true ><<<blocks,threads,0,stream>>>(C,A,(const __nv_bfloat16*)Bbf16,N,K); \
+                                  else   gemm_bf16w_mk_kernel<MM,false><<<blocks,threads,0,stream>>>(C,A,(const __nv_bfloat16*)Bbf16,N,K); return;
+        switch(M){ BFMK(2) BFMK(3) BFMK(4) BFMK(5) BFMK(6) BFMK(7) BFMK(8) default: break; }
+        #undef BFMK
+    }
     dim3 grid((N + wpb - 1)/wpb, M);
     gemm_bf16w_kernel<<<grid, threads, 0, stream>>>(C, A, (const __nv_bfloat16*)Bbf16, M, N, K, vec2);
 }

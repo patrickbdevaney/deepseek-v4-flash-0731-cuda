@@ -1710,3 +1710,76 @@ the AR tokens exactly. Base decode unchanged.
 **Still open, same treatment, ~38 ms:** `cattn:q_proj` and `moe:shared` both go through
 `fp8_block_gemm` at M=5 and scale ~3×. `fp8_gemv_mkT_kernel<M>` already exists (Finding 28) — it
 needs to be reached at M=5 for these two call sites.
+
+---
+
+## Finding 41 — the m16 tile was fetching every weight sector for half its payload
+
+`tc_fp8_gemm` is reached for every dense FP8 GEMM at M>=2, which is the whole spec-decode verify.
+Its cost looked like an mma-tiling problem for seven rounds. It was not. On wq_b [32768,1024] with
+12 rotating copies (so nothing is served from cache):
+
+|          | M=1  | M=2  | M=3  | M=5  | M=8  |
+|----------|------|------|------|------|------|
+| HOT      | .145 | .248 | .353 | .153 | .203 |
+| COLD     | .157 | .499 | .505 | .488 | .503 |
+
+**A kernel 3.2x slower cold than hot is neither compute- nor bandwidth-bound — it is fetching bytes
+it does not use.** The B operand was `*(const unsigned*)(B + nn*K + k0 + tid4*4)`: four lanes cover
+16 contiguous bytes of one row, eight rows per warp, strided by K. Sixteen bytes is half a 32-byte
+sector and the other half arrives on a different instruction, so cold, every sector is fetched twice.
+
+Fix: stage a [8W x 128] B tile through shared memory with eight consecutive lanes walking 128
+contiguous bytes of one row, then read mma fragments from smem. The tile is not reused — this buys
+the global access pattern and nothing else. Row stride padded 128 -> 144 B so the eight lane groups
+land on banks 4g..4g+3 (a permutation of all 32) instead of colliding 8 ways on bank 0. Tile height
+is adaptive: at 8 warps, N=512 gives 8 blocks for 20 SMs, so W shrinks until the grid is >= 64.
+
+Cold, on the six shapes decode issues, at M=5: **wo_b 2.9x, sw2 2.5x, wq_b 2.1x, wq_a/wkv 1.7x,
+sw1/3 1.6x** — and flat in M to 16, which is what makes a larger speculation block thinkable.
+
+Three things this cost, all worth keeping:
+
+1. **The comparison that set the old cutoff was never run.** `fp8_block_gemm` capped the small-M
+   GEMV at M<=4 citing "a wash at M=5 (1.04x)" from gemm_bench's COLD+GEMV_MK row. That row called
+   `setenv("GEMV_MK",...)`, and nothing has read `GEMV_MK` since the dispatch was rewritten — it had
+   been measuring the default path against itself. A cached `getenv` cannot be re-read inside one
+   process, so both knobs are now setters (`fp8_set_gemv_mk_maxm`, `tc_fp8_set_smem`).
+2. **Against the fixed tile the GEMV loses everywhere at M>=2**, by 1.5-2.3x even at M=2..4 where it
+   was the default. Cutoff moved to M=1. It is exactly linear in M (0.267/0.356/0.517/0.770 at
+   M=2/3/5/8) because it decodes the same activation bytes once per warp per m per k.
+3. **A shared-A variant of that GEMV was SLOWER at every M** — retired with the measurement. It
+   trades L1 traffic for 4x the smem traffic (float4 per m per k where the fp8 read was 4 bytes).
+
+**And the gate could not have caught the bug that shipped.** The staged uint4 load crashed prefill
+immediately (`misaligned address` -> wo_b): every weight is a pointer into a mapped safetensors file
+and is only 4-byte aligned, while a gate that allocates B with `cudaMalloc` always gets 256. The
+kernel is now templated on alignment (1x uint4, or 4x unsigned covering the same 16 bytes and the
+same cache lines), and the gate runs every shape and M at B+0 *and* B+4. Unaligned costs 10-20% and
+still wins 1.5-2.4x. General rule: **a gate that allocates its own inputs cannot test alignment.**
+
+## Finding 42 — the lm_head was read once per token in the block
+
+`gemm_bf16w` is one warp per OUTPUT ELEMENT with `grid(N/wpb, M)`, so at M>1 it reads all of B M
+times. For every other caller B is a few MB. For the lm_head B is [129280, 4096] bf16 = **1.06 GB**,
+and the verify calls it at M=BLK: 5.3 GB of DRAM per verify to produce five rows — more traffic than
+any single MoE phase. Same fix as ogroup_gemv_mk (Finding 40): one warp per n, B row read once,
+dotted against all MM activation rows. A is re-read per warp but is 80 KB, i.e. L2-resident.
+
+Templated on M=2..8 *and* on B alignment, for the Finding 41 reason: falling back to the M=1 kernel
+when the base is only 4-byte aligned would silently restore the M-times-B-traffic behaviour, which
+is the one outcome worse than either fast path.
+
+## Measured together, full model, canonical prompt
+
+| | before | after |
+|---|---|---|
+| base AR (M=1, control — neither change touches it) | 97.6 ms/tok | **97.4 ms/tok** |
+| M=5 verify, one forward | 253.7 ms | **200.6 ms** |
+| c_v | 2.60 | **2.06** |
+| per-verify cycle (draft + verify) | 310 ms | **250 ms** |
+| speculation vs base | 0.98x | **1.18x** |
+| **spec-decode** | 10.04 tok/s | **12.12 tok/s** |
+
+GATE PASS, verify argmax == AR tokens 5/5, generated token stream byte-identical.
+Acceptance unchanged at 3.00/5 — this is entirely `c_v`, which was the correct target.

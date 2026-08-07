@@ -277,9 +277,11 @@ void compressed_verify_step_strided(float* out, const float* x_full, int pos, in
     const int Kd=N_HEADS*HEAD_DIM;
     float* q; q=(float*)dmalloc((size_t)K*Kd*4);
     build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, eps, stream);
+    dprof_begin(DP_C_COMPRESS,stream);
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){                         // emit groups completing in the block
         compressor_emit_group(comp_kv+(size_t)(*T)*HEAD_DIM, x_full, j/ratio, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,
                               w.mc_norm,w.cc_cos,w.cc_sin, DIM,HEAD_DIM,false,ROPE_DIM,eps,false,stream); ++(*T); }
+    dprof_end(DP_C_COMPRESS,stream);
     int Tf=*T, nwin=pos+K, ntot=nwin+Tf;
     float* kv_all; kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
     CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
@@ -300,11 +302,14 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     const float wscale=rsqrtf((float)ihd)*rsqrtf((float)nH); const float *cosP=a.cosT+(size_t)pos*half, *sinP=a.sinT+(size_t)pos*half;
     float* q; q=(float*)dmalloc((size_t)K*Kd*4);
     build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, eps, stream);
+    dprof_begin(DP_C_COMPRESS,stream);
     // emit main + indexer compressed rows for groups completing in the block
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){ int g=j/ratio; int t=*T;
         compressor_emit_group(comp_kv+(size_t)t*HEAD_DIM, x_full, g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,ROPE_DIM,eps,false,stream);
         compressor_emit_group(idx_ckv+(size_t)t*ihd, x_full, g, ratio, w.idx_c_wkv,w.idx_c_wgate,w.idx_c_ape,w.idx_c_norm,w.cc_cos,w.cc_sin,DIM,ihd,true,ROPE_DIM,eps,true,stream); ++(*T); }
+    dprof_end(DP_C_COMPRESS,stream);
     int Tf=*T, nwin=pos+K;
+    dprof_begin(DP_C_INDEXER,stream);
     // indexer scoring for K queries: qidx = fp4sim(hadamard(rope(idx_wq_b(qr)))) — recompute qr (cheap) at M=K
     uint8_t *iqrq; float *iqrs,*qr2,*qidx,*qtmp,*iw,*iscore;
     // qr again (needed for indexer); recompute from x
@@ -325,6 +330,7 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     int topkc = (w.index_topk<Tf)?w.index_topk:Tf;
     int* dtop; dtop=(int*)dmalloc((size_t)K*topkc*4);
     k_topk_verify<<<K,32,(size_t)Tf*4,stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, nwin);   // device top-k (no D2H sync)
+    dprof_end(DP_C_INDEXER,stream);
     int ntot=nwin+Tf; float* kv_all; kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
     CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
     CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));

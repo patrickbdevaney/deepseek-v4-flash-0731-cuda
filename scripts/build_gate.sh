@@ -15,3 +15,9 @@ g++ -O1 -std=c++17 -I include tests/gate_api.cpp      -o build/gate_api      && 
 nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   tests/gate_ogroup_gemv.cu kernels/mla_attn.cu kernels/dscratch.cu -o build/gate_ogroup_gemv
 echo "built build/gate_ogroup_gemv"
+# Gate TC_FP8_SMEM — the smem-staged FP8 tensor-core GEMM (Finding 41). gate_units checks
+# tc_fp8_gemm at ONE (M,N,K); this sweeps every shape and every M the verify path issues, plus the
+# N%64 and M%16 tails that the tile mapping gets wrong independently of each other.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_tc_fp8_smem.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu -o build/gate_tc_fp8_smem
+echo "built build/gate_tc_fp8_smem"
