@@ -1,0 +1,47 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=43
+[decode] loaded 100.40 GiB, 45821 tensors
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 111.3/122.8 GiB
+[decode] prefill 5 positions...
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (96.8 ms warmup)
+  step 1 pos 6 -> token 16  (95.0 ms)
+  step 2 pos 7 -> token 455  (104.7 ms)
+  step 3 pos 8 -> token 6102  (95.3 ms)
+  step 4 pos 9 -> token 294  (94.8 ms)
+  step 5 pos 10 -> token 16603  (99.7 ms)
+  step 6 pos 11 -> token 344  (102.8 ms)
+  step 7 pos 12 -> token 29168  (82.0 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 96.3 ms/tok = 10.38 tok/s  (M=1 steady state, 7-step avg)
+
+[graph] captured FULL 43-layer decode step OK. replaying...
+[graph] first token argmax=11111 (expect 11111) -> GATE PASS
+[graph] generated: 11111 16 455 6102 294 16603 344 29168
+[graph] WARM: 85.4 ms/tok = 11.71 tok/s  vs non-graph 96.3 ms/tok -> 1.13x
+
+[spec-verify] M=5 verify in ONE forward: 173.5 ms (= 34.7 ms/tok if all accepted vs 96.3 M=1 -> 2.78x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5
+[spec] head built. mem 111.3/122.8 GiB
+[spec] decoding 24 tokens (block=5)...
+  verify 1: accepted 1/4 + correction -> +2 tokens (203.8 ms)  cpos=7
+  verify 2: accepted 1/4 + correction -> +2 tokens (212.4 ms)  cpos=9
+  verify 3: accepted 1/4 + correction -> +2 tokens (206.9 ms)  cpos=11
+  verify 4: accepted 1/4 + correction -> +2 tokens (213.0 ms)  cpos=13
+  verify 5: accepted 4/4 + correction -> +5 tokens (206.7 ms)  cpos=18
+  verify 6: accepted 1/4 + correction -> +2 tokens (212.8 ms)  cpos=20
+  verify 7: accepted 4/4 + correction -> +5 tokens (206.9 ms)  cpos=25
+  verify 8: accepted 1/4 + correction -> +2 tokens (208.8 ms)  cpos=27
+  verify 9: accepted 4/4 + correction -> +5 tokens (215.6 ms)  cpos=32
+
+[spec] generated 27 tokens over 9 verifies: mean tokens/verify = 3.00 (block=5, max 5)
+[spec] tokens: 11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 344 16235 16 455 6102 294 29585 344 76405 16 455 6102 294 25062
+[spec] SPEC-DECODE: 67.3 ms/tok = 14.85 tok/s  (vs base M=1 96.3 ms/tok = 10.38 tok/s -> 1.43x)
+[decode] mem 111.3/122.8 GiB

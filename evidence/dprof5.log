@@ -1,0 +1,212 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=43
+[decode] loaded 100.40 GiB, 45821 tensors
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 111.3/122.8 GiB
+[decode] prefill 5 positions...
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (96.8 ms warmup)
+  step 1 pos 6 -> token 16  (95.5 ms)
+  step 2 pos 7 -> token 455  (107.1 ms)
+  step 3 pos 8 -> token 6102  (96.0 ms)
+  step 4 pos 9 -> token 294  (99.5 ms)
+  step 5 pos 10 -> token 16603  (96.4 ms)
+  step 6 pos 11 -> token 344  (107.0 ms)
+  step 7 pos 12 -> token 29168  (82.8 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 97.7 ms/tok = 10.23 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 179.4 ms (= 35.9 ms/tok if all accepted vs 97.7 M=1 -> 2.72x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+[dprof] enabled, 8192 marks
+
+[dprof] K=1 — verify step by sub-op, summed over all layers (881 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         1.82     2.2%         43
+[dprof] rmsnorm (attn)         0.74     0.9%         43
+[dprof] ATTENTION             39.07    47.1%         43
+[dprof] hc_post (attn)         0.28     0.3%         43
+[dprof] hc_pre  (ffn)          2.94     3.5%         43
+[dprof] rmsnorm (ffn)          0.77     0.9%         43
+[dprof] MoE                   31.10    37.5%         43
+[dprof] hc_post (ffn)          0.28     0.3%         43
+[dprof] kv xin copy            0.18     0.2%         41
+[dprof] hc_head+norm           0.04     0.0%          1
+[dprof] lm_head                5.78     7.0%          1
+[dprof]   attn:q_proj          0.52     0.6%          2
+[dprof]   attn:kv_write        0.07     0.1%          2
+[dprof]   attn:sparse          0.05     0.1%          2
+[dprof]   attn:ogroup          0.90     1.1%          2
+[dprof]   cattn:q_proj        11.43    13.8%         41
+[dprof]   cattn:compress       0.05     0.1%         41
+[dprof]   cattn:indexer        8.52    10.3%         21
+[dprof]   cattn:sparse         0.68     0.8%         41
+[dprof]   cattn:ogroup        16.19    19.5%         41
+[dprof]   moe:router           1.89     2.3%         43
+[dprof]   moe:group            2.16     2.6%         43
+[dprof]   moe:w1w3            12.33    14.9%         43
+[dprof]   moe:act              0.38     0.5%         43
+[dprof]   moe:w2               5.77     6.9%         43
+[dprof]   moe:combine          0.41     0.5%         43
+[dprof]   moe:shared           7.55     9.1%         43
+[dprof] TOTAL                 83.01
+
+[dprof] K=2 — verify step by sub-op, summed over all layers (881 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.03     1.7%         43
+[dprof] rmsnorm (attn)         0.76     0.7%         43
+[dprof] ATTENTION             53.34    45.9%         43
+[dprof] hc_post (attn)         0.29     0.3%         43
+[dprof] hc_pre  (ffn)          3.03     2.6%         43
+[dprof] rmsnorm (ffn)          0.75     0.6%         43
+[dprof] MoE                   49.82    42.9%         43
+[dprof] hc_post (ffn)          0.31     0.3%         43
+[dprof] kv xin copy            0.19     0.2%         41
+[dprof] hc_head+norm           0.04     0.0%          1
+[dprof] lm_head                5.60     4.8%          1
+[dprof]   attn:q_proj          0.81     0.7%          2
+[dprof]   attn:kv_write        0.12     0.1%          2
+[dprof]   attn:sparse          0.05     0.0%          2
+[dprof]   attn:ogroup          1.24     1.1%          2
+[dprof]   cattn:q_proj        17.59    15.1%         41
+[dprof]   cattn:compress       0.05     0.0%         41
+[dprof]   cattn:indexer        9.71     8.4%         21
+[dprof]   cattn:sparse         0.76     0.7%         41
+[dprof]   cattn:ogroup        22.38    19.3%         41
+[dprof]   moe:router           1.90     1.6%         43
+[dprof]   moe:group            2.26     1.9%         43
+[dprof]   moe:w1w3            22.54    19.4%         43
+[dprof]   moe:act              0.53     0.5%         43
+[dprof]   moe:w2              10.57     9.1%         43
+[dprof]   moe:combine          0.45     0.4%         43
+[dprof]   moe:shared          10.91     9.4%         43
+[dprof] TOTAL                116.15
+
+[dprof] K=3 — verify step by sub-op, summed over all layers (881 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.34     1.6%         43
+[dprof] rmsnorm (attn)         0.74     0.5%         43
+[dprof] ATTENTION             66.49    45.7%         43
+[dprof] hc_post (attn)         0.36     0.2%         43
+[dprof] hc_pre  (ffn)          3.20     2.2%         43
+[dprof] rmsnorm (ffn)          0.77     0.5%         43
+[dprof] MoE                   64.62    44.4%         43
+[dprof] hc_post (ffn)          0.38     0.3%         43
+[dprof] kv xin copy            0.19     0.1%         41
+[dprof] hc_head+norm           0.04     0.0%          1
+[dprof] lm_head                6.37     4.4%          1
+[dprof]   attn:q_proj          0.69     0.5%          2
+[dprof]   attn:kv_write        0.13     0.1%          2
+[dprof]   attn:sparse          0.05     0.0%          2
+[dprof]   attn:ogroup          1.47     1.0%          2
+[dprof]   cattn:q_proj        17.63    12.1%         41
+[dprof]   cattn:compress       9.90     6.8%         41
+[dprof]   cattn:indexer        9.95     6.8%         21
+[dprof]   cattn:sparse         0.88     0.6%         41
+[dprof]   cattn:ogroup        25.05    17.2%         41
+[dprof]   moe:router           1.89     1.3%         43
+[dprof]   moe:group            2.41     1.7%         43
+[dprof]   moe:w1w3            32.45    22.3%         43
+[dprof]   moe:act              0.54     0.4%         43
+[dprof]   moe:w2              15.15    10.4%         43
+[dprof]   moe:combine          0.48     0.3%         43
+[dprof]   moe:shared          11.06     7.6%         43
+[dprof] TOTAL                145.49
+
+[dprof] K=4 — verify step by sub-op, summed over all layers (881 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.72     1.7%         43
+[dprof] rmsnorm (attn)         0.78     0.5%         43
+[dprof] ATTENTION             67.91    42.0%         43
+[dprof] hc_post (attn)         0.39     0.2%         43
+[dprof] hc_pre  (ffn)          3.35     2.1%         43
+[dprof] rmsnorm (ffn)          0.76     0.5%         43
+[dprof] MoE                   79.71    49.2%         43
+[dprof] hc_post (ffn)          0.40     0.2%         43
+[dprof] kv xin copy            0.22     0.1%         41
+[dprof] hc_head+norm           0.04     0.0%          1
+[dprof] lm_head                5.59     3.5%          1
+[dprof]   attn:q_proj          0.70     0.4%          2
+[dprof]   attn:kv_write        0.13     0.1%          2
+[dprof]   attn:sparse          0.06     0.0%          2
+[dprof]   attn:ogroup          1.40     0.9%          2
+[dprof]   cattn:q_proj        17.97    11.1%         41
+[dprof]   cattn:compress      10.01     6.2%         41
+[dprof]   cattn:indexer       10.23     6.3%         21
+[dprof]   cattn:sparse         1.05     0.6%         41
+[dprof]   cattn:ogroup        25.70    15.9%         41
+[dprof]   moe:router           1.90     1.2%         43
+[dprof]   moe:group            2.46     1.5%         43
+[dprof]   moe:w1w3            42.53    26.3%         43
+[dprof]   moe:act              0.64     0.4%         43
+[dprof]   moe:w2              19.71    12.2%         43
+[dprof]   moe:combine          0.55     0.3%         43
+[dprof]   moe:shared          11.30     7.0%         43
+[dprof] TOTAL                161.87
+
+[dprof] K=5 — verify step by sub-op, summed over all layers (881 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.90     1.6%         43
+[dprof] rmsnorm (attn)         0.73     0.4%         43
+[dprof] ATTENTION             70.49    38.9%         43
+[dprof] hc_post (attn)         0.46     0.3%         43
+[dprof] hc_pre  (ffn)          3.62     2.0%         43
+[dprof] rmsnorm (ffn)          0.78     0.4%         43
+[dprof] MoE                   94.40    52.1%         43
+[dprof] hc_post (ffn)          0.44     0.2%         43
+[dprof] kv xin copy            0.19     0.1%         41
+[dprof] hc_head+norm           0.05     0.0%          1
+[dprof] lm_head                7.05     3.9%          1
+[dprof]   attn:q_proj          0.86     0.5%          2
+[dprof]   attn:kv_write        0.13     0.1%          2
+[dprof]   attn:sparse          0.07     0.0%          2
+[dprof]   attn:ogroup          1.40     0.8%          2
+[dprof]   cattn:q_proj        17.54     9.7%         41
+[dprof]   cattn:compress      10.11     5.6%         41
+[dprof]   cattn:indexer       10.57     5.8%         21
+[dprof]   cattn:sparse         1.10     0.6%         41
+[dprof]   cattn:ogroup        28.02    15.5%         41
+[dprof]   moe:router           1.95     1.1%         43
+[dprof]   moe:group            2.69     1.5%         43
+[dprof]   moe:w1w3            52.50    29.0%         43
+[dprof]   moe:act              0.63     0.3%         43
+[dprof]   moe:w2              24.18    13.4%         43
+[dprof]   moe:combine          0.55     0.3%         43
+[dprof]   moe:shared          11.23     6.2%         43
+[dprof] TOTAL                181.10
+
+[ksweep] 43-layer verify cost vs K (ms), split by layer flavour
+[ksweep]  K |   total | slide(2L) | r128(20L) |  r4(21L) | c_v meas | c_v model | excess
+[ksweep]  1 |   77.74 |      3.27 |     32.43 |    42.05 |    1.000 |     1.000 | +0.000
+[ksweep]  2 |  111.06 |      4.95 |     47.38 |    58.73 |    1.429 |     1.296 | +0.133
+[ksweep]  3 |  139.66 |      5.68 |     56.35 |    77.63 |    1.796 |     1.582 | +0.214
+[ksweep]  4 |  156.82 |      6.45 |     63.92 |    86.44 |    2.017 |     1.856 | +0.161
+[ksweep]  5 |  174.52 |      7.32 |     71.83 |    95.37 |    2.245 |     2.120 | +0.125
+
+[ksweep] per-flavour growth K=1 -> K=5 (the actual test):
+[ksweep]   slide (no compressor, no indexer) : 2.242x   <- control
+[ksweep]   r128  (compressor, NO indexer)    : 2.215x
+[ksweep]   r4    (compressor + DSA indexer)  : 2.268x
+[ksweep] DSA hypothesis holds IFF r4 grows materially faster than slide and r128.
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK=5
+[spec] head built. mem 111.3/122.8 GiB
+[spec] decoding 24 tokens (block=5)...
+  verify 1: accepted 1/4 + correction -> +2 tokens (210.6 ms)  cpos=7
+  verify 2: accepted 1/4 + correction -> +2 tokens (221.2 ms)  cpos=9
+  verify 3: accepted 1/4 + correction -> +2 tokens (210.1 ms)  cpos=11
+  verify 4: accepted 1/4 + correction -> +2 tokens (226.0 ms)  cpos=13
+  verify 5: accepted 4/4 + correction -> +5 tokens (212.5 ms)  cpos=18
+  verify 6: accepted 1/4 + correction -> +2 tokens (215.3 ms)  cpos=20
+  verify 7: accepted 4/4 + correction -> +5 tokens (217.7 ms)  cpos=25
+  verify 8: accepted 1/4 + correction -> +2 tokens (214.9 ms)  cpos=27
+  verify 9: accepted 4/4 + correction -> +5 tokens (223.5 ms)  cpos=32
+
+[spec] generated 27 tokens over 9 verifies: mean tokens/verify = 3.00 (block=5, max 5)
+[spec] tokens: 11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 344 16235 16 455 6102 294 29585 344 76405 16 455 6102 294 25062
+[spec] SPEC-DECODE: 69.6 ms/tok = 14.36 tok/s  (vs base M=1 97.7 ms/tok = 10.23 tok/s -> 1.40x)
+[decode] mem 111.3/122.8 GiB

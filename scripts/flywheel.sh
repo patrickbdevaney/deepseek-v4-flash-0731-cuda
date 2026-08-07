@@ -186,6 +186,11 @@ HARD INVARIANTS — every one of these was paid for with a wrong result in this 
 
 FINISH BY, in this order:
   a. appending your result to LOOP_LOG.md — including negative results, WITH the numbers
+  a2. IF AND ONLY IF you adopted a lever with a measured gain: append one row to the results table
+     in OPTIMIZATION_LOG.md — `| what changed | before | after | log | commit |`. LOOP_LOG.md is the
+     reasoning and is long; OPTIMIZATION_LOG.md is the cumulative answer to "what actually made
+     decode faster, and by how much", and it is the document a reader opens first. It has gone stale
+     before. A rejected lever does NOT go here — it goes in the retired list in LOOP_LOG.md.
   b. updating FLYWHEEL_STATE.json: cycle+1, queue (with the advanced stage), last_result, and
      consecutive_sub_half_pct (increment if this lever moved end-to-end < 0.5%, else reset to 0).
      If and only if you MEASURED a real end-to-end gain this cycle, update baseline.spec_tok_s and
@@ -233,6 +238,18 @@ for ln in open(sys.argv[1]):
         except Exception: pass
 PY
 log "agent exited rc=$RC"
+
+# ---- archive the evidence -----------------------------------------------------------------------
+# Every number in LOOP_LOG.md is only as durable as the log it came from, and those logs live in
+# ~/ -- outside the repo, unversioned, and one `rm ~/*.log` from making every past claim
+# unverifiable. The observer's first and most valuable check is "grep the log for that number";
+# that check has to still work in a month. Model-run logs are ~50 KB of text, so copy any that this
+# cycle wrote into the repo and let them ride along in the same commit as the finding.
+mkdir -p "$ROOT/evidence"
+for L in $(find "$HOME" -maxdepth 1 -name '*.log' -newer "$ROOT/.flywheel_selftest.txt" 2>/dev/null); do
+    B=$(basename "$L")
+    cp "$L" "$ROOT/evidence/$(printf 'cycle%03d' "$CYCLE")-$B" 2>/dev/null &&         log "archived evidence: $(printf 'cycle%03d' "$CYCLE")-$B ($(wc -l < "$L") lines)"
+done
 
 # ---- commit on the agent's behalf --------------------------------------------------------------
 # Clerical work belongs to the harness, not to the agent's turn budget. The agent writes a message;

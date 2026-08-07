@@ -201,3 +201,36 @@ harness commits mid-cycle by design, it should either wait for the executor to e
 - **Counter caveat for the observer.** `consecutive_sub_half_pct` is now 6, but cycles 2, 3 and 4 were
   instrument and correctness repair, not levers. The Phase-A stopping rule should not be read as fired
   on that number alone.
+
+## Cycle 5 — the measurement I2 was queued for, and it says two different things
+
+- **One full-model run, `evidence/cycle5.log`.** Twelve of sixteen sweep points completed at
+  NGEN0=60. Points 0-10 are cycle 3's points in cycle 3's order; a new 28-id prompt moves
+  `SMAX` 18 → 28, which is exactly what cycle 4 asked for.
+- **Reproducibility: materially fixed.** Twelve points, four prompts, **exactly four distinct token
+  sequences**. Cycle 3 had three different sequences on prompt 2 alone (11.05 / 14.62 / 16.36
+  tok/s); cycle 5 gives 18.61 / 17.81 / 18.50 / 18.55 — ±20 % down to ±2.2 %. The residual is one
+  level down: prompt 2 still has three distinct `[margins]` traces, and on one point a gap crossed
+  the adaptK threshold and bought a 19th verify. So I1 is partially, not fully, discharged.
+- **The crash recurs, and it is not what it looked like.** `indexer.cu:96 illegal memory access`
+  entering point 12. It *followed* `SMAX` — cycle 3 died in prompt 2's prefill when p2 was longest,
+  cycle 5 died in prompt 4's when p4 became longest — which is what the length hypothesis predicts.
+  But `gate_prefill_len` at the crashing length (PSp=27) and its neighbours **passes, 0 errors,
+  both weight alignments**, run this cycle; and in cycle 3 the `SMAX` prompt survived three prefills
+  and died on the fourth. Length is a correlate, not the cause. The frame that fits everything is
+  **accumulation across sweep points**, with the longest prompt being the first allocation big
+  enough to fall off the end of whatever is shrinking.
+- **No number banked.** Canonical bookends measured 16.96 / 17.04 vs baseline 16.86 — +0.8 %, inside
+  the ±1 % band, carried by three changes (bigger smem request, two skipped no-op launches, one TLS
+  read) that cannot speed anything up. Baseline stays 16.86, `OPTIMIZATION_LOG.md` gets no row. The
+  run *confirms* the baseline rather than replacing it, which is the useful thing it did.
+- **Free bonus:** prompt 1 at adaptK 1.50 / 1.00 / 2.50 emits the same 61 tokens over 23 / 23 / 26
+  verifies. Third independent confirmation that adaptive verify width is lossless (Finding 49).
+- **halt=true** (invariant 7). **Next cycle: I3 at stage `candidate` — implement and unit-gate, do
+  not measure.** Instrument `cudaMemGetInfo` at sweep-point boundaries and replay the indexer's
+  malloc/free pattern in a standalone gate. Two 15-minute checkpoint loads have now gone into this
+  fault; the third should not be spent until a unit gate has confirmed or killed the accumulation
+  frame. If that gate is inconclusive, do the D pass rather than idle.
+- **Counter caveat, again.** `consecutive_sub_half_pct` is 7, but cycles 2-5 were all instrument and
+  correctness repair. It is four cycles since a performance lever was measured — that, not the
+  counter, is the thing to watch.

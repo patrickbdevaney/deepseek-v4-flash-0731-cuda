@@ -5,6 +5,7 @@ cache/
 .flywheel_cycles/
 .flywheel_last_run.*
 .flywheel_quarantine/
+# evidence/ is deliberately NOT ignored — see the archive step in scripts/flywheel.sh
 .flywheel_selftest.txt
 .flywheel_failstreak
 .flywheel_commit_msg

@@ -1,0 +1,26 @@
+[flywheel 2026-08-07T02:17:02-04:00] cycle 0 starting; 114 GiB free; HEAD 53b372f
+[flywheel 2026-08-07T02:27:08-04:00] agent exited rc=0
+[flywheel 2026-08-07T02:27:08-04:00] committed: 20ebe6a flywheel: stream-json capture per cycle + a renderer for watching the agent 
+/home/patrickd/deepseek-v4-flash-0731-cuda/scripts/flywheel.sh: line 213: unexpected EOF while looking for matching `''
+[flywheel 2026-08-07T03:17:01-04:00] HALT: no FLYWHEEL_STATE.json
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: '//FLYWHEEL_STATE.json'
+[flywheel 2026-08-07T03:30:23-04:00] selftest PASS
+[flywheel 2026-08-07T03:30:23-04:00] cycle 2 starting; 114 GiB free; HEAD 6615316
+[flywheel 2026-08-07T03:50:30-04:00] agent exited rc=0
+[flywheel 2026-08-07T03:50:30-04:00] committed cycle 2: flywheel: the sweep prefilled every prompt to the wrong length, and a lambda capture is why
+[flywheel 2026-08-07T03:50:30-04:00] committed: c302a12 flywheel: the sweep prefilled every prompt to the wrong length, and a lambda capture is why 469d9c2 flywheel: research is not blocked by a broken instrument 
+[flywheel 2026-08-07T03:50:30-04:00] OK: 5 commit(s) held locally for review
+[flywheel 2026-08-07T03:51:05-04:00] cycle 2 done
+[flywheel 2026-08-07T04:07:10-04:00] selftest PASS
+[flywheel 2026-08-07T04:07:10-04:00] cycle 3 starting; 114 GiB free; HEAD a84fa08
+[flywheel 2026-08-07T04:43:10-04:00] agent exited rc=0
+[flywheel 2026-08-07T04:43:10-04:00] committed cycle 3: flywheel: the fault on indexer.cu:91 is real, and a gate that varies s found it
+[flywheel 2026-08-07T04:43:10-04:00] committed: 124480d flywheel: the fault on indexer.cu:91 is real, and a gate that varies s found it 
+[flywheel 2026-08-07T04:43:10-04:00] OK: 2 commit(s) held locally for review
+[flywheel 2026-08-07T04:43:44-04:00] not publishing: gain=0.00% fresh_gate_pass=1 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-07T04:43:44-04:00] cycle 3 done
+[flywheel 2026-08-07T05:19:28-04:00] selftest PASS
+[flywheel 2026-08-07T05:19:28-04:00] cycle 4 starting; 114 GiB free; HEAD 124480d
+[flywheel 2026-08-07T05:30:42-04:00] agent exited rc=0

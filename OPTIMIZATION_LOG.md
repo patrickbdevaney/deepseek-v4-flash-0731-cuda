@@ -137,3 +137,23 @@ byte-identical unless noted.
 Block size > 5 (identical accept sequence at 5 and 8) · draft refinement (3.00 -> 2.08; the MTP
 heads are trained with the noise token as placeholder) · shared-A fp8 GEMV (slower at every M) ·
 the small-M fp8 GEMV as a default at M>=2 (loses 1.5-2.3x to the fixed m16 tile).
+
+---
+
+## Cumulative results table — maintained by the loop from here on
+
+Every adopted lever gets one row. A rejected lever does **not** appear here; it goes to the
+retired-with-a-measurement list in `LOOP_LOG.md`, which is what stops the next cycle paying twice
+for the same negative result. The `log` column names a file in `evidence/`, committed alongside the
+finding, so any number in this table can still be re-verified after the working logs in `~/` are
+gone. That is the point of the column.
+
+| what changed | before | after | log | commit |
+|---|---|---|---|---|
+| smem-staged FP8 mma tile (Finding 41) + lm_head M=K (Finding 42) | 10.04 tok/s spec | 12.12 | — | `c290902` |
+| bf16 alignment fallback — `head_bf` is only 4-byte aligned | 12.12 | 14.36 | — | `c290902` |
+| ogroup NR + `gemm_fp32` M=K (Finding 43) | 14.36 | 14.76 | `evidence/f47.log` | `7d42672` |
+| weights → managed device-preferred memory (Finding 44) | 14.76 | 15.49 | `evidence/managed.log` | `d52e5fd` |
+| full-step CUDA graph re-gate, base AR only | 92.5 ms/tok | 79.3 (12.61 tok/s) | `evidence/graph_regate.log` | `d52e5fd` |
+| adaptive verify width, lossless (Finding 49) | 3694 ms/61 tok | 3616 (+2.1%) | `evidence/adaptk3.log` | `df199a4` |
+| **baseline at handover to the autonomous loop** | — | **16.86 spec / 12.61 base** | `evidence/adaptk3.log` | `99dda26` |

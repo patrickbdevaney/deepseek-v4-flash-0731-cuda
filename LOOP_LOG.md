@@ -2663,3 +2663,132 @@ is LONGER than 18 ids, so `SMAX > 18`. That run answers three things at once: do
 reproduce byte-identically, does the fault recur, and — from the `SMAX > 18` change — was "the prompt
 of length SMAX" ever the right frame. Watch stderr for `[launch] file:line pending CUDA error`, which
 is now the engine's own voice for anything that fails to launch.
+
+---
+
+## Finding 54 — the top-k fix bought reproducibility and did not buy the crash: the fault follows SMAX but is not caused by length
+
+**Cycle 5. ONE full-model run, `evidence/cycle5.log`, 16 sweep points planned, 12 completed, NGEN0=60.**
+Lever I2 was at stage `implemented`, so this cycle is its single measurement. The run answers all three
+questions cycle 4 posed, and two of the three answers are not the expected ones.
+
+The launch, recorded in full because the run is not reproducible without it:
+
+```
+DSV4_PROMPTS="<p1 colors, 11 ids>;<p2 fibonacci, 18>;<p3 moon, 15>;<p4 apollo, 28>"
+DSV4_BLKSWEEP="5:1:1.5:0,5:1:1.5:2,5:1:1.5:2,5:1:1.5:1,5:1:1.5:2,5:1:1.5:1,5:1:1.5:3,5:1:1.5:3,
+               5:1:1.5:0,5:1:1.0:1,5:1:2.5:1,5:1:1.5:2,5:1:1.5:4,5:1:1.5:4,5:1:1.5:4,5:1:1.5:0"
+scripts/run_model.sh ~/cycle5.log ./build/decode <ckpt> "0,671,6102,294,8760,344" 8 "" 60
+```
+
+Points 0–10 are cycle 3's eleven points in cycle 3's order, unchanged, so the comparison is controlled.
+Prompt 4 is new and is 28 ids, so `SMAX` moves 18 → 28 and prompt 2 stops being the longest prompt.
+Its ids come from `tools/encode_prompt.py` (canonical gate PASS, round-trip PASS); the sweep table was
+gated with `DSV4_PARSE_ONLY=1` before the load (`SMAX=28 BLKMAX=5 seqmax=101`).
+
+### (a) Reproducibility: fixed at the token level, not at the decision level
+
+| prompt | points | tokens generated | verifies | tok/s | distinct token sequences |
+|---|---|---|---|---|---|
+| 0 canonical, s=6 | PT0, PT8 | 61, 61 | 21, 21 | **16.96, 17.04** | 1 |
+| 1 colors, s=11 | PT3, PT5 (aK 1.5) | 61, 61 | 23, 23 | 15.55, 15.55 | 1 |
+| 2 fibonacci, s=18 | PT1, PT2, PT4, PT11 | 60 ×4 | **18, 19, 18, 18** | **18.61, 17.81, 18.50, 18.55** | **1** |
+| 3 moon, s=15 | PT6, PT7 | 60, 60 | 34, 34 | 11.22, 11.26 | 1 |
+
+**Twelve points, four prompts, exactly four distinct token sequences** (`[spec] tokens:` lines, first 40
+tokens — that is all the engine prints). Cycle 3 had **three different sequences on prompt 2 alone**,
+at 11.05 / 14.62 / 16.36 tok/s. The spread on prompt 2 collapses from **±20 % to ±2.2 %**.
+
+The residual is one level down. Hashing each point's full `[margins]` trace:
+
+| prompt-2 point | margin-trace hash | verifies |
+|---|---|---|
+| PT1 | `db8a0284…` | 18 |
+| PT2 | `a40691b4…` | 19 |
+| PT4 | `dce5b92f…` | 18 |
+| PT11 | `dce5b92f…` | 18 |
+
+Three distinct decision traces for one identical output. First verify, same context, same weights:
+PT1 `9.05 6.45 1.12 1.42 2.11`, PT4/PT11 `8.64 5.37 0.06 2.81 1.88`, PT2 `7.72 7.09 2.19 3.31 1.69`.
+Every other prompt's replicate pair is trace-identical (`PT0≡PT8`, `PT3≡PT5`, `PT6≡PT7`). So the draft
+head's logit gaps are still not bit-stable **on prompt 2 only**, and on PT2 one gap crossed the 1.5
+threshold and bought a 19th verify. Per Finding 49 that is a *cost* difference and not a correctness
+one — and this run is the third independent confirmation of that, because PT3 (aK 1.50), PT9 (1.00) and
+PT10 (2.50) emit the **same 61 tokens** over 23 / 23 / 26 verifies at 15.55 / 14.85 / 14.63 tok/s.
+
+**I1 is therefore much closer to discharged than it was, and is not discharged.** 4/4 prompts reproduce
+their output; 3/4 reproduce their decisions.
+
+### (b) The fault recurs
+
+```
+[spec] SPEC-DECODE: 53.9 ms/tok = 18.55 tok/s        <- point 11, prompt 2, completes normally
+cuda kernels/indexer.cu:96 an illegal memory access was encountered
+```
+
+Line 96 is the same `cudaStreamSynchronize` cycle 3 hit at line 91 (the file grew five lines). It killed
+the run entering **point 12**, i.e. inside the prefill of prompt 4 — the run never printed point 12's
+header. Points 12–15 did not run. **No `[launch] … pending CUDA error` line appears anywhere in the 644
+lines**, so cycle 4's last-error drain was live and found nothing: this is a genuine asynchronous illegal
+access, not a launch that failed to start.
+
+### (c) `SMAX > 18` moved the fault — and that still does not make it a length defect
+
+Cycle 3 crashed in the prefill of prompt 2 when prompt 2 was the `SMAX` prompt. Cycle 5 crashed in the
+prefill of prompt 4 when prompt 4 became the `SMAX` prompt, and prompt 2 — same ids, same position in
+the sweep — prefilled four times without incident. The fault follows `SMAX`. That is the answer cycle 4
+asked for, and taken alone it says "zero-slack buffer sized on the longest prompt".
+
+Taken with the rest of the evidence it cannot be the whole story:
+
+1. `build/gate_prefill_len "5,10,14,17,21,24,27"` — the exact prefill lengths this run used, `PSp=27`
+   being prompt 4's — **GATE PASS, 0 prefix mismatches, 0 stages leaving a CUDA error, both weight
+   alignments** (`+0` and `+4`). Run this cycle. The prefill attention chain at the crashing length is
+   clean in isolation.
+2. In cycle 3 the `SMAX` prompt prefilled **successfully three times** and faulted on the fourth. Being
+   the longest prompt is not sufficient.
+3. Here the `SMAX` prompt faulted on its **first** prefill — but at sweep point 12, after 21 ratio-4
+   layers × 12 prefills of `cudaMalloc`/`cudaFree` churn.
+
+The frame that fits all three is **accumulation across sweep points, tripped at the largest working
+set**: something grows or fragments over points, and the longest prompt is simply the first allocation
+big enough to fall off the end of it. `indexer_forward` (`kernels/indexer.cu:78-83`) and its caller
+(`kernels/compressed_attn.cu:62`) do eight raw `cudaMalloc`/`cudaFree` per indexer layer per call inside
+a 122.8 GiB managed pool holding 111.5 GiB of resident weights — ~11 GiB of headroom, churned 21×
+per prefill. Sizes are correct by inspection (`s*T*4`, `s*itopk*4`, all `s`- and `T`-derived), so this is
+a lead about *allocator behaviour*, not about a wrong size, and it is a lead and not a cause.
+
+Note also that cycle 5 got **one point further than cycle 3** (12 completed vs 11). Whether cycle 4's
+removal of ~20 failing gridDim-0 launches per prefill moved that boundary is not established and must
+not be written as if it were.
+
+### The numbers, for the record
+
+| | cycle 3 (`evidence/cycle3.log`) | cycle 5 (`evidence/cycle5.log`) |
+|---|---|---|
+| base AR, M=1 warm | 96.8 ms/tok = 10.33 tok/s | 95.6 ms/tok = **10.46** tok/s |
+| canonical spec, both bookends | 16.83 / 16.90 | **16.96 / 17.04** |
+| M=K verify equivalence gate | PASS | **MATCH 5/5 → PASS** |
+| first-token gate | PASS (11111) | **PASS (11111)** |
+
+**The baseline does not move.** +0.8 % on the canonical prompt is inside the ±1 % cross-run band
+(invariant 6), and the three changes this run carried — a *larger* shared-memory request, two skipped
+no-op launches, one TLS read per `dsync` — cannot produce a speedup by construction. Recording it as a
+gain would be the Finding 33 failure mode. `spec_tok_s` stays at 16.86.
+
+### Disposition — HALT
+
+Invariant 7: the run faulted, so this stops here. `halt=true`.
+
+I2 advances `implemented` → **`measured` and is adopted on its own criterion**: it converted three
+divergent token sequences into one, it is bit-exact by construction, and it fixed a real out-of-bounds
+that had been firing on every prefill this project ever ran. It did **not** discharge the crash, and the
+crash was never claimed as its target — cycle 4's write-up said so explicitly.
+
+The crash becomes a new queue head, **I3**, with a frame the loop has not tried before: not "which
+length", but "what accumulates". Its first action needs **no model run**, which matters because the loop
+should not spend a 15-minute checkpoint load on a hypothesis a unit gate can kill: instrument
+`cudaMemGetInfo` at every sweep-point boundary and around `indexer_forward`, and write a standalone
+gate that replays N cycles of the indexer's malloc/free pattern at ascending `s` in a pool sized to
+leave ~11 GiB free. If free memory is flat across points, the accumulation frame dies and the next
+suspect is `arena_reset` / the per-point head rebuild.
