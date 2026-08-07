@@ -2427,3 +2427,119 @@ the same prompt at the same setting twice in a row, on a *non-canonical* prompt,
 identical sequence and an identical verify split. Until that passes, no multi-prompt number is
 admissible, and the adaptive-verify threshold shipped at 1.5 remains fitted on 18 verifies of one
 prompt exactly as Finding 49 warned.
+
+---
+
+## Finding 52 — D2 root-caused and fixed: `run_layer` prefilled every sweep point at the ARGV prompt's length
+
+**Cycle 3. One full-model run (`~/cycle3.log`, base-AR gate PASS: first decoded token argmax 11111).
+End-to-end movement on the shipped configuration: 0.0%** — canonical prompt 16.83 / 16.90 tok/s
+against the 16.86 baseline, base AR 10.33 tok/s against 10.31 (`~/adaptk3.log`) and 10.27
+(`~/cycle2.log`). Nothing on the shipped path changed and the numbers confirm it.
+
+### The bug, found by inspection before any run
+
+`src/decode.cu:265`, `run_layer`, is a `[&]` lambda whose prefill branch passed `PS` to
+`block_prefill_cache` / `cblock_prefill_cache`. Name lookup inside a lambda body is **lexical**, and
+resolved at the lambda's definition point — where the only `PS` in scope is line 96's,
+`argv[2].size()-1`. The multi-prompt sweep loop then declared its own
+
+```
+const std::vector<int>& ids = prompts[promptSweep[bsi]];
+const int s = (int)ids.size(), PS = s-1;          // shadows line 96
+```
+
+and called `run_layer(Lyr,true,0,h,h2,d_ids)`. The shadow is invisible to the callee. So on every
+sweep point:
+
+| what | length used |
+|---|---|
+| `k_embed` / `k_hc_expand` | the point's prompt (correct) |
+| **`block_prefill_cache` / `cblock_prefill_cache` — the KV caches** | **the argv prompt (WRONG)** |
+| `dspark_tap_pool` / `dspark_main_x` / `cpos` / the whole spec loop | the point's prompt (correct) |
+
+With the canonical prompt on argv, every point prefilled **5** positions. A sweep point on an
+18-token prompt therefore decoded from `cpos=17` over KV caches holding 5 rows; positions 5..16 were
+whatever the *previous* points had left in `win_kv`/`xin`/`h`/`h2`. That is D2, exactly, and it
+predicts cycle 2's signature with no free parameters: prompt 0 (the argv prompt, `PS`=5=`PSp`) had
+**all five** of its points byte-identical, while prompts 1/2/3 each had their FIRST point disagree
+with the rest. Cycle 2's `[spec] decoding ... s=%d` header printed the *shadowed* `s`, so the run
+looked correctly labelled while the caches were not.
+
+### The fix, and the gate that would have caught it
+
+1. The prefill length is now an **explicit parameter** `npre` on `run_layer` (8 call sites). A
+   parameter cannot be shadowed out from under the callee; a capture can.
+2. The sweep loop no longer shadows at all: `pids` / `ps` / `PSp`.
+3. **New in-run gate, every point, before any measurement:** a compressed layer emits exactly
+   `floor(PSp/ratio)` rows during prefill, so `KV[L].T` is a direct readout of the length the
+   prefill *actually ran at*. `KV[L].T != PSp/ratio` for any of the 21 compressed layers prints
+   `[spec] GATE FAIL` and exits 3. Under the old code, `PSp=17` against an argv `PS` of 5 gives
+   `T=1` where 4 is required. **This gate PASSED at all 11 points that ran.**
+
+### The measurement: the I1 replicate gate now passes on 3 of 4 prompts, and fails on the 4th
+
+Nine gate points, prompts interleaved so a replicate pair is separated by a different-length prompt.
+Hashes are over the emitted token list and over the full per-verify decision trace
+(margins, K, accepted/VB, cpos) with timings stripped:
+
+| pair | prompt | s | result |
+|---|---|---|---|
+| PT0 / PT8 | 0 canonical | 6 | **identical** — 61 tokens, 21 verifies, 2.90/verify, 16.83 / 16.90 tok/s |
+| PT3 / PT5 | 1 colors | 11 | **identical** — 61 tokens, 23 verifies, 2.65/verify, 15.45 / 15.45 tok/s |
+| PT6 / PT7 | 3 moon | 15 | **identical** — 60 tokens, 34 verifies, 1.76/verify, 11.10 / 11.11 tok/s |
+| PT1 / PT2 / PT4 | 2 fibonacci | **18** | **THREE different sequences**: 11.05 / 14.62 / 16.36 tok/s, 32 / 23 / 21 verifies, first-verify margins `7.01 5.85 0.70 3.56 1.80` vs `8.20 6.39 1.80 4.09 3.55` vs `7.74 6.87 0.11 2.53 2.30` |
+
+Cycle 2 had **0 of 3** non-canonical prompts reproducing. Cycle 3 has **2 of 3** (plus canonical).
+PT3/PT5 and PT6/PT7 are byte-identical in both the sequence and the decision trace — not merely
+close in tok/s. **I1 is therefore partially, not fully, discharged.**
+
+### The run also died, on the same prompt
+
+```
+cuda kernels/indexer.cu:91 an illegal memory access was encountered
+```
+
+after PT10 and before PT11 printed its header — i.e. inside **PT11's prefill**, which is prompt 2
+again (s=18). PT1/PT2/PT4 had already prefilled that same prompt successfully, so the fault is
+state- or history-dependent, not a fixed out-of-bounds. `indexer.cu:91` is the
+`cudaStreamSynchronize` at the end of `indexer_forward`, which only *reports* an earlier async
+fault; it does not locate it.
+
+**Both surviving symptoms are on prompt 2 and only prompt 2, which is the only prompt whose length
+equals `SMAX`.** The one buffer in the spec path sized with zero slack is
+`mh_pre = (SMAX-1)*3*d*4` (`src/decode.cu:615`), exactly `PSp_max` rows — every shorter prompt
+overruns *into* the allocation, the SMAX prompt overruns *out of* it. That is a lead, **not a
+demonstrated cause**, and it is not the only candidate (`indexer_forward` also does raw
+`cudaMalloc`/`cudaFree` per layer per call with 11 GiB of headroom in a 122.8 GiB managed pool).
+
+**The next iteration's falsification test costs no extra run and is decisive:** append a prompt
+LONGER than 18 to `DSV4_PROMPTS` so `SMAX > 18`, and re-run the same 9 gate points. If prompt 2 then
+reproduces, the defect is "the prompt of length SMAX", i.e. a zero-slack buffer. If it still fails,
+the defect is specific to that prompt's length/content and `SMAX` is a coincidence.
+
+### Bonus, and it is not a small one: adaptive verify width is LOSSLESS, demonstrated
+
+PT3 / PT9 / PT10 are prompt 1 at adaptK **1.50 / 1.00 / 2.50**. All three emit the **identical
+61-token sequence** (same hash) with different verify counts — 23 / 23 / 26 — and different K
+choices per verify. Finding 49 argued losslessness from the structure of the accept rule
+("verifying fewer proposals cannot change what the target emits"). This is the first direct
+measurement of it: the threshold moves the *cost* of a verify and nothing else.
+
+Within-run, one replicate each (PT3 and PT5 are exact replicates of the 1.50 point, both 15.45):
+
+| adaptK on prompt 1 | verifies | tok/s |
+|---|---|---|
+| 1.00 | 23 | 14.76 |
+| **1.50 (shipped)** | 23 | **15.45** |
+| 2.50 | 26 | 14.51 |
+
+**This is not adopted and R1 stays blocked.** It is one prompt, and defect D1 (a sweep entry of `0`
+falls through to the 1.5 default) means the run still contains no fixed-width control. It does say
+the shipped 1.5 is not obviously mis-set.
+
+### Disposition — HALT
+
+Invariant 7: a gate failed and a run faulted, so this stops here rather than being built on.
+`halt=true`. The queue head is now **I2 — the SMAX-length prompt does not reproduce and its 12th
+prefill faults** — with the single-run falsification test above as its first action.

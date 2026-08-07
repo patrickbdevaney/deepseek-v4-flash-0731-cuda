@@ -262,13 +262,19 @@ int main(int argc, char** argv){
             b.dim=DIM;b.hc=HC_MULT;b.win=WINDOW;b.ratio=ratio;
         }
     };
-    auto run_layer=[&](int Lyr, bool prefill, int pos, const float* x_in, float* x_out, const int* ids_dev, cudaStream_t st=0){
+    // `npre` = prefill positions, EXPLICIT (ignored when !prefill). It used to be read from the
+    // captured outer `PS`, and LOOP_LOG Finding 52 is what that cost: the multi-prompt sweep loop
+    // declares its own `const int PS = s-1` for the point's prompt, but shadowing is LEXICAL, so
+    // this body kept binding to line 96's argv-prompt PS. Every sweep point on a non-argv prompt
+    // prefilled the KV caches to the WRONG length while everything else used the right one. A
+    // parameter cannot be shadowed out from under the callee; a capture can.
+    auto run_layer=[&](int Lyr, bool prefill, int pos, const float* x_in, float* x_out, const int* ids_dev, int npre, cudaStream_t st=0){
         int ratio=compress_ratio(Lyr);
         if(ratio==0){
-            if(prefill) block_prefill_cache(x_out,x_in,ids_dev,BW[Lyr],PS,HC_SINKHORN_ITERS,EPS,KV[Lyr],st);
+            if(prefill) block_prefill_cache(x_out,x_in,ids_dev,BW[Lyr],npre,HC_SINKHORN_ITERS,EPS,KV[Lyr],st);
             else        block_decode_step (x_out,x_in,ids_dev,BW[Lyr],pos,HC_SINKHORN_ITERS,EPS,KV[Lyr],st);
         } else {
-            if(prefill) cblock_prefill_cache(x_out,x_in,ids_dev,CW[Lyr],PS,HC_SINKHORN_ITERS,EPS,KV[Lyr],st);
+            if(prefill) cblock_prefill_cache(x_out,x_in,ids_dev,CW[Lyr],npre,HC_SINKHORN_ITERS,EPS,KV[Lyr],st);
             else        cblock_decode_step  (x_out,x_in,ids_dev,CW[Lyr],pos,HC_SINKHORN_ITERS,EPS,KV[Lyr],st);
         }
     };
@@ -289,7 +295,7 @@ int main(int argc, char** argv){
     arena_init((size_t)512<<20);                            // 512 MB decode scratch arena (bump, reset per layer)
     printf("[decode] prefill %d positions...\n", PS);
     for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset();
-        run_layer(Lyr,true,0,h,h2,d_ids); std::swap(h,h2);     // structs prebuilt -> no per-token Loader work
+        run_layer(Lyr,true,0,h,h2,d_ids,PS); std::swap(h,h2);     // structs prebuilt -> no per-token Loader work
     }
     printf("[decode] prefill done. caches populated. starting decode.\n");
 
@@ -306,7 +312,7 @@ int main(int argc, char** argv){
         k_hc_expand<<<((size_t)hc*d+255)/256,256>>>(hd,h0,1,hc,d);
         float* xin=hd; float* xout=hd2;
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset();
-            run_layer(Lyr,false,pos,xin,xout,cur_dev); std::swap(xin,xout);
+            run_layer(Lyr,false,pos,xin,xout,cur_dev,0); std::swap(xin,xout);
         }
         int am; head_fwd(xin,&am);
         cudaEventRecord(t1); cudaEventSynchronize(t1); float ms=0; cudaEventElapsedTime(&ms,t0,t1);
@@ -332,7 +338,7 @@ int main(int argc, char** argv){
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
         k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d);
         k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
-        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids); std::swap(h,h2); }
+        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PS); std::swap(h,h2); }
         for(int L=0;L<N_LAYERS;++L){ int ratio=compress_ratio(L); if(!ratio) continue;
             CU(cudaMemcpy(KV[L].kvc,KV[L].win_kv,(size_t)PS*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
             CU(cudaMemcpy(KV[L].kvc+(size_t)winmax*HEAD_DIM,KV[L].comp_kv,(size_t)KV[L].T*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
@@ -351,7 +357,7 @@ int main(int argc, char** argv){
         build_step(cap); CU(cudaStreamSynchronize(cap));                 // warm (also advances caches for pos PS) — re-prefill after
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
         k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d); k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
-        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids); std::swap(h,h2); }
+        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PS); std::swap(h,h2); }
         for(int L=0;L<N_LAYERS;++L){ int ratio=compress_ratio(L); if(!ratio) continue;
             CU(cudaMemcpy(KV[L].kvc,KV[L].win_kv,(size_t)PS*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
             CU(cudaMemcpy(KV[L].kvc+(size_t)winmax*HEAD_DIM,KV[L].comp_kv,(size_t)KV[L].T*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
@@ -385,7 +391,7 @@ int main(int argc, char** argv){
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;                                                 // reset compressed caches
         k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d);
         k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
-        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids); std::swap(h,h2); }  // re-prefill (reset window/comp caches)
+        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PS); std::swap(h,h2); }  // re-prefill (reset window/comp caches)
         int* d_vtok; CU(cudaMalloc(&d_vtok,(size_t)VK*4)); CU(cudaMemcpy(d_vtok,vtok.data(),(size_t)VK*4,cudaMemcpyHostToDevice));
         CU(cudaMemcpy(d_ids+PS,vtok.data(),(size_t)VK*4,cudaMemcpyHostToDevice));               // ids for hash routing at [PS..]
         float *hv,*hv2,*collK,*logK; CU(cudaMalloc(&hv,(size_t)VK*hc*d*4)); CU(cudaMalloc(&hv2,(size_t)VK*hc*d*4));
@@ -432,7 +438,7 @@ int main(int argc, char** argv){
             for(int L=0;L<N_LAYERS;++L) KV[L].T=0;                       // re-prefill: replay must not extend caches
             k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d);
             k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
-            for(int L=0;L<N_LAYERS;++L){ arena_reset(); run_layer(L,true,0,h,h2,d_ids); std::swap(h,h2); }
+            for(int L=0;L<N_LAYERS;++L){ arena_reset(); run_layer(L,true,0,h,h2,d_ids,PS); std::swap(h,h2); }
             std::vector<int> Tsnap(N_LAYERS); for(int L=0;L<N_LAYERS;++L) Tsnap[L]=KV[L].T;
             // ungraphed baseline on the same stream, same state
             const int VIT=5;
@@ -488,7 +494,7 @@ int main(int argc, char** argv){
                 for(int L=0;L<N_LAYERS;++L) KV[L].T=0;                       // reset caches, then re-prefill
                 k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d);
                 k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
-                for(int L=0;L<N_LAYERS;++L){ arena_reset(); run_layer(L,true,0,h,h2,d_ids); std::swap(h,h2); }
+                for(int L=0;L<N_LAYERS;++L){ arena_reset(); run_layer(L,true,0,h,h2,d_ids,PS); std::swap(h,h2); }
                 CU(cudaMemcpy(d_vtok,kt.data(),(size_t)K*4,cudaMemcpyHostToDevice));
                 CU(cudaMemcpy(d_ids+PS,kt.data(),(size_t)K*4,cudaMemcpyHostToDevice));
                 k_embed<<<((size_t)K*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_vtok,K,d);
@@ -628,22 +634,33 @@ int main(int argc, char** argv){
         // side — a too-low threshold degrades to fixed width, a too-high one costs accepted tokens.
         const float adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi]
                            : (getenv("NO_ADAPTK") ? 0.f : 1.5f);
-        // This point's prompt shadows the argv prompt for the rest of the iteration. Everything
-        // below reads `ids`/`s`/`PS`; every device buffer above is sized at the longest prompt.
-        const std::vector<int>& ids = prompts[promptSweep[bsi]];
-        const int s = (int)ids.size(), PS = s-1;
+        // This point's prompt. Named `pids`/`ps`/`PSp`, NOT `ids`/`s`/`PS`: the previous version
+        // shadowed the outer names, and `run_layer` — a [&] lambda defined at outer scope — went on
+        // binding the OUTER `PS`. See Finding 52. Every device buffer above is sized at the
+        // longest prompt (SMAX), so any of these lengths is safe to use here.
+        const std::vector<int>& pids = prompts[promptSweep[bsi]];
+        const int ps = (int)pids.size(), PSp = ps-1;
         // Re-prefill so each point starts from the same state: the spec loop mutates the
         // window/compressed caches and main_x, and a sweep point that inherited them would be
         // measuring a different sequence, not a different setting. d_ids must be reloaded BEFORE
         // the prefill, not after it — the previous point may have left a different prompt there.
-        CU(cudaMemcpy(d_ids,ids.data(),(size_t)s*4,cudaMemcpyHostToDevice));
+        CU(cudaMemcpy(d_ids,pids.data(),(size_t)ps*4,cudaMemcpyHostToDevice));
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
-        k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,emb,d_ids,PS,d); k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
-        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids); std::swap(h,h2);
-            if(Lyr==40) dspark_tap_pool(mh_pre,h,PS,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_pre,h,PS,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_pre,h,PS,hc,d,2,3); }
-        dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PS, d, EPS); CU(cudaDeviceSynchronize());
+        k_embed<<<((size_t)PSp*d+255)/256,256>>>(h0,emb,d_ids,PSp,d); k_hc_expand<<<((size_t)PSp*hc*d+255)/256,256>>>(h,h0,PSp,hc,d); CU(cudaDeviceSynchronize());
+        for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PSp); std::swap(h,h2);
+            if(Lyr==40) dspark_tap_pool(mh_pre,h,PSp,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_pre,h,PSp,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_pre,h,PSp,hc,d,2,3); }
+        // GATE (in-run, every point). A compressed layer emits exactly floor(PSp/ratio) rows during
+        // prefill, so KV[L].T is a direct readout of the length the prefill ACTUALLY ran at. This is
+        // the assertion whose absence cost cycle 2 its whole run: with the Finding-52 bug and
+        // PSp=17 against an argv PS of 5, a ratio-4 layer reports T=1 where it must report 4.
+        for(int L=0;L<N_LAYERS;++L){ int r=compress_ratio(L); if(!r) continue;
+            if(KV[L].T != PSp/r){
+                fprintf(stderr,"[spec] GATE FAIL: point %zu prompt %d PSp=%d ratio=%d -> KV[%d].T=%d, expected %d "
+                               "(the prefill ran at the wrong length)\n", bsi, promptSweep[bsi], PSp, r, L, KV[L].T, PSp/r);
+                return 3; } }
+        dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PSp, d, EPS); CU(cudaDeviceSynchronize());
         int NGEN=NGEN0;
-        int cur=ids[s-1], cpos=PS;                 // cur = token at position cpos (=PS=s-1), not yet in cache
+        int cur=pids[ps-1], cpos=PSp;              // cur = token at position cpos (=PSp=ps-1), not yet in cache
         std::vector<int> sgen; int nverify=0, timed_tok=0; float spec_ms=0; cudaEvent_t s0,s1; cudaEventCreate(&s0); cudaEventCreate(&s1);
         // Per-phase attribution of the spec step (LOOP_LOG Finding 17: the draft is ~6x off its
         // roofline and it is what keeps speculation at parity). DSV4_SPECPROF=1.
@@ -651,7 +668,7 @@ int main(int argc, char** argv){
         cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
         double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
         printf("[spec] decoding %d tokens (block=%d, draft passes=%d, adaptK=%.2f, prompt=%d s=%d)...\n",
-               NGEN, BLK, NPASS, adaptK, promptSweep[bsi], s);
+               NGEN, BLK, NPASS, adaptK, promptSweep[bsi], ps);
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]

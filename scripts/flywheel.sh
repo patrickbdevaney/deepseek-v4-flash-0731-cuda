@@ -104,8 +104,19 @@ THEN follow the phase in FLYWHEEL_STATE.json:
                rewrite queue, record the top entry in phaseB_top_history, go to A next iteration.
   C EXPLORE  — one structural item. Ends in a measured adopt/reject OR a written impossibility.
   D RESEARCH — write RESEARCH_PROMPT_v<N+1>.md against the CURRENT measured residual, query the
-               arXiv API directly (export.arxiv.org/api/query, sorted by submittedDate), convert
-               hits to levers with falsification tests, refill the queue, go to A next iteration.
+               arXiv API directly with WebFetch (export.arxiv.org/api/query?search_query=abs:"..."
+               +AND+abs:"...", sortBy=submittedDate) — it is complete, dated and not SEO-shaped,
+               unlike a web search. Fetch the abstracts of the top hits; an abstract usually states
+               losslessness and the headline number, which is enough to rank. Convert hits to levers
+               with falsification tests, refill the queue, go to A next iteration.
+
+RESEARCH IS NOT BLOCKED BY A BROKEN INSTRUMENT. Phase D produces CANDIDATE LEVERS, not numbers, so
+it does not need a working measurement to be worth doing — and it is the cheapest phase (no model
+run, no build). If the queue is thin, or the top entry is blocked, or two Phase-B rankings returned
+the same answer, do a D pass INSTEAD of idling. The one thing D must not do is adopt anything: a
+lever that arrives from a paper still has to be implemented, gated and measured in a later A cycle
+before a single number about it is written down. Finding 49 came from a D pass and it re-framed a
+residual the loop had spent seven rounds treating as physics.
 
 YOUR JOB IS CUDA, MEASUREMENT AND RESEARCH. NOTHING ELSE. The harness has already, before you
 started: verified nvcc/g++/the GPU/a trivial sm_110a compile-and-launch, built and run every unit
