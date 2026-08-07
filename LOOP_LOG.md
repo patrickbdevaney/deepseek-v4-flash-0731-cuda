@@ -1273,3 +1273,57 @@ already at 89-94% of achievable and the glue is flat. The two remaining measured
 (~55% of achievable after Opt #1) and the m16 B-repack (M>=2 only, so it buys verify/draft, not
 base). Further base gains require attacking the MoE beyond occupancy — a different kernel, not
 another launch-geometry tweak.
+
+---
+
+## 2026-08-06 — Finding 29: tcgen05 and TMA are AVAILABLE on Thor. The inherited blocker was a flag error.
+
+Before dispatching the deep-research effort I re-tested the one inherited "fact" that constrained the
+most: that `sm_110a` lacks 5th-gen tensor cores. **It does not.**
+
+```
+compile (compute_110a)                 runtime (real Thor silicon)
+  tcgen05.fence/alloc/mma/ld  COMPILES   tcgen05 alloc + relinquish + dealloc : OK
+  cp.async.bulk (TMA)         COMPILES   TMA bulk copy w/ mbarrier completion : OK
+  mma m16n8k32 e4m3           COMPILES
+  mma e2m1 (FP4)              BLOCKED  <- "mma with with FP6/FP4 floating point type"
+  mma .kind::mxf4 block_scale BLOCKED  <- "mma with block scale"
+```
+
+**Root cause of the false blocker — one letter.**
+```
+-arch=sm_110   -> compute_110   -> tcgen05 BLOCKED
+-arch=sm_110a  -> compute_110a  -> tcgen05 COMPILES
+```
+The prior project's own recorded error message says `.target 'sm_110'` — not `sm_110a`. The `a` suffix
+enables architecture-specific features, and tcgen05 is behind it. That conclusion propagated into
+`DECODE_GAP_RESEARCH.md` ("DeepGEMM's SM100 fp8×fp4 kernels are a REWRITE, not a port"), then into this
+project's `HARDWARE.md` §5 and `ROOFLINE.md`, and I carried it forward unquestioned through six
+optimisation rounds. It shaped which levers were even considered.
+
+A second, subtler trap: building an **executable** with `-arch=sm_110a` still emits `compute_110` PTX
+alongside the SASS, and *that* fails. The correct form is
+`-gencode arch=compute_110a,code=sm_110a`. My own first runtime attempt hit exactly this and briefly
+looked like a confirmation of the old claim.
+
+Captured permanently as `tools/arch_probe.cu` + `tools/arch_probe_runtime.cu` + `scripts/arch_probe.sh`,
+which test **compile and runtime**, so this cannot rot again.
+
+### What changes
+
+- **TMA is the textbook fix for Finding 28.** The M≥2 penalty is B-operand coalescing loss (8 rows
+  strided by K, 32 B each). `cp.async.bulk.tensor` does hardware-managed, swizzled, fully-coalesced
+  global→shared staging — exactly the missing piece, and it needs no weight repack.
+- **tcgen05 reopens the CUTLASS/DeepGEMM SM100 kernel family** as a port rather than a rewrite.
+- **The user's FP4 premise is half right, and the half that fails is now nailed down:** Thor has FP4
+  *storage* and hardware FP4→half *conversion* (both already used), but **no FP4 tensor-core matmul and
+  no block-scaled mma** — confirmed on the arch-specific target, with ptxas naming the feature. So MXFP4
+  weights must still be converted before an FP8/FP16 `mma`. That is a real ceiling, not a flag error.
+
+### Discipline note
+
+Every earlier finding in this log was validated by measurement. This one was inherited as a *negative*
+capability claim and never re-tested, because "the compiler rejects it" felt like proof. Negative
+capability claims deserve the same re-verification as performance claims — more, because they silently
+remove options rather than producing a wrong number. `scripts/arch_probe.sh` should be re-run after
+every CUDA toolkit update.

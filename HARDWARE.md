@@ -110,10 +110,31 @@ and re-deriving them is wasted time. Source: `~/dspark-cuda-reap-finetune/DECODE
 
 | Feature | Status on `sm_110a` | Consequence |
 |---|---|---|
-| `tcgen05.*` (5th-gen tensor core / UMMA) | **NOT supported** (`Instruction 'tcgen05.fence' not supported on .target 'sm_110'`) | DeepGEMM / SM100 fp8×fp4 kernels are a rewrite, not a port. Datacenter-Blackwell kernels do not transfer. |
+| `tcgen05.*` (5th-gen TC / tensor memory) | **SUPPORTED — compiles AND runs** (`alloc`/`dealloc`/`mma`/`ld` all pass ptxas on `compute_110a`; alloc+dealloc verified at runtime) | **The inherited "not supported" claim was a TARGET-FLAG ERROR** — see the box below. DeepGEMM/CUTLASS SM100-class kernels are back on the table. |
+| `cp.async.bulk` / `.tensor` (**TMA**) | **SUPPORTED — compiles AND runs** (bulk copy with `mbarrier` completion verified at runtime) | Hardware-managed, swizzled, perfectly-coalesced global→shared transfer. This is the textbook fix for the B-operand coalescing loss in `LOOP_LOG` Finding 28. |
+| `mma` with **FP4/FP6 operands** | **GENUINELY BLOCKED** (`Instruction 'mma with with FP6/FP4 floating point type' not supported on .target 'sm_110a'`) | FP4 remains a **storage + conversion** format only. Confirmed on the arch-specific target, so this is not the same flag error. |
+| `mma` with **block scale** (`.kind::mxf4`) | **GENUINELY BLOCKED** (`Instruction 'mma with block scale' not supported`) | No hardware MXFP4 block-scaled matmul. |
 | `cp.async.cg.shared.global` | **OK** | Async weight streaming / software pipelining is available. |
 | `__nv_cvt_fp4x2_to_halfraw2` (HW FP4×2 → half2 unpack) | **OK** | The fast MXFP4 dequant primitive works. This is the top unexploited lever (see `ROOFLINE.md` §6). |
-| FP4 tensor-core **compute** | **BLOCKED** on all paths (ptxas, cuBLASLt reports 0 algos, CUTLASS, SASS) | FP4 is a **storage/bandwidth** format only. FP8 `mma` is the compute ceiling. Re-test with `~/dspark-cuda-reap-finetune/tools/cublas_fp4_probe.cu` after every CUDA toolkit update. |
+| FP4 tensor-core **compute** | **BLOCKED** — re-confirmed on `compute_110a` with ptxas naming the feature explicitly | FP4 is a **storage/bandwidth** format only. FP8 `mma` is the compute ceiling. |
+
+> ### ⚠ The target flag decides what exists. Get it wrong and you will conclude the hardware lacks features it has.
+>
+> ```
+> -arch=sm_110    -> compute_110    -> tcgen05 BLOCKED      <-- where the inherited claim came from
+> -arch=sm_110a   -> compute_110a   -> tcgen05 COMPILES     (but building an EXECUTABLE this way ALSO
+>                                                            emits compute_110 PTX, which then fails)
+> -gencode arch=compute_110a,code=sm_110a                   <-- correct for executables: SASS only
+> ```
+>
+> The `a` suffix means "architecture-specific features enabled", and tcgen05 lives behind it. The prior
+> project recorded `Instruction 'tcgen05.fence' not supported on .target 'sm_110'` — note the target in
+> its own error message is `sm_110`, not `sm_110a`. That single missing letter propagated into
+> `DECODE_GAP_RESEARCH.md` as "DeepGEMM is a rewrite, not a port", and into this project's `HARDWARE.md`
+> and `ROOFLINE.md` as a hard architectural constraint. It was never true.
+>
+> **Reproduce with `bash scripts/arch_probe.sh`** — it tests compile *and* runtime, and it is now part of
+> the repo precisely so this cannot rot again.
 
 ## 6. Remaining instrumentation gaps
 
