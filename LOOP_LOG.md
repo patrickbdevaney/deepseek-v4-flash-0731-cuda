@@ -3266,3 +3266,45 @@ A masked read is not a safe read. `m0`/`m8` silenced the symptom of a missing lo
 correctness gate in this project ran at a prompt length that could not reach it. **Gate the shape
 range the engine actually spans, not the one the canonical prompt happens to use** — the sweep
 prompts (11, 15, 18, 29 tokens) had been running through this code for cycles.
+
+---
+
+## Finding 63 — adaptive verify width, re-measured on a correct prefill: +9-11% where it engages, and my own 7x claim was inflated
+
+Finding 59 measured adaptive-vs-fixed verify width across five prompts and reported +9.5 / +28.0 /
++7.9 / +12.2 %, concluding the lever was worth "7x what the log says". That sweep ran on a **partly
+garbage prefill** (Finding 62: every prompt of 18+ tokens had uninitialised rows in its sliding-layer
+prefill output). Re-run post-fix, two replicates, arms at adjacent sweep positions
+(`evidence/adaptfix2.log`):
+
+| prompt | adaptive | fixed | gain (rep1 / rep2) | acceptance a/f |
+|---|---|---|---|---|
+| 0 — canonical, 6 ids | 17.89 / 17.97 | 18.02 / 18.00 | −0.7 % / −0.2 % | 2.90 / 3.39 |
+| 1 — 11 ids | 16.34 / 16.40 | 14.93 / 14.98 | **+9.4 % / +9.5 %** | 2.65 / 2.90 |
+| 2 — 18 ids | 19.32 / 19.38 | 17.02 / 19.26 | +13.5 % / +0.6 % | **3.33 / 3.33** |
+| 3 — 15 ids | 11.81 / 13.65 | 10.87 / 12.32 | **+8.6 % / +10.8 %** | 1.76 / 2.07 |
+| 4 — 29 ids | 12.09 / 13.97 | 11.10 / 12.61 | **+8.9 % / +10.8 %** | 1.82 / 2.14 |
+
+**Corrected verdict: +9 to +11 % on the three prompts where the lever engages, a wash on the two where
+it does not.** Not the +28 % that prompt 2 showed pre-fix.
+
+Read prompt 2 carefully, because it is the clean case: **acceptance is 3.33 under BOTH modes**, i.e.
+the adaptive threshold never narrowed a single verify there, so the two arms did *identical work* and
+any tok/s difference between them is measurement noise by construction. Rep 1 says +13.5 %, rep 2 says
++0.6 %. That is a 13 % timing spread on two runs that are provably the same computation — a direct
+measurement of trap #5 (sweep position), and the reason the pre-fix +28 % should never have been
+quoted from one replicate.
+
+So Finding 59's *direction* holds and two of its four magnitudes hold (p1 +9.5 → +9.4, p3 +7.9 →
++8.6/+10.8). Its headline number does not. **Against the originally recorded +2.1 %, adaptive width is
+worth roughly 4-5x, not 7x**, and the honest way to state it is per-prompt, not as a single ratio.
+
+### The determinism fix, confirmed at the behavioural level
+
+Every cell's two replicates have **exactly** matching acceptance — 2.90/2.90, 2.65/2.65, 3.33/3.33,
+1.76/1.76, 1.82/1.82, across five prompts and both modes. Before Finding 62, 36 identical points gave
+20 distinct acceptance values. The engine now does the same work on the same input every time.
+
+**Timing still varies with sweep position** (p3 adaptive: 11.81 in replicate 1, 13.65 in replicate 2,
+same acceptance). Output determinism and timing determinism are different properties; F62 fixed the
+first. Keep putting A/B arms at adjacent positions.
