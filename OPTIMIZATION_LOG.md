@@ -11,6 +11,8 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 | # | lever | change | correctness | bench | **full model** | status |
 |---|---|---|---|---|---|---|
 | 2 | small-N GEMV wave quantisation | grid-stride + wave-aligned launch for `fp8_gemv_m1_kernel` | Gate K PASS | clamp-to-one-wave: `wq_b` 214.6 -> 186.3, `wo_b` 225.5 -> 194.7 (**worse**); round-down: within noise (`wq_a` 41.6 vs 156.8 across runs) | not run | **REVERTED — negative result.** Whole lever is <2% of `B_tok` (`wq_a` 1.6% + `wkv` 0.8%); could not justify risk to `wq_b`/`wo_b` (~26% at 89-94%) |
+| 7 | **M=1 GEMV memory-level parallelism** | inner loop issued ONE 4-byte load per iteration and consumed it immediately (**ILP=1**). Unrolled by 4, all 8 loads issued before any use. kb accumulation order unchanged -> bit-exact. | Gate K PASS | on-box: ILP=1 streaming sustains 110-132 GB/s, ILP>=2 sustains 224-237 | **105.2 -> 101.7 ms/tok, 9.51 -> 9.83 tok/s (1.034x)** | **ADOPTED** |
+| — | lock EMC + GPU `min_freq` | default governors park EMC at 2750 MHz between bursts; worth +19% mean on *gapped* workloads | — | sustained bw 235 vs 240 (noise) | **106.8 vs 105.2 ms/tok — NO GAIN.** Our step is fully device-side with no host gaps to recover. | **REJECTED** |
 | 6 | small-M coalesced FP8 GEMV | Templated `fp8_gemv_mkT_kernel<M>` (`acc[M]`, not `acc[16]` — the register pressure that made the prior project reject this path). Reads B fully coalesced (128 B/warp) vs the m16 tile's 8 rows strided by K. Adopted for M=2..4; `TC_MK=1` forces the tile. | Gate K PASS | **COLD** A/B: M=2 **2.00x**, M=3 1.49x, M=5 1.04x, M=8 0.72x | none by construction (dispatch is M>=2; base decode is M=1) | **ADOPTED for M=2..4** |
 | 5 | device-side draft AR loop | `dspark_forward_head`'s greedy loop ran on the HOST: per block position a sync, a 517 KB logits D2H, and a 129k-element CPU argmax. Moved on-device (`k_seed_first`/`k_pick`/`k_argmax_row`/`k_store`), removed the internal sync in `dspark_markov`. | **draft tokens byte-identical**, acceptance unchanged at 3.12 | — | draft `fwd_head` **39.2 -> 32.4 ms**; round 353.5 -> 346.5; **spec-decode 0.98x -> 1.00x of base** | **ADOPTED** |
 | 4 | BF16-native `lm_head` + markov heads | `Loader::bf16` was dequantising BF16 weights to f32, so `lm_head` was **read as 2118 MB instead of 1059 MB every step** (and `markov_w2` 5x per draft). New `gemm_bf16w`: native bf16x2 loads, 4 warps/block (the old `gemm_fp32` launched 646,400 one-warp blocks), runtime alignment check. | `gate_bf16w` vs the old f32 path: **cosine 1.000000000, argmax MATCH** on all 4 shapes | — | **108.4 -> 105.2 ms/tok, 9.26 -> 9.51 tok/s**; draft `fwd_head` 54.0 -> 39.2 ms; verify 308.7 -> 293.0; **memory 110.2 -> 108.1 GiB** | **ADOPTED** |
@@ -24,8 +26,9 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 | Ported as-is (= prior project's 180B result, 126.7 ms) | 128.2 | 7.80 | 87.4 | 36.4% |
 | After Opt #1 | 115.8 | 8.63 | 96.7 | 40.3% |
 | After Opt #3 | 108.0 | 9.26 | 103.7 | 43.2% |
-| After Opt #4 | **105.2** | **9.51** | **116.6** | **48.6%** |
-| **Cumulative** | **1.219x** | | | |
+| After Opt #4 | 105.2 | 9.51 | 116.6 | 48.6% |
+| After Opt #7 (ILP) | **101.7** | **9.83** | **120.6** | **50.2%** |
+| **Cumulative** | **1.261x** | | | |
 
 Note the GB/s column now uses the **engine's** `B_tok` of 12,261 MB, not the checkpoint's 11,202 MB.
 `ROOFLINE.md` measured what is *stored*; Finding 26b showed the engine was reading `lm_head` at
