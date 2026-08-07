@@ -4,3 +4,7 @@ build/
 cache/
 .flywheel_cycles/
 .flywheel_last_run.*
+.flywheel_quarantine/
+.flywheel_selftest.txt
+.flywheel_failstreak
+.flywheel_commit_msg

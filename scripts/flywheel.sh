@@ -200,9 +200,26 @@ if [ -n "$(git status --porcelain)" ]; then
           || git add -A && git commit -q -F "$MSG"
         log "committed cycle $CYCLE: $(head -1 "$MSG")"
         : > "$MSG"
+    elif [ "$RC" -ne 0 ]; then
+        # A cycle that ERRORED must not leave edits behind: the next cycle would build on unverified
+        # code and could report it as its own. Preserve the work as a patch, restore a clean tree.
+        mkdir -p "$ROOT/.flywheel_quarantine"
+        Q="$ROOT/.flywheel_quarantine/cycle${CYCLE}-$(date +%Y%m%d-%H%M).patch"
+        git diff > "$Q"; git status --porcelain > "$Q.status"
+        git checkout -- . 2>/dev/null
+        log "cycle failed (rc=$RC) and left a dirty tree; quarantined to $Q and restored HEAD"
     else
         log "WARNING: working tree dirty but no .flywheel_commit_msg — leaving uncommitted for review"
     fi
+fi
+
+# two failed cycles in a row is a systemic problem, not bad luck
+if [ "$RC" -ne 0 ]; then
+    N=$(cat "$ROOT/.flywheel_failstreak" 2>/dev/null || echo 0); N=$((N+1))
+    echo "$N" > "$ROOT/.flywheel_failstreak"
+    [ "$N" -ge 2 ] && halt "two consecutive cycles failed (rc=$RC); see .flywheel_last_run.jsonl"
+else
+    echo 0 > "$ROOT/.flywheel_failstreak"
 fi
 
 # ---- postflight ------------------------------------------------------------------------------
