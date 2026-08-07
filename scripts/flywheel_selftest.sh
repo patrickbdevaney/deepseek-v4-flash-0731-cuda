@@ -64,7 +64,7 @@ for g in gate_units gate_bf16w gate_ogroup_gemv gate_tc_fp8_smem; do
 done
 
 echo "[selftest] no competing work"
-pgrep -f build/decode >/dev/null && no "a full-model process is already running" || ok "gpu idle"
+pgrep -x decode >/dev/null && no "a full-model process is already running" || ok "gpu idle"
 
 [ "$fail" -eq 0 ] && echo "[selftest] PASS" || echo "[selftest] FAIL — not starting a cycle"
 exit "$fail"

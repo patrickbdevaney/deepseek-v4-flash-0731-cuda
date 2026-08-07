@@ -30,8 +30,12 @@
 #   - a measured regression worse than 3% against the recorded baseline
 #   - FLYWHEEL_STATE.json .halt == true
 set -uo pipefail
-cd "$(dirname "$0")/.."
+# The cron wrapper runs a SNAPSHOT of this script from /tmp (so an edit cannot race a firing timer),
+# which makes $(dirname "$0")/.. resolve to "/" and every path wrong -- the loop then halted every
+# hour on `no FLYWHEEL_STATE.json` at "//FLYWHEEL_STATE.json". The root is passed explicitly.
+cd "${FLYWHEEL_ROOT:-$(dirname "$0")/..}" || exit 1
 ROOT="$PWD"
+[ -f "$ROOT/FLYWHEEL_STATE.json" ] || { echo "[flywheel] wrong root: $ROOT"; exit 1; }
 STATE="$ROOT/FLYWHEEL_STATE.json"
 JOURNAL="$ROOT/FLYWHEEL_JOURNAL.md"
 LOCK=/tmp/dsv4-flywheel.lock
@@ -58,7 +62,10 @@ flock -n 9 || { log "another iteration is running; exiting"; exit 0; }
 [ -f "$STATE" ] || halt "no FLYWHEEL_STATE.json"
 python3 -c "import json;s=json.load(open('$STATE'));exit(1 if s.get('halt') else 0)" \
   || { log "state is halted: $(python3 -c "import json;print(json.load(open('$STATE')).get('halt_reason',''))")"; exit 0; }
-pgrep -f "build/decode" >/dev/null && { log "a full-model process is already running; exiting"; exit 0; }
+# `pgrep -f build/decode` matches ANY process whose command line mentions the path -- a
+# monitoring shell, a grep, an editor -- and a false positive makes the loop skip the cycle.
+# `pgrep -x decode` matches the executable name, which is what we actually mean.
+pgrep -x decode >/dev/null && { log "a full-model process is already running; exiting"; exit 0; }
 [ -d "$MODEL" ] || halt "model dir missing: $MODEL"
 
 # The 100.4 GiB checkpoint needs headroom; the page cache is reclaimable and run_model.sh refuses

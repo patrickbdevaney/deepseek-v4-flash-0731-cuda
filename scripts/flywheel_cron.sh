@@ -8,7 +8,9 @@ export PATH="$HOME/.local/bin:/usr/local/cuda-13.0/bin:$PATH"
 # The timer can fire while the script is being edited. Running a half-written file produced
 # "unexpected EOF while looking for matching quote" and a lost tick; parse it first, and snapshot it
 # so an edit landing mid-cycle cannot change what is executing.
-SRC="$HOME/deepseek-v4-flash-0731-cuda/scripts/flywheel.sh"
+REPO="$HOME/deepseek-v4-flash-0731-cuda"
+export FLYWHEEL_ROOT="$REPO"
+SRC="$REPO/scripts/flywheel.sh"
 SNAP="$(mktemp /tmp/flywheel-XXXXXX.sh)"
 cp "$SRC" "$SNAP"
 if ! bash -n "$SNAP" 2>>"$HOME/flywheel_cron.log"; then

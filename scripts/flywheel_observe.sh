@@ -9,7 +9,7 @@
 # FLYWHEEL_STATE.json. Halting is the point — if cycle N produced a number that cannot be traced to
 # a run, cycle N+1 must not build on it. Everything else is denied by .claude/settings.json.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "${FLYWHEEL_ROOT:-$(dirname "$0")/..}" || exit 1
 ROOT="$PWD"
 LOCK=/tmp/dsv4-flywheel-observe.lock
 log(){ printf '[observe %s] %s\n' "$(date -Is)" "$*"; }
@@ -18,7 +18,9 @@ exec 9>"$LOCK"; flock -n 9 || { log "already observing"; exit 0; }
 [ -f "$ROOT/FLYWHEEL_STOP" ] && { log "FLYWHEEL_STOP present"; exit 0; }
 
 # Do not audit a cycle that is still running — half a transcript reads like a failure.
-if pgrep -f "scripts/flywheel.sh" >/dev/null || pgrep -f "build/decode" >/dev/null; then
+# Ask the lock the worker actually holds, not pgrep: `pgrep -f scripts/flywheel.sh` also matches any
+# shell whose command line merely mentions the path, such as a monitoring loop.
+if ! flock -n /tmp/dsv4-flywheel.lock true 2>/dev/null || pgrep -x decode >/dev/null; then
     log "a cycle is in flight; skipping this pass"; exit 0
 fi
 

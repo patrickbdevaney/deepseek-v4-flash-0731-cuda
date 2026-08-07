@@ -22,7 +22,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
         grep -nE "$PAT" "$LOG" | tail -3
         exit 0
     fi
-    if [ -f "$LOG" ] && ! pgrep -f "build/decode" >/dev/null; then
+    if [ -f "$LOG" ] && ! pgrep -x decode >/dev/null; then
         sleep 3                        # settle: the process may be mid-exit with output buffered
         if grep -qE "$PAT" "$LOG"; then grep -nE "$PAT" "$LOG" | tail -3; exit 0; fi
         echo "run exited without matching /$PAT/; tail follows:" >&2
