@@ -43,6 +43,30 @@ void index_score(float* score, const float* q, const float* kv, const float* wei
 #include <cstdio>
 #define CUI(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 
+// N1, ADOPTED (default ON; NO_ZERO_SCRATCH=1 disables). Finding 60: the engine is nondeterministic on identical input
+// and DSV4_ARENA_ZERO exonerated the arena. This is the analogue the arena test could not reach —
+// the PREFILL path allocates its scratch with raw cudaMalloc, once per layer per call, and never
+// zeroes it, so every buffer starts life holding whatever the allocator last had at that address.
+// Any kernel here that accumulates into its output rather than assigning it, or that writes fewer
+// rows than it later reads, would inherit that and produce different numbers run to run.
+//
+// MEASURED (Finding 60): on 8 byte-identical sweep points, zeroing these buffers moves the count of
+// distinct FIRST-verify margin vectors from 8/8 to 5/8. So this is a REAL contributor to the
+// engine's nondeterminism, not a theory. It is free at the measurement that matters, because decode
+// runs entirely out of the arena and never touches these allocations -- only prefill does, and
+// prefill time is not a reported quantity.
+//
+// THIS MASKS A BUG, IT DOES NOT FIX ONE. Some kernel in the prefill path reads its output buffer
+// before writing it. Zeroing makes the engine reproducible-ish and removes the nondeterminism this
+// particular defect contributes; it does not identify the kernel. Finding that kernel is still open,
+// and the remaining 5/8 says there is a second, non-memory source as well.
+static inline cudaError_t zalloc(void** p, size_t n){
+    static const bool z = getenv("NO_ZERO_SCRATCH") == nullptr;   // DEFAULT ON, see below
+    cudaError_t e = cudaMalloc(p, n);
+    if(e == cudaSuccess && z && n) cudaMemset(*p, 0, n);
+    return e;
+}
+
 __global__ void k_scale(float* y, float sc, int n){ int i=blockIdx.x*blockDim.x+threadIdx.x; if(i<n) y[i]*=sc; }
 
 // causal mask: score[si,t] = -inf where t >= (si+1)/ratio.
@@ -78,9 +102,9 @@ void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, con
     if (T <= 0) return;
     float softmax_scale = rsqrtf((float)idx_hd), wscale = softmax_scale * rsqrtf((float)n_heads);
     unsigned char* qrq; float *qrs, *q, *qtmp, *ckv, *weights;
-    CUI(cudaMalloc(&qrq,(size_t)s*q_lora)); CUI(cudaMalloc(&qrs,(size_t)s*(q_lora/128)*4));
-    CUI(cudaMalloc(&q,(size_t)s*QD*4)); CUI(cudaMalloc(&qtmp,(size_t)s*QD*4));
-    CUI(cudaMalloc(&ckv,(size_t)T*idx_hd*4)); CUI(cudaMalloc(&weights,(size_t)s*n_heads*4));
+    CUI(zalloc((void**)&qrq,(size_t)s*q_lora)); CUI(zalloc((void**)&qrs,(size_t)s*(q_lora/128)*4));
+    CUI(zalloc((void**)&q,(size_t)s*QD*4)); CUI(zalloc((void**)&qtmp,(size_t)s*QD*4));
+    CUI(zalloc((void**)&ckv,(size_t)T*idx_hd*4)); CUI(zalloc((void**)&weights,(size_t)s*n_heads*4));
 
     act_quant_fp8(qrq, qrs, qr, s, q_lora, 128, stream); dprobe(stream);
     fp8_block_gemm(q, qrq, qrs, wq_b, wq_b_s, s, QD, q_lora, stream); dprobe(stream);              // [s, n_heads*idx_hd]

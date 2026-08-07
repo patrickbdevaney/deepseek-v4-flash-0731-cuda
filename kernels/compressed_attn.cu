@@ -10,6 +10,30 @@
 #include <cmath>
 #include <cstdio>
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
+// N1, ADOPTED (default ON; NO_ZERO_SCRATCH=1 disables). Finding 60: the engine is nondeterministic on identical input
+// and DSV4_ARENA_ZERO exonerated the arena. This is the analogue the arena test could not reach —
+// the PREFILL path allocates its scratch with raw cudaMalloc, once per layer per call, and never
+// zeroes it, so every buffer starts life holding whatever the allocator last had at that address.
+// Any kernel here that accumulates into its output rather than assigning it, or that writes fewer
+// rows than it later reads, would inherit that and produce different numbers run to run.
+//
+// MEASURED (Finding 60): on 8 byte-identical sweep points, zeroing these buffers moves the count of
+// distinct FIRST-verify margin vectors from 8/8 to 5/8. So this is a REAL contributor to the
+// engine's nondeterminism, not a theory. It is free at the measurement that matters, because decode
+// runs entirely out of the arena and never touches these allocations -- only prefill does, and
+// prefill time is not a reported quantity.
+//
+// THIS MASKS A BUG, IT DOES NOT FIX ONE. Some kernel in the prefill path reads its output buffer
+// before writing it. Zeroing makes the engine reproducible-ish and removes the nondeterminism this
+// particular defect contributes; it does not identify the kernel. Finding that kernel is still open,
+// and the remaining 5/8 says there is a second, non-memory source as well.
+static inline cudaError_t zalloc(void** p, size_t n){
+    static const bool z = getenv("NO_ZERO_SCRATCH") == nullptr;   // DEFAULT ON, see below
+    cudaError_t e = cudaMalloc(p, n);
+    if(e == cudaSuccess && z && n) cudaMemset(*p, 0, n);
+    return e;
+}
+
 using namespace dsv4;
 
 // combined_idxs[q, 0:wwidth] = window[q], combined[q, wwidth:] = compress[q]. one thread per (q,j).
@@ -26,12 +50,12 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
     const auto& a = w.attn;
 
     uint8_t *xq, *qrq, *ogq; float *xs, *qrs, *ogs, *qr, *q, *kv_win, *kv_comp, *kv_all, *o, *og;
-    CU(cudaMalloc(&xq,(size_t)bs*DIM)); CU(cudaMalloc(&xs,(size_t)bs*(DIM/128)*4));
-    CU(cudaMalloc(&qr,(size_t)bs*Q_LORA*4)); CU(cudaMalloc(&qrq,(size_t)bs*Q_LORA)); CU(cudaMalloc(&qrs,(size_t)bs*(Q_LORA/128)*4));
-    CU(cudaMalloc(&q,(size_t)bs*Kd*4)); CU(cudaMalloc(&kv_win,(size_t)bs*HEAD_DIM*4));
-    CU(cudaMalloc(&kv_comp,(size_t)T*HEAD_DIM*4)); CU(cudaMalloc(&kv_all,(size_t)(bs+T)*HEAD_DIM*4));
-    CU(cudaMalloc(&o,(size_t)bs*Kd*4)); CU(cudaMalloc(&og,(size_t)bs*OB*4));
-    CU(cudaMalloc(&ogq,(size_t)bs*OB)); CU(cudaMalloc(&ogs,(size_t)bs*(OB/128)*4));
+    CU(zalloc((void**)&xq,(size_t)bs*DIM)); CU(zalloc((void**)&xs,(size_t)bs*(DIM/128)*4));
+    CU(zalloc((void**)&qr,(size_t)bs*Q_LORA*4)); CU(zalloc((void**)&qrq,(size_t)bs*Q_LORA)); CU(zalloc((void**)&qrs,(size_t)bs*(Q_LORA/128)*4));
+    CU(zalloc((void**)&q,(size_t)bs*Kd*4)); CU(zalloc((void**)&kv_win,(size_t)bs*HEAD_DIM*4));
+    CU(zalloc((void**)&kv_comp,(size_t)T*HEAD_DIM*4)); CU(zalloc((void**)&kv_all,(size_t)(bs+T)*HEAD_DIM*4));
+    CU(zalloc((void**)&o,(size_t)bs*Kd*4)); CU(zalloc((void**)&og,(size_t)bs*OB*4));
+    CU(zalloc((void**)&ogq,(size_t)bs*OB)); CU(zalloc((void**)&ogs,(size_t)bs*(OB/128)*4));
 
     // --- q ---
     act_quant_fp8(xq, xs, x, bs, DIM, 128, stream); dprobe(stream);
@@ -60,7 +84,7 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
     int itopk; int* compress_topk;
     if (has_indexer) {
         itopk = w.index_topk < T ? w.index_topk : T;
-        float* idx_score; CU(cudaMalloc(&idx_score,(size_t)s*T*4)); CU(cudaMalloc(&compress_topk,(size_t)s*itopk*4));
+        float* idx_score; CU(zalloc((void**)&idx_score,(size_t)s*T*4)); CU(zalloc((void**)&compress_topk,(size_t)s*itopk*4));
         indexer_forward(idx_score, compress_topk, x, qr, w.idx_wq_b, w.idx_wq_b_s, w.idx_weights_proj,
                         w.idx_c_wkv, w.idx_c_wgate, w.idx_c_ape, w.idx_c_norm, a.cosT, a.sinT, w.cc_cos, w.cc_sin,
                         s, DIM, Q_LORA, w.index_n_heads, w.index_head_dim, ROPE_DIM, ratio, w.index_topk, s, eps, stream);
@@ -70,7 +94,7 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
         itopk = T; std::vector<int> hc((size_t)s * T);
         for (int i = 0; i < s; ++i) { int thr = (i + 1) / ratio;
             for (int t = 0; t < T; ++t) hc[(size_t)i * T + t] = (t >= thr) ? -1 : t + s; }
-        CU(cudaMalloc(&compress_topk,(size_t)s*T*4));
+        CU(zalloc((void**)&compress_topk,(size_t)s*T*4));
         CU(cudaMemcpyAsync(compress_topk, hc.data(), (size_t)s*T*4, cudaMemcpyHostToDevice, stream));
     }
 
@@ -79,9 +103,9 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
     std::vector<int> hw((size_t)s * wwidth);
     for (int i = 0; i < s; ++i) { int base = i - win + 1; if (base < 0) base = 0;
         for (int k = 0; k < wwidth; ++k) { int v = base + k; hw[(size_t)i * wwidth + k] = (v > i) ? -1 : v; } }
-    int* window_dev; CU(cudaMalloc(&window_dev,(size_t)s*wwidth*4));
+    int* window_dev; CU(zalloc((void**)&window_dev,(size_t)s*wwidth*4));
     CU(cudaMemcpyAsync(window_dev, hw.data(), (size_t)s*wwidth*4, cudaMemcpyHostToDevice, stream));
-    int tot = wwidth + itopk; int* combined; CU(cudaMalloc(&combined,(size_t)s*tot*4));
+    int tot = wwidth + itopk; int* combined; CU(zalloc((void**)&combined,(size_t)s*tot*4));
     k_combine_idxs<<<(s*tot+255)/256,256,0,stream>>>(combined, window_dev, compress_topk, s, wwidth, itopk); dprobe(stream);
 
     // --- sparse attention over combined KV, then de-rotate + grouped o-LoRA + wo_b ---

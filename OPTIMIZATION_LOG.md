@@ -187,3 +187,19 @@ Remaining candidates, ranked by the standalone cost that could be hidden (curren
 `lm_head` 6.47 (runs after all 43 layers; nothing left to overlap with) ·
 `wkv` inside `build_qKV` (independent of the `wq_a->wq_b` chain, and it is the worst shape on the
 probe at 47.8 GB/s standalone) · the ~14 ms of glue kernels that move almost no bytes.
+| **C1: kv chain forked off the q chain (Finding 57)** | 17.48 | **17.61** | `evidence/c1.log` | (cycle 7) |
+| **clocks pinned — `jetson_clocks` (Finding 60)** | 17.61 / 10.48 base | **17.92 / 12.65 base** | `evidence/pinned.log` | (cycle 7) |
+| **prefill scratch zeroed (Finding 60) — determinism, no decode cost** | — | — | `evidence/zeroscratch.log` | (cycle 7) |
+| **cycle-7 close, prompt 0, clocks pinned** | 17.05 (same-day control) | **18.19 spec / 12.66 base AR** | `evidence/final.log` | (cycle 7) |
+
+### Where the cycle-7 gain came from
+
+| component | gain | how it was measured |
+|---|---|---|
+| intra-layer concurrency, 3 fork sites | **+3.1 %** | 36 MATCHED identical points, splits on 18.09 vs off 17.54 |
+| clock pinning (`jetson_clocks`) | **+3.0 % steady, +20.7 % cold** | paired at matched sweep positions across 3 replicates |
+| prefill scratch zeroing | 0 % (determinism only) | decode runs out of the arena and never touches those buffers |
+
+**17.05 → 18.19 tok/s on prompt 0 (+6.7 %)**, base AR non-graph **10.30 → 12.66 (+22.9 %)**.
+Prompt 0 is the *stable* prompt (four measurements span 17.42-17.71, ±0.8 %), so this single point is
+meaningful; on prompt 2 the same measurement would carry a ±17 % error bar (Finding 60).

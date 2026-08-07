@@ -679,6 +679,24 @@ int main(int argc, char** argv){
         // the prefill, not after it — the previous point may have left a different prompt there.
         CU(cudaMemcpy(d_ids,pids.data(),(size_t)ps*4,cudaMemcpyHostToDevice));
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
+        // N1 DIAGNOSTIC (DSV4_ZERO_CACHES=1). Finding 60. A sweep point resets `T` and re-prefills,
+        // but the KV caches, `xin`, `main_x` and `mh_pre` are persistent cudaMalloc buffers that are
+        // never cleared — so every point starts holding the PREVIOUS point's tail, and a read past
+        // the freshly written range sees different data at every point while being perfectly
+        // deterministic within one. That is exactly the signature: identical inputs, different
+        // first-verify margins, and no atomics anywhere in the path.
+        // DSV4_ARENA_ZERO exonerated the arena; DSV4_ZERO_SCRATCH (prefill's raw cudaMalloc) moved
+        // 8/8 distinct margin vectors to 5/8, so it is part of it. This covers the rest.
+        if(getenv("DSV4_ZERO_CACHES")){
+            for(int L=0;L<N_LAYERS;++L){ int r=compress_ratio(L);
+                if(KV[L].win_kv) CU(cudaMemset(KV[L].win_kv,0,(size_t)seqmax*HEAD_DIM*4));
+                if(KV[L].xin)    CU(cudaMemset(KV[L].xin,0,(size_t)seqmax*DIM*4));
+                if(r && KV[L].comp_kv) CU(cudaMemset(KV[L].comp_kv,0,(size_t)(seqmax/r+2)*HEAD_DIM*4));
+                if(r==4 && KV[L].idx_ckv) CU(cudaMemset(KV[L].idx_ckv,0,(size_t)(seqmax/r+2)*INDEX_HEAD_DIM*4)); }
+            CU(cudaMemset(main_x,0,(size_t)seqmax*d*4));
+            CU(cudaMemset(mh_pre,0,(size_t)(SMAX-1)*3*d*4));
+            CU(cudaDeviceSynchronize());
+        }
         k_embed<<<((size_t)PSp*d+255)/256,256>>>(h0,emb,d_ids,PSp,d); k_hc_expand<<<((size_t)PSp*hc*d+255)/256,256>>>(h,h0,PSp,hc,d); CU(cudaDeviceSynchronize());
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PSp); std::swap(h,h2);
             if(Lyr==40) dspark_tap_pool(mh_pre,h,PSp,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_pre,h,PSp,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_pre,h,PSp,hc,d,2,3); }

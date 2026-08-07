@@ -7,15 +7,15 @@
     "moe-latency"
   ],
   "baseline": {
-    "spec_tok_s": 17.61,
-    "spec_tok_s_note": "canonical prompt 0, single point. See warning below: a single sweep point is a +/-17% measurement on a sensitive prompt (Finding 60).",
+    "spec_tok_s": 18.19,
+    "spec_tok_s_note": "prompt 0 with clocks PINNED. Same-day ungoverned control with no cycle-7 changes: 17.05 (evidence/dprof6.log). Prompt 0 is the stable prompt (4 measurements span 17.42-17.71, +/-0.8%); on prompt 2 a single point carries +/-17% (Finding 60).",
     "concurrency_gain_paired": "splits ON 18.09 vs OFF 17.54 over 36 MATCHED identical points = +3.1%. This is the defensible number for the cycle-6/7 concurrency work.",
-    "base_tok_s_nograph_pinned": 12.65,
+    "base_tok_s_nograph_pinned": 12.66,
     "base_tok_s_nograph_governed": 10.48,
     "base_tok_s_graphed": 12.52,
     "verify_k5_ms": 150.56,
     "prompt_range": "11.5 to 21.1 tok/s across 5 prompts -- prompt 0 is NOT representative",
-    "source_log": "evidence/c1.log, evidence/pinned.log, evidence/rampshape.log, evidence/rampctl.log",
+    "source_log": "evidence/final.log (clocks pinned, all cycle-7 changes in)",
     "measured": "2026-08-07"
   },
   "queue": [
@@ -25,7 +25,7 @@
       "priority": "HIGHEST",
       "what": "Finding 60: the engine is nondeterministic on identical input. 36 identical sweep points give 19 distinct token sequences, acceptance 1.40-3.33, tok/s 10.04-22.52, and 36 distinct FIRST-verify margin vectors. Mean 18.1 against its own good draws of 21-22. Nothing left in kernel work is worth close to this.",
       "falsify": "ELIMINATED ALREADY, do not re-test: the new concurrency (splits-off control reproduces it exactly), MoE atomics (only in the unused non-batched path), a stale draft-window read (nwin is clamped), and uninitialised ARENA scratch (DSV4_ARENA_ZERO=1 does not fix it). NEXT: zero the PREFILL's raw cudaMalloc scratch -- compressed_attn_forward allocates 17 buffers per layer per call and never zeroes them, and that is the one analogue of the arena test that was not run. Then check mh_pre, which is written for only PSp of SMAX-1 rows.",
-      "note": "the base AR argmax gate passes every run (11111) and MATCH 5/5 holds, so the MAIN model is stable at M=1 and M=5; it is the DRAFT path whose margins move."
+      "note": "the base AR argmax gate passes every run (11111) and MATCH 5/5 holds, so the MAIN model is stable at M=1 and M=5; it is the DRAFT path whose margins move. ELIMINATED THIS CYCLE TOO: persistent KV/xin/main_x/mh_pre caches (DSV4_ZERO_CACHES=1 adds nothing over scratch zeroing), and concurrency a SECOND time (splits-off with everything zeroed is identical, 5/8). Zeroing the prefill scratch IS a real contributor (8/8 -> 5/8 distinct margin vectors) and is now default ON, but it MASKS rather than fixes: some prefill kernel reads its output before writing it, and the residual 5/8 is a second, non-memory source. Find the kernel."
     },
     {
       "id": "P1",
