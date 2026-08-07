@@ -2029,3 +2029,62 @@ one for *how much a kernel is worth end-to-end*.
 **Phase A is over.** Levers are now landing at under 1% each while the measurement noise band on a
 full-model run is +/-1%. The remaining gap is not a kernel that can be tuned; it is the serialised
 tail of ~600 dependent launches, which is a scheduling problem, not a bandwidth or occupancy one.
+
+## Finding 48 — both scoped structural items retired with measurements
+
+The queue's two remaining structural items were verify-path CUDA-graph capture and a persistent
+megakernel. Both are now measured or costed rather than estimated, and neither survives.
+
+### Verify graph: 1.05x, measured without writing it
+
+A reusable verify graph needs device-pos variants of every verify kernel (~400 lines, mirroring the
+decode path's `_dp` family) because `Tf`, `ntot`, `topk` and `wmax` all move with `pos` and `T`.
+But the *question* needs none of that: capture ONE verify at a fixed position and replay it. The
+replay recomputes the same position so its outputs are meaningless — the **time** is exactly what a
+device-pos verify graph would be worth. Forty lines to de-risk four hundred (`VERIFYGRAPH=1`).
+
+Prerequisite: `cudaMemcpyAsync` from PAGEABLE host memory is not capturable, and the host-built
+`comb` arrays were the only uncapturable thing left in the verify (the indexer variant, 21 of 43
+layers, already builds its comb on device via `k_comb_verify`). One grow-only pinned staging buffer
+fixed all three sites.
+
+```
+[vgraph] M=5 verify, 2788 graph nodes: ungraphed 163.9 ms -> graph 156.3 ms (1.05x)
+```
+
+**7.6 ms, against base AR's 1.17x / 13 ms on a comparable node count.** The reason is not subtle:
+at M=5 every kernel does ~4x the work of its M=1 counterpart, so the CPU stays ahead of the GPU and
+launch overhead is hidden. **Base AR is launch-bound; the verify is not.** 3.8% of the cycle for a
+400-line device-pos rewrite of every verify kernel — retired. Requeue only if the verify's kernels
+get much faster (which would re-expose the launch cost).
+
+### Megakernel: negative expected value, on this project's own measurements
+
+`src/megakernel.cu` exists but is a dead port artifact: 160 lines fusing `input_rmsnorm + Q/K/V
+projection` for a plain-QKV FP4 architecture with per-tensor group scales. DSV4 has MLA
+(`wq_a -> q_norm -> wq_b`, separate `wkv`), hyper-connections, a compressor and a DSA indexer. It is
+not wired into `decode.cu` and none of it is reusable. A DSV4 megakernel is a from-scratch project,
+and three measurements already on the board say it would lose:
+
+1. **Register pressure.** A fused kernel compiles to the max of all its stages. ncu (Finding 47) has
+   `ogroup` at 128 registers / 33% occupancy and the MoE GEMV at 48 / 75%. Fusing them runs *every*
+   stage at 33% — and ncu says both stages are latency-bound and want *more* warps, not fewer. The
+   megakernel makes the diagnosed problem worse by construction.
+2. **Barriers.** ~25 stages per layer x 43 layers is ~1075 grid-wide syncs per token. At a few us
+   each on 20 SMs that is 2-5 ms — a large fraction of the 13 ms of launch overhead it would remove.
+3. **The prize is already measured and it is small.** The launch overhead a megakernel targets is
+   13 ms in base AR (which CUDA graphs already recover, at zero occupancy cost) and 7.6 ms in the
+   verify. There is no third pot.
+
+Retired before implementation, with the arithmetic recorded.
+
+### And the remaining gap is not allocation fragmentation
+
+The engine reads 45,821 tensors across ~20 managed shard allocations while `alloc_probe` reads one
+contiguous buffer, so page-table locality was the obvious next suspect. Same bytes, same kernel,
+split N ways and walked in sequence: **192.1 / 182.9 / 181.4 / 183.3 / 183.6 GB/s at N = 1 / 4 / 16
+/ 64 / 256.** A 5% effect, not the 1.5x being hunted. Ruled out.
+
+What is left is what ncu already said: latency, with memory throughput at 14-25% and
+`long_scoreboard` at 66-84%. Base AR moves 12.26 GB in 79.3 ms = 155 GB/s of weight traffic against
+a 234 GB/s strided ceiling. Every structural fix for that has now been tried and measured.

@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cuda_runtime.h>
+#include <vector>
 
 #define CU(x) do{ cudaError_t e=(x); if(e){ printf("CUDA %s @%d\n", cudaGetErrorString(e), __LINE__); return 1; } }while(0)
 
@@ -103,5 +104,39 @@ int main(int argc, char** argv){
     }
     printf("\nIf row 1 is materially below row 0, the engine's weights are in the slow allocator and\n"
            "every '%% of achievable' recorded against the 240 GB/s cudaMalloc roofline is overstated.\n");
+
+    // FRAGMENTATION. The probe above reads ONE contiguous allocation. The engine reads 45,821
+    // tensors scattered across ~20 managed shard allocations, one weight matrix per kernel, each
+    // kernel touching a different region. If page-table locality is what separates the probe's 233
+    // GB/s from the engine's ~155, then splitting the same bytes across many allocations and
+    // walking them in sequence should reproduce the engine's number on a kernel that is otherwise
+    // identical. Same total bytes, same kernel, only the allocation pattern differs.
+    printf("\n--- same bytes, split across N allocations, read in sequence ---\n");
+    printf("%-10s %14s %14s\n", "N allocs", "each (MiB)", "GB/s");
+    for (int nalloc : {1, 4, 16, 64, 256}){
+        const size_t per = bytes / nalloc;
+        if (per < (1u<<20)) continue;
+        std::vector<void*> ps(nalloc, nullptr);
+        bool ok = true;
+        for (int i=0;i<nalloc;++i){
+            if (cudaMallocManaged(&ps[i], per) != cudaSuccess){ ok=false; break; }
+            cudaMemLocation loc{}; loc.type = cudaMemLocationTypeDevice; loc.id = dev;
+            cudaMemAdvise(ps[i], per, cudaMemAdviseSetPreferredLocation, loc);
+            cudaMemPrefetchAsync(ps[i], per, loc, 0, 0);
+        }
+        cudaDeviceSynchronize();
+        if(!ok){ for(auto p2:ps) if(p2) cudaFree(p2); printf("%-10d %14s %14s\n", nalloc, "-", "alloc failed"); continue; }
+        const size_t pn4 = per/sizeof(float4);
+        for(int i=0;i<nalloc;++i) stream_read<<<blocks,256>>>((const float4*)ps[i], pn4, out);
+        CU(cudaDeviceSynchronize());
+        cudaEvent_t a,b; cudaEventCreate(&a); cudaEventCreate(&b);
+        cudaEventRecord(a);
+        for(int k=0;k<iters;++k) for(int i=0;i<nalloc;++i) stream_read<<<blocks,256>>>((const float4*)ps[i], pn4, out);
+        cudaEventRecord(b); CU(cudaEventSynchronize(b));
+        float ms=0; cudaEventElapsedTime(&ms,a,b);
+        printf("%-10d %14.1f %14.1f\n", nalloc, per/1048576.0, (double)bytes*iters/(ms*1e-3)/1e9);
+        cudaEventDestroy(a); cudaEventDestroy(b);
+        for(auto p2:ps) cudaFree(p2);
+    }
     return 0;
 }

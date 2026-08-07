@@ -10,6 +10,16 @@
 #include <vector>
 #include <cmath>
 #include <cstdio>
+
+// Pinned staging for the host-built `comb` index arrays. `cudaMemcpyAsync` from PAGEABLE host
+// memory is not stream-capturable, and it was the only thing in the verify path that was not — the
+// indexer variant already builds its comb on device (`k_comb_verify`). One grow-only pinned buffer,
+// so a graph capture of the verify sees a capturable copy. (LOOP_LOG Finding 48.)
+static int* comb_pinned(size_t n){
+    static int* buf = nullptr; static size_t cap = 0;
+    if(n > cap){ if(buf) cudaFreeHost(buf); cudaHostAlloc((void**)&buf, n*4, cudaHostAllocDefault); cap = n; }
+    return buf;
+}
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 using namespace dsv4;
 
@@ -102,11 +112,11 @@ void compressed_decode_step_strided(float* out, const float* x_full, int pos, co
     // combined idxs: window [base..pos] ⊕ compressed [nwin + t] for t<Tn (strided: all t<(pos+1)/ratio == Tn)
     int base = pos - WINDOW + 1; if(base<0) base=0; int wwidth = pos+1-base;
     int tot = wwidth + Tn;
-    std::vector<int> comb(tot);
+    int* comb = comb_pinned((size_t)tot);
     for(int k=0;k<wwidth;++k) comb[k]=base+k;
     for(int t=0;t<Tn;++t) comb[wwidth+t]=nwin+t;
     int* dcomb; dcomb=(decltype(dcomb))dmalloc((size_t)tot*4);
-    CU(cudaMemcpyAsync(dcomb, comb.data(), (size_t)tot*4, cudaMemcpyHostToDevice, stream));
+    CU(cudaMemcpyAsync(dcomb, comb, (size_t)tot*4, cudaMemcpyHostToDevice, stream));
     sparse_attn(o, q, kv_all, a.attn_sink, dcomb, 1, 1, N_HEADS, HEAD_DIM, ntot, tot, scale, stream);
     // de-rotate, grouped o-LoRA, wo_b
     rope_interleaved(o + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
@@ -209,9 +219,9 @@ void compressed_decode_step_indexer(float* out, const float* x_full, int pos, co
     // --- combined idxs: window [base..pos] ⊕ indexer topk ---
     int base = pos - WINDOW + 1; if(base<0) base=0; int wwidth = pos+1-base;
     int tot = wwidth + topk;
-    std::vector<int> hwin(wwidth); for(int k=0;k<wwidth;++k) hwin[k]=base+k;
+    int* hwin = comb_pinned((size_t)wwidth); for(int k=0;k<wwidth;++k) hwin[k]=base+k;
     int* comb; comb=(decltype(comb))dmalloc((size_t)tot*4);
-    CU(cudaMemcpyAsync(comb, hwin.data(), (size_t)wwidth*4, cudaMemcpyHostToDevice, stream));
+    CU(cudaMemcpyAsync(comb, hwin, (size_t)wwidth*4, cudaMemcpyHostToDevice, stream));
     CU(cudaMemcpyAsync(comb + wwidth, dtop, (size_t)topk*4, cudaMemcpyDeviceToDevice, stream));
     sparse_attn(o, q, kv_all, a.attn_sink, comb, 1, 1, N_HEADS, HEAD_DIM, ntot, tot, scale, stream);
     rope_interleaved(o + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
@@ -292,11 +302,12 @@ void compressed_verify_step_strided(float* out, const float* x_full, int pos, in
     CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
     CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
     int wmax=0,tmax=0; for(int i=0;i<K;++i){int ig=pos+i,b=ig-WINDOW+1;if(b<0)b=0;int wid=ig+1-b;if(wid>wmax)wmax=wid;int Ti=(ig+1)/ratio;if(Ti>tmax)tmax=Ti;}
-    int topk=wmax+tmax; std::vector<int> comb((size_t)K*topk,-1);
+    int topk=wmax+tmax; int* comb = comb_pinned((size_t)K*topk);
+    for(size_t z=0; z<(size_t)K*topk; ++z) comb[z]=-1;
     for(int i=0;i<K;++i){int ig=pos+i,b=ig-WINDOW+1;if(b<0)b=0;int wid=ig+1-b;int Ti=(ig+1)/ratio;
         for(int k=0;k<wid;++k) comb[(size_t)i*topk+k]=b+k;
         for(int t=0;t<Ti;++t) comb[(size_t)i*topk+wmax+t]=nwin+t; }
-    int* dcomb; dcomb=(int*)dmalloc((size_t)K*topk*4); CU(cudaMemcpyAsync(dcomb,comb.data(),(size_t)K*topk*4,cudaMemcpyHostToDevice,stream));
+    int* dcomb; dcomb=(int*)dmalloc((size_t)K*topk*4); CU(cudaMemcpyAsync(dcomb,comb,(size_t)K*topk*4,cudaMemcpyHostToDevice,stream));
     finish_attn(w, q, kv_all, dcomb, K, pos, ntot, topk, out, eps, stream);
     dsync(stream); dfree(q);dfree(kv_all);dfree(dcomb);
 }

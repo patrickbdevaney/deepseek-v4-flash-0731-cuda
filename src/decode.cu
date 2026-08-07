@@ -370,6 +370,63 @@ int main(int argc, char** argv){
         printf("[spec-verify] MATCH %d/%d -> %s  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)\n",
                match, VK, match>=VK-1?"PASS":"FAIL");
 
+        // ---- VERIFY GRAPH VALUE (VERIFYGRAPH=1) ----
+        // Finding 47 left one question: how much of the verify is the exposed tail of ~600
+        // serialised dependent launches? A reusable verify graph needs device-pos variants of every
+        // verify kernel (~400 lines, mirroring the decode path's `_dp` family) because Tf, ntot,
+        // topk and wmax all move with pos and T. But the QUESTION can be answered without any of
+        // that: capture ONE verify at a fixed position and replay it. The replay recomputes the same
+        // position, so the numbers it produces are meaningless — the TIME is exactly what a graph
+        // would save. 40 lines to de-risk 400.
+        if(getenv("VERIFYGRAPH")){
+            cudaStream_t vs; CU(cudaStreamCreate(&vs));
+            auto build_verify=[&](cudaStream_t st){ float* a=hv; float* b=hv2;
+                for(int L=0;L<N_LAYERS;++L){ arena_reset(); int r=compress_ratio(L);
+                    if(r==0) block_verify_step (b,a,d_ids+PS,BW[L],PS,VK,HC_SINKHORN_ITERS,EPS,KV[L],st);
+                    else     cblock_verify_step(b,a,d_ids+PS,CW[L],PS,VK,HC_SINKHORN_ITERS,EPS,KV[L],st);
+                    std::swap(a,b); }
+                hc_head(collK,a,hc_fn,hc_sc,hc_bs,VK,hc,d,HC_EPS,st); rmsnorm(collK,collK,norm_w,VK,d,EPS,true,st);
+                gemm_bf16w(logK,collK,head_bf,VK,VOCAB,d,st); };
+            for(int L=0;L<N_LAYERS;++L) KV[L].T=0;                       // re-prefill: replay must not extend caches
+            k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d);
+            k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
+            for(int L=0;L<N_LAYERS;++L){ arena_reset(); run_layer(L,true,0,h,h2,d_ids); std::swap(h,h2); }
+            std::vector<int> Tsnap(N_LAYERS); for(int L=0;L<N_LAYERS;++L) Tsnap[L]=KV[L].T;
+            // ungraphed baseline on the same stream, same state
+            const int VIT=5;
+            arena_reset(); build_verify(vs); CU(cudaStreamSynchronize(vs));
+            for(int L=0;L<N_LAYERS;++L) KV[L].T=Tsnap[L];
+            cudaEvent_t a0,a1; cudaEventCreate(&a0); cudaEventCreate(&a1);
+            cudaEventRecord(a0,vs);
+            for(int i=0;i<VIT;++i){ build_verify(vs); for(int L=0;L<N_LAYERS;++L) KV[L].T=Tsnap[L]; }
+            cudaEventRecord(a1,vs); CU(cudaStreamSynchronize(a1?vs:vs)); CU(cudaEventSynchronize(a1));
+            float ums=0; cudaEventElapsedTime(&ums,a0,a1); ums/=VIT;
+            for(int L=0;L<N_LAYERS;++L) KV[L].T=Tsnap[L];
+            arena_reset();
+            cudaGraph_t vg; cudaGraphExec_t vex;
+            cudaError_t cerr = cudaStreamBeginCapture(vs, cudaStreamCaptureModeThreadLocal);
+            if(cerr==cudaSuccess){ build_verify(vs); cerr = cudaStreamEndCapture(vs,&vg); }
+            if(cerr!=cudaSuccess){
+                printf("\n[vgraph] capture FAILED: %s — the verify path still contains something\n"
+                       "[vgraph] uncapturable (pageable H2D, a sync, or a host callback).\n", cudaGetErrorString(cerr));
+            } else {
+                size_t nnodes=0; cudaGraphGetNodes(vg,nullptr,&nnodes);
+                CU(cudaGraphInstantiate(&vex,vg,0));
+                CU(cudaGraphLaunch(vex,vs)); CU(cudaStreamSynchronize(vs));
+                cudaEventRecord(a0,vs);
+                for(int i=0;i<VIT;++i) CU(cudaGraphLaunch(vex,vs));
+                cudaEventRecord(a1,vs); CU(cudaEventSynchronize(a1));
+                float gms=0; cudaEventElapsedTime(&gms,a0,a1); gms/=VIT;
+                printf("\n[vgraph] M=%d verify, %zu graph nodes: ungraphed %.1f ms -> graph %.1f ms (%.2fx)\n",
+                       VK, nnodes, ums, gms, ums/gms);
+                printf("[vgraph] this replays ONE position, so the outputs are meaningless; the TIME is\n"
+                       "[vgraph] what a device-pos verify graph would be worth per verify.\n");
+                cudaGraphExecDestroy(vex); cudaGraphDestroy(vg);
+            }
+            for(int L=0;L<N_LAYERS;++L) KV[L].T=Tsnap[L];
+            CU(cudaStreamDestroy(vs));
+        }
+
         // ---- K-sweep + per-layer-flavour cost split (DSV4_KSWEEP=1) ----
         // Decisive test for LOOP_LOG Finding 13. The weight-traffic model in ROOFLINE.md §5 says
         // c_v(K) = (B_fixed + 43*|union|(K)*b_expert)/B_tok, i.e. 1.000/1.296/1.582/1.856/2.120
