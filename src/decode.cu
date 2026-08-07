@@ -98,11 +98,15 @@ int main(int argc, char** argv){
     // full-model measurement otherwise costs a ~10-minute cold load of a 100 GiB checkpoint, which
     // makes a four-point sweep of the single most consequential speculation parameter a whole
     // afternoon. The sweep re-prefills between points, so the runs are independent.
-    std::vector<int> blkSweep;
+    // Entries are "BLK" or "BLK:passes", e.g. "5:1,5:2" to A/B draft refinement at one block size.
+    std::vector<int> blkSweep, passSweep;
     if(const char* bsz=getenv("DSV4_BLKSWEEP")){ const char* q=bsz;
-        while(*q){ int v=atoi(q); if(v>=2&&v<=16) blkSweep.push_back(v);
+        while(*q){ int v=atoi(q); int np=1;
+                   const char* c=q; while(*c && *c!=',' && *c!=':') ++c;
+                   if(*c==':') np=atoi(c+1);
+                   if(v>=2&&v<=16){ blkSweep.push_back(v); passSweep.push_back(np<1?1:np); }
                    while(*q && *q!=',') ++q; if(*q==',') ++q; } }
-    if(blkSweep.empty()) blkSweep.push_back(DSPARK_BLOCK);
+    if(blkSweep.empty()){ blkSweep.push_back(DSPARK_BLOCK); passSweep.push_back(1); }
     int BLKMAX=0; for(int v:blkSweep) if(v>BLKMAX) BLKMAX=v;
     int seqmax = s + (NDEC>NGEN0?NDEC:NGEN0) + BLKMAX + 8;   // room for spec block overshoot
     printf("[decode] loading %s ... s=%d NDEC=%d seqmax=%d\n", dir, s, NDEC, seqmax);
@@ -508,7 +512,7 @@ int main(int argc, char** argv){
         CU(cudaMalloc(&collK,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&logK,(size_t)BLKMAX*VOCAB*4)); CU(cudaMalloc(&mh_v,(size_t)BLKMAX*3*d*4));
         std::vector<double> sweep_mstok(blkSweep.size()), sweep_acc(blkSweep.size());
       for(size_t bsi=0; bsi<blkSweep.size(); ++bsi){
-        const int BLK = blkSweep[bsi];
+        const int BLK = blkSweep[bsi], NPASS = passSweep[bsi];
         // Re-prefill so each block size starts from the same state: the spec loop mutates the
         // window/compressed caches and main_x, and a sweep point that inherited them would be
         // measuring a different sequence, not a different block size.
@@ -526,7 +530,7 @@ int main(int argc, char** argv){
         const bool specprof = getenv("DSV4_SPECPROF")!=nullptr;
         cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
         double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
-        printf("[spec] decoding %d tokens (block=%d)...\n", NGEN, BLK);
+        printf("[spec] decoding %d tokens (block=%d, draft passes=%d)...\n", NGEN, BLK, NPASS);
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]
@@ -534,17 +538,32 @@ int main(int argc, char** argv){
             // rebuild head main-KV over the context
             for(int st=0;st<NSTAGE;++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctx, EPS);
             if(specprof) cudaEventRecord(p1);
-            // DRAFT: block [cur, noise x (BLK-1)]
-            std::vector<int> bid(BLK,DSPARK_NOISE_TID); bid[0]=cur; CU(cudaMemcpy(dbid,bid.data(),BLK*4,cudaMemcpyHostToDevice));
-            k_embed<<<((size_t)BLK*d+255)/256,256>>>(xemb,emb,dbid,BLK,d); k_hc_expand<<<((size_t)BLK*hc*d+255)/256,256>>>(xa,xemb,BLK,hc,d); CU(cudaDeviceSynchronize());
-            float *cb=xa,*nb=xb;
-            for(int st=0;st<NSTAGE;++st){ dspark_block_forward(nb,cb,dbid,mkv[st],anchor,mb[st],blk_cos+(size_t)ctx*hf,blk_sin+(size_t)ctx*hf,BLK,WINDOW,HC_SINKHORN_ITERS,EPS); std::swap(cb,nb); }
-            if(specprof) cudaEventRecord(p2);
-            CU(cudaMemcpy(dfid,&cur,4,cudaMemcpyHostToDevice));
-            dspark_forward_head(dout,cb,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,VOCAB,DSPARK_MARKOV_RANK,EPS); CU(cudaDeviceSynchronize());
+            // DRAFT: block [cur, noise x (BLK-1)].
+            //
+            // REFINEMENT (NPASS>1). The MTP blocks see DSPARK_NOISE_TID at positions 1..BLK-1, so
+            // they condition the whole block on a token that carries no information; only the
+            // markov head at the output does any sequencing. Pass 2 re-runs the same three blocks
+            // with pass 1's own proposals in those slots, so the blocks condition on something
+            // plausible. It is free of correctness risk by construction — the draft is only a
+            // proposal and the verify is unchanged — and costs one more block chain + head, so it
+            // pays iff mean tokens/verify rises by more than that fraction of the cycle.
+            std::vector<int> bid(BLK,DSPARK_NOISE_TID); bid[0]=cur;
+            std::vector<int> oo(BLK+1), draft(BLK);
+            float *cb=nullptr,*nb=nullptr;
+            for(int pass=0; pass<NPASS; ++pass){
+                arena_reset();     // each pass re-dmallocs the whole block chain; 3 passes overflow without this
+                CU(cudaMemcpy(dbid,bid.data(),BLK*4,cudaMemcpyHostToDevice));
+                k_embed<<<((size_t)BLK*d+255)/256,256>>>(xemb,emb,dbid,BLK,d); k_hc_expand<<<((size_t)BLK*hc*d+255)/256,256>>>(xa,xemb,BLK,hc,d); CU(cudaDeviceSynchronize());
+                cb=xa; nb=xb;
+                for(int st=0;st<NSTAGE;++st){ dspark_block_forward(nb,cb,dbid,mkv[st],anchor,mb[st],blk_cos+(size_t)ctx*hf,blk_sin+(size_t)ctx*hf,BLK,WINDOW,HC_SINKHORN_ITERS,EPS); std::swap(cb,nb); }
+                if(specprof && pass==NPASS-1) cudaEventRecord(p2);
+                CU(cudaMemcpy(dfid,&cur,4,cudaMemcpyHostToDevice));
+                dspark_forward_head(dout,cb,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,VOCAB,DSPARK_MARKOV_RANK,EPS); CU(cudaDeviceSynchronize());
+                CU(cudaMemcpy(oo.data(),dout,(BLK+1)*4,cudaMemcpyDeviceToHost));
+                for(int i=0;i<BLK;++i) draft[i]=oo[1+i];   // proposals for cpos+1..cpos+BLK
+                for(int i=1;i<BLK;++i) bid[i]=draft[i-1];  // feed them back for the next pass
+            }
             if(specprof) cudaEventRecord(p3);
-            std::vector<int> oo(BLK+1); CU(cudaMemcpy(oo.data(),dout,(BLK+1)*4,cudaMemcpyDeviceToHost));
-            std::vector<int> draft(BLK); for(int i=0;i<BLK;++i) draft[i]=oo[1+i];     // proposals for cpos+1..cpos+BLK
             // VERIFY block [cur, draft[0..BLK-2]] at [cpos..cpos+BLK-1]
             std::vector<int> vtok(BLK); vtok[0]=cur; for(int i=1;i<BLK;++i) vtok[i]=draft[i-1];
             std::vector<int> Tbefore(N_LAYERS); for(int L=0;L<N_LAYERS;++L) Tbefore[L]=KV[L].T;
@@ -596,9 +615,9 @@ int main(int argc, char** argv){
         sweep_mstok[bsi]=ms_per_tok; sweep_acc[bsi]=avg_acc;
       }
       if(blkSweep.size()>1){
-        printf("\n[blksweep]  BLK | mean tok/verify | ms/tok | tok/s | vs base %.2f tok/s\n", 1000.0/warm_ms);
+        printf("\n[blksweep]  BLK  passes | mean tok/verify | ms/tok | tok/s | vs base %.2f tok/s\n", 1000.0/warm_ms);
         for(size_t i2=0;i2<blkSweep.size();++i2)
-            printf("[blksweep] %4d | %15.2f | %6.1f | %5.2f | %.2fx\n", blkSweep[i2], sweep_acc[i2],
+            printf("[blksweep] %4d %7d | %15.2f | %6.1f | %5.2f | %.2fx\n", blkSweep[i2], passSweep[i2], sweep_acc[i2],
                    sweep_mstok[i2], 1000.0/sweep_mstok[i2], warm_ms/sweep_mstok[i2]);
       }
     }

@@ -1889,3 +1889,54 @@ comparable kernel chain and is not yet captured.
 | speculation vs base | 0.98x | 1.44x |
 | M=5 verify | 279.4 ms | 168.8 ms |
 | c_v | 2.88 | 1.82 |
+
+## Finding 45 — draft refinement makes acceptance WORSE, and the ceiling arithmetic that follows
+
+The draft's three MTP blocks see `DSPARK_NOISE_TID` at block positions 1..BLK-1, so they condition
+the entire block on a token carrying no information; only the markov head at the output does any
+sequencing. The obvious fix is a second pass with the first pass's own proposals in those slots.
+It is free of correctness risk by construction — the draft is a proposal, the verify is unchanged —
+so the only question is whether acceptance rises by more than the extra block chain costs.
+
+| draft passes | mean tokens/verify | ms/tok | tok/s |
+|---|---|---|---|
+| 1 | **3.00** | 64.6 | **15.49** |
+| 2 | 2.08 | 105.8 | 9.46 |
+
+**It does not cost acceptance a little; it destroys it (3.00 -> 2.08).** The heads were trained with
+the noise token as the placeholder, so a plausible token in that slot is *off-distribution* — the
+opposite of the intuition. Retired with a measurement. `DSV4_BLKSWEEP="5:1,5:2"` reproduces it in
+one process. (3 passes also overflowed the arena, since each pass re-dmallocs the chain; fixed with
+an `arena_reset()` per pass so the knob stays usable, not because refinement is worth revisiting.)
+
+### The ceiling, from measured bytes
+
+With acceptance fixed at 3.00 by the shipped heads and flat in block size (Finding 43), the only
+remaining question is how close the cycle can get to its byte floor. At the corrected 233 GB/s
+(Finding 44), per-expert 12.58 MB fp4, dense remainder 9.01 GB:
+
+| | bytes | floor | measured |
+|---|---|---|---|
+| base AR | 12.26 GB | 52.6 ms (19.0 tok/s) | 92.8 (81.3 w/ graph) |
+| verify K=5 (union ~25) | 22.54 GB | 96.7 ms | 168.8 |
+| draft (3 MTP blocks + lm_head) | 2.3 GB | 9.9 ms | 27.3 |
+| **cycle** | | **106.6 ms** | **201.8** |
+
+**Measured `c_v` is 1.82 against a byte-model floor of 1.84 — the verify's K-scaling is already
+optimal.** The whole remaining 95 ms is a *uniform* 1.89x inefficiency present equally at K=1 and
+K=5, the same factor that makes base AR 92.8 instead of 52.6. That is the useful conclusion:
+**there is no speculation-specific work left; every ms of base-AR efficiency now converts
+proportionally into the spec number.**
+
+At the floor, with acceptance 3.00: **28.1 tok/s**. The target band needs:
+
+| target | tokens/verify required |
+|---|---|
+| 28 tok/s | 3.00 (measured) — reachable by kernel work alone |
+| 35 tok/s | 3.70 |
+| 50 tok/s | 5.30 — **exceeds BLK=5's maximum of 5; not reachable at any kernel speed** |
+
+Raising block size does not help (Finding 43: the accept sequence is identical at BLK=5 and 8).
+So 35+ requires either a REAP-repair fine-tune of the MTP heads (S3 — a training task, outside a
+pure-CUDA inference server) or fewer bytes, i.e. quantising MLA (41% of `B_tok`), which the
+project's non-negotiables forbid. **Both are decisions for the user, not defaults to adopt.**

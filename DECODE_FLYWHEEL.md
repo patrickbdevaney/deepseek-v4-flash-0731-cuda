@@ -8,44 +8,58 @@ This document is the loop's state. It is meant to be executed, not read once.
 
 ---
 
-## 0. The ceiling arithmetic, stated first
-
-Everything below is ranked against these numbers, so they come before the plan.
+## 0. The ceiling arithmetic, stated first  (REWRITTEN — the old numbers were against the wrong roofline)
 
 | quantity | value | source |
 |---|---|---|
-| `B_tok` (bytes read per token) | **12.26 GB** | `ROOFLINE.md`, engine-measured (not checkpoint-stored) |
-| achievable BW, large working set | **240 GB/s** | `tools/bw_probe.cu` on-box |
-| achievable BW at our kernel working sets (1.7–50 MB) | **~208 GB/s** | on-box working-set sweep |
-| **base AR ceiling** | **19.6 tok/s** (240) / **~17.0** (208) | `B_tok` / BW |
-| current base AR | **10.3 tok/s** (126 GB/s, 53%) | `~/opt11.log` |
+| `B_tok` (bytes read per token) | **12.26 GB** | `ROOFLINE.md`, engine-measured |
+| achievable BW, **strided, out of the allocator the weights live in** | **~233 GB/s** | `tools/alloc_probe`, 16 GiB (Finding 44) |
+| — the same, before Finding 44 moved them off mapped-host | ~216 GB/s | same probe |
+| — `cudaMalloc`, which `bw_probe`'s 240 measured and the model never used | 234 GB/s | same probe |
+| base AR floor | **52.6 ms = 19.0 tok/s** | `B_tok`/BW |
+| base AR now | 92.8 ms (10.8) / **81.3 ms (12.3) with the CUDA graph** | `~/managed.log` |
+| verify K=5 floor (dense 9.01 GB + union~25 x 12.58 MB x 43) | **96.7 ms** | measured expert size |
+| verify K=5 now | 168.8 ms | `~/managed.log` |
+| draft floor / now | 9.9 / 27.3 ms | specprof |
+| **cycle floor / now** | **106.6 / 201.8 ms** | |
+| acceptance | **3.00 tokens/verify, flat in block size** | Finding 43 |
 
-**Base AR has at most 1.65× left in it, and not one token more.** `B_tok` is fixed: the user's
-non-negotiables forbid further quantisation, and every byte lever that does not change the
-checkpoint has been enumerated (§3).
+**`c_v` measured 1.82 against a byte-model floor of 1.84: the verify's K-scaling is already optimal.**
+The entire remaining gap is a *uniform* 1.89x present equally at K=1 and K=5. There is no
+speculation-specific work left — **every ms of base-AR efficiency now converts proportionally into
+the spec number**, and the two priorities have merged.
 
-So a 35–50 tok/s target decomposes, and only one decomposition is physically available:
+At the floor with acceptance 3.00: **28.1 tok/s**. What the target band would require:
 
-```
-   35 tok/s  =  17.5 base AR  x  2.00 speculation
-   50 tok/s  =  19.0 base AR  x  2.63 speculation
-```
+| target | tokens/verify needed | verdict |
+|---|---|---|
+| 28 | 3.00 (measured) | reachable by kernel work alone |
+| 35 | 3.70 | needs a better draft — S3 fine-tune |
+| 50 | 5.30 | **exceeds BLK=5's maximum of 5; not reachable at any kernel speed** |
 
-The comparison points confirm the shape rather than contradicting it — on this same box,
-**Mistral Small 4: 17.5 base → 33.7 with Eagle (1.93×)**; **Qwen 122B-A12B: DFlash 1.70×**.
-Neither exceeded ~19 tok/s on base AR either. The 50 tok/s vLLM figure was a different machine.
+Bigger blocks do not buy acceptance (Finding 43: identical accept sequence at BLK=5 and BLK=8), and
+draft refinement makes it worse (Finding 45: 3.00 -> 2.08). So beyond ~28 tok/s the levers are a
+REAP-repair fine-tune of the MTP heads (a training task) or quantising MLA (forbidden by the
+project's non-negotiables). **Both are user decisions, not defaults.**
 
-**Therefore the loop's priority is inverted from where it has been for seven rounds:**
+### Where the remaining 95 ms of cycle is
 
-| lever class | current | ceiling | multiplier available |
+Composition of the 1.89x, from the K=5 dprof and the shape bench:
+
+| | measured | byte floor | the difference is |
 |---|---|---|---|
-| base AR efficiency | 126 GB/s | 208–240 | **1.65×** |
-| **speculation** | **1.00×** | **2.0–2.6×** | **2.0–2.6×** |
+| `moe:w1w3`+`w2` | 76.5 ms | 58.0 | kernel: 177 GB/s vs 233 |
+| `cattn:ogroup` | 24.3 | 11.8 | ~half glue (rope, act_quant), half kernel |
+| `cattn:q_proj` | 17.8 | 7.0 | **12.4 ms is glue** — 7 small kernels x 41 layers |
+| `moe:shared` | 11.2 | 4.6 | act_quant/swiglu/accum chain |
+| `cattn:indexer` | 10.7 | ~1 | almost entirely small-kernel latency (21 layers) |
+| `cattn:compress` | 8.5 | ~1 | ~8 launches per emit per layer |
+| `lm_head` | 6.9 | 4.5 | |
 
-Speculation is at **1.00×**, i.e. *zero percent harvested*, and it is the larger of the two.
-Kernel work continues, but it is no longer the headline.
-
----
+**Glue, not GEMM bandwidth, is the majority of it** — which the CUDA-graph re-gate confirmed
+independently (1.14x on base AR, ~11.5 ms out of ~600 launches). The two general attacks are
+graph-capturing the verify path (needs device-pos variants, as the decode path already has) and
+fusing the per-layer glue chains. Byte reduction on the MoE is not the lever it was ranked as.
 
 ## 1. The loop
 
@@ -124,37 +138,31 @@ for with a wrong prediction:
 
 ---
 
-## 3. LEVER QUEUE (live — reorder as measurements land)
+## 3. LEVER QUEUE (live — reordered after Findings 43-45)
 
-### Speculation — the 2.0–2.6× (now the headline)
-
-| # | lever | expected | state |
-|---|---|---|---|
-| **S1** | **Resolve the half2 / acceptance either-or (Finding 31)** | 1.00× → ~1.6× | half2 perturbs target logits below the argmax margin; greedy output is unchanged but acceptance is an *exact* match, so draft/target agreement breaks. `MOE_MMA=1` restores 3.12/5 acceptance at −0.15 tok/s. **Blocking everything else in speculation.** |
-| **S2** | Cut verify cost `c_v` 2.6 → ~1.9 | 1.6× → ~2.0× | corrected `E_frac`: the real expert union at K=5 is ~25, not 30 |
-| **S3** | REAP-repair fine-tune of the 3 MTP blocks + markov head | acceptance 3.12 → 4.0–4.5 | the principled fix for S1 as well — retrains the head against what the target *actually* computes |
-| **S4** | Reduced draft vocabulary + `d2t` | draft `lm_head` is 1059 MB | lossless by construction: verification catches draft errors |
-| **S5** | AcceptMoE commitment-weighted expert set at verify | 1.29× measured at batch 1 | −0.27 pp accuracy |
-
-### Base AR — the 1.65×
+Base AR and speculation are now the SAME queue: `c_v` is at its byte floor, so anything that speeds
+the M=1 step speeds the verify by the same factor.
 
 | # | lever | expected | state |
 |---|---|---|---|
-| A1 | Intra-expert activation sparsity | **+11–17%** | training-free, runtime-only, no artifact change; derate for block-32 granularity |
-| A2 | `tcgen05` MXFP4 with output columns in M | removes dequant entirely | native block-scaled `mma` on the format the weights already ship in |
-| A3 | Kernel fusion to raise per-kernel working sets | small kernels run at 23–59% | Thor has 228 KB smem/SM, 2.28× GB10's |
-| A4 | half2 rewrite of `gemm_fp32`, then re-try `COMP_BF16=1` | ~620 MB/step | precondition now done (Opt #10) |
-| A5 | HC params F32 → FP16 | 68 MB, +0.6% | trivial |
-| A6 | CUTLASS `reg_reconfig.h` missing `1100` clause | 1.74× on FMHA upstream | two lines, local patch |
+| G1 | **Make the CUDA graph the default for base AR** | 1.14x, measured | gated PASS, tokens identical; currently behind `GRAPH=1` |
+| G2 | **Graph-capture the verify path** | ~12% of 174 ms | needs device-pos `cblock_verify_step_dp`, as the decode path already has |
+| F1 | **Fuse the attention glue chain** (act_quant/rmsnorm/rope) | ~12 ms of `cattn:q_proj` at K=5 | 7 small kernels x 41 layers; the single clearest glue target |
+| F2 | Fuse the compressor emit chain | ~7 ms | ~8 launches per emit per layer, 21 layers |
+| F3 | Fuse the indexer chain | ~9 ms | `cattn:indexer` is 10.7 ms for ~1 ms of bytes |
+| M1 | MoE GEMV 177 -> 210+ GB/s | ~10 ms | bench hits 233 hot; in situ 177 — cold/TLB or issue rate, not yet separated |
+| S4 | Reduced draft vocabulary + `d2t` | ~5 ms | draft `lm_head` is 1.06 GB; needs a principled token subset, not an invented one |
+| A1 | Intra-expert activation sparsity | +11-17% | training-free, runtime-only |
+| A6 | CUTLASS `reg_reconfig.h` missing `1100` clause | 1.74x on FMHA upstream | two lines, local patch |
 
 ### Retired with a measurement (do not re-queue)
 
-m16 B-operand repack (0.98×) · clock/EMC locking (106.8 vs 105.2) · MAXN power mode (EMC 4266 in
-all modes) · expert prefetch/caching/sticky routing · speculation trees · draft/verify pipelining ·
-2:4 sparsity · MLA weight absorption · FlashMLA port · MoE g-loop pipelining (101.7 → 102.9) ·
-wave-quantisation clamp (Opt #2, 214.6 → 186.3) · BF16-native compressor (100.2 → 103.5).
-
----
+m16 B-operand repack (0.98x) · clock/EMC locking · MAXN power mode · expert prefetch/caching/sticky
+routing · speculation trees · draft/verify pipelining · 2:4 sparsity · MLA weight absorption ·
+FlashMLA port · MoE g-loop pipelining · wave-quantisation clamp (Opt #2) · BF16-native compressor
+(Finding 32) · shared-A fp8 GEMV (Finding 41: slower at every M) · **block size > 5 (Finding 43:
+identical accept sequence at 5 and 8)** · **draft refinement (Finding 45: acceptance 3.00 -> 2.08 —
+the MTP heads are trained with the noise token as placeholder, so real tokens are off-distribution)**.
 
 ## 4. Phase-C explorations (structural)
 
