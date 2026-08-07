@@ -331,6 +331,12 @@ void compressor_forward(float* out, const float* x, const float* wkv, const floa
                         int s, int dim, int d, int ratio, bool overlap, int rope_dim, float eps,
                         bool rotate, cudaStream_t stream) {
     int coff = overlap ? 2 : 1, groups = s / ratio, od = coff * d;
+    // LOOP_LOG Finding 53. groups = s/ratio is ZERO for every ratio-128 layer at every prompt this
+    // project has ever run (the longest is 18 tokens against a ratio of 128), and it was falling
+    // through to five launches with gridDim = (0*d+255)/256 = 0. Each one fails to launch and leaves
+    // cudaErrorInvalidValue in the thread's last-error slot; none of them could have done any work,
+    // because there is no complete group to emit yet. Returning early is what the code always meant.
+    if (groups <= 0) return;
     float *kv, *score;
     kv=(decltype(kv))dmalloc( (size_t)s * od * 4); score=(decltype(score))dmalloc( (size_t)s * od * 4);
     // BF16-NATIVE (LOOP_LOG Finding 32): wkv/wgate ship as BF16 and were being expanded to f32 by

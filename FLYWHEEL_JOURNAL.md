@@ -161,3 +161,43 @@ committed under a message that does not mention them.** `.flywheel_commit_msg` h
 cycle-3 message; the harness's commit at exit will apply it to `FLYWHEEL_JOURNAL.md` alone. If the
 harness commits mid-cycle by design, it should either wait for the executor to exit or use
 `.flywheel_commit_msg`, or history will keep attributing work to the wrong commit.
+
+## Cycle 4 — 2026-08-07 — I2: candidate -> implemented. Finding 53. No model run.
+
+- **Stage discipline.** I2 was at `candidate`, so this cycle builds it and gates it and does not
+  measure it. **No full-model run was launched and the baseline is untouched at 16.86 spec / 12.61
+  base tok/s** — those are still cycle 3's numbers, not mine.
+- **Cycle 3's lead was wrong, and it cost nothing to say so.** `mh_pre = (SMAX-1)*3*d*4` is an exact
+  fit: `k_tap_pool` writes exactly `PSp*3*d` floats and max `PSp` is `SMAX-1`. Discharged by reading
+  `kernels/dspark_real.cu:44`, no run spent.
+- **The gate this suite was missing: one that varies `s`.** Every existing gate runs at one fixed
+  prompt length, which is exactly how a length-dependent defect survives. `tests/gate_prefill_len.cu`
+  asserts prefix-invariance — prefill is causal, so for lengths s < S over the same x the first s rows
+  must agree bit-exactly — over outputs and all three KV caches, sliding + ratio-4 + ratio-128,
+  s = 1..20, weight alignment +0 and +4.
+- **The invariant holds everywhere.** That is the more valuable half: the prefill is *not*
+  length-dependent, `PSp=17` is not special, and cycle 3's whole framing was wrong.
+- **What it caught instead.** Under compute-sanitizer: `Invalid __shared__ read of size 12 bytes at
+  k_topk_offset ... indexer.cu:60` → `cuda kernels/indexer.cu:91 unspecified launch failure`. The
+  kernel fills `extern __shared__ float sh[]` and scans it, and was launched with exactly `T*4` bytes;
+  nvcc widens the scan into a 12-byte vectorised load, so **any T < 3 reads out of bounds**. Swept it:
+  T=1 and T=2 fault (5, 6, 9 errors), T>=3 clean. Three sibling top-k kernels had the same undersizing.
+- **Second defect, found chasing the attribution.** A gridDim-0 launch reports only through the
+  last-error slot — `cudaDeviceSynchronize` returns success, measured here — and this engine never
+  called `cudaGetLastError` anywhere, so **a kernel that never ran was indistinguishable from one that
+  did**. It was firing on every prefill: `groups = s/128` is 0 for all 20 ratio-128 layers at every
+  prompt this project has run. Fixed, and `dsync()` now drains and names the slot.
+- **Verified:** gate_prefill_len passes plain and under memcheck (0 errors, 2m45s); gate_indexer_decode
+  clean at s=4,5,8,12,16,17,18 where 4/5/8 used to fault; the whole existing suite passes; the four
+  compressed/indexer equivalence gates are still bit-exact at rms 0.00e+00; `build_decode.sh` clean.
+- **What I am NOT claiming.** The prompt that crashed cycle 3 had T=4, which does not over-read. Two of
+  that run's four prompts did. This is a real fix on the exact line the fault named; its sufficiency is
+  unproven.
+- **Next iteration: I2 is at `implemented`, so it is ONE full-model run.** `NGEN0=60`, cycle 3's gate
+  points, plus a prompt longer than 18 ids appended so `SMAX > 18` — which answers "does prompt 2
+  reproduce", "does the fault recur" and "was SMAX ever the right frame" in a single run. Watch stderr
+  for `[launch] file:line pending CUDA error`; that is new, and it is the engine's first voice for a
+  kernel that failed to launch.
+- **Counter caveat for the observer.** `consecutive_sub_half_pct` is now 6, but cycles 2, 3 and 4 were
+  instrument and correctness repair, not levers. The Phase-A stopping rule should not be read as fired
+  on that number alone.

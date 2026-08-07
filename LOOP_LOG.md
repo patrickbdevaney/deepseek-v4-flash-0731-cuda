@@ -2543,3 +2543,123 @@ the shipped 1.5 is not obviously mis-set.
 Invariant 7: a gate failed and a run faulted, so this stops here rather than being built on.
 `halt=true`. The queue head is now **I2 — the SMAX-length prompt does not reproduce and its 12th
 prefill faults** — with the single-run falsification test above as its first action.
+
+---
+
+## Finding 53 — the fault on `indexer.cu:91` is a real, reproducible shared-memory over-read in the top-k scan, found without a model run
+
+**Cycle 4. NO full-model run — lever I2 was at stage `candidate`, so this cycle builds and gates it and
+the next one measures it. Everything below was measured on unit gates and `compute-sanitizer`.**
+
+Cycle 3 halted on `cuda kernels/indexer.cu:91 an illegal memory access` during the prefill of the one
+prompt whose length equals `SMAX`, and named a lead: `mh_pre = (SMAX-1)*3*d*4`, the zero-slack buffer.
+That lead is **wrong, and dischargeable by inspection**: `k_tap_pool` (`kernels/dspark_real.cu:44`)
+writes `mh[t*(n_taps*d) + slot*d + j]` for `t < PSp`, i.e. exactly `PSp*3*d` floats, and the maximum
+`PSp` is `SMAX-1` because `PSp = len(prompt)-1`. Zero slack, but an exact fit. Not the cause.
+
+### The gate that found the real one
+
+`tests/gate_prefill_len.cu`, new. Nothing in this suite had ever varied the prompt LENGTH — every
+gate ran at one fixed `s` — which is precisely how a length-dependent defect survives.
+
+The invariant it asserts: every prefill path here is causal and every prompt is shorter than the
+sliding `WINDOW`, so output row `i` is a function of `x[0..i]` alone. There is no cross-row reduction
+anywhere in the chain (every GEMM is per-output-row, `rmsnorm`/`act_quant`/`rope` are per row, the
+compressor pools per group, `sparse_attn` is per query), so for two lengths `s < S` over the same `x`
+the first `s` rows must agree **bit-exactly**. It checks the KV caches too — `win_kv`, `comp_kv`,
+`idx_ckv` — not just the block output, because those are what a wrong-length prefill leaves behind.
+Coverage: the sliding layer (`hc_pre` → `rmsnorm` → `mla_cache_kv` → `mla_forward` → `hc_post`), the
+ratio-4 indexer layer and the ratio-128 strided layer, at `s = 1..20`, at weight alignment `+0` **and**
+`+4` (standing caveat 2). It also drains and names `cudaGetLastError` after every stage.
+
+**Result 1, a negative one and the more useful half: prefix-invariance HOLDS, bit-exactly, at all 20
+lengths in both alignments, on all 8 tracked outputs.** The prefill attention chain is not
+length-dependent. `PSp=17` is not special. That kills the whole "the prefill runs differently at
+SMAX" hypothesis, which is where cycle 3 pointed.
+
+**Result 2, the defect.** Under `compute-sanitizer --tool memcheck`:
+
+```
+Invalid __shared__ read of size 12 bytes
+    at k_topk_offset(...)+0x1280 in indexer.cu:60
+    Access to 0x400 is out of bounds
+...
+cuda kernels/indexer.cu:91 unspecified launch failure
+```
+
+`k_topk_offset` declares `extern __shared__ float sh[]`, fills `sh[0..T-1]` and scans it with
+`for(t=0;t<T;++t)`, and was launched with exactly `T*sizeof(float)`. **nvcc widens that scan into a
+12-byte vectorised shared load, so the request is too small whenever `T < 3`.** Measured directly, by
+sweeping `s` through `tests/gate_indexer_decode` under memcheck:
+
+| s | T = s/4 | smem requested | memcheck |
+|---|---|---|---|
+| 4, 5 | 1 | 4 B | **5 / 6 errors, launch killed, reported at `indexer.cu:91`** |
+| 8 | 2 | 8 B | **9 errors, launch killed, reported at `indexer.cu:91`** |
+| 12 | 3 | 12 B | 0 errors |
+| 16, 17, 18 | 4 | 16 B | 0 errors |
+
+The same undersizing is in three sibling kernels — `k_topk_decode`, `k_topk_verify` and
+`k_topk_masked` in `compressed_decode.cu`, all `extern __shared__ float sh[]` launched at `n*4`. They
+do not trip at today's context lengths, but they are the same defect and are fixed together;
+`include/indexer.h` now carries one `topk_scan_smem(n)` helper that rounds `n+3` up to 4 floats.
+
+**Honest scope.** The prompt that crashed cycle 3 had `PSp=17` → `T=4`, which does **not** over-read.
+Two of that run's four prompts did (`PSp=5` → `T=1`, `PSp=10` → `T=2`), on all 21 ratio-4 layers of
+every prefill, and the canonical prompt is one of them — this has been happening on every run this
+project has ever made. So: a real memory-safety defect, reproducible, on exactly the line cycle 3's
+fault named, now fixed and gated. **Whether it is sufficient to explain the cycle-3 fault is NOT
+established, and the next cycle's run is the test.**
+
+### Result 3 — the engine cannot see a kernel that failed to launch
+
+Chasing the attribution turned up a second defect. Measured on this box (`/tmp/zg.cu`, 6 lines):
+
+```
+gridDim0 -> 1 invalid argument       # the launch fails
+after sync -> 0 no error             # cudaDeviceSynchronize returns SUCCESS
+```
+
+A launch failure is reported **only** through the thread's last-error slot, and this engine never
+called `cudaGetLastError` anywhere. So a kernel that never ran was indistinguishable from one that
+did, and the stale code sat in the slot until some unrelated `CU()` happened to pick it up.
+
+And it was firing constantly: `compressor_forward` computes `groups = s/ratio`, which is **0 for every
+ratio-128 layer at every prompt this project has run** (longest 18 tokens, ratio 128), and fell
+through to five launches with `gridDim = (0*d+255)/256 = 0`. Twenty layers × every prefill. The same
+hole existed one level up in `indexer_forward` for `T = s/ratio == 0` (prompt length ≤ ratio). Both
+now return early — which is what the code always meant, since there is no complete group to emit.
+
+`dsync()` — the one call every sub-function already ends with — now drains the slot and names the
+file:line (`dsync_at`, `include/dscratch.h`). The **sync** stays a no-op under the decode arena; only
+a TLS read is added. It reports by default and aborts only under `DSV4_STRICT_LAUNCH=1`, because a
+stale code must never be able to kill a 15-minute model run on its own, and must never be silent.
+
+### Verification
+
+| check | result |
+|---|---|
+| `gate_prefill_len`, 20 lengths × 2 alignments, plain | **GATE PASS** — 0 prefix mismatches, 0 stages leaving a CUDA error |
+| `gate_prefill_len`, same, under `memcheck` (2m45s) | **GATE PASS, ERROR SUMMARY: 0 errors** |
+| `gate_indexer_decode` at s = 4, 5, 8, 12, 16, 17, 18 under `memcheck` | all **PASS**, 0 errors (was 5/6/9 errors at s = 4/5/8) |
+| `gate_units` (goldens), `gate_encoding`, `gate_bf16w`, `gate_api`, `gate_ogroup_gemv`, `gate_tc_fp8_smem` | all exit 0 |
+| `gate_compressed_decode`, `gate_compressor_emit`, `gate_indexer_graph`, `gate_compressed_graph` | all **PASS**, cosine 1.00000000, rms 0.00e+00 |
+| `scripts/build_decode.sh` | builds clean |
+
+Note the equivalence gates are bit-exact (`rms=0.00e+00`) after the change, which is the point: a
+larger shared-memory request cannot alter a result, so this is a memory-safety fix with provably zero
+numerical consequence.
+
+### Disposition
+
+Halt stays cleared. I2 advances `candidate` → `implemented`. Three changes land on the shipped path
+this cycle and the next measurement carries all three: the `topk_scan_smem` rounding (four launches),
+the two `groups==0`/`T==0` early returns, and the `dsync` last-error drain. None is a performance
+lever and none can change a number — but per invariant 1 they are named here so the next cycle's
+result is not attributed to them.
+
+**Next cycle (I2 at `implemented`) is one full-model run** with `NGEN0=60` and a prompt appended that
+is LONGER than 18 ids, so `SMAX > 18`. That run answers three things at once: does the s=18 prompt now
+reproduce byte-identically, does the fault recur, and — from the `SMAX > 18` change — was "the prompt
+of length SMAX" ever the right frame. Watch stderr for `[launch] file:line pending CUDA error`, which
+is now the engine's own voice for anything that fails to launch.

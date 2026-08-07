@@ -21,3 +21,14 @@ echo "built build/gate_ogroup_gemv"
 nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   tests/gate_tc_fp8_smem.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu -o build/gate_tc_fp8_smem
 echo "built build/gate_tc_fp8_smem"
+# Gate PREFILL_LEN — prefix-invariance of the prefill attention chain across prompt LENGTHS, plus a
+# drain of the CUDA last-error slot after every stage (Finding 53). Nothing else in the suite varies
+# s, which is how an undersized dynamic-shared-memory request survived at T<3 and how a ratio-128
+# layer issued five gridDim-0 launches on every prompt this project has ever run. Worth running under
+# `compute-sanitizer --tool memcheck` too: that is what found the shared over-read.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include -lineinfo \
+  tests/gate_prefill_len.cu kernels/compressed_decode.cu kernels/compressed_attn.cu kernels/compressor.cu \
+  kernels/indexer.cu kernels/mla_attn.cu kernels/mla_forward.cu kernels/mla_decode.cu kernels/hc.cu \
+  kernels/hc_sinkhorn.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu \
+  -o build/gate_prefill_len
+echo "built build/gate_prefill_len"

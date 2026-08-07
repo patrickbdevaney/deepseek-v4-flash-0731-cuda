@@ -18,7 +18,22 @@ static inline void* dmalloc(size_t n){
     void* p; cudaMalloc(&p,n); return p;
 }
 static inline void dfree(void* p){ if(!g_arena_on && p) cudaFree(p); }
-static inline void dsync(cudaStream_t s){ if(!g_arena_on) cudaStreamSynchronize(s); }
+
+// LOOP_LOG Finding 53. A kernel LAUNCH failure — gridDim 0, too much dynamic shared memory, a bad
+// block shape — is reported only through the thread's last-error slot. `cudaStreamSynchronize` does
+// NOT return it (measured on this box: a gridDim-0 launch leaves cudaErrorInvalidValue pending and
+// the following cudaDeviceSynchronize returns cudaSuccess), and this engine never called
+// cudaGetLastError anywhere. So a kernel that never ran was indistinguishable from one that did, and
+// the stale code sat in the slot until some unrelated CU() picked it up — which is how a fault gets
+// attributed to a line that only happens to hold the next sync.
+//
+// dsync() is the one call every sub-function already ends with, so it is the right drain point. The
+// SYNC stays a no-op under the arena (that is the whole point of the arena); only the last-error
+// read is added, which is a TLS read, not a device round-trip. It REPORTS by default and aborts only
+// under DSV4_STRICT_LAUNCH=1 — a stale code must never be able to kill a 15-minute model run on its
+// own, but it must never be silent either.
+void dsync_at(cudaStream_t s, const char* file, int line);
+#define dsync(s) dsync_at((s), __FILE__, __LINE__)
 
 void arena_init(size_t cap);   // allocate the slab once, set g_arena_on
 void arena_reset();            // g_arena_off = 0 (call at the top of each layer's work)

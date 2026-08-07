@@ -1,7 +1,7 @@
 {
-  "cycle": 3,
+  "cycle": 4,
   "phase": "A",
-  "consecutive_sub_half_pct": 5,
+  "consecutive_sub_half_pct": 6,
   "phaseB_top_history": [
     "moe-latency",
     "moe-latency"
@@ -13,26 +13,27 @@
     "verify_ms": 167.5,
     "source_log": "~/adaptk3.log",
     "measured": "2026-08-07",
-    "note": "spec_tok_s is what the harness compares to decide publishing. Move it ONLY on a number measured in that same cycle."
+    "note": "spec_tok_s is what the harness compares to decide publishing. Move it ONLY on a number measured in that same cycle. Cycle 4 ran NO full-model measurement, so this is UNCHANGED and is still cycle-3's number."
   },
   "queue": [
     {
       "id": "I2",
-      "stage": "candidate",
-      "what": "illegal memory access at kernels/indexer.cu:91 during prefill of the s=18 prompt (the only prompt whose length equals SMAX). Cycle 3 halted on it. Lead, not cause: mh_pre = (SMAX-1)*3*d*4 is the zero-slack buffer on that path.",
-      "falsify": "append a prompt longer than 18 ids so SMAX>18 and re-run the same 9 gate points; if prompt 2 stops faulting the defect is 'the prompt of length SMAX', if it still faults SMAX is a coincidence. compute-sanitizer on 3 points locates it directly and needs no NGEN0=60.",
-      "note": "cleared halt 2026-08-07 by the user; the fault is REAL and deterministic, not flaky \u2014 it is queued, not dismissed."
+      "stage": "implemented",
+      "what": "root-caused and fixed the fault reported at kernels/indexer.cu:91. Finding 53: k_topk_offset (and three sibling top-k scan kernels) requested exactly n*sizeof(float) of dynamic shared memory while nvcc widens the scan into a 12-byte vectorised load, so any n<3 reads out of bounds and the launch is killed. Fixed via topk_scan_smem() in include/indexer.h. Also fixed: gridDim-0 launches in compressor_forward (groups==0) and indexer_forward (T==0), and dsync() now drains + names the CUDA last-error slot, which the engine never read.",
+      "falsify": "one full-model run, NGEN0=60, with a prompt LONGER than 18 ids appended so SMAX>18, re-running cycle 3's gate points. Three outcomes at once: (a) does prompt 2 (s=18) now emit an identical sequence on repeated points, (b) does the indexer.cu fault recur, (c) does SMAX>18 change anything, which decides whether 'the prompt of length SMAX' was ever the right frame. Watch stderr for '[launch] file:line pending CUDA error'.",
+      "note": "the crashing prompt's T was 4, which does NOT over-read; two of the four prompts in that run (T=1 and T=2) did. So the fix is real and on the reported line but its sufficiency for the cycle-3 fault is UNPROVEN. Do not write it up as solved before the run.",
+      "gate": "tests/gate_prefill_len.cu (new, in scripts/build_gate.sh) + tests/gate_indexer_decode under compute-sanitizer at s=4,5,8,12,16,17,18"
     },
     {
       "id": "D-pass",
       "stage": "research",
-      "what": "Phase D: arXiv against the CURRENT residual \u2014 (a) instrument reliability under repeated identical settings, (b) the 155 GB/s vs 234 GB/s memory-LATENCY gap at batch 1 on integrated LPDDR5X. Produces candidates only.",
-      "falsify": "n/a \u2014 a research pass adopts nothing"
+      "what": "Phase D: arXiv against the CURRENT residual — (a) instrument reliability under repeated identical settings, (b) the 155 GB/s vs 234 GB/s memory-LATENCY gap at batch 1 on integrated LPDDR5X. Produces candidates only.",
+      "falsify": "n/a — a research pass adopts nothing"
     },
     {
       "id": "I1",
       "stage": "implemented",
-      "what": "make one process run the same sweep point twice and get the same answer (cycle 2's D2 defect; gate already written and failing)",
+      "what": "make one process run the same sweep point twice and get the same answer (cycle 2's D2 defect). Partially discharged in cycle 3: 3 of 4 prompts now reproduce byte-identically. The 4th is I2.",
       "falsify": "two identical points in one process differ by >1% -> still broken"
     },
     {
@@ -44,33 +45,45 @@
   ],
   "halt": false,
   "halt_reason": "",
-  "halt_considered": "Yes, both ways. Nothing on the shipped configuration is implicated: the canonical prompt reproduces byte-identically twice at 16.83/16.90 tok/s and base AR at 10.33, and every prior number in this project was measured on that prompt with one prompt per process, where PSp == PS and the Finding 52 bug cannot fire. The halt is about not stacking a second fix on an un-root-caused fault, not about the engine being broken.",
+  "halt_considered": "No halt. No gate failed and no run faulted this cycle: the new gate failed on first write (which is what a gate is for), the defects it exposed were fixed, and it and the whole existing suite now pass, including under compute-sanitizer.",
   "last_result": {
-    "cycle": 3,
-    "lever": "I1 (queue[0]) \u2014 root-caused, fixed, PARTIALLY discharged. Finding 52.",
+    "cycle": 4,
+    "lever": "I2 (queue[0]) advanced candidate -> implemented. Finding 53.",
     "measured": {
-      "end_to_end_pct": 0.0,
-      "run": "~/cycle3.log, 17 points requested, 11 ran, base-AR gate PASS (11111), new prefill-length gate PASS at all 11",
-      "canonical_replicates_tok_s": [
-        16.83,
-        16.9
-      ],
-      "canonical_replicate_identical": true,
-      "base_ar_tok_s": 10.33,
-      "replicate_gate": {
-        "prompt0_s6": "PASS \u2014 identical sequence and identical verify trace",
-        "prompt1_s11": "PASS \u2014 identical sequence and identical verify trace, 15.45 / 15.45 tok/s",
-        "prompt3_s15": "PASS \u2014 identical sequence and identical verify trace, 11.10 / 11.11 tok/s",
-        "prompt2_s18": "FAIL \u2014 three different sequences at one setting, 11.05 / 14.62 / 16.36 tok/s"
+      "end_to_end_pct": null,
+      "end_to_end_note": "NOT MEASURED. A candidate-stage cycle implements and unit-gates; it does not run the model. No full-model run was launched, so no number moved and the baseline is untouched.",
+      "gate_prefill_len_plain": "GATE PASS — 20 lengths x 2 weight alignments, 0 prefix mismatches, 0 stages leaving a CUDA error",
+      "gate_prefill_len_memcheck": "GATE PASS, compute-sanitizer ERROR SUMMARY: 0 errors (2m45s wall)",
+      "gate_indexer_decode_memcheck_before": {
+        "s4_T1": "5 errors, launch killed, reported at indexer.cu:91",
+        "s5_T1": "6 errors, launch killed",
+        "s8_T2": "9 errors, launch killed",
+        "s12_T3": "0 errors",
+        "s16_T4": "0 errors",
+        "s17_T4": "0 errors"
       },
-      "crash": "point 11 (prompt 2 again), cuda kernels/indexer.cu:91 illegal memory access, during prefill",
-      "adaptk_losslessness": "prompt 1 at adaptK 1.00 / 1.50 / 2.50 emitted the IDENTICAL 61-token sequence over 23 / 23 / 26 verifies at 14.76 / 15.45 / 14.51 tok/s \u2014 first direct measurement that adaptive verify width changes cost only, not output"
+      "gate_indexer_decode_memcheck_after": "s=4,5,8,12,16,17,18 all PASS, 0 errors, cosine=1.00000000 rms=0.00e+00",
+      "suite": "gate_units/gate_encoding/gate_bf16w/gate_api/gate_ogroup_gemv/gate_tc_fp8_smem all exit 0; gate_compressed_decode/gate_compressor_emit/gate_indexer_graph/gate_compressed_graph all PASS at cosine 1.00000000",
+      "engine_build": "scripts/build_decode.sh clean",
+      "griddim0_probe": "measured on this box: a gridDim-0 launch returns cudaErrorInvalidValue (1, 'invalid argument') via cudaGetLastError, and the following cudaDeviceSynchronize returns cudaSuccess"
     },
+    "negative_results": [
+      "the mh_pre lead from cycle 3 is DISCHARGED by inspection: k_tap_pool writes exactly PSp*3*d floats and max PSp == SMAX-1, so mh_pre = (SMAX-1)*3*d is an exact fit, not an overrun",
+      "prefix-invariance of the whole prefill attention chain HOLDS bit-exactly at s=1..20 in both alignments, so the prefill does NOT behave differently at PSp=17 and cycle 3's framing was wrong"
+    ],
     "artifacts": [
-      "LOOP_LOG.md Finding 52",
-      "src/decode.cu: run_layer takes an explicit `npre` prefill length (8 call sites); the sweep loop no longer shadows ids/s/PS (now pids/ps/PSp); new per-point gate asserting KV[L].T == PSp/ratio for all 21 compressed layers before any measurement"
+      "LOOP_LOG.md Finding 53",
+      "tests/gate_prefill_len.cu (new) + scripts/build_gate.sh entry",
+      "include/indexer.h: topk_scan_smem(); applied at 4 launch sites (indexer.cu k_topk_offset; compressed_decode.cu k_topk_decode/k_topk_verify/k_topk_masked)",
+      "kernels/compressor.cu: early return when groups==0; kernels/indexer.cu: early return when T==0",
+      "include/dscratch.h + kernels/dscratch.cu: dsync -> dsync_at(s,__FILE__,__LINE__), drains and names the CUDA last-error slot; DSV4_STRICT_LAUNCH=1 to abort"
+    ],
+    "shipped_path_changes_carried_into_the_next_measurement": [
+      "topk_scan_smem rounding at 4 launch sites (cannot change a result: a larger shared request)",
+      "groups==0 / T==0 early returns (skipped launches that could not have done work)",
+      "dsync last-error drain (one TLS read per sub-function call)"
     ]
   },
-  "counter_note": "consecutive_sub_half_pct 4 -> 5: this lever moved end-to-end 0.0% by design (nothing on the shipped path changed). The Phase-A stopping rule and both clauses of the Phase-D trigger still read as satisfied, and the cycle-2 reasoning still holds: do NOT advance the phase while the instrument cannot reproduce its own measurement on every prompt. Two of three non-canonical prompts now reproduce byte-identically, which is progress on exactly that blocker, not a reason to skip the third.",
-  "note_for_executor": "Research is not blocked by the broken instrument (D produces candidates, not numbers). Alternate: one D pass, then implement/measure what it finds."
+  "counter_note": "consecutive_sub_half_pct 5 -> 6, following cycle 3's precedent of incrementing on a cycle that moved end-to-end 0.0%. It is now MISLEADING and the next executor should read it as such: cycles 2, 3 and 4 were instrument and correctness repair, not levers, so the counter no longer counts three levers that measured under 0.5%. The Phase-A stopping rule should not be treated as fired on this number alone.",
+  "note_for_executor": "queue[0]=I2 is at stage 'implemented', so the next cycle is ONE full-model measurement via scripts/run_model.sh with NGEN0=60 and a prompt longer than 18 ids appended (SMAX>18). Do not re-derive the fix; measure it. If the run is clean and prompt 2 reproduces, I2 is discharged and drops out (it is a correctness lever, so 'gain >= 0.5%' does not apply to it — discharge on the reproduce/no-fault criterion instead). Research is still not blocked by the instrument: if the run is inconclusive, do a D pass rather than idle."
 }

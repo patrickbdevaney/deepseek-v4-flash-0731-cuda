@@ -70,6 +70,11 @@ void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, con
                      int s, int dim, int q_lora, int n_heads, int idx_hd, int rd, int ratio,
                      int index_topk, int offset, float eps, cudaStream_t stream) {
     int T = s / ratio, QD = n_heads * idx_hd;
+    // Same defect as compressor_forward's (LOOP_LOG Finding 53), one layer up: with T = s/ratio == 0
+    // there is no compressed row to score, both outputs are empty ([s,0] and [s,min(topk,0)]), and
+    // index_score / k_causal_mask were being launched with gridDim (s*0+255)/256 = 0 — a launch that
+    // fails and leaves cudaErrorInvalidValue behind. Reached at prompt lengths <= ratio.
+    if (T <= 0) return;
     float softmax_scale = rsqrtf((float)idx_hd), wscale = softmax_scale * rsqrtf((float)n_heads);
     unsigned char* qrq; float *qrs, *q, *qtmp, *ckv, *weights;
     CUI(cudaMalloc(&qrq,(size_t)s*q_lora)); CUI(cudaMalloc(&qrs,(size_t)s*(q_lora/128)*4));
@@ -87,7 +92,7 @@ void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, con
     index_score(index_score_out, qtmp, ckv, weights, s, T, n_heads, idx_hd, stream);
     k_causal_mask<<<(s*T+255)/256,256,0,stream>>>(index_score_out, s, T, ratio);
     int topk = index_topk < T ? index_topk : T;
-    k_topk_offset<<<s, 32, T*sizeof(float), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
+    k_topk_offset<<<s, 32, topk_scan_smem(T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
     CUI(cudaStreamSynchronize(stream));
     cudaFree(qrq);cudaFree(qrs);cudaFree(q);cudaFree(qtmp);cudaFree(ckv);cudaFree(weights);
 }

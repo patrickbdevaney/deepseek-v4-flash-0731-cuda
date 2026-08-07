@@ -210,7 +210,7 @@ void compressed_decode_step_indexer(float* out, const float* x_full, int pos, co
     index_score(iscore, qtmp, idx_ckv, iw, 1, Tn, nH, idx_hd, stream);
     int topk = w.index_topk < Tn ? w.index_topk : Tn;
     int* dtop; dtop=(decltype(dtop))dmalloc((size_t)topk*4);
-    k_topk_decode<<<1,32,(size_t)Tn*4,stream>>>(dtop, iscore, Tn, topk, nwin);
+    k_topk_decode<<<1,32,topk_scan_smem(Tn),stream>>>(dtop, iscore, Tn, topk, nwin);
     // --- kv_all = [win_kv[0..pos] ; comp_kv[0..Tn-1]] ---
     int ntot = nwin + Tn;
     float* kv_all; kv_all=(decltype(kv_all))dmalloc((size_t)ntot*HEAD_DIM*4);
@@ -340,7 +340,7 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     // per-query top-k with GLOBAL causal threshold (t < (pos+i+1)/ratio), offset nwin
     int topkc = (w.index_topk<Tf)?w.index_topk:Tf;
     int* dtop; dtop=(int*)dmalloc((size_t)K*topkc*4);
-    k_topk_verify<<<K,32,(size_t)Tf*4,stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, nwin);   // device top-k (no D2H sync)
+    k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, nwin);   // device top-k (no D2H sync)
     dprof_end(DP_C_INDEXER,stream);
     int ntot=nwin+Tf; float* kv_all; kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
     CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
@@ -464,7 +464,7 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     rope_interleaved_dp(qidx+(ihd-rd),a.cosT,a.sinT,nH,rd,false,ihd,nH,d_pos,stream); hadamard(qtmp,qidx,nH,ihd,stream); act_quant_fp4sim(qtmp,nH,ihd,32,ihd,stream);
     gemm_fp32(iw,x,w.idx_weights_proj,1,nH,DIM,stream); k_iw_scale<<<(nH+63)/64,64,0,stream>>>(iw,wscale,nH);
     index_score(isc,qtmp,idx_kvc,iw,1,Tmax,nH,ihd,stream); k_mask_scores<<<(Tmax+63)/64,64,0,stream>>>(isc,d_T,Tmax);
-    k_topk_masked<<<1,32,(size_t)Tmax*4,stream>>>(sel,isc,Tmax,topk_c,winmax);
+    k_topk_masked<<<1,32,topk_scan_smem(Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax);
     k_comb_strided_dp<<<(wtop+63)/64,64,0,stream>>>(win,d_pos,d_T,winmax,wtop,0);   // window part only (Tmax=0)
     k_comb_join<<<(wtop+topk_c+63)/64,64,0,stream>>>(comb,win,sel,wtop,topk_c);
     sparse_attn(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+topk_c,scale,stream);
