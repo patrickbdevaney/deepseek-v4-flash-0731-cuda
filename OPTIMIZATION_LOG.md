@@ -100,3 +100,39 @@ small-N GEMV wave quantisation (real mechanism, but the whole lever is <2% of `B
 
 **Rank by `bytes x (1 - efficiency)`, never by efficiency deficit alone.** Opt #2 was queued at #2
 on its 19% efficiency without checking that the shape carries only 1.6% of the bytes.
+
+
+---
+
+## Session 2026-08-06/07 — speculation crosses 1.0x and the roofline gets corrected
+
+Measured end-to-end, canonical prompt `0,671,6102,294,8760,344`, GATE PASS on every row, tokens
+byte-identical unless noted.
+
+| change | base AR | M=5 verify | spec-decode | note |
+|---|---|---|---|---|
+| start of session | 97.6 ms (10.24) | 279.4 ms | 10.04 tok/s (0.92x) | |
+| S1 draft e8m0 scale fix | 97.4 | 279.4 | acceptance 1.00 -> **3.00** | Finding 39 |
+| S2 ogroup M=K GEMV | 97.6 | 253.7 | 10.04 (0.98x) | Finding 40 |
+| **F41 smem-staged fp8 tile + F42 lm_head M=K** | 97.4 | **200.6** | **12.12 (1.18x)** | first win |
+| F42 bf16 alignment fallback | 97.7 | 179.4 | **14.36 (1.40x)** | `head_bf` is only 4-byte aligned |
+| F43 ogroup NR + gemm_fp32 M=K | 96.5 | 173.5 | 14.76 (1.42x) | |
+| **F44 weights -> managed device-preferred** | **92.8** | **168.8** | **15.49 (1.44x)** | + CUDA graph: 81.3 ms = 12.30 tok/s |
+
+**1.54x on speculative decode; 1.05x on base AR, 1.23x with the CUDA graph.**
+
+### What the numbers mean now
+
+- `c_v` is **1.82** against a byte-model floor of **1.84** — the verify's K-scaling is optimal. All
+  remaining loss is a uniform 1.89x shared by K=1 and K=5, so base-AR efficiency and speculation are
+  now one lever, not two.
+- The achievable bandwidth for this engine is **~233 GB/s strided** out of managed memory (was ~216
+  out of mapped-host), **not** the 240 GB/s `cudaMalloc` figure every earlier "% of achievable" used.
+- Cycle floor 106.6 ms at acceptance 3.00 = **28.1 tok/s**. 35 needs 3.70 tokens/verify; 50 needs
+  5.30, above BLK=5's hard maximum of 5.
+
+### Retired with a measurement this session
+
+Block size > 5 (identical accept sequence at 5 and 8) · draft refinement (3.00 -> 2.08; the MTP
+heads are trained with the noise token as placeholder) · shared-A fp8 GEMV (slower at every M) ·
+the small-M fp8 GEMV as a default at M>=2 (loses 1.5-2.3x to the fixed m16 tile).

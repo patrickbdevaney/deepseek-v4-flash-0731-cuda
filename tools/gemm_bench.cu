@@ -302,6 +302,37 @@ int main(int argc, char** argv) {
         }
     }
 
+    // ---- ogroup wo_a, COLD, vs NR (activation-reuse factor) ----
+    // `cattn:ogroup` is the largest sub-roofline phase left: 24.3 ms at K=5 for 33.5 MB/layer of
+    // wo_a plus wo_b, i.e. ~96 GB/s against a 233 GB/s strided achievable. The kernel reads
+    // NR x 128 weight bytes and M x 512 activation bytes per warp per K-block, so the f32
+    // activation traffic is 4M/NR times the weight traffic — 5x even at NR=4. Rotate over enough
+    // copies of wo_a that nothing is served from cache, and sweep NR.
+    {
+        const int G=O_GROUPS, R=O_LORA, Kd=(N_HEADS*HEAD_DIM)/O_GROUPS;   // [8, 1024, 4096]
+        const size_t wb=(size_t)G*R*Kd;                                   // 33.5 MB
+        const int NC=12;
+        std::vector<uint8_t*> W(NC), SC(NC);
+        for(int i=0;i<NC;++i){ W[i]=(uint8_t*)dalloc(wb); SC[i]=(uint8_t*)dalloc((size_t)(G*R/128)*(Kd/128)); }
+        printf("\n--- ogroup wo_a [%d x %d, %d] COLD, %d rotating copies: ms (GB/s) ---\n", G,R,Kd,NC);
+        printf("%-6s %14s %14s %14s %14s\n","M","NR=1","NR=2","NR=4","NR=8");
+        for(int M : {1,2,3,5,8}){
+            float* o=(float*)dalloc((size_t)M*G*Kd*4);
+            float* out=(float*)dalloc((size_t)M*G*R*4);
+            printf("M=%-4d", M);
+            for(int nr : {1,2,4,8}){
+                char buf[8]; snprintf(buf,sizeof buf,"%d",nr); setenv("OG_NR",buf,1);
+                int c=0;
+                double ms=timeit([&]{ int i=c++%NC; ogroup_gemm_fp8(out,o,W[i],SC[i],M,G,R,Kd,0); }, 24);
+                printf(" %8.4f(%3.0f)", ms, wb/ms/1e6);
+            }
+            unsetenv("OG_NR");
+            printf("\n");
+            CU(cudaFree(o)); CU(cudaFree(out));
+        }
+        for(int i=0;i<NC;++i){ CU(cudaFree(W[i])); CU(cudaFree(SC[i])); }
+    }
+
     // ---- the ATTENTION GLUE (LOOP_LOG Finding 15 closure): act_quant / rmsnorm / rope ----
     // These are the chains that step 2.6-3.0x from K=1 to K=2 in situ while the GEMMs stay flat.
     // Shapes are the real per-layer ones from mla_verify_step.

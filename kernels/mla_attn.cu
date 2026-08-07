@@ -356,7 +356,8 @@ __global__ void ogroup_gemv_mk_kernel(float* __restrict__ out, const float* __re
 // NR falls as M rises to keep NR*M accumulators in registers. NO_OGNR=1 pins NR=1, which is
 // exactly Finding 40's kernel, for A/B.
 #define OG_MK_CASE(M) case M: \
-    if(ognr==4)      ogroup_gemv_mk_kernel<M,4><<<(nb+3)/4,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    if(ognr==8)      ogroup_gemv_mk_kernel<M,8><<<(nb+7)/8,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    else if(ognr==4) ogroup_gemv_mk_kernel<M,4><<<(nb+3)/4,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
     else if(ognr==2) ogroup_gemv_mk_kernel<M,2><<<(nb+1)/2,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
     else             ogroup_gemv_mk_kernel<M,1><<<nb,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); break;
 // fp8-native TC ogroup: o(f32)->f16 + fused fp8 wo_a decode in the mma. No per-token wo16 conversion.
@@ -383,8 +384,16 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
                     && (getenv("NO_OGVEC4")==nullptr);
     if(bs>1 && bs<=16 && ogvec4 && getenv("NO_OGMK")==nullptr){
         // NR consecutive output rows share `o` only if the run stays inside one group: R%NR==0.
-        int ognr = (getenv("NO_OGNR")!=nullptr) ? 1 : (bs<=8 ? 4 : 2);
-        if((R % ognr)!=0) ognr = ((R%2)==0)?2:1;
+        // NR is the activation-reuse factor: activation traffic is 4*M/NR times the weight traffic.
+        // OG_NR=<n> overrides for A/B; NO_OGNR=1 pins NR=1 (Finding 40's kernel).
+        // Measured per M on the real shape [8 x 1024, 4096], 12 rotating copies, twice (gemm_bench
+        // "ogroup wo_a COLD"). The best NR is not monotone in M — NR*M accumulators trade activation
+        // reuse against occupancy, and NR=8 at M=8 is 64 of them — so this is a lookup, not a rule:
+        //   M=2 -> NR=2 (0.175 ms)   M=3 -> NR=4 (0.204)   M=5 -> NR=8 (0.272)   M=8 -> NR=2 (0.369)
+        int ognr = (getenv("NO_OGNR")!=nullptr) ? 1 : (bs<=2 ? 2 : (bs<=4 ? 4 : (bs<=6 ? 8 : 2)));
+        if(const char* e=getenv("OG_NR")) ognr = atoi(e);
+        if(ognr!=1 && ognr!=2 && ognr!=4 && ognr!=8) ognr = 4;
+        while(ognr>1 && (R % ognr)!=0) ognr >>= 1;
         const int threads=256; const size_t nb=((size_t)G*R*32+threads-1)/threads;
         switch(bs){ OG_MK_CASE(2)  OG_MK_CASE(3)  OG_MK_CASE(4)  OG_MK_CASE(5)
                     OG_MK_CASE(6)  OG_MK_CASE(7)  OG_MK_CASE(8)  OG_MK_CASE(9)
