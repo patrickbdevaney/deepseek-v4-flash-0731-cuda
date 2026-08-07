@@ -1637,3 +1637,76 @@ extra loads. The redundancy across the 24 blocks is free; they all re-read `xr` 
 
 Together with Opt #11: **99.9 → 96.9 ms/tok (10.01 → 10.32 tok/s), +3.1%.** Gate PASS, tokens
 byte-identical.
+
+---
+
+## 2026-08-06 — Finding 39 (S1): draft acceptance was 0/4 because the GEMV read f32 scales as e8m0 BYTES.
+
+Finding 31 recorded that half2 "costs DSpark acceptance (3.12 → 1.00)" and framed it as a precision
+trade: half2 perturbs the target's logits just below the argmax margin, and acceptance is an exact
+token match. I handed that to the user as a real either-or. **It was a bug, and the write-up was
+wrong.**
+
+Two things gave it away. First, **0/4 accepted on 24 of 24 verifies**. Margin noise gives occasional
+acceptance; a hard zero is structural. Second, `git show` on the half2 commit: it did not only
+rewrite the kernel, it flipped the default —
+
+```
+-  g_moe_gemv = (getenv("MOE_GEMV") != nullptr)   // default OFF -> mma path
++  g_moe_gemv = (getenv("MOE_MMA")  == nullptr)   // default ON  -> GEMV path
+```
+
+Every 3.12 run was on the mma path and every 1.00 run on the GEMV path. The variable that changed
+was **which kernel runs**, not its precision — and I attributed the effect to the change I had been
+thinking about rather than the one I had made.
+
+**Root cause.** `moe_forward` selects the GEMV on `use_gemv` alone and casts the scale tables:
+`tc_fp4_grouped_gemv_e8m0(..., (const uint8_t* const*)s1d, ...)`. The GEMV reads them as e8m0
+exponent bytes (`exp2f(Sn[kb]-127)`) and has no f32-scale variant. `fill_moe` sets
+`e8m0_scales=true` for the main model — but the DSpark draft blocks (`decode.cu:458`) filled theirs
+with `LH.scale(...)`, a **dequant to f32**, and left `e8m0_scales` false. The mma path branches on
+that flag correctly; the GEMV silently reinterpreted the low byte of each float as an exponent. The
+draft's MoE had been computing garbage for eleven runs, while the main path — which *does* set the
+flag — kept passing its argmax gate.
+
+**Fixed** by giving the draft native e8m0 scale bytes (also faster: it now uses the GEMV too), and
+by making the precondition part of the predicate so the two can never disagree again:
+`const bool use_gemv = g_moe_gemv && w.e8m0_scales;`
+
+**Acceptance 1.00 → 3.00 on the default path.** Gate PASS.
+
+**The lesson is about the cast.** A C-style cast on a `void*`-shaped pointer table is a silent
+type pun: it made an f32/e8m0 configuration error unrepresentable in the type system and
+undetectable at runtime. The unit gates could not see it either, because they construct their own
+weights and set the flag consistently.
+
+---
+
+## 2026-08-06 — Finding 40 (S2): acceptance was never the blocker. `c_v` is.
+
+With acceptance restored to 3.00, speculation still measured **0.92× of base** (9.45 vs 10.27).
+The M=5 verify costs 279 ms against a 97 ms M=1 step: **c_v = 2.88**. The K=1 → K=5 sub-phase
+profile shows exactly where, and separates the legitimate from the wasted:
+
+| phase | K=1 | K=5 | ratio | expected |
+|---|---|---|---|---|
+| `moe:w1w3` / `moe:w2` | 12.40 / 5.79 | 52.67 / 24.45 | 4.25× | **~4.2 ✓** expert union — unavoidable |
+| `cattn:ogroup` | 16.63 | 64.34 | **3.87×** | ~1.0 — identical weights for all 5 tokens |
+| `cattn:q_proj` | 11.35 | 34.32 | **3.02×** | ~1.0 |
+| `moe:shared` | 7.55 | 23.15 | **3.07×** | ~1.0 |
+
+~85 ms of the 235 ms verify is re-reading weights that should be read once. Mechanism is Finding
+15's: the m16 mma tile wastes 11 of 16 rows at M=5 *and* issues 8×32B requests per fragment.
+
+**Fix applied to ogroup** — a templated M=K GEMV (`ogroup_gemv_mk_kernel<M>`, M=2..8) that loads
+each weight row once and dots it against all M activation rows. The stale comment at that call site
+claimed "M=K GEMV A/B'd SLOWER: acc[bs] array kills occupancy"; that was the *untemplated* version,
+whose `acc[]` was sized to the maximum M — precisely the defect Finding 28 fixed for the dense fp8
+GEMV. Templated, `acc[]` is M registers.
+
+**M=5 verify 279.4 → 253.7 ms, c_v 2.88 → 2.60, speculation 0.92× → 0.98×.** Verify argmax matches
+the AR tokens exactly. Base decode unchanged.
+
+**Still open, same treatment, ~38 ms:** `cattn:q_proj` and `moe:shared` both go through
+`fp8_block_gemm` at M=5 and scale ~3×. `fp8_gemv_mkT_kernel<M>` already exists (Finding 28) — it
+needs to be reached at M=5 for these two call sites.

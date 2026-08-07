@@ -289,6 +289,52 @@ __global__ void ogroup_gemv_fp8_kernel(float* __restrict__ out, const float* __r
     for(int o2=16;o2>0;o2>>=1) acc+=__shfl_down_sync(0xffffffff,acc,o2);
     if(lane==0) out[gr]=acc;
 }
+// M=K ogroup GEMV (LOOP_LOG Finding 40). At the M=5 spec-decode verify, `cattn:ogroup` measured
+// 64.34 ms against 16.63 at M=1 — a 3.87x scaling on weights that are IDENTICAL for all M tokens
+// and should therefore cost ~1.0x. The m16 mma tile re-reads `wo_a` per 16-row tile and issues
+// 8x32B requests per fragment (Finding 15's mechanism), so at M=5 it both wastes 11 of 16 rows and
+// quadruples the request count. Reading each weight row ONCE and dotting it against all M
+// activation rows removes both at a stroke — the same shape as `fp8_gemv_mkT_kernel` (Finding 28),
+// templated on M so `acc[M]` is a real register array rather than 16 spilled ones.
+template<int M>
+__global__ void ogroup_gemv_mk_kernel(float* __restrict__ out, const float* __restrict__ o,
+                                      const uint8_t* __restrict__ wo, const uint8_t* __restrict__ wsc,
+                                      int G, int R, int Kd, int vec4){
+    int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int total=G*R; if(warp>=total) return;
+    int gr=warp, g=gr/R; int lane=threadIdx.x&31, scw=Kd/128;
+    const uint8_t* wr=wo+(size_t)gr*Kd; const uint8_t* sr=wsc+(size_t)(gr/128)*scw;
+    float acc[M];
+    #pragma unroll
+    for(int m=0;m<M;++m) acc[m]=0.f;
+    for(int kb=0; kb<Kd/128; ++kb){
+        const float ws=exp2f((float)sr[kb]-127.f);
+        const int base=kb*128+lane*4;
+        // the weight is loaded ONCE and reused across all M rows — the entire point
+        const uint32_t w4 = vec4 ? *(const uint32_t*)(wr+base) : 0u;
+        float d0,d1,d2,d3;
+        if(vec4){ d0=ogm_e4m3((uint8_t)(w4))*ws;      d1=ogm_e4m3((uint8_t)(w4>>8))*ws;
+                  d2=ogm_e4m3((uint8_t)(w4>>16))*ws;  d3=ogm_e4m3((uint8_t)(w4>>24))*ws; }
+        else    { d0=d1=d2=d3=0.f; }
+        #pragma unroll
+        for(int m=0;m<M;++m){
+            if(vec4){
+                const float4 o4=*(const float4*)(o+(size_t)(m*G+g)*Kd+base);
+                acc[m]=fmaf(o4.x,d0,acc[m]); acc[m]=fmaf(o4.y,d1,acc[m]);
+                acc[m]=fmaf(o4.z,d2,acc[m]); acc[m]=fmaf(o4.w,d3,acc[m]);
+            } else {
+                const float* om=o+(size_t)(m*G+g)*Kd;
+                for(int dd=kb*128+lane; dd<(kb+1)*128; dd+=32) acc[m]+=om[dd]*ogm_e4m3(wr[dd])*ws;
+            }
+        }
+    }
+    #pragma unroll
+    for(int m=0;m<M;++m){
+        #pragma unroll
+        for(int o2=16;o2>0;o2>>=1) acc[m]+=__shfl_down_sync(0xffffffff,acc[m],o2);
+        if(lane==0) out[(size_t)m*total+gr]=acc[m];
+    }
+}
+#define OG_MK_CASE(M) case M: ogroup_gemv_mk_kernel<M><<<nb,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd,vec4); break;
 // fp8-native TC ogroup: o(f32)->f16 + fused fp8 wo_a decode in the mma. No per-token wo16 conversion.
 void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const uint8_t* wo_sc,
                      int bs, int G, int R, int Kd, cudaStream_t stream){
@@ -299,7 +345,19 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         const int vec4 = ((Kd % 128)==0) && ((((uintptr_t)wo_fp8)&3)==0) && ((((uintptr_t)o)&15)==0)
                       && (getenv("NO_OGVEC4")==nullptr);
         int threads=256; ogroup_gemv_fp8_kernel<<<((size_t)G*R*32+threads-1)/threads,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd,vec4);
-        dsync(stream); return; }        // (M=K GEMV A/B'd SLOWER: acc[bs] array kills occupancy — like the fp8 M=K GEMV)
+        dsync(stream); return; }
+    // M=K GEMV for the spec-decode verify (Finding 40). The old note here said "M=K GEMV A/B'd
+    // SLOWER: acc[bs] array kills occupancy" — that was the UNTEMPLATED version, whose acc[] was
+    // sized to the maximum M regardless of the real M; Finding 28 established the same fix for the
+    // dense fp8 GEMV. Templated on M, acc[] is M registers, not 16.
+    if(bs>1 && bs<=8 && getenv("NO_OGMK")==nullptr){
+        const int vec4 = ((Kd % 128)==0) && ((((uintptr_t)wo_fp8)&3)==0) && ((((uintptr_t)o)&15)==0)
+                      && (getenv("NO_OGVEC4")==nullptr);
+        const int threads=256; const size_t nb=((size_t)G*R*32+threads-1)/threads;
+        switch(bs){ OG_MK_CASE(2) OG_MK_CASE(3) OG_MK_CASE(4) OG_MK_CASE(5)
+                    OG_MK_CASE(6) OG_MK_CASE(7) OG_MK_CASE(8) default: break; }
+        dsync(stream); return;
+    }
     __half* o16; o16=(__half*)dmalloc((size_t)bs*G*Kd*2);
     k_f2h<<<((size_t)bs*G*Kd+255)/256,256,0,stream>>>(o16,o,(size_t)bs*G*Kd);
     dim3 grid((R+7)/8, G); tc_ogroup_fp8_kernel<<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd);

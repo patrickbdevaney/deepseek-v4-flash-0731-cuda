@@ -306,7 +306,13 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         // cannot be mixed per-M within one run — attempting it made prefill (M=5) read unrepacked
         // weights through the mma and produced argmax 260 instead of 11111. Selecting per-M would
         // need a second weight copy (~86 GiB — impossible here) or a non-mutating repack.
-        const bool use_gemv = g_moe_gemv;
+        // The GEMV reads scale tables as e8m0 BYTES, unconditionally. It has no f32-scale variant,
+        // and the `(const uint8_t* const*)s1d` cast below will happily accept `const float*`
+        // pointers and read the low byte of each float as an exponent. That is exactly what
+        // happened to the DSpark draft blocks for eleven runs (Finding 39): correct-looking main
+        // output, garbage draft, acceptance pinned at 0/4. Make the precondition part of the
+        // predicate so the two can never disagree again.
+        const bool use_gemv = g_moe_gemv && w.e8m0_scales;
         dprof_begin(DP_M_W13,stream);
         if(use_gemv){                                          // fp4 GEMV on ORIGINAL fp4 (act stays fp8)
             tc_fp4_grouped_gemv_e8m0(Gb,Xeq,Xes,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);

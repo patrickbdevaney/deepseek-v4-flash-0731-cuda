@@ -441,7 +441,11 @@ int main(int argc, char** argv){
         printf("[spec] NSTAGE=%d head-experts=%d BLK=%d\n", NSTAGE, NE, BLK);
         std::vector<BlockWeights> mb(NSTAGE); std::vector<float*> mkv(NSTAGE);
         std::vector<std::vector<const uint8_t*>> HP1(NSTAGE),HP2(NSTAGE),HP3(NSTAGE);
-        std::vector<std::vector<const float*>> HS1(NSTAGE),HS2(NSTAGE),HS3(NSTAGE);
+        // NATIVE e8m0 expert scales, exactly as fill_moe does for the main model. These used to be
+        // `const float*` filled by LH.scale() (a dequant to f32) with `e8m0_scales` left false —
+        // which the mma path handled correctly and the GEMV path silently misread as scale BYTES.
+        // See LOOP_LOG Finding 39: that is why draft acceptance was 0/4 on every single verify.
+        std::vector<std::vector<const uint8_t*>> HS1(NSTAGE),HS2(NSTAGE),HS3(NSTAGE);
         for(int st=0; st<NSTAGE; ++st){
             std::string b="mtp."+std::to_string(st)+".", p=b+"attn."; MLAWeights& a=mb[st].attn;
             a.wq_a=LH.raw(p+"wq_a.weight");a.wq_a_s=LH.scale(p+"wq_a.scale");a.wq_b=LH.raw(p+"wq_b.weight");a.wq_b_s=LH.scale(p+"wq_b.scale");
@@ -455,8 +459,9 @@ int main(int argc, char** argv){
             m.gate_w=LH.bf16(fp+"gate.weight");m.is_hash=false;m.gate_bias=WH.has(fp+"gate.bias")?LH.f32(fp+"gate.bias"):nullptr;m.tid2eid=nullptr;
             for(int e=0;e<NE;++e){ std::string ep=fp+"experts."+std::to_string(e)+".";
                 HP1[st].push_back(LH.raw(ep+"w1.weight"));HP2[st].push_back(LH.raw(ep+"w2.weight"));HP3[st].push_back(LH.raw(ep+"w3.weight"));
-                HS1[st].push_back(LH.scale(ep+"w1.scale"));HS2[st].push_back(LH.scale(ep+"w2.scale"));HS3[st].push_back(LH.scale(ep+"w3.scale")); }
-            m.w1p=HP1[st].data();m.w2p=HP2[st].data();m.w3p=HP3[st].data();m.w1sp=HS1[st].data();m.w2sp=HS2[st].data();m.w3sp=HS3[st].data();
+                HS1[st].push_back(LH.raw(ep+"w1.scale"));HS2[st].push_back(LH.raw(ep+"w2.scale"));HS3[st].push_back(LH.raw(ep+"w3.scale")); }   // e8m0 bytes, no dequant
+            m.w1p=HP1[st].data();m.w2p=HP2[st].data();m.w3p=HP3[st].data();
+            m.e8m0_scales=true; m.w1sp8=HS1[st].data();m.w2sp8=HS2[st].data();m.w3sp8=HS3[st].data();
             std::string sp2=fp+"shared_experts."; m.sw1=LH.raw(sp2+"w1.weight");m.sw2=LH.raw(sp2+"w2.weight");m.sw3=LH.raw(sp2+"w3.weight");
             m.sw1s=LH.scale(sp2+"w1.scale");m.sw2s=LH.scale(sp2+"w2.scale");m.sw3s=LH.scale(sp2+"w3.scale");
             m.n_routed=NE;m.n_act=N_ACT;m.dim=DIM;m.inter=MOE_INTER;m.vocab=VOCAB;m.route_scale=ROUTE_SCALE;m.swiglu_limit=SWIGLU_LIMIT;
