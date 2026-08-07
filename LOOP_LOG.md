@@ -1975,3 +1975,57 @@ inside noise) and +0.7% (this one). Glue fusion is exhausted as a percentage lev
 costs 4-12 us against phases of 8-25 ms, and the remaining fusions (rmsnorm+act_quant, rmsnorm+rope)
 would remove ~4 launches/layer for an estimated 0.5-0.8 ms in the graph-captured path. What is left
 above 1% is kernel bandwidth — the MoE at 177 GB/s and `cattn:ogroup` at 121 — not launch count.
+
+## Finding 47 — ncu: both kernels are latency-bound, not bandwidth-bound; and the bench overstates every kernel win
+
+`tools/ncu_target.cu` + `scripts/ncu_probe.sh` profile exactly the two kernels the queue said were
+the whole remaining gap, one launch each at the real shapes. (First attempt profiled the MoE *mma*
+kernel — the engine's default is the GEMV, selected inside `moe_forward` by `g_moe_gemv`. Same class
+of mistake as the stale `GEMV_MK` bench row in Finding 41: profiling a path decode does not take.)
+
+| metric | MoE GEMV, M=5 | ogroup GEMV, M=5 NR=8 |
+|---|---|---|
+| Memory throughput | 25.4% | 14.3% |
+| Compute (SM) throughput | 37.2% | 37.6% |
+| Mem pipes busy | 8.8% | 9.4% |
+| Executed IPC | 1.35 of 4 | 1.60 of 4 |
+| Registers/thread | 52 | **128** |
+| Theoretical / achieved occupancy | 75% / 64.5% | **33.3% / 33.2%** |
+| **`long_scoreboard` stall** | **20.44 of 24.35 warp-cycles (84%)** | 6.62 of 9.97 (66%) |
+
+**Neither kernel is bandwidth-bound.** Nothing is above 40% of peak and the dominant stall in both
+is `long_scoreboard` — waiting on global loads. They are latency-bound with too few requests in
+flight, which is Little's Law again (Finding 20 / Opt #7) in two more places.
+
+Two different causes, so two different fixes:
+
+- **ogroup** materialised `d[NR][4]` — the dequantised weights for all NR rows — before touching the
+  activations. At NR=8, M=5 that is 40 accumulators plus 32 weight floats, and the kernel compiled
+  to 128 registers, capping it at 2 blocks/SM. Restructured to issue the NR raw weight loads and M
+  activation float4s up front (the MLP), then dequantise one row at a time into 4 reused registers,
+  plus `__launch_bounds__(256, 4)` to force the register cap. `long_scoreboard` 6.62 -> 4.32.
+- **MoE GEMV** issued and consumed each weight pair inside the same `u` iteration. Hoisted all BN
+  pairs and their scales ahead of the compute. Registers 52 -> 48, achieved occupancy 70% -> 76%.
+
+Both gate **bit-identical** (rms 0.0 at every M).
+
+### The result, and the pattern it completes
+
+| | bench (cold, 400 MB rotation) | in situ (100 GiB working set) |
+|---|---|---|
+| ogroup wo_a M=5 | 0.272 -> **0.200-0.228 ms** (−20 to −26%) | `cattn:ogroup` 22.39 -> **21.62 ms** (−3.4%) |
+| MoE GEMV M=5 | 0.5402 -> 0.5398 (cache-served, invalid) | `moe:w2` 24.19 -> 22.36, `w1w3` 52.27 -> 52.95 |
+| | | verify 168.5 -> **167.5**, spec **15.29 tok/s** (flat) |
+
+**This is the fourth consecutive time a kernel win measured in `gemm_bench` has arrived 2-4x smaller
+in situ** (ogroup NR, gemm_fp32 M=K, indexer dedup, and now this). The cause is now clear enough to
+write down: **the bench launches the same kernel repeatedly on rotating weights, so consecutive
+launches overlap — the tail of one drains while the next ramps. In the engine every kernel is
+serialised by a data dependency on the previous one, so its tail wave is fully exposed.** ncu says
+ogroup runs 3.2 waves, i.e. a partial wave worth up to 25% of its runtime, and the bench hides
+exactly that. `gemm_bench` is a valid instrument for *which of two kernels is faster* and an invalid
+one for *how much a kernel is worth end-to-end*.
+
+**Phase A is over.** Levers are now landing at under 1% each while the measurement noise band on a
+full-model run is +/-1%. The remaining gap is not a kernel that can be tuned; it is the serialised
+tail of ~600 dependent launches, which is a scheduling problem, not a bandwidth or occupancy one.

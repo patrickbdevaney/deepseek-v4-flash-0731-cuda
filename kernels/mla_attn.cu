@@ -307,8 +307,11 @@ __global__ void ogroup_gemv_fp8_kernel(float* __restrict__ out, const float* __r
 // exactly. Give each warp NR rows: the `o` float4 is loaded once and used against NR weights, and
 // the ratio falls from 4M to 4M/NR. Accumulators are NR*M registers, which is why NR is templated
 // alongside M rather than fixed — 4x5 = 20 is comfortable, 8x16 would spill.
+#ifndef OGMK_BLOCKS_PER_SM
+#define OGMK_BLOCKS_PER_SM 4      // A/B: -DOGMK_BLOCKS_PER_SM=n caps registers at 65536/(256*n)
+#endif
 template<int M, int NR>
-__global__ void ogroup_gemv_mk_kernel(float* __restrict__ out, const float* __restrict__ o,
+__global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel(float* __restrict__ out, const float* __restrict__ o,
                                       const uint8_t* __restrict__ wo, const uint8_t* __restrict__ wsc,
                                       int G, int R, int Kd){
     int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int total=G*R;
@@ -321,26 +324,37 @@ __global__ void ogroup_gemv_mk_kernel(float* __restrict__ out, const float* __re
     for(int r=0;r<NR;++r){
         #pragma unroll
         for(int m=0;m<M;++m) acc[r][m]=0.f; }
+    // REGISTER PRESSURE (ncu, Finding 47). The first version materialised `d[NR][4]` — the
+    // dequantised weights for all NR rows — before touching the activations. At NR=8, M=5 that is
+    // 40 accumulators + 32 weight floats and the kernel compiled to **128 registers**, so Block
+    // Limit Registers was 2 and theoretical occupancy 33.3% (16 of 48 warps). ncu: 66% of stall
+    // cycles on `long_scoreboard`, i.e. waiting on global loads, with Memory Throughput at 14% —
+    // latency-bound with too few warps to hide it, NOT bandwidth-bound.
+    //
+    // Keep the loads in flight but not the dequantised values: issue the NR raw uint32 weight loads
+    // and the M activation float4s up front (that is the memory-level parallelism the phase needs),
+    // then dequantise one row at a time into 4 registers reused across r. Same arithmetic, same
+    // order, so this stays bit-identical; it just stops holding 32 floats live across the m loop.
     for(int kb=0; kb<Kd/128; ++kb){
         const int base=kb*128+lane*4;
-        float d[NR][4];
+        uint32_t w[NR]; float ws[NR];
         #pragma unroll
         for(int r=0;r<NR;++r){
-            const int rr = (gr0+r<total) ? (gr0+r) : gr0;      // tail warps: harmless duplicate, store is masked
-            const uint8_t* wr=wo+(size_t)rr*Kd;
-            const uint8_t* sr=wsc+(size_t)(rr/128)*scw;
-            const float ws=exp2f((float)sr[kb]-127.f);      // power of two: folding it in is exact
-            const uint32_t w4=*(const uint32_t*)(wr+base);
-            d[r][0]=ogm_e4m3((uint8_t)(w4    ))*ws; d[r][1]=ogm_e4m3((uint8_t)(w4>> 8))*ws;
-            d[r][2]=ogm_e4m3((uint8_t)(w4>>16))*ws; d[r][3]=ogm_e4m3((uint8_t)(w4>>24))*ws;
+            const int rr = (gr0+r<total) ? (gr0+r) : gr0;   // tail warps: duplicate, store is masked
+            w[r]  = *(const uint32_t*)(wo+(size_t)rr*Kd+base);
+            ws[r] = exp2f((float)wsc[(size_t)(rr/128)*scw + kb]-127.f);   // power of two: exact to fold
         }
+        float4 o4[M];
         #pragma unroll
-        for(int m=0;m<M;++m){
-            const float4 o4=*(const float4*)(og+(size_t)m*G*Kd+base);   // loaded ONCE for all NR
+        for(int m=0;m<M;++m) o4[m]=*(const float4*)(og+(size_t)m*G*Kd+base);
+        #pragma unroll
+        for(int r=0;r<NR;++r){
+            const float d0=ogm_e4m3((uint8_t)(w[r]    ))*ws[r], d1=ogm_e4m3((uint8_t)(w[r]>> 8))*ws[r],
+                        d2=ogm_e4m3((uint8_t)(w[r]>>16))*ws[r], d3=ogm_e4m3((uint8_t)(w[r]>>24))*ws[r];
             #pragma unroll
-            for(int r=0;r<NR;++r){
-                acc[r][m]=fmaf(o4.x,d[r][0],acc[r][m]); acc[r][m]=fmaf(o4.y,d[r][1],acc[r][m]);
-                acc[r][m]=fmaf(o4.z,d[r][2],acc[r][m]); acc[r][m]=fmaf(o4.w,d[r][3],acc[r][m]);
+            for(int m=0;m<M;++m){
+                acc[r][m]=fmaf(o4[m].x,d0,acc[r][m]); acc[r][m]=fmaf(o4[m].y,d1,acc[r][m]);
+                acc[r][m]=fmaf(o4[m].z,d2,acc[r][m]); acc[r][m]=fmaf(o4[m].w,d3,acc[r][m]);
             }
         }
     }
@@ -386,11 +400,12 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         // NR consecutive output rows share `o` only if the run stays inside one group: R%NR==0.
         // NR is the activation-reuse factor: activation traffic is 4*M/NR times the weight traffic.
         // OG_NR=<n> overrides for A/B; NO_OGNR=1 pins NR=1 (Finding 40's kernel).
-        // Measured per M on the real shape [8 x 1024, 4096], 12 rotating copies, twice (gemm_bench
-        // "ogroup wo_a COLD"). The best NR is not monotone in M — NR*M accumulators trade activation
-        // reuse against occupancy, and NR=8 at M=8 is 64 of them — so this is a lookup, not a rule:
-        //   M=2 -> NR=2 (0.175 ms)   M=3 -> NR=4 (0.204)   M=5 -> NR=8 (0.272)   M=8 -> NR=2 (0.369)
-        int ognr = (getenv("NO_OGNR")!=nullptr) ? 1 : (bs<=2 ? 2 : (bs<=4 ? 4 : (bs<=6 ? 8 : 2)));
+        // Measured per M on the real shape [8 x 1024, 4096], 12 rotating copies (gemm_bench
+        // "ogroup wo_a COLD"), at OGMK_BLOCKS_PER_SM=4. NR*M accumulators trade activation reuse
+        // against occupancy and the optimum is not monotone, so this is a lookup, not a rule:
+        //   M=2 -> NR=2 (0.177 ms)  M=3 -> NR=2 (0.213)  M=5 -> NR=4 (0.200-0.228)  M=8 -> NR=2 (0.389)
+        // NR=8 spills against the 64-register cap (40 accumulators alone) and loses badly there.
+        int ognr = (getenv("NO_OGNR")!=nullptr) ? 1 : (bs<=4 ? 2 : (bs<=6 ? 4 : 2));
         if(const char* e=getenv("OG_NR")) ognr = atoi(e);
         if(ognr!=1 && ognr!=2 && ognr!=4 && ognr!=8) ognr = 4;
         while(ognr>1 && (R % ognr)!=0) ognr >>= 1;

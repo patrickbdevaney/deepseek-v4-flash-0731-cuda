@@ -308,15 +308,29 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
             uint4 a0 =*(const uint4*)(Aq+(size_t)kb*32);
             uint4 a1 =*(const uint4*)(Aq+(size_t)kb*32+16);
             const uint8_t* ab0=(const uint8_t*)&a0; const uint8_t* ab1=(const uint8_t*)&a1;
+            // MEMORY-LEVEL PARALLELISM (ncu, Finding 47). The weight loads used to be issued and
+            // consumed inside the same `u` iteration, so at most one pair was outstanding at a
+            // time. ncu on the real shape: `long_scoreboard` accounts for **20.44 of 24.35** warp
+            // cycles per issued instruction — 84% of all stall time is waiting on global loads —
+            // while Memory Throughput sits at 25% and IPC at 1.35 of 4. That is the signature of a
+            // latency-bound kernel with too few requests in flight, not a bandwidth-bound one.
+            // Issue all BN weight pairs and their scales first, consume after. Same arithmetic and
+            // same order, so bit-identical; it costs 4 uint4 of registers to double the MLP.
+            uint4 WAv[BN], WBv[BN]; float wsv[BN];
             #pragma unroll
             for(int u=0; u<BN; ++u){
                 if(u>=nact) break;
                 const uint8_t* Wn = wptr[e] + (size_t)(nbase+u)*(K/2);
                 const uint8_t* Sn = sptr[e] + (size_t)(nbase+u)*(K/32);
-                float ws=exp2f((float)Sn[kb]-127.f);
                 const uint8_t* wa=Wn+(size_t)kb*16-off_b;
-                uint4 WA=__ldcs((const uint4*)wa), WB=__ldcs((const uint4*)(wa+16));
-                uint4 w16=tcm_funnel16(WA,WB,k0f,shf);
+                WAv[u]=__ldcs((const uint4*)wa); WBv[u]=__ldcs((const uint4*)(wa+16));
+                wsv[u]=exp2f((float)Sn[kb]-127.f);
+            }
+            #pragma unroll
+            for(int u=0; u<BN; ++u){
+                if(u>=nact) break;
+                const float ws=wsv[u];
+                uint4 w16=tcm_funnel16(WAv[u],WBv[u],k0f,shf);
                 const uint8_t* wb=(const uint8_t*)&w16;
                 // HALF2 DEQUANT (LOOP_LOG Finding 31). The scalar path below cost ~96 ops per 16 B
                 // of weight: 32 __constant__ LUT lookups + 32 fp8->float converts + 32 scalar FMAs.
