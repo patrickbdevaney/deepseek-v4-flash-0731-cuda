@@ -1439,3 +1439,77 @@ gate, which is a deliberate change of gate class and the reason it is scoped rat
 **Recorded rather than quietly dropped**, because "BN=2 didn't help" is misleading: BN=2 worked
 exactly as the research predicted (+19%), and what it revealed is that our GEMV was never
 bandwidth-bound in the first place. The research number was achievable — with a different inner loop.
+
+---
+
+## 2026-08-06 — Finding 31: half2 dequant. 2.6x on the MoE kernel, +1.5% end-to-end, and it costs DSpark acceptance.
+
+User authorised the gate-class change. Rewrote the MoE GEMV inner loop from scalar to half2:
+`cvt.rn.f16x2.e2m1x2` (2 fp4 -> half2) + `cvt.rn.f16x2.e4m3x2` (2 fp8 -> half2) + `__hfma2`,
+replacing 32 `__constant__` LUT lookups + 32 fp8->float converts + 32 scalar FMAs per 16 B.
+~96 ops -> ~32. Accumulate in half2 **within** a 32-element block, widen to f32 across blocks, so
+precision loss is bounded to 32 accumulations rather than 4096.
+
+### The tolerance gate
+
+The first run printed `cosine=0.9999999 maxabs=3.63e-01 -> FAIL` against the old absolute
+threshold. That threshold was the wrong criterion, and this project had already established why
+(prior repo, ratio-4/ratio-128 attention gates): per-element absolute/relative error is
+**pathological** for deep fp8/fp4 compositions — it grows with K on near-zero outputs while the
+result stays correct. The established metric for this class is
+**cosine > 0.9999 AND rms_rel < 1e-2 AND max_abs/|o|max < 5e-3**. Re-gated on those:
+
+```
+[fp4_gemv] cosine=0.9999999  rms_rel=4.04e-04  max_abs/|o|max=5.01e-04  (|o|max=725.131)  PASS
+```
+The alarming `3.63e-01` was 5e-4 *relative* — `|o|max` is 725. **These thresholds were adopted with
+evidence in earlier work, not invented to admit this change.**
+
+### Speed
+
+| M | mma (GB/s) | **half2 GEMV** | |
+|---:|---:|---:|---|
+| 1 | 121.5 | **314.6** | **2.59x** |
+| 2 | 125.7 | 232.2 | 1.85x |
+| 5 | 130.4 | 179.6 | 1.38x |
+| 8 | 130.9 | 230.3 | 1.76x |
+
+(The >240 figure is hot-cache inflation; the *relative* comparison is what holds.) The GEMV had
+been off by default since the prior project A/B'd it as slower — **it was slower only because of
+the scalar inner loop, exactly as the flat-in-M signature predicted.**
+
+**Full model: 101.7 -> 100.2 ms/tok, 9.83 -> 9.98 tok/s.** GATE PASS, and the generated token
+sequence is **byte-identical** (`11111 16 455 6102 294 16603 344 29168`) despite the numerics
+change — the perturbation is far below the argmax margin at every position.
+
+### The cost, stated plainly
+
+**DSpark acceptance collapsed 3.12 -> 1.00 tokens/verify.** Acceptance is an *exact token*
+comparison between draft and target; half2 perturbs the target's logits just enough to break
+agreement, even though the greedy output is unchanged. Speculation was already at parity so this
+costs nothing measurable today, but it **blocks the speculative path** until resolved.
+
+### Why it cannot simply be scoped to M=1
+
+I tried gating the GEMV to `bs == 1` to keep the base win and leave verify on the mma path. It
+produced **argmax 260 instead of 11111**. Root cause: **`tc_ensure_repacked` rewrites each expert
+weight IN PLACE into mma-fragment order, and is skipped when the GEMV is active**; the GEMV reads
+the ORIGINAL packed fp4. The two paths need mutually exclusive layouts of the same bytes. With the
+global flag set but the mma selected at M=5, prefill read unrepacked weights through the mma tile.
+
+Selecting per-M would require either a second copy of the expert weights (**~86 GiB — impossible
+here**) or a non-mutating repack (extra bandwidth on every access, which defeats the point).
+
+**So this is a genuine either/or, and it is the right thing to hand over rather than decide
+silently:**
+- **all-GEMV (current):** 9.98 tok/s base, DSpark acceptance 1.00
+- **all-mma:** 9.83 tok/s base, DSpark acceptance 3.12
+
+Kept on GEMV because base decode is the headline number and speculation is at parity either way.
+`MOE_MMA=1` restores the mma path in one env var, with no rebuild.
+
+**The resolution that gets both** is to make the *draft* numerically consistent with the target
+again — i.e. run the MTP blocks through the same half2 kernel (they already do) *and* re-derive
+acceptance, or fine-tune the head against the half2 target. The REAP-repair fine-tune already on
+the plan would subsume this, since it retrains the head against whatever the target actually
+computes.

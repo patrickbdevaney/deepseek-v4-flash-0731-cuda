@@ -318,12 +318,28 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
                 uint4 WA=__ldcs((const uint4*)wa), WB=__ldcs((const uint4*)(wa+16));
                 uint4 w16=tcm_funnel16(WA,WB,k0f,shf);
                 const uint8_t* wb=(const uint8_t*)&w16;
-                float sub=0.f;
+                // HALF2 DEQUANT (LOOP_LOG Finding 31). The scalar path below cost ~96 ops per 16 B
+                // of weight: 32 __constant__ LUT lookups + 32 fp8->float converts + 32 scalar FMAs.
+                // The hardware does both conversions two-at-a-time — `cvt.rn.f16x2.e2m1x2` and
+                // `cvt.rn.f16x2.e4m3x2` — and `__hfma2` does two MACs. That is ~32 ops per 16 B,
+                // 3x fewer, which is what the issue-rate budget (126 G warp-inst/s) requires to
+                // reach streaming bandwidth.
+                // PRECISION: accumulate in half2 only WITHIN a 32-element block, then widen to
+                // float and accumulate across blocks in f32. Half has ~11 mantissa bits and the
+                // products are O(1), so 32 accumulations is well inside its range — but this is
+                // NOT bit-exact with the f32 path, hence the tolerance gate.
+                __half2 acc2 = __floats2half2_rn(0.f, 0.f);
                 #pragma unroll
-                for(int j=0;j<16;++j){ uint8_t byte=wb[j]; uint8_t a2j=(j<8)?ab0[2*j]:ab1[2*(j-8)]; uint8_t a2j1=(j<8)?ab0[2*j+1]:ab1[2*(j-8)+1];
-                    sub += gv_e4m3(a2j)  * gv_fp4(byte&0xF);
-                    sub += gv_e4m3(a2j1) * gv_fp4((byte>>4)&0xF);
+                for(int j=0;j<16;++j){
+                    const uint8_t byte = wb[j];
+                    const uint8_t lo = (j<8)? ab0[2*j]   : ab1[2*(j-8)];
+                    const uint8_t hi = (j<8)? ab0[2*j+1] : ab1[2*(j-8)+1];
+                    __half2 w2 = tcm_fp4x2(byte);                                  // HW: 2 fp4 -> half2
+                    __half2_raw ar = __nv_cvt_fp8x2_to_halfraw2(                   // HW: 2 fp8 -> half2
+                        (__nv_fp8x2_storage_t)((unsigned short)lo | ((unsigned short)hi << 8)), __NV_E4M3);
+                    acc2 = __hfma2(*reinterpret_cast<__half2*>(&ar), w2, acc2);
                 }
+                const float sub = __low2float(acc2) + __high2float(acc2);
                 if(u==0) acc0 += sub * asc * ws; else acc1 += sub * asc * ws;
             }
         }

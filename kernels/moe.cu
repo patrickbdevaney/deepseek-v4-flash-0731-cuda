@@ -251,7 +251,14 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         // -- routed experts: gather -> quant -> fp16 -> grouped gate/up -> swiglu -> quant -> fp16 -> grouped down -> scatter --
         k_gather_x<<<((size_t)maxm*dim+255)/256,256,0,stream>>>(Xe,x,alltok_d,maxm,dim);
         act_quant_fp8(Xeq,Xes,Xe,maxm,dim,128,stream);
-        if(g_moe_gemv){                                         // fp4 GEMV on ORIGINAL fp4 (no x16, act stays fp8)
+        // NOTE (LOOP_LOG Finding 31): the GEMV and the m16 mma need MUTUALLY EXCLUSIVE weight
+        // layouts. `tc_ensure_repacked` rewrites each expert IN PLACE into mma-fragment order and
+        // is skipped when the GEMV is active; the GEMV reads the ORIGINAL packed fp4. So the two
+        // cannot be mixed per-M within one run — attempting it made prefill (M=5) read unrepacked
+        // weights through the mma and produced argmax 260 instead of 11111. Selecting per-M would
+        // need a second weight copy (~86 GiB — impossible here) or a non-mutating repack.
+        const bool use_gemv = g_moe_gemv;
+        if(use_gemv){                                          // fp4 GEMV on ORIGINAL fp4 (act stays fp8)
             tc_fp4_grouped_gemv_e8m0(Gb,Xeq,Xes,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
             tc_fp4_grouped_gemv_e8m0(Ub,Xeq,Xes,w3d,(const uint8_t* const*)s3d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
         } else if(w.e8m0_scales){
@@ -265,7 +272,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         }
         swiglu_wrow<<<((size_t)maxm*inter+255)/256,256,0,stream>>>(Hb,Gb,Ub,allwt_d,maxm,inter,w.swiglu_limit);
         act_quant_fp8(Hqb,Hsb,Hb,maxm,inter,128,stream);
-        if(g_moe_gemv)         tc_fp4_grouped_gemv_e8m0(OEb,Hqb,Hsb,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);
+        if(use_gemv)           tc_fp4_grouped_gemv_e8m0(OEb,Hqb,Hsb,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);
         else if(w.e8m0_scales){tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm_e8m0(OEb,h16,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
         else                  {tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm(OEb,h16,w2d,(const float* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
         // DETERMINISTIC combine: scatter to unique (token,slot) slots (no atomics) then sum na slots in fixed order

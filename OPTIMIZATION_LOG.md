@@ -12,6 +12,7 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 |---|---|---|---|---|---|---|
 | 2 | small-N GEMV wave quantisation | grid-stride + wave-aligned launch for `fp8_gemv_m1_kernel` | Gate K PASS | clamp-to-one-wave: `wq_b` 214.6 -> 186.3, `wo_b` 225.5 -> 194.7 (**worse**); round-down: within noise (`wq_a` 41.6 vs 156.8 across runs) | not run | **REVERTED — negative result.** Whole lever is <2% of `B_tok` (`wq_a` 1.6% + `wkv` 0.8%); could not justify risk to `wq_b`/`wo_b` (~26% at 89-94%) |
 | 7 | **M=1 GEMV memory-level parallelism** | inner loop issued ONE 4-byte load per iteration and consumed it immediately (**ILP=1**). Unrolled by 4, all 8 loads issued before any use. kb accumulation order unchanged -> bit-exact. | Gate K PASS | on-box: ILP=1 streaming sustains 110-132 GB/s, ILP>=2 sustains 224-237 | **105.2 -> 101.7 ms/tok, 9.51 -> 9.83 tok/s (1.034x)** | **ADOPTED** |
+| 9 | **half2 dequant in the MoE GEMV** | `cvt.f16x2.e2m1x2` + `cvt.f16x2.e4m3x2` + `__hfma2` replacing 96 scalar ops per 16 B with ~32; half2 accumulate within a 32-elt block, f32 across blocks. GEMV promoted to default. | **TOLERANCE gate** (cosine>0.9999, rms_rel<1e-2, max_abs/\|o\|max<5e-3): cosine **0.9999999**, rms_rel 4.04e-04, rel_max 5.01e-04 | **M=1 121.5 -> 314.6 GB/s (2.59x)**; wins at every M | **101.7 -> 100.2 ms/tok, 9.83 -> 9.98 tok/s**; generated tokens byte-identical | **ADOPTED** — but costs DSpark acceptance 3.12 -> 1.00. `MOE_MMA=1` reverts. |
 | 8 | **MoE GEMV output-column blocking BN=2** | one warp per output column re-loaded the activation for every column; now 2 columns/warp, activation loaded once, grid halved, 128 thr/block | `gate_fp4_gemv` **cosine 1.0000000**; Gate K MoE paths cosine 1.0000000 | **GEMV 91.0 -> 108.4 GB/s (+19%)** | **0** — GEMV still loses to the m16 mma (121.6) so it stays off by default | **BANKED, not adopted.** Revealed the GEMV is COMPUTE-bound (flat 108-109 GB/s across M=1..8): ~96 scalar ops per 16 B vs the reference kernel's ~32 via `cvt.f16x2` + `__hfma2`. Next step is a dequant rewrite, which needs a tolerance gate. |
 | — | MoE g-loop software pipelining | prefetch iteration g+1's two `uint4` weight loads while consuming g | Gate K PASS, cosine 1.0000000 | bench 121.6 -> 118.0 GB/s | **102.9 vs 101.7 ms/tok — WORSE** | **REVERTED** — loop already at ILP=2; +8 registers against Block-Limit-Registers 48 loses more occupancy than it gains |
 | — | lock EMC + GPU `min_freq` | default governors park EMC at 2750 MHz between bursts; worth +19% mean on *gapped* workloads | — | sustained bw 235 vs 240 (noise) | **106.8 vs 105.2 ms/tok — NO GAIN.** Our step is fully device-side with no host gaps to recover. | **REJECTED** |
@@ -29,8 +30,9 @@ And never trust `ncu`'s "Memory Throughput %" on Thor at all — it is L2 throug
 | After Opt #1 | 115.8 | 8.63 | 96.7 | 40.3% |
 | After Opt #3 | 108.0 | 9.26 | 103.7 | 43.2% |
 | After Opt #4 | 105.2 | 9.51 | 116.6 | 48.6% |
-| After Opt #7 (ILP) | **101.7** | **9.83** | **120.6** | **50.2%** |
-| **Cumulative** | **1.261x** | | | |
+| After Opt #7 (ILP) | 101.7 | 9.83 | 120.6 | 50.2% |
+| After Opt #9 (half2) | **100.2** | **9.98** | **122.4** | **51.0%** |
+| **Cumulative** | **1.279x** | | | |
 
 Note the GB/s column now uses the **engine's** `B_tok` of 12,261 MB, not the checkpoint's 11,202 MB.
 `ROOFLINE.md` measured what is *stored*; Finding 26b showed the engine was reading `lm_head` at

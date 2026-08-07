@@ -101,7 +101,12 @@ int main(int argc, char** argv){
     const int half=ROPE_DIM/2, hc=HC_MULT, d=DIM;
     extern bool g_tc_fp8; g_tc_fp8=true; extern bool g_tc_ogroup; g_tc_ogroup=true;
     extern bool g_moe_grouped; g_moe_grouped=true; extern void tc_moe_clear_cache();
-    extern bool g_moe_gemv; g_moe_gemv=(getenv("MOE_GEMV")!=nullptr);   // fp4 GEMV: A/B'd SLOWER than TC mma (scalar nibble decode > mma-waste). default OFF.
+    // MoE fp4 GEMV is now the DEFAULT (LOOP_LOG Finding 31). It was off because its scalar
+    // nibble-decode inner loop made it compute-bound and slower than the m16 mma. After the half2
+    // dequant rewrite (cvt.f16x2.e2m1x2 + cvt.f16x2.e4m3x2 + __hfma2) it beats the mma path at
+    // every M measured: 314.6 vs 121.5 GB/s at M=1, 232.2 vs 125.7 at M=2, 230.3 vs 130.9 at M=8.
+    // MOE_MMA=1 restores the m16 tile for A/B.
+    extern bool g_moe_gemv; g_moe_gemv=(getenv("MOE_MMA")==nullptr);
 
     // freqs over seqmax
     std::vector<void*> keep;
