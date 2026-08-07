@@ -1,5 +1,5 @@
 {
-  "cycle": 7,
+  "cycle": 8,
   "phase": "A",
   "consecutive_sub_half_pct": 0,
   "phaseB_top_history": [
@@ -7,25 +7,23 @@
     "moe-latency"
   ],
   "baseline": {
-    "spec_tok_s": 18.19,
-    "spec_tok_s_note": "prompt 0 with clocks PINNED. Same-day ungoverned control with no cycle-7 changes: 17.05 (evidence/dprof6.log). Prompt 0 is the stable prompt (4 measurements span 17.42-17.71, +/-0.8%); on prompt 2 a single point carries +/-17% (Finding 60).",
+    "spec_tok_s": 18.13,
+    "spec_tok_s_note": "prompt 0, clocks pinned, AFTER the Finding 62 fix. Unchanged from 18.19 pre-fix because prompt 0 is 6 tokens and never reached the buggy tile. Prompt 2 (18 tokens) now measures 19.14/19.26 DETERMINISTICALLY where it used to range 16.90-21.52.",
     "concurrency_gain_paired": "splits ON 18.09 vs OFF 17.54 over 36 MATCHED identical points = +3.1%. This is the defensible number for the cycle-6/7 concurrency work.",
     "base_tok_s_nograph_pinned": 12.66,
     "base_tok_s_nograph_governed": 10.48,
     "base_tok_s_graphed": 12.52,
     "verify_k5_ms": 150.56,
     "prompt_range": "11.5 to 21.1 tok/s across 5 prompts -- prompt 0 is NOT representative",
-    "source_log": "evidence/final.log (clocks pinned, all cycle-7 changes in)",
+    "source_log": "evidence/final2.log (post-fix, clocks pinned)",
     "measured": "2026-08-07"
   },
   "queue": [
     {
       "id": "N1",
-      "stage": "candidate",
-      "priority": "HIGHEST",
-      "what": "Finding 60: the engine is nondeterministic on identical input. 36 identical sweep points give 19 distinct token sequences, acceptance 1.40-3.33, tok/s 10.04-22.52, and 36 distinct FIRST-verify margin vectors. Mean 18.1 against its own good draws of 21-22. Nothing left in kernel work is worth close to this.",
-      "falsify": "ELIMINATED ALREADY, do not re-test: the new concurrency (splits-off control reproduces it exactly), MoE atomics (only in the unused non-batched path), a stale draft-window read (nwin is clamped), and uninitialised ARENA scratch (DSV4_ARENA_ZERO=1 does not fix it). NEXT: zero the PREFILL's raw cudaMalloc scratch -- compressed_attn_forward allocates 17 buffers per layer per call and never zeroes them, and that is the one analogue of the arena test that was not run. Then check mh_pre, which is written for only PSp of SMAX-1 rows.",
-      "note": "the base AR argmax gate passes every run (11111) and MATCH 5/5 holds, so the MAIN model is stable at M=1 and M=5; it is the DRAFT path whose margins move. ELIMINATED THIS CYCLE TOO: persistent KV/xin/main_x/mh_pre caches (DSV4_ZERO_CACHES=1 adds nothing over scratch zeroing), and concurrency a SECOND time (splits-off with everything zeroed is identical, 5/8). Zeroing the prefill scratch IS a real contributor (8/8 -> 5/8 distinct margin vectors) and is now default ON, but it MASKS rather than fixes: some prefill kernel reads its output before writing it, and the residual 5/8 is a second, non-memory source. Find the kernel."
+      "stage": "CLOSED \u2014 fixed",
+      "what": "tc_ogroup_fp8_kernel / tc_ogroup_kernel were a single m16 tile with no row-tile loop, so bs>16 left rows 16+ of `og` UNINITIALISED. Prefill runs at bs=PSp, so every prompt of 18+ tokens had garbage in its sliding-layer prefill output. Found with DSV4_HASH bisection + compute-sanitizer --tool initcheck (65536 uninit reads, one site: act_quant_fp8_kernel at mla_attn.cu:159 via mla_forward). Fixed with blockIdx.z row tiles; gate_ogroup_gemv now covers M=17,24,33 and fails without the fix.",
+      "falsify": "CONFIRMED in situ: 4 byte-identical sweep points go from a 5-cycle to 1 distinct prefill state, 1 token sequence, 1 margin vector. The engine is deterministic."
     },
     {
       "id": "P1",
@@ -59,5 +57,5 @@
     ]
   },
   "counter_note": "consecutive_sub_half_pct 6 -> 7, incremented because this cycle moved end-to-end 0.0%. It remains MISLEADING and the next executor should read it as such: cycles 2, 3, 4 and 5 were instrument and correctness repair, not levers, so the counter does not count three consecutive LEVERS under 0.5%. The Phase-A stopping rule must not be treated as fired on this number alone. It is now four cycles since a performance lever was measured, and that is the real signal: once I3 is closed, the loop owes itself either a Phase B re-profile or a D pass.",
-  "note_for_executor": "PRIORITY INVERTED THIS CYCLE. Stop ranking kernel levers: the routed MoE is at the roofline, the concurrency lever's large wins are taken (+3.1% paired), and what remains in that class is sub-1% per pair. The dominant term is now N1, nondeterminism: identical input gives tok/s 10.04-22.52 because acceptance swings 1.40-3.33. Four causes are already eliminated WITH MEASUREMENTS -- do not re-test them. MEASUREMENT RULE, now mandatory: a single sweep point is a +/-17% measurement. Use >=3 replicates per cell and compare means, or put the two arms of an A/B at ADJACENT sweep positions. Several numbers in this log predating cycle 7 do not meet that bar. Pin clocks (jetson_clocks) for every measurement and say so in the writeup."
+  "note_for_executor": "N1 is CLOSED and it was a correctness bug, not nondeterminism: rows 16+ of the ogroup output were never written for bs>16, so every prompt of 18+ tokens had garbage in its prefill. The engine is now deterministic \u2014 identical sweep points give identical everything. That also means the +/-17% measurement caveat from Finding 60 is GONE for prompts that were hitting it, and single-point measurements are trustworthy again. THE STANDING LESSON: every correctness gate in this project ran at the canonical 6-token prompt, which cannot reach a bs>16 code path, while the sweep prompts (11/15/18/29 tokens) had been running through it for cycles. Gate the shape range the engine spans, not the one the canonical prompt uses. Next: re-derive any ranking that used multi-prompt sweep numbers taken before this fix \u2014 they were measuring a partly-garbage prefill."
 }

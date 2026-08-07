@@ -195,10 +195,11 @@ __global__ void k_f2h(__half* o, const float* in, size_t n){ size_t i=blockIdx.x
 __global__ void tc_ogroup_kernel(float* out, const __half* o16, const __half* wo16, int bs, int G, int R, int Kd){
     int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
     int gg=blockIdx.y, n0=blockIdx.x*8; if(n0>=R) return;
-    const __half* xg0 = o16 + ((size_t)gid*G+gg)*Kd;          // A row bb=gid (stride G*Kd), group gg
-    const __half* xg8 = o16 + ((size_t)(gid+8)*G+gg)*Kd;
+    const int mb=blockIdx.z*16, r0=mb+gid, r8=mb+gid+8;       // row tiles — same defect as the fp8 twin
+    const __half* xg0 = o16 + ((size_t)r0*G+gg)*Kd;           // A row bb=r0 (stride G*Kd), group gg
+    const __half* xg8 = o16 + ((size_t)r8*G+gg)*Kd;
     const __half* Bg  = wo16 + (size_t)gg*R*Kd;               // B = wo16[gg] [R,Kd]
-    bool m0=gid<bs, m8=(gid+8)<bs; float c[4]={0,0,0,0};
+    bool m0=r0<bs, m8=r8<bs; float c[4]={0,0,0,0};
     for(int k0=0;k0<Kd;k0+=16){
         unsigned a[4],b[2];
         a[0]=m0?*(const unsigned*)(xg0+k0+2*t4):0u; a[1]=m8?*(const unsigned*)(xg8+k0+2*t4):0u;
@@ -208,24 +209,35 @@ __global__ void tc_ogroup_kernel(float* out, const __half* o16, const __half* wo
         ogm_mma(c,a,b);
     }
     int cn=2*t4;
-    if(gid<bs   && n0+cn  <R) out[((size_t)gid*G+gg)*R + n0+cn  ]=c[0];
-    if(gid<bs   && n0+cn+1<R) out[((size_t)gid*G+gg)*R + n0+cn+1]=c[1];
-    if(gid+8<bs && n0+cn  <R) out[((size_t)(gid+8)*G+gg)*R + n0+cn ]=c[2];
-    if(gid+8<bs && n0+cn+1<R) out[((size_t)(gid+8)*G+gg)*R + n0+cn+1]=c[3];
+    if(r0<bs && n0+cn  <R) out[((size_t)r0*G+gg)*R + n0+cn  ]=c[0];
+    if(r0<bs && n0+cn+1<R) out[((size_t)r0*G+gg)*R + n0+cn+1]=c[1];
+    if(r8<bs && n0+cn  <R) out[((size_t)r8*G+gg)*R + n0+cn  ]=c[2];
+    if(r8<bs && n0+cn+1<R) out[((size_t)r8*G+gg)*R + n0+cn+1]=c[3];
 }
 #include <cuda_fp8.h>
 __device__ __forceinline__ float ogm_e4m3(uint8_t b){
     __half_raw r=__nv_cvt_fp8_to_halfraw((__nv_fp8_storage_t)b,__NV_E4M3); return __half2float(*reinterpret_cast<__half*>(&r)); }
 // FUSED fp8 wo_a TC ogroup: decode fp8 wo_a * e8m0 block-scale -> f16 IN the mma inner loop (no wo16 buffer,
 // no per-token full-tensor conversion). Reads fp8 (half the bytes of f16). Bit-identical to convert-then-mma.
+// ROW TILES (LOOP_LOG Finding 62). This is a SINGLE m16 mma tile: gid = lane>>2 covers rows 0..7 and
+// gid+8 covers 8..15, and there was no loop over row tiles — so for bs > 16 every row from 16 up was
+// never computed and never stored, leaving the caller's `og` buffer UNINITIALISED there. The masks
+// (m0/m8) hid it by making the reads safe, so nothing faulted and nothing gated: the only symptom was
+// that prefill output for positions >=16 in the two pure-sliding layers was whatever the allocator
+// last left at that address. That is why the engine's prefill differed between byte-identical sweep
+// points on an 18-token prompt (PSp=17) and not on an 11-token one, and why the difference tracked
+// `seqmax` — it is a read of another allocation's contents, not of anything the engine wrote.
+// blockIdx.z now walks the rows in steps of 16. compute-sanitizer --tool initcheck named the read;
+// tests/gate_ogroup_gemv covers M=17,24,33 and fails without this (cosine 0.94/0.67/0.70).
 __global__ void tc_ogroup_fp8_kernel(float* out, const __half* o16, const uint8_t* wo, const uint8_t* wsc,
                                      int bs, int G, int R, int Kd){
     int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
     int gg=blockIdx.y, n0=blockIdx.x*8; if(n0>=R) return;
-    const __half* xg0 = o16 + ((size_t)gid*G+gg)*Kd;
-    const __half* xg8 = o16 + ((size_t)(gid+8)*G+gg)*Kd;
+    const int mb=blockIdx.z*16, r0=mb+gid, r8=mb+gid+8;
+    const __half* xg0 = o16 + ((size_t)r0*G+gg)*Kd;
+    const __half* xg8 = o16 + ((size_t)r8*G+gg)*Kd;
     const uint8_t* Bg = wo + (size_t)gg*R*Kd; int scw=Kd/128;
-    bool m0=gid<bs, m8=(gid+8)<bs; float c[4]={0,0,0,0};
+    bool m0=r0<bs, m8=r8<bs; float c[4]={0,0,0,0};
     int n=n0+gid; const uint8_t* wr = Bg + (size_t)n*Kd; size_t grow=(size_t)gg*R+n;
     for(int k0=0;k0<Kd;k0+=16){
         unsigned a[4],b[2];
@@ -241,10 +253,10 @@ __global__ void tc_ogroup_fp8_kernel(float* out, const __half* o16, const uint8_
         ogm_mma(c,a,b);
     }
     int cn=2*t4;
-    if(gid<bs   && n0+cn  <R) out[((size_t)gid*G+gg)*R + n0+cn  ]=c[0];
-    if(gid<bs   && n0+cn+1<R) out[((size_t)gid*G+gg)*R + n0+cn+1]=c[1];
-    if(gid+8<bs && n0+cn  <R) out[((size_t)(gid+8)*G+gg)*R + n0+cn ]=c[2];
-    if(gid+8<bs && n0+cn+1<R) out[((size_t)(gid+8)*G+gg)*R + n0+cn+1]=c[3];
+    if(r0<bs && n0+cn  <R) out[((size_t)r0*G+gg)*R + n0+cn  ]=c[0];
+    if(r0<bs && n0+cn+1<R) out[((size_t)r0*G+gg)*R + n0+cn+1]=c[1];
+    if(r8<bs && n0+cn  <R) out[((size_t)r8*G+gg)*R + n0+cn  ]=c[2];
+    if(r8<bs && n0+cn+1<R) out[((size_t)r8*G+gg)*R + n0+cn+1]=c[3];
 }
 bool g_tc_ogroup = false;   // forward.cu sets true; gates use the warp-per-output oracle
 // M=1 ogroup GEMV: one warp per output (g,r), out[g*R+r] = sum_d o[g][d]*fp8(wo[gr][d])*e8m0scale. Coalesced
@@ -539,7 +551,7 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
     }
     __half* o16; o16=(__half*)dmalloc((size_t)bs*G*Kd*2);
     k_f2h<<<((size_t)bs*G*Kd+255)/256,256,0,stream>>>(o16,o,(size_t)bs*G*Kd);
-    dim3 grid((R+7)/8, G); tc_ogroup_fp8_kernel<<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd);
+    dim3 grid((R+7)/8, G, (bs+15)/16); tc_ogroup_fp8_kernel<<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd);
     dsync(stream); dfree(o16);
 }
 void ogroup_gemm(float* out, const float* o, const float* wo_a,
@@ -548,7 +560,7 @@ void ogroup_gemm(float* out, const float* o, const float* wo_a,
         __half *o16,*wo16; o16=(__half*)dmalloc((size_t)bs*G*Kd*2); wo16=(__half*)dmalloc((size_t)G*R*Kd*2);
         k_f2h<<<((size_t)bs*G*Kd+255)/256,256,0,stream>>>(o16,o,(size_t)bs*G*Kd);
         k_f2h<<<((size_t)G*R*Kd+255)/256,256,0,stream>>>(wo16,wo_a,(size_t)G*R*Kd);
-        dim3 grid((R+7)/8, G); tc_ogroup_kernel<<<grid,32,0,stream>>>(out,o16,wo16,bs,G,R,Kd);
+        dim3 grid((R+7)/8, G, (bs+15)/16); tc_ogroup_kernel<<<grid,32,0,stream>>>(out,o16,wo16,bs,G,R,Kd);
         dsync(stream); dfree(o16); dfree(wo16); return;
     }
     ogroup_gemm_kernel<<<bs * G * R, 32, 0, stream>>>(out, o, wo_a, bs, G, R, Kd);

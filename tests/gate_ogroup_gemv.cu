@@ -87,7 +87,7 @@ int main(){
     // oracle run one row at a time. NR only changes which warp owns which output row, so the
     // first should be bit-identical; the second is the real correctness statement.
     bool mkok = true;
-    for (int M : {2,3,5,8,12,16}) {
+    for (int M : {2,3,5,8,12,16,17,24,33}) {   // >16 exercises the m16 tensor-core tile (Finding 62)
         std::vector<float> ob((size_t)M*G*Kd);
         for(auto&x:ob) x=(rand()%2000-1000)/1000.f;
         float *dob,*Cnr,*C1,*Coracle;

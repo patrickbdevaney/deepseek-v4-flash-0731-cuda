@@ -1,0 +1,977 @@
+========= COMPUTE-SANITIZER
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=80
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 109.7/122.8 GiB
+[decode] prefill 5 positions...
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (3891.4 ms warmup)
+  step 1 pos 6 -> token 16  (3902.0 ms)
+  step 2 pos 7 -> token 455  (4172.5 ms)
+  step 3 pos 8 -> token 6102  (3907.7 ms)
+  step 4 pos 9 -> token 294  (3911.7 ms)
+  step 5 pos 10 -> token 16603  (3918.2 ms)
+  step 6 pos 11 -> token 344  (4190.0 ms)
+  step 7 pos 12 -> token 29168  (3930.3 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 3990.3 ms/tok = 0.25 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 7000.8 ms (= 1400.2 ms/tok if all accepted vs 3990.3 M=1 -> 2.85x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5 5
+[spec] head built. mem 109.7/122.8 GiB
+[ihash] point 0 : h0(embed)=de51597d910094ca  h(hc_expand)=ca0416b3b2e8ad3b  hptr=0xd70a00000  wq_a[0..1MB]=7fb713f4d96b9386
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (0,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5000
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (1,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5004
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (2,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5008
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (3,0,0) in block (1064,0,0)
+=========     Address 0xd69fc500c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (4,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5010
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (5,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5014
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (6,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5018
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (7,0,0) in block (1064,0,0)
+=========     Address 0xd69fc501c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (8,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5020
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (9,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5024
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (10,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5028
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (11,0,0) in block (1064,0,0)
+=========     Address 0xd69fc502c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (12,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5030
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (13,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5034
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (14,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5038
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (15,0,0) in block (1064,0,0)
+=========     Address 0xd69fc503c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (16,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5040
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (17,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5044
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (18,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5048
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (19,0,0) in block (1064,0,0)
+=========     Address 0xd69fc504c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (20,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5050
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (21,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5054
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (22,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5058
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (23,0,0) in block (1064,0,0)
+=========     Address 0xd69fc505c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (24,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5060
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (25,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5064
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (26,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5068
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (27,0,0) in block (1064,0,0)
+=========     Address 0xd69fc506c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (28,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5070
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (29,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5074
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (30,0,0) in block (1064,0,0)
+=========     Address 0xd69fc5078
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (31,0,0) in block (1064,0,0)
+=========     Address 0xd69fc507c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (96,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2580
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (97,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2584
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (98,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2588
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (99,0,0) in block (1042,0,0)
+=========     Address 0xd69fc258c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (100,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2590
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (101,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2594
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (102,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2598
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (103,0,0) in block (1042,0,0)
+=========     Address 0xd69fc259c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (104,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25a0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (105,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25a4
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (106,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25a8
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (107,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25ac
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (108,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25b0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (109,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25b4
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (110,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25b8
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (111,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25bc
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (112,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25c0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (113,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25c4
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (114,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25c8
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (115,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25cc
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (116,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25d0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (117,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25d4
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (118,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25d8
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (119,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25dc
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (120,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25e0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (121,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25e4
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (122,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25e8
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (123,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25ec
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (124,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25f0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (125,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25f4
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (126,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25f8
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (127,0,0) in block (1042,0,0)
+=========     Address 0xd69fc25fc
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (0,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2400
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (1,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2404
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (2,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2408
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (3,0,0) in block (1042,0,0)
+=========     Address 0xd69fc240c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (4,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2410
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (5,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2414
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (6,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2418
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (7,0,0) in block (1042,0,0)
+=========     Address 0xd69fc241c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (8,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2420
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (9,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2424
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (10,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2428
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (11,0,0) in block (1042,0,0)
+=========     Address 0xd69fc242c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (12,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2430
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (13,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2434
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (14,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2438
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (15,0,0) in block (1042,0,0)
+=========     Address 0xd69fc243c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (16,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2440
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (17,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2444
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (18,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2448
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (19,0,0) in block (1042,0,0)
+=========     Address 0xd69fc244c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (20,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2450
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (21,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2454
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (22,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2458
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (23,0,0) in block (1042,0,0)
+=========     Address 0xd69fc245c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (24,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2460
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (25,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2464
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (26,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2468
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (27,0,0) in block (1042,0,0)
+=========     Address 0xd69fc246c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (28,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2470
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (29,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2474
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (30,0,0) in block (1042,0,0)
+=========     Address 0xd69fc2478
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (31,0,0) in block (1042,0,0)
+=========     Address 0xd69fc247c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (0,0,0) in block (1049,0,0)
+=========     Address 0xd69fc3200
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (1,0,0) in block (1049,0,0)
+=========     Address 0xd69fc3204
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (2,0,0) in block (1049,0,0)
+=========     Address 0xd69fc3208
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+========= Uninitialized __global__ memory read of size 4 bytes
+=========     at act_quant_fp8_kernel(unsigned char *, float *, const float *, int, int, int)+0x450 in mla_attn.cu:159
+=========     by thread (3,0,0) in block (1049,0,0)
+=========     Address 0xd69fc320c
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: mla_forward(float*, float const*, MLAWeights const&, int, int, CUstream_st*) [0x45503] in decode
+=========         Host Frame: block_prefill_cache(float*, float const*, int const*, BlockWeights const&, int, int, float, LayerKV&, CUstream_st*) [0x5e233] in decode
+=========         Host Frame: main [0x11fbf] in decode
+========= 
+[hash] point 0 prompt 2 PSp=17 : main_x=fce870a85634f29f mh_pre=1a1e2577c6e1f6ab scratch0=0000000d699cc000
+[spec] decoding 20 tokens (block=5, draft passes=1, adaptK=1.50, prompt=2 s=18)...
+  [margins] 2.34 2.79 1.95 0.61 1.20  K=4
+  verify 1: accepted 2/3 (K=4) + correction -> +3 tokens (8106.5 ms)  cpos=20
+  [margins] 5.61 3.37 8.11 6.73 9.43  K=5
+  verify 2: accepted 4/4 (K=5) + correction -> +5 tokens (8619.5 ms)  cpos=25
+  [margins] 8.07 7.88 0.53 0.28 0.02  K=3
+  verify 3: accepted 2/2 (K=3) + correction -> +3 tokens (7311.4 ms)  cpos=28
+  [margins] 0.64 1.40 5.69 4.70 0.37  K=2
+  verify 4: accepted 1/1 (K=2) + correction -> +2 tokens (6194.6 ms)  cpos=30
+  [margins] 4.38 7.29 2.41 2.12 0.92  K=5
+  verify 5: accepted 2/4 (K=5) + correction -> +3 tokens (8705.3 ms)  cpos=33
+  [margins] 4.48 2.18 7.20 0.53 0.18  K=4
+  verify 6: accepted 3/3 (K=4) + correction -> +4 tokens (8154.3 ms)  cpos=37
+
+[spec] generated 20 tokens over 6 verifies: mean tokens/verify = 3.33 (block=5, max 5)
+[spec] tokens: 55155 3913 15 19 11 940 55155 3913 15 20 868 3465 1840 15536 361 313 438 688 14867 1698
+[spec] SPEC-DECODE: 2293.2 ms/tok = 0.44 tok/s  (vs base M=1 3990.3 ms/tok = 0.25 tok/s -> 1.74x)
+[ihash] point 1 : h0(embed)=de51597d910094ca  h(hc_expand)=ca0416b3b2e8ad3b  hptr=0xd71000000  wq_a[0..1MB]=7fb713f4d96b9386
+[hash] point 1 prompt 2 PSp=17 : main_x=e5e5c95c754d23e4 mh_pre=b2392ba021f2da2c scratch0=0000000d699cc000
+[spec] decoding 20 tokens (block=5, draft passes=1, adaptK=1.50, prompt=2 s=18)...
+  [margins] 8.73 8.58 0.15 1.28 0.35  K=3
+  verify 1: accepted 2/2 (K=3) + correction -> +3 tokens (7240.6 ms)  cpos=20
+  [margins] 6.59 3.36 7.73 6.50 9.01  K=5
+  verify 2: accepted 4/4 (K=5) + correction -> +5 tokens (8620.4 ms)  cpos=25
+  [margins] 9.99 6.90 0.73 1.22 1.89  K=3
+  verify 3: accepted 2/2 (K=3) + correction -> +3 tokens (7299.1 ms)  cpos=28
+  [margins] 0.65 0.79 0.46 2.30 0.40  K=2
+  verify 4: accepted 0/1 (K=2) + correction -> +1 tokens (6183.8 ms)  cpos=29
+  [margins] 0.84 0.11 2.56 2.05 0.54  K=2
+  verify 5: accepted 0/1 (K=2) + correction -> +1 tokens (6190.8 ms)  cpos=30
+  [margins] 1.29 6.48 1.27 0.42 4.68  K=3
+  verify 6: accepted 2/2 (K=3) + correction -> +3 tokens (7333.7 ms)  cpos=33
+  [margins] 2.10 2.80 0.96 0.75 3.05  K=3
+  verify 7: accepted 2/2 (K=3) + correction -> +3 tokens (7350.9 ms)  cpos=36
+  [margins] 1.84 1.27 5.94 0.54 0.27  K=2
+  verify 8: accepted 1/1 (K=2) + correction -> +2 tokens (6251.0 ms)  cpos=38
+
+[spec] generated 21 tokens over 8 verifies: mean tokens/verify = 2.62 (block=5, max 5)
+[spec] tokens: 55155 3913 15 19 11 940 55155 3913 15 20 682 80 438 688 14867 1698 13228 260 1167 28 77796
+[spec] SPEC-DECODE: 2735.0 ms/tok = 0.37 tok/s  (vs base M=1 3990.3 ms/tok = 0.25 tok/s -> 1.46x)
+
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 0.25 tok/s
+[blksweep]    5      1   1.50   1.50      2 |            3.33 | 2293.2 |  0.44 | 1.74x
+[blksweep]    5      1   1.50   1.50      2 |            2.62 | 2735.0 |  0.37 | 1.46x
+[decode] mem 109.1/122.8 GiB
+========= ERROR SUMMARY: 65536 errors
+========= ERROR SUMMARY: 65436 errors were not printed. Use --print-limit option to adjust the number of printed errors

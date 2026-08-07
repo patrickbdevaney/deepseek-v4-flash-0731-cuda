@@ -3196,3 +3196,73 @@ never touches those buffers) and the comment in both files now says it fixes not
 The measurement lesson is the same one Finding 60 raised, applied to my own result: **a count of
 distinct values over 8 samples is not evidence about a mechanism.** The hash sequence is, because it
 is exact and reproducible.
+
+---
+
+## Finding 62 — FOUND AND FIXED: `tc_ogroup_fp8_kernel` never wrote rows 16+, so every prompt of 18+ tokens had garbage in its prefill
+
+**This was never a performance bug. The engine was producing incorrect output.**
+
+### The defect
+
+`tc_ogroup_fp8_kernel` (and its f32 twin `tc_ogroup_kernel`) is a **single m16 mma tile**: `gid=lane>>2`
+covers rows 0-7 and `gid+8` covers 8-15. There was **no loop over row tiles**. For `bs > 16` every row
+from 16 up was never computed and never stored, leaving the caller's `og` buffer uninitialised there —
+and `mla_forward` then feeds `og` straight into `act_quant_fp8` and `wo_b`.
+
+The row masks (`m0`/`m8`) made the *reads* safe, so nothing ever faulted and no gate ever fired. The
+only symptom was that the prefill output for positions ≥16 in the two pure-sliding layers was whatever
+the allocator last left at that address.
+
+`ogroup_gemm_fp8` dispatches the M=K GEMV only for `bs<=16`; at `bs=17` it falls through to this tile.
+**Prefill runs at `bs = PSp = len(prompt)-1`, so any prompt of 18 tokens or more hit it.** Decode
+(bs=1) and the verify (bs≤5) never did, which is why the decode gates stayed green.
+
+### Why it hid for the whole project
+
+The canonical gate prompt is **6 tokens**. `PSp=5`. It never reaches the tile. Every gate, every
+baseline and every `GATE PASS` in this log was measured on a prompt that cannot trigger the bug, while
+the multi-prompt sweeps that *did* trigger it reported it as "nondeterminism" for three cycles.
+
+### The chain that found it
+
+1. `DSV4_HASH=1/2` — hash `main_x`/`mh_pre` per sweep point, and the hidden state after every layer.
+   Showed the prefill was a **deterministic 5-cycle**, layer 0 already differing, input bit-identical.
+2. **`seqmax` was the discriminator, not decode length**: holding `NGEN0=20` and raising `seqmax`
+   51 → 91 (via `NDEC`) turned the effect on. That says "reads another allocation's contents", which
+   is what a layout-dependent uninitialised read looks like.
+3. `compute-sanitizer --tool initcheck` on a short-decode repro: **65,536 uninitialised reads, one
+   site** — `act_quant_fp8_kernel` at `mla_attn.cu:159`, via `mla_forward` ← `block_prefill_cache`.
+4. The reported block index decoded to **row 16 of bs=17** — the first row past the tile.
+
+### The fix, and the gate that now holds it
+
+`blockIdx.z` walks the rows in steps of 16 in both kernels; grids become `(R+7)/8, G, (bs+15)/16`.
+`tests/gate_ogroup_gemv` now covers **M=17, 24, 33**, and it fails without the fix and passes with it:
+
+| M | before | after |
+|---|---|---|
+| 17 | cosine **0.9419** | 0.999999983 |
+| 24 | cosine **0.6702** | 0.999999983 |
+| 33 | cosine **0.6976** | 0.999999983 |
+
+### In situ, the whole of Findings 60/61 collapses
+
+Four byte-identical sweep points on the 18-token prompt:
+
+| | before | after |
+|---|---|---|
+| distinct prefill states | 5-cycle | **1 of 4** |
+| distinct token sequences | 19 of 36 | **1 of 4** |
+| distinct verify-1 margins | 36 of 36 | **1 of 4** |
+
+**The engine is deterministic.** Findings 60 and 61 described the symptom correctly and named the
+cause wrongly; this is the cause. The canonical baseline is unchanged (18.13 vs 18.19, prompt 0 never
+triggered it), all gates pass, `MATCH 5/5` and first-token 11111 hold.
+
+### The lesson worth keeping
+
+A masked read is not a safe read. `m0`/`m8` silenced the symptom of a missing loop, and every
+correctness gate in this project ran at a prompt length that could not reach it. **Gate the shape
+range the engine actually spans, not the one the canonical prompt happens to use** — the sweep
+prompts (11, 15, 18, 29 tokens) had been running through this code for cycles.
