@@ -14,7 +14,10 @@
 #      user locked out.
 #
 # Usage:  scripts/run_model.sh <logfile> <binary> [args...]
-#   e.g.  scripts/run_model.sh ~/opt1.log ./build/decode ~/models/DeepSeek-V4-Flash-0731-REAP "0,671,..." 8
+# The GATE prompt is EXACTLY these six ids (BOS + "The capital of France is"); the expected first
+# decoded token 11111 is only meaningful for this prompt. Do NOT abbreviate it — a truncated list
+# still runs, still prints a tok/s, and silently reports GATE FAIL against a different sequence.
+#   scripts/run_model.sh ~/opt1.log ./build/decode ~/models/DeepSeek-V4-Flash-0731-REAP "0,671,6102,294,8760,344" 8
 # Env passthrough works normally:  DSV4_KSWEEP=1 scripts/run_model.sh ...
 set -euo pipefail
 

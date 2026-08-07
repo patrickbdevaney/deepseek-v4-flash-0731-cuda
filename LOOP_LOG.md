@@ -1554,3 +1554,86 @@ re-tried and should win.
 
 Left in the tree behind `COMP_BF16=1` (default **off**) so the re-try after a `gemm_fp32` rewrite is
 one env var away, and the −0.5 GiB memory saving is available if headroom ever binds.
+
+---
+
+## 2026-08-06 — Finding 33: the BF16 compressor left a type-punned pointer behind. Two paths, one weight.
+
+Reverting Finding 32 by flipping `g_compressor_bf16` to default-off did **not** revert it. The
+`decode.cu` wiring still handed `W.get(...).dev` — raw BF16 — to `mc_wkv`/`idx_c_wkv`, while the
+now-default `else` branch fed those pointers to `gemm_fp32`, which reads them as f32.
+
+Worse, `emit_group_dp` (`compressed_decode.cu:363`) reaches the same pointers through
+`gemm_fp32_cond`, which has **no bf16 variant at all** — so on the device-pos decode path the
+weights were misread *in both flag states*. The binary I had rebuilt, written up and pushed was
+never measured; I reported 9.98 tok/s for it, which was the number from the *previous* build.
+
+Two lessons, and the second is the one that generalises:
+
+1. **A flag that selects a kernel must also select the data.** The dispatch was on
+   `g_compressor_bf16`, but the pointer's *type* was decided unconditionally at load. A boolean
+   guarding half a decision is worse than no boolean, because it reads as if it guards all of it.
+2. **Never write up a config that has not been run.** The rebuild after flipping the default was
+   one command; measuring it was one more. I skipped the second and documented the first.
+
+Fixed by making the pointer f32 unconditionally (`L.bf16(...)`). The BF16 experiment can be redone
+properly once `gemm_fp32_cond` has a bf16 twin — until then there is one pointer type in the tree.
+
+---
+
+## 2026-08-06 — Finding 34 (Opt #10): `gemm_fp32` was the ILP=1 / one-warp-per-block defect, for the third time.
+
+`gemm_fp32` launched `<<<dim3(N,M), 32>>>` with `acc += a[k]*b[k]`. Both halves of the defect that
+Finding 21 fixed in the MoE and Finding 26 fixed in `gemm_bf16w` — one warp per block caps occupancy
+at 50%, and a single dependent load→FMA chain leaves memory-level parallelism unused. This call site
+was simply never revisited after those two.
+
+float4 + 4 accumulator chains + 4 warps/block, with the Finding 25 runtime alignment check. Same
+treatment applied to `gemm_fp32_cond` and to `gemm_bf16w` (float4 = 8 bf16 per load).
+
+**100.2 → 99.9 ms/tok (9.98 → 10.01 tok/s).** Gate PASS, tokens byte-identical.
+
++0.3% is small, and that is exactly what Finding 32's rule predicts: the compressor is ~4% of
+`B_tok`, so even a large efficiency win on it is a small end-to-end win. Adopted anyway because it
+is free, and because it is the *precondition* for re-trying the BF16 compressor — the reason that
+experiment lost was this kernel's inner loop.
+
+**The pattern is now established well enough to search for rather than stumble on:** every
+warp-per-output reduction in this codebase was written correctness-first and inherited both defects.
+The remaining ones were found by grep, not by profiling.
+
+---
+
+## 2026-08-06 — Finding 35 (Opt #11): the ogroup GEMV read ONE BYTE per lane.
+
+```
+for(int dd=kb*128+lane; dd<(kb+1)*128; dd+=32) acc += og[dd]*ogm_e4m3(wr[dd])*ws;
+```
+
+32 lanes × 1 byte = a **32-byte request** where the memory system wants 128. This is the identical
+mechanism Finding 15 traced under the M≥2 verify penalty — there the m16 tile issued 8×32B against
+the GEMV's 1×128B — and it had been sitting in the M=1 path the whole time. `wo_a` is ~33 MB/layer,
+~1.44 GB/token.
+
+One `uint32_t` per lane (128 contiguous bytes per warp) + `float4` activations + 4 accumulator
+chains. `ws` is a power of two, so folding it into the weight rather than the product is exact.
+
+**And it had no unit gate.** `tests/gate_ogroup.cu` covers `ogroup_gemm` — f32 weights, bs=8, the
+tensor-core tile path. The decode kernel is `ogroup_gemv_fp8_kernel`, reached only via
+`ogroup_gemm_fp8` at bs==1: different kernel, different format, different M. The source comment
+claimed "Gated cosine vs ogroup_gemm oracle (tests/gate_ogroup_gemv.cu)" — **a file that did not
+exist**. The most expensive kernel in attention was the least tested one, and the comment said the
+opposite. Wrote `tests/gate_ogroup_gemv.cu` (vec4 vs scalar vs f32 oracle, cosine 1.000000000) and
+registered it in `build_gate.sh`.
+
+---
+
+## 2026-08-06 — Finding 36 (Opt #12): `k_rsqrt` was one block, and k_mixes had already loaded its input.
+
+`hc_pre` ran `k_rsqrt<<<bs,256>>>` — at decode bs=1, i.e. **one block on one SM** to reduce 64 KB —
+and every `k_mixes` block then waited on its result. But `k_mixes` streams the whole of `xr`
+already, so it can accumulate Σx² from the same registers for one extra FMA per element and zero
+extra loads. The redundancy across the 24 blocks is free; they all re-read `xr` from L2 regardless.
+
+Together with Opt #11: **99.9 → 96.9 ms/tok (10.01 → 10.32 tok/s), +3.1%.** Gate PASS, tokens
+byte-identical.

@@ -182,16 +182,19 @@ int main(int argc, char** argv){
         } else {
             CompressedBlockWeights& b=CW[Lyr]; fill_attn(lp,b.attn.attn,true);
             std::string p=lp+"attn.";
-            // native BF16 (Finding 32) — do NOT dequantise; ~526 MB/step
-            b.attn.mc_wkv=(const float*)W.get(p+"compressor.wkv.weight").dev;
-            b.attn.mc_wgate=(const float*)W.get(p+"compressor.wgate.weight").dev;
+            // Finding 32/33: f32-dequantised. The BF16-native variant is SLOWER with the current
+            // gemm and — critically — `emit_group_dp` reaches these same pointers through
+            // `gemm_fp32_cond`, which has no bf16 variant, so a bf16 pointer here is silently
+            // misread on the device-pos decode path regardless of COMP_BF16. One pointer type.
+            b.attn.mc_wkv=L.bf16(p+"compressor.wkv.weight");
+            b.attn.mc_wgate=L.bf16(p+"compressor.wgate.weight");
             b.attn.mc_ape=L.f32(p+"compressor.ape");b.attn.mc_norm=L.bf16(p+"compressor.norm.weight");
             b.attn.cc_cos=(ratio==4)?cc4c:cc128c;b.attn.cc_sin=(ratio==4)?cc4s:cc128s;
             if(ratio==4){
                 b.attn.idx_wq_b=L.raw(p+"indexer.wq_b.weight");b.attn.idx_wq_b_s=L.scale(p+"indexer.wq_b.scale");
                 b.attn.idx_weights_proj=L.bf16(p+"indexer.weights_proj.weight");
-                b.attn.idx_c_wkv=(const float*)W.get(p+"indexer.compressor.wkv.weight").dev;   // native BF16 (Finding 32)
-                b.attn.idx_c_wgate=(const float*)W.get(p+"indexer.compressor.wgate.weight").dev;
+                b.attn.idx_c_wkv=L.bf16(p+"indexer.compressor.wkv.weight");   // see above (Finding 33)
+                b.attn.idx_c_wgate=L.bf16(p+"indexer.compressor.wgate.weight");
                 b.attn.idx_c_ape=L.f32(p+"indexer.compressor.ape");b.attn.idx_c_norm=L.bf16(p+"indexer.compressor.norm.weight");
             }
             b.attn.index_n_heads=INDEX_N_HEADS;b.attn.index_head_dim=INDEX_HEAD_DIM;b.attn.index_topk=INDEX_TOPK;
@@ -377,6 +380,11 @@ int main(int argc, char** argv){
                 k_embed<<<((size_t)K*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_vtok,K,d);
                 k_hc_expand<<<((size_t)K*hc*d+255)/256,256>>>(hv,h0,K,hc,d); CU(cudaDeviceSynchronize());
                 float* a=hv; float* b=hv2;
+                // The re-prefill above ALSO runs moe_forward / compressed attention, so their
+                // sub-phase marks fire 43 times for prefill and 43 for the verify pass. Reporting
+                // both made `moe:w1w3` (67 ms, mostly 5-token prefill) exceed its own parent
+                // `MoE` (31 ms). Only the timed pass counts.
+                dprof_reset();
                 cudaEventRecord(ev[0]);
                 for(int L=0; L<N_LAYERS; ++L){ arena_reset(); int r=compress_ratio(L);
                     if(r==0) block_verify_step (b,a,d_ids+PS,BW[L],PS,K,HC_SINKHORN_ITERS,EPS,KV[L]);

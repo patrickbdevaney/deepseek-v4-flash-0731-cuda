@@ -40,6 +40,12 @@ struct MoEWeights {
     // When e8m0_scales, the grouped MoE reads these instead of w1sp/... and dequants exp2(byte-127) in-kernel.
     bool e8m0_scales = false;
     const uint8_t *const *w1sp8 = nullptr, *const *w2sp8 = nullptr, *const *w3sp8 = nullptr;
+    // LOOP_LOG Finding 37. The six pointer tables above are HOST arrays and the grouped MoE needs
+    // them on the device, so it was issuing six cudaMemcpyAsync H2D copies -- per layer, per token.
+    // 43 layers x 6 = 258 copies every step, of data that is fixed for the life of the process and
+    // is not even pinned. Cached in one device allocation on first use; the layer structs are
+    // persistent (decode.cu builds them once), so `mutable` here is a genuine cache, not state.
+    mutable void* dev_ptr_tables = nullptr;    // 6 * n_routed device pointers, laid out w1,w3,w2,s1,s3,s2
 };
 // x:[bs,dim] fp32, input_ids:[bs] i32 (for hash routing) -> out:[bs,dim] fp32.
 void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeights& w,

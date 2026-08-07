@@ -18,7 +18,15 @@ enum DProfId {
     DP_HC_PRE_ATTN = 0, DP_RMSNORM_ATTN, DP_ATTN, DP_HC_POST_ATTN,
     DP_HC_PRE_FFN, DP_RMSNORM_FFN, DP_MOE, DP_HC_POST_FFN, DP_KV_XIN,
     // second level: inside the attention phase (Finding 15 narrowed the M>=2 step to ATTENTION)
+    // NOTE: these live in mla_decode.cu, which serves only the 2 pure-sliding (ratio==0) layers.
+    // The other 41 go through compressed_decode.cu and were invisible here — extrapolating a
+    // per-layer cost from these two overstated `ogroup` by ~5x and sent Finding 35 chasing 12 ms
+    // that was worth 2.4. The DP_C_* ids below close that hole.
     DP_A_QPROJ, DP_A_KV, DP_A_SPARSE, DP_A_OGROUP, DP_A_MISC,
+    // compressed-attention layers (the other 41)
+    DP_C_QPROJ, DP_C_COMPRESS, DP_C_INDEXER, DP_C_SPARSE, DP_C_OGROUP,
+    // inside MoE — 44% of the step and, until now, entirely unattributed
+    DP_M_ROUTER, DP_M_GROUP, DP_M_W13, DP_M_ACT, DP_M_W2, DP_M_COMBINE, DP_M_SHARED,
     DP_N
 };
 

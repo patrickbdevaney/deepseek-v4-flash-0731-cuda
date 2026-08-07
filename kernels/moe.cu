@@ -1,6 +1,7 @@
 // moe.cu — MoE primitives, correctness-first (Gate K oracle: ref/gen_units.py).
 #include "moe.h"
 #include "dscratch.h"
+#include "dprof.h"
 #include <cuda_fp8.h>
 #include <cuda_fp16.h>
 
@@ -106,13 +107,48 @@ __global__ void compute_scores_kernel(float* sc, const float* x, const float* gw
     sc[i]=sqrtf(sp);
 }
 // warp-per-(token,expert): coalesced row read + shuffle-reduce (vs the serial per-thread dot above).
-__global__ void compute_scores_warp(float* sc, const float* x, const float* gw, int bs, int dim, int nr){
-    int gid=blockIdx.x; int t=gid/nr, e=gid%nr; if(t>=bs) return; int lane=threadIdx.x&31;
-    const float* xr=x+(size_t)t*dim; const float* gr=gw+(size_t)e*dim;
-    float d=0.f; for(int j=lane;j<dim;j+=32) d+=xr[j]*gr[j];
+// Finding 34/38: <<<bs*nr, 32>>> is 160 ONE-WARP blocks at decode (50% occupancy ceiling) running a
+// scalar ILP=1 dot. Same fix as gemm_fp32: 4 warps/block, float4, 4 accumulator chains.
+__device__ __forceinline__ float rscore_dot(const float* __restrict__ xr, const float* __restrict__ gr,
+                                            int dim, int lane, int vec4){
+    if(vec4){
+        const float4* x4=(const float4*)xr; const float4* g4=(const float4*)gr; const int n4=dim>>2;
+        float a0=0.f,a1=0.f,a2=0.f,a3=0.f;
+        for(int j=lane;j<n4;j+=32){ const float4 a=x4[j], b=g4[j];
+            a0=fmaf(a.x,b.x,a0); a1=fmaf(a.y,b.y,a1); a2=fmaf(a.z,b.z,a2); a3=fmaf(a.w,b.w,a3); }
+        return (a0+a1)+(a2+a3);
+    }
+    float d=0.f; for(int j=lane;j<dim;j+=32) d+=xr[j]*gr[j]; return d;
+}
+__device__ __forceinline__ float rscore_fin(float d){    // sqrtsoftplus
     #pragma unroll
     for(int o=16;o>0;o>>=1) d+=__shfl_down_sync(0xffffffff,d,o);
-    if(lane==0){ float sp=d>20.f?d:log1pf(expf(d)); sc[gid]=sqrtf(sp); }
+    return sqrtf(d>20.f?d:log1pf(expf(d)));
+}
+__global__ void compute_scores_warp(float* sc, const float* x, const float* gw, int bs, int dim, int nr, int vec4){
+    int gid=blockIdx.x*(blockDim.x>>5)+(threadIdx.x>>5); if(gid>=bs*nr) return;
+    int t=gid/nr, e=gid%nr; int lane=threadIdx.x&31;
+    float d=rscore_dot(x+(size_t)t*dim, gw+(size_t)e*dim, dim, lane, vec4);
+    float v=rscore_fin(d); if(lane==0) sc[gid]=v;
+}
+// HASH layers only (IMPLEMENTATION_PLAN Tier-1 #7). The first 3 layers route by `tid2eid`, a pure
+// function of the token id, so the expert set is known before any arithmetic happens — yet the
+// router still scored all 160 experts and then read exactly `na`=6 of them. Score only the 6.
+// 26x less router work and 26x fewer gate_w bytes on those layers; no behaviour change, because
+// the discarded 154 scores never reached an output.
+__global__ void compute_scores_sel(float* scsel, const float* x, const float* gw, const int* idx,
+                                   int bs, int dim, int na, int vec4){
+    int gid=blockIdx.x*(blockDim.x>>5)+(threadIdx.x>>5); if(gid>=bs*na) return;
+    int t=gid/na, lane=threadIdx.x&31; int e=idx[gid];
+    float d=rscore_dot(x+(size_t)t*dim, gw+(size_t)e*dim, dim, lane, vec4);
+    float v=rscore_fin(d); if(lane==0) scsel[gid]=v;
+}
+// gather_scale over the COMPACT [bs,na] scores (identical math to gather_scale_kernel, which indexed
+// the full [bs,nr] score table by idx).
+__global__ void gather_scale_sel_kernel(float* w, const float* scsel, int bs, int na, float rs){
+    int t=blockIdx.x; if(t>=bs) return; if(threadIdx.x) return;
+    float sum=0.f; for(int s=0;s<na;++s) sum+=scsel[(size_t)t*na+s];
+    for(int s=0;s<na;++s) w[(size_t)t*na+s]=scsel[(size_t)t*na+s]/sum*rs;
 }
 __global__ void gather_hash_kernel(int* idx, const long* tid2eid, const int* ids, int bs, int na){
     int i=blockIdx.x*blockDim.x+threadIdx.x; if(i>=bs*na) return;
@@ -191,13 +227,19 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
     hq=(decltype(hq))dmalloc(inter); hs=(decltype(hs))dmalloc((inter/128)*4); oe=(decltype(oe))dmalloc(dim*4);
     CU(cudaMemsetAsync(out,0,(size_t)bs*dim*4,stream));
 
-    compute_scores_warp<<<bs*nr,32,0,stream>>>(sc,x,w.gate_w,bs,dim,nr);
+    // float4 needs 16-byte alignment on both operands; `gate_w` is a mapped tensor (Finding 25).
+    dprof_begin(DP_M_ROUTER,stream);
+    const int rvec4 = ((dim & 3)==0) && ((((uintptr_t)x)&15)==0) && ((((uintptr_t)w.gate_w)&15)==0);
     if(w.is_hash){
+        // Route FIRST (it needs no scores at all), then score only the selected experts — Finding 38.
         gather_hash_kernel<<<(bs*na+63)/64,64,0,stream>>>(idx,w.tid2eid,input_ids,bs,na);
-        gather_scale_kernel<<<bs,32,0,stream>>>(wt,sc,idx,bs,na,nr,w.route_scale);
+        compute_scores_sel<<<(bs*na+3)/4,128,0,stream>>>(sc,x,w.gate_w,idx,bs,dim,na,rvec4);
+        gather_scale_sel_kernel<<<bs,32,0,stream>>>(wt,sc,bs,na,w.route_scale);
     } else {
+        compute_scores_warp<<<(bs*nr+3)/4,128,0,stream>>>(sc,x,w.gate_w,bs,dim,nr,rvec4);
         router_topk_kernel<<<bs,32,nr*sizeof(float),stream>>>(wt,idx,sc,w.gate_bias,bs,nr,na,w.route_scale);
     }
+    dprof_end(DP_M_ROUTER,stream);
     // ================= GROUPED zero-sync MoE (STRUCTURAL_PLAN Step 1b) =================
     // ONE grouped GEMM per stage (gate/up/down) over ALL experts, expert map built on-device from off[] — the
     // last per-layer host sync (the off[] D2H copy) is GONE, so this path is CUDA-graph-capturable. Gated
@@ -220,6 +262,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         counts=(decltype(counts))dmalloc(nr*4); off_d=(decltype(off_d))dmalloc((nr+1)*4); cursor=(decltype(cursor))dmalloc(nr*4);
         alltok_d=(decltype(alltok_d))dmalloc((size_t)maxm*4); allwt_d=(decltype(allwt_d))dmalloc((size_t)maxm*4); allslot_d=(decltype(allslot_d))dmalloc((size_t)maxm*4);
         CU(cudaMemsetAsync(counts,0,nr*4,stream)); CU(cudaMemsetAsync(cursor,0,nr*4,stream));
+        dprof_begin(DP_M_GROUP,stream);
         k_moe_count<<<(bs*na+63)/64,64,0,stream>>>(counts,idx,bs*na);
         k_moe_prefix<<<1,1,0,stream>>>(off_d,counts,nr);
         k_moe_scatter<<<(bs*na+63)/64,64,0,stream>>>(alltok_d,allwt_d,allslot_d,cursor,idx,wt,off_d,bs,na);
@@ -230,17 +273,22 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         // GEMV path reads ORIGINAL fp4 (no repack).
         if(!g_moe_gemv) for(int e=0;e<nr;++e){ tc_ensure_repacked((uint8_t*)w.w1p[e],inter,dim,stream);
             tc_ensure_repacked((uint8_t*)w.w3p[e],inter,dim,stream); tc_ensure_repacked((uint8_t*)w.w2p[e],dim,inter,stream); }
+        // Finding 37: uploaded ONCE per layer struct, not once per layer per token. These tables are
+        // constant; the only reason they were re-copied every step is that they lived in the arena,
+        // which resets. One persistent cudaMalloc holding all six, filled on first use.
         const uint8_t **w1d,**w3d,**w2d; void **s1d,**s3d,**s2d;   // s*d hold float* (dequant) OR uint8_t* (e8m0)
-        w1d=(decltype(w1d))dmalloc(nr*sizeof(void*)); w3d=(decltype(w3d))dmalloc(nr*sizeof(void*)); w2d=(decltype(w2d))dmalloc(nr*sizeof(void*));
-        s1d=(decltype(s1d))dmalloc(nr*sizeof(void*)); s3d=(decltype(s3d))dmalloc(nr*sizeof(void*)); s2d=(decltype(s2d))dmalloc(nr*sizeof(void*));
-        CU(cudaMemcpyAsync(w1d,w.w1p,nr*sizeof(void*),cudaMemcpyHostToDevice,stream)); CU(cudaMemcpyAsync(w3d,w.w3p,nr*sizeof(void*),cudaMemcpyHostToDevice,stream));
-        CU(cudaMemcpyAsync(w2d,w.w2p,nr*sizeof(void*),cudaMemcpyHostToDevice,stream));
         const void *hs1 = w.e8m0_scales?(const void*)w.w1sp8:(const void*)w.w1sp;
         const void *hs3 = w.e8m0_scales?(const void*)w.w3sp8:(const void*)w.w3sp;
         const void *hs2 = w.e8m0_scales?(const void*)w.w2sp8:(const void*)w.w2sp;
-        CU(cudaMemcpyAsync(s1d,hs1,nr*sizeof(void*),cudaMemcpyHostToDevice,stream));
-        CU(cudaMemcpyAsync(s3d,hs3,nr*sizeof(void*),cudaMemcpyHostToDevice,stream));
-        CU(cudaMemcpyAsync(s2d,hs2,nr*sizeof(void*),cudaMemcpyHostToDevice,stream));
+        if(!w.dev_ptr_tables){
+            void* p=nullptr; CU(cudaMalloc(&p, (size_t)6*nr*sizeof(void*)));
+            const void* src[6] = {(const void*)w.w1p,(const void*)w.w3p,(const void*)w.w2p, hs1,hs3,hs2};
+            for(int i=0;i<6;++i) CU(cudaMemcpy((char*)p + (size_t)i*nr*sizeof(void*), src[i], nr*sizeof(void*), cudaMemcpyHostToDevice));
+            w.dev_ptr_tables = p;
+        }
+        char* tb = (char*)w.dev_ptr_tables; const size_t tsz = (size_t)nr*sizeof(void*);
+        w1d=(const uint8_t**)(tb+0*tsz); w3d=(const uint8_t**)(tb+1*tsz); w2d=(const uint8_t**)(tb+2*tsz);
+        s1d=(void**)(tb+3*tsz); s3d=(void**)(tb+4*tsz); s2d=(void**)(tb+5*tsz);
         // -- scratch (maxm rows) --
         float *Xe,*Xes,*Gb,*Ub,*Hb,*Hsb,*OEb; uint8_t *Xeq,*Hqb; __half *x16,*h16;
         Xe=(decltype(Xe))dmalloc((size_t)maxm*dim*4); Xeq=(decltype(Xeq))dmalloc((size_t)maxm*dim); Xes=(decltype(Xes))dmalloc((size_t)maxm*(dim/128)*4);
@@ -251,6 +299,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         // -- routed experts: gather -> quant -> fp16 -> grouped gate/up -> swiglu -> quant -> fp16 -> grouped down -> scatter --
         k_gather_x<<<((size_t)maxm*dim+255)/256,256,0,stream>>>(Xe,x,alltok_d,maxm,dim);
         act_quant_fp8(Xeq,Xes,Xe,maxm,dim,128,stream);
+        dprof_end(DP_M_GROUP,stream);
         // NOTE (LOOP_LOG Finding 31): the GEMV and the m16 mma need MUTUALLY EXCLUSIVE weight
         // layouts. `tc_ensure_repacked` rewrites each expert IN PLACE into mma-fragment order and
         // is skipped when the GEMV is active; the GEMV reads the ORIGINAL packed fp4. So the two
@@ -258,6 +307,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         // weights through the mma and produced argmax 260 instead of 11111. Selecting per-M would
         // need a second weight copy (~86 GiB — impossible here) or a non-mutating repack.
         const bool use_gemv = g_moe_gemv;
+        dprof_begin(DP_M_W13,stream);
         if(use_gemv){                                          // fp4 GEMV on ORIGINAL fp4 (act stays fp8)
             tc_fp4_grouped_gemv_e8m0(Gb,Xeq,Xes,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
             tc_fp4_grouped_gemv_e8m0(Ub,Xeq,Xes,w3d,(const uint8_t* const*)s3d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
@@ -270,15 +320,23 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
             tc_fp4_grouped_gemm(Gb,x16,w1d,(const float* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
             tc_fp4_grouped_gemm(Ub,x16,w3d,(const float* const*)s3d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
         }
+        dprof_end(DP_M_W13,stream);
+        dprof_begin(DP_M_ACT,stream);
         swiglu_wrow<<<((size_t)maxm*inter+255)/256,256,0,stream>>>(Hb,Gb,Ub,allwt_d,maxm,inter,w.swiglu_limit);
         act_quant_fp8(Hqb,Hsb,Hb,maxm,inter,128,stream);
+        dprof_end(DP_M_ACT,stream);
+        dprof_begin(DP_M_W2,stream);
         if(use_gemv)           tc_fp4_grouped_gemv_e8m0(OEb,Hqb,Hsb,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);
         else if(w.e8m0_scales){tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm_e8m0(OEb,h16,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
         else                  {tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm(OEb,h16,w2d,(const float* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
+        dprof_end(DP_M_W2,stream);
+        dprof_begin(DP_M_COMBINE,stream);
         // DETERMINISTIC combine: scatter to unique (token,slot) slots (no atomics) then sum na slots in fixed order
         k_scatter_ts<<<((size_t)maxm*dim+255)/256,256,0,stream>>>(OEbts,OEb,alltok_d,allslot_d,maxm,dim,na);
         k_reduce_ts<<<((size_t)bs*dim+255)/256,256,0,stream>>>(out,OEbts,bs,dim,na);
+        dprof_end(DP_M_COMBINE,stream);
         // -- shared expert (fp8, all bs tokens, weight 1) --
+        dprof_begin(DP_M_SHARED,stream);
         if(!getenv("NOSHARED")){
             act_quant_fp8(Xeq,Xes,x,bs,dim,128,stream);
             fp8_block_gemm(Gb,Xeq,Xes,w.sw1,w.sw1s,bs,inter,dim,stream);
@@ -288,10 +346,11 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
             fp8_block_gemm(OEb,Hqb,Hsb,w.sw2,w.sw2s,bs,dim,inter,stream);
             accum_kernel<<<((size_t)bs*dim+63)/64,64,0,stream>>>(out,OEb,bs*dim);
         }
+        dprof_end(DP_M_SHARED,stream);
         dsync(stream);
         dfree(counts);dfree(off_d);dfree(cursor);dfree(alltok_d);dfree(allwt_d);
         dfree(tile_e);dfree(tile_row0);dfree(ntiles_d);
-        dfree(w1d);dfree(w3d);dfree(w2d);dfree(s1d);dfree(s3d);dfree(s2d);
+        // w1d..s2d point into the persistent dev_ptr_tables cache — NOT arena scratch. Never freed here.
         dfree(Xe);dfree(Xeq);dfree(Xes);dfree(x16);dfree(h16);
         dfree(Gb);dfree(Ub);dfree(Hb);dfree(Hqb);dfree(Hsb);dfree(OEb);
         dfree(sc);dfree(wt);dfree(idx);dfree(xq);dfree(xs);dfree(g);dfree(u);dfree(h);dfree(hq);dfree(hs);dfree(oe);

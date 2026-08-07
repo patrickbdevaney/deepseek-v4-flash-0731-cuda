@@ -7,18 +7,56 @@ bool g_compressor_bf16 = false;
 #include "dscratch.h"
 
 // C[M,N] = A[M,K] @ B[N,K]^T. One warp per (m,n).
+//
+// LOOP_LOG Finding 34 (Opt #10). The original launched <<<dim3(N,M), 32>>> with a scalar ILP=1
+// K-loop, and so lost twice over:
+//   * one warp per block caps occupancy at 50% — the identical defect Finding 21 fixed in the MoE
+//     and Finding 26 fixed in `gemm_bf16w`; this call site was simply never revisited.
+//   * `acc += a[k]*b[k]` is a single dependent load->fma chain, i.e. one outstanding request per
+//     lane. Little's Law says achieved bandwidth = MSHRs x bytes / latency, so ILP=1 leaves most
+//     of the memory level parallelism on the floor. Opt #7 measured +3.4% end-to-end from exactly
+//     this fix on the dense FP8 GEMV.
+// float4 gives 4 independent accumulator chains and turns each lane's 4 B loads into 1. This is
+// the "fix the inner loop BEFORE narrowing the format" step that Finding 32 concluded with: the
+// BF16-native compressor lost because it added conversion ALU to a kernel that was ALU/issue
+// bound, not bandwidth bound. Make it bandwidth bound first, then the byte saving pays.
+//
+// float4 needs 16-byte alignment. B is a mapped safetensors tensor, so it is checked at runtime
+// and the kernel falls back to the scalar loop — Finding 25 is why that is not optional.
 __global__ void gemm_fp32_kernel(float* __restrict__ C, const float* __restrict__ A,
-                                 const float* __restrict__ B, int M, int N, int K) {
-    int n = blockIdx.x, m = blockIdx.y; if (m >= M || n >= N) return;
-    int lane = threadIdx.x & 31;
+                                 const float* __restrict__ B, int M, int N, int K, int vec4) {
+    const int n = blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5);
+    const int m = blockIdx.y;
+    if (m >= M || n >= N) return;
+    const int lane = threadIdx.x & 31;
     const float* a = A + (size_t)m * K; const float* b = B + (size_t)n * K;
-    float acc = 0.f; for (int k = lane; k < K; k += 32) acc += a[k] * b[k];
+    float acc = 0.f;
+    if (vec4) {
+        const float4* a4 = (const float4*)a; const float4* b4 = (const float4*)b;
+        const int n4 = K >> 2;
+        float a0 = 0.f, a1 = 0.f, a2 = 0.f, a3 = 0.f;
+        for (int k = lane; k < n4; k += 32) {
+            const float4 av = a4[k], bv = b4[k];
+            a0 = fmaf(av.x, bv.x, a0); a1 = fmaf(av.y, bv.y, a1);
+            a2 = fmaf(av.z, bv.z, a2); a3 = fmaf(av.w, bv.w, a3);
+        }
+        acc = (a0 + a1) + (a2 + a3);
+    } else {
+        for (int k = lane; k < K; k += 32) acc += a[k] * b[k];
+    }
     #pragma unroll
     for (int o = 16; o > 0; o >>= 1) acc += __shfl_down_sync(0xffffffff, acc, o);
     if (lane == 0) C[(size_t)m * N + n] = acc;
 }
+// 16-byte alignment of a *row* needs the base pointer aligned AND the row stride K*4 a multiple
+// of 16, i.e. K a multiple of 4 — which the K%4==0 test already implies.
+static inline int gemm_vec4_ok(const void* A, const void* B, int K) {
+    return ((K & 3) == 0) && ((((uintptr_t)A) & 15) == 0) && ((((uintptr_t)B) & 15) == 0);
+}
 void gemm_fp32(float* C, const float* A, const float* B, int M, int N, int K, cudaStream_t stream) {
-    dim3 grid(N, M); gemm_fp32_kernel<<<grid, 32, 0, stream>>>(C, A, B, M, N, K);
+    const int wpb = 4, threads = 32*wpb;
+    dim3 grid((N + wpb - 1)/wpb, M);
+    gemm_fp32_kernel<<<grid, threads, 0, stream>>>(C, A, B, M, N, K, gemm_vec4_ok(A, B, K));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -47,7 +85,27 @@ __global__ void gemm_bf16w_kernel(float* __restrict__ C, const float* __restrict
     const float* a = A + (size_t)m * K;
     const __nv_bfloat16* b = B + (size_t)n * K;
     float acc = 0.f;
-    if (vec2) {
+    if (vec2 == 2) {
+        // Finding 34: 8 bf16 per B load (one float4) + 4 independent accumulators. The vec2 path
+        // below was still ILP=1 on a dependent load->fma chain; this is what makes the kernel
+        // bandwidth bound rather than issue bound, which is the precondition for the BF16 byte
+        // saving to pay at all (Finding 32).
+        const float4* b4 = (const float4*)b; const float4* a4 = (const float4*)a;
+        const int n8 = K >> 3;
+        float a0 = 0.f, a1 = 0.f, a2 = 0.f, a3 = 0.f;
+        for (int k = lane; k < n8; k += 32) {
+            const float4 bv = b4[k];
+            const float4 av0 = a4[2*k], av1 = a4[2*k+1];
+            const __nv_bfloat162* bp = (const __nv_bfloat162*)&bv;
+            const float2 p0 = __bfloat1622float2(bp[0]), p1 = __bfloat1622float2(bp[1]);
+            const float2 p2 = __bfloat1622float2(bp[2]), p3 = __bfloat1622float2(bp[3]);
+            a0 = fmaf(av0.x, p0.x, a0); a1 = fmaf(av0.y, p0.y, a1);
+            a2 = fmaf(av0.z, p1.x, a2); a3 = fmaf(av0.w, p1.y, a3);
+            a0 = fmaf(av1.x, p2.x, a0); a1 = fmaf(av1.y, p2.y, a1);
+            a2 = fmaf(av1.z, p3.x, a2); a3 = fmaf(av1.w, p3.y, a3);
+        }
+        acc = (a0 + a1) + (a2 + a3);
+    } else if (vec2) {
         const __nv_bfloat162* b2 = (const __nv_bfloat162*)b;
         const int n2 = K >> 1;
         for (int k = lane; k < n2; k += 32) {
@@ -63,7 +121,10 @@ __global__ void gemm_bf16w_kernel(float* __restrict__ C, const float* __restrict
 }
 void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K, cudaStream_t stream) {
     const int wpb = 4, threads = 32*wpb;
-    const int vec2 = ((K & 1) == 0) && ((((uintptr_t)Bbf16) & 3) == 0);
+    // 2 = float4 (8 bf16) path, 1 = bf16x2 path, 0 = scalar. B rows are 16-byte aligned iff the
+    // base is and K*2 is a multiple of 16, i.e. K%8==0; A rows likewise need K*4 %16 == 0.
+    const int vec2 = (((K & 7) == 0) && ((((uintptr_t)Bbf16) & 15) == 0) && ((((uintptr_t)A) & 15) == 0)) ? 2
+                   : ((((K & 1) == 0) && ((((uintptr_t)Bbf16) & 3) == 0)) ? 1 : 0);
     dim3 grid((N + wpb - 1)/wpb, M);
     gemm_bf16w_kernel<<<grid, threads, 0, stream>>>(C, A, (const __nv_bfloat16*)Bbf16, M, N, K, vec2);
 }
@@ -71,18 +132,24 @@ void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K
 // NOT a group-completion (so the expensive K-loop only runs on commit steps ~ every `ratio` tokens).
 // grid-STRIDE (small fixed grid) so non-commit steps schedule few blocks (all early-return), not M*N of them.
 __global__ void gemm_fp32_cond_kernel(float* __restrict__ C, const float* __restrict__ A, const float* __restrict__ B,
-                                      int M, int N, int K, const int* __restrict__ d_pos, int ratio){
+                                      int M, int N, int K, const int* __restrict__ d_pos, int ratio, int vec4){
     if(((*d_pos)+1)%ratio != 0) return;
     int lane=threadIdx.x&31, wpb=blockDim.x>>5, warp=blockIdx.x*wpb + (threadIdx.x>>5), nw=gridDim.x*wpb, tot=M*N;
     for(int idx=warp; idx<tot; idx+=nw){ int m=idx/N, n=idx%N;
         const float* a=A+(size_t)m*K; const float* b=B+(size_t)n*K; float acc=0.f;
-        for(int k=lane;k<K;k+=32) acc+=a[k]*b[k];
+        if(vec4){                                                  // Finding 34: same ILP fix as gemm_fp32
+            const float4* a4=(const float4*)a; const float4* b4=(const float4*)b; const int n4=K>>2;
+            float a0=0.f,a1=0.f,a2=0.f,a3=0.f;
+            for(int k=lane;k<n4;k+=32){ const float4 av=a4[k], bv=b4[k];
+                a0=fmaf(av.x,bv.x,a0); a1=fmaf(av.y,bv.y,a1); a2=fmaf(av.z,bv.z,a2); a3=fmaf(av.w,bv.w,a3); }
+            acc=(a0+a1)+(a2+a3);
+        } else for(int k=lane;k<K;k+=32) acc+=a[k]*b[k];
         #pragma unroll
         for(int o=16;o>0;o>>=1) acc+=__shfl_down_sync(0xffffffff,acc,o);
         if(lane==0) C[idx]=acc; }
 }
 void gemm_fp32_cond(float* C, const float* A, const float* B, int M, int N, int K, const int* d_pos, int ratio, cudaStream_t stream){
-    gemm_fp32_cond_kernel<<<256,256,0,stream>>>(C,A,B,M,N,K,d_pos,ratio);   // 256*8=2048 warps grid-stride M*N
+    gemm_fp32_cond_kernel<<<256,256,0,stream>>>(C,A,B,M,N,K,d_pos,ratio,gemm_vec4_ok(A,B,K));   // 256*8=2048 warps grid-stride M*N
 }
 
 // pooled[g,e] = Σ_p softmax_p(score[g*ratio+p,e]+ape[p,e]) * kv[g*ratio+p,e]. One thread per (g,e).

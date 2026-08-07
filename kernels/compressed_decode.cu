@@ -6,6 +6,7 @@
 #include "indexer.h"
 #include "deepseek_v4.h"
 #include "dscratch.h"
+#include "dprof.h"
 #include <vector>
 #include <cmath>
 #include <cstdio>
@@ -236,6 +237,7 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
     uint8_t *xq,*qrq; float *xs,*qrs,*qr;
     xq=(uint8_t*)dmalloc((size_t)K*DIM); xs=(float*)dmalloc((size_t)K*(DIM/128)*4);
     qr=(float*)dmalloc((size_t)K*Q_LORA*4); qrq=(uint8_t*)dmalloc((size_t)K*Q_LORA); qrs=(float*)dmalloc((size_t)K*(Q_LORA/128)*4);
+    dprof_begin(DP_C_QPROJ,stream);
     act_quant_fp8(xq,xs,xK,K,DIM,128,stream);
     fp8_block_gemm(qr,xq,xs,a.wq_a,a.wq_a_s,K,Q_LORA,DIM,stream);
     rmsnorm(qr,qr,a.q_norm,K,Q_LORA,eps,true,stream);
@@ -248,6 +250,7 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
     rmsnorm(kvn,kvn,a.kv_norm,K,HEAD_DIM,eps,true,stream);
     rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,stream);
     act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,stream);
+    dprof_end(DP_C_QPROJ,stream);
     dfree(xq);dfree(xs);dfree(qr);dfree(qrq);dfree(qrs);
 }
 static void finish_attn(const CompressedAttnWeights& w, const float* q, const float* kv_all, const int* comb,
@@ -256,12 +259,16 @@ static void finish_attn(const CompressedAttnWeights& w, const float* q, const fl
     const float *cosP=a.cosT+(size_t)pos*half, *sinP=a.sinT+(size_t)pos*half; const float scale=1.f/sqrtf((float)HEAD_DIM);
     float *o,*og; uint8_t *ogq; float *ogs;
     o=(float*)dmalloc((size_t)K*Kd*4); og=(float*)dmalloc((size_t)K*OB*4); ogq=(uint8_t*)dmalloc((size_t)K*OB); ogs=(float*)dmalloc((size_t)K*(OB/128)*4);
+    dprof_begin(DP_C_SPARSE,stream);
     sparse_attn(o,q,kv_all,a.attn_sink,comb,1,K,N_HEADS,HEAD_DIM,ntot,topk,scale,stream);
+    dprof_end(DP_C_SPARSE,stream);
+    dprof_begin(DP_C_OGROUP,stream);
     rope_interleaved(o+NOPE_DIM,cosP,sinP,K*N_HEADS,ROPE_DIM,true,HEAD_DIM,N_HEADS,stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og,o,a.wo_a_fp8,a.wo_a_sc,K,O_GROUPS,O_LORA,GKd,stream);
     else              ogroup_gemm    (og,o,a.wo_a,               K,O_GROUPS,O_LORA,GKd,stream);
     act_quant_fp8(ogq,ogs,og,K,OB,128,stream);
     fp8_block_gemm(out,ogq,ogs,a.wo_b,a.wo_b_s,K,DIM,OB,stream);
+    dprof_end(DP_C_OGROUP,stream);
     dfree(o);dfree(og);dfree(ogq);dfree(ogs);
 }
 

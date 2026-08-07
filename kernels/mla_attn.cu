@@ -250,14 +250,41 @@ bool g_tc_ogroup = false;   // forward.cu sets true; gates use the warp-per-outp
 // M=1 ogroup GEMV: one warp per output (g,r), out[g*R+r] = sum_d o[g][d]*fp8(wo[gr][d])*e8m0scale. Coalesced
 // strided reads (lanes read consecutive bytes), NO mma waste (bs=1). Kills the tc_ogroup's scalar-byte m16 mma
 // (~32 ms/tok -> bandwidth). Gated cosine vs ogroup_gemm oracle (tests/gate_ogroup_gemv.cu).
+//
+// LOOP_LOG Finding 35 (Opt #11). The inner loop above read ONE BYTE per lane:
+//     for(dd=kb*128+lane; dd<(kb+1)*128; dd+=32) acc += og[dd]*ogm_e4m3(wr[dd])*ws;
+// 32 lanes x 1 byte = a 32-byte request, so streaming `wo_a` costs 4x the requests a 128-byte
+// access would. This is the SAME defect Finding 15 traced under the M>=2 verify penalty — there
+// the m16 tile issued 8x32B where the GEMV issued 1x128B — and it was sitting in the M=1 path all
+// along. `wo_a` is [G*R, Kd] fp8 = ~33 MB/layer, ~1.44 GB/token: by the dprof sub-marks this
+// kernel is ~22 ms of a ~98 ms step, i.e. ~65 GB/s against 240 achievable.
+//
+// One uint32_t per lane makes the warp cover 128 contiguous bytes in a single request, and gives
+// 4 independent accumulator chains for free (Little's Law: ILP=1 leaves MLP on the floor).
+// `ws` is a power of two, so folding it into the weight instead of the product is exact.
 __global__ void ogroup_gemv_fp8_kernel(float* __restrict__ out, const float* __restrict__ o,
-                                       const uint8_t* __restrict__ wo, const uint8_t* __restrict__ wsc, int G, int R, int Kd){
+                                       const uint8_t* __restrict__ wo, const uint8_t* __restrict__ wsc, int G, int R, int Kd, int vec4){
     int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int total=G*R; if(warp>=total) return;
     int gr=warp, g=gr/R; int lane=threadIdx.x&31, scw=Kd/128;
     const uint8_t* wr=wo+(size_t)gr*Kd; const uint8_t* sr=wsc+(size_t)(gr/128)*scw; const float* og=o+(size_t)g*Kd;
     float acc=0.f;
-    for(int kb=0; kb<Kd/128; ++kb){ float ws=exp2f((float)sr[kb]-127.f);
-        for(int dd=kb*128+lane; dd<(kb+1)*128; dd+=32) acc += og[dd]*ogm_e4m3(wr[dd])*ws; }
+    if(vec4){
+        float a0=0.f,a1=0.f,a2=0.f,a3=0.f;
+        for(int kb=0; kb<Kd/128; ++kb){
+            const float ws=exp2f((float)sr[kb]-127.f);
+            const int base=kb*128+lane*4;
+            const uint32_t w4=*(const uint32_t*)(wr+base);
+            const float4  o4=*(const float4*)(og+base);
+            a0=fmaf(o4.x, ogm_e4m3((uint8_t)(w4    ))*ws, a0);
+            a1=fmaf(o4.y, ogm_e4m3((uint8_t)(w4>> 8))*ws, a1);
+            a2=fmaf(o4.z, ogm_e4m3((uint8_t)(w4>>16))*ws, a2);
+            a3=fmaf(o4.w, ogm_e4m3((uint8_t)(w4>>24))*ws, a3);
+        }
+        acc=(a0+a1)+(a2+a3);
+    } else {
+        for(int kb=0; kb<Kd/128; ++kb){ float ws=exp2f((float)sr[kb]-127.f);
+            for(int dd=kb*128+lane; dd<(kb+1)*128; dd+=32) acc += og[dd]*ogm_e4m3(wr[dd])*ws; }
+    }
     #pragma unroll
     for(int o2=16;o2>0;o2>>=1) acc+=__shfl_down_sync(0xffffffff,acc,o2);
     if(lane==0) out[gr]=acc;
@@ -266,7 +293,12 @@ __global__ void ogroup_gemv_fp8_kernel(float* __restrict__ out, const float* __r
 void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const uint8_t* wo_sc,
                      int bs, int G, int R, int Kd, cudaStream_t stream){
     if(bs==1 && getenv("NO_OGGEMV")==nullptr){          // M=1 decode: bandwidth-bound GEMV (no mma waste). bs>1
-        int threads=256; ogroup_gemv_fp8_kernel<<<((size_t)G*R*32+threads-1)/threads,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd);
+        // uint32 weight / float4 activation loads need Kd%128==0 (already required by the e8m0
+        // block-scale stride) plus real pointer alignment — `wo_fp8` is a mapped safetensors
+        // tensor, and Finding 25 is why that is checked rather than assumed.
+        const int vec4 = ((Kd % 128)==0) && ((((uintptr_t)wo_fp8)&3)==0) && ((((uintptr_t)o)&15)==0)
+                      && (getenv("NO_OGVEC4")==nullptr);
+        int threads=256; ogroup_gemv_fp8_kernel<<<((size_t)G*R*32+threads-1)/threads,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd,vec4);
         dsync(stream); return; }        // (M=K GEMV A/B'd SLOWER: acc[bs] array kills occupancy — like the fp8 M=K GEMV)
     __half* o16; o16=(__half*)dmalloc((size_t)bs*G*Kd*2);
     k_f2h<<<((size_t)bs*G*Kd+255)/256,256,0,stream>>>(o16,o,(size_t)bs*G*Kd);
