@@ -283,40 +283,68 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
         const int* __restrict__ off, const uint8_t* Xq, const float* Xs, int N, int K){
     int tile=blockIdx.y; if(tile>=*ntiles) return;
     int e=tile_e[tile], row0=tile_row0[tile]; int me=off[e+1]-row0; if(me>16)me=16;
-    int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int n=warp; if(n>=N) return; int lane=threadIdx.x&31;
-    const uint8_t* Wn = wptr[e] + (size_t)n*(K/2);       // packed fp4 row (2 nibbles/byte) — arbitrary alignment
-    const uint8_t* Sn = sptr[e] + (size_t)n*(K/32);      // e8m0 per-32 scale row
+    // OUTPUT-COLUMN BLOCKING, BN=2 (IMPLEMENTATION_PLAN Tier-1 #1).
+    // This used one warp per output n, so the ACTIVATION uint4 pair was re-loaded for every output
+    // column even though every column at the same k reads the SAME activation. A rebuild of our
+    // exact MoE shape measured BN=1 at 155-160 GB/s and BN=2 at 242-249 (101-104% of achievable):
+    // at BN=1 each 16-byte weight load is paired with a fresh activation fetch, and the inner loop
+    // becomes issue-rate bound (20 SMs x 4 sched x 1.575 GHz = 126 G warp-inst/s, and a BN=1 body
+    // burns ~50 of them per 512 B of weight). At BN>=2 the activation registers are reused and the
+    // instruction count per weight byte roughly halves.
+    // Per-n accumulation order over kb is UNCHANGED -> bit-exact.
+    const int BN = 2;
+    int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int nbase=warp*BN; if(nbase>=N) return; int lane=threadIdx.x&31;
+    const int nact = (nbase+BN<=N) ? BN : (N-nbase);
+    const uint8_t* Wn0 = wptr[e] + (size_t)nbase*(K/2);
     int nb32 = K/32;                                     // 32-weight blocks = 16 bytes each
-    int off_b=(int)((uintptr_t)Wn & 15); int k0f=off_b>>2; unsigned shf=(off_b&3)*8;   // funnel-align the weight loads
+    int off_b=(int)((uintptr_t)Wn0 & 15); int k0f=off_b>>2; unsigned shf=(off_b&3)*8;   // funnel-align
     for(int r=0;r<me;++r){
         const uint8_t* Aq = Xq + (size_t)(row0+r)*K;
         const float*  As = Xs + (size_t)(row0+r)*(K/128);
-        float acc=0.f;
-        for(int kb=lane; kb<nb32; kb+=32){              // lane -> whole 32-weight block (16B), coalesced across warp
-            float ws=exp2f((float)Sn[kb]-127.f); float asc=As[kb/4];   // act scale per-128 = per 4 of the 32-blocks
-            const uint8_t* wa=Wn+(size_t)kb*16-off_b;
-            uint4 WA=__ldcs((const uint4*)wa), WB=__ldcs((const uint4*)(wa+16));
-            uint4 w16=tcm_funnel16(WA,WB,k0f,shf);
+        float acc0=0.f, acc1=0.f;
+        for(int kb=lane; kb<nb32; kb+=32){              // lane -> whole 32-weight block (16B), coalesced
+            float asc=As[kb/4];                          // act scale per-128 = per 4 of the 32-blocks
+            // activation loaded ONCE, reused across all BN output columns
             uint4 a0 =*(const uint4*)(Aq+(size_t)kb*32);
             uint4 a1 =*(const uint4*)(Aq+(size_t)kb*32+16);
-            const uint8_t* wb=(const uint8_t*)&w16; const uint8_t* ab0=(const uint8_t*)&a0; const uint8_t* ab1=(const uint8_t*)&a1;
-            float sub=0.f;
+            const uint8_t* ab0=(const uint8_t*)&a0; const uint8_t* ab1=(const uint8_t*)&a1;
             #pragma unroll
-            for(int j=0;j<16;++j){ uint8_t byte=wb[j]; uint8_t a2j=(j<8)?ab0[2*j]:ab1[2*(j-8)]; uint8_t a2j1=(j<8)?ab0[2*j+1]:ab1[2*(j-8)+1];
-                sub += gv_e4m3(a2j)  * gv_fp4(byte&0xF);
-                sub += gv_e4m3(a2j1) * gv_fp4((byte>>4)&0xF);
+            for(int u=0; u<BN; ++u){
+                if(u>=nact) break;
+                const uint8_t* Wn = wptr[e] + (size_t)(nbase+u)*(K/2);
+                const uint8_t* Sn = sptr[e] + (size_t)(nbase+u)*(K/32);
+                float ws=exp2f((float)Sn[kb]-127.f);
+                const uint8_t* wa=Wn+(size_t)kb*16-off_b;
+                uint4 WA=__ldcs((const uint4*)wa), WB=__ldcs((const uint4*)(wa+16));
+                uint4 w16=tcm_funnel16(WA,WB,k0f,shf);
+                const uint8_t* wb=(const uint8_t*)&w16;
+                float sub=0.f;
+                #pragma unroll
+                for(int j=0;j<16;++j){ uint8_t byte=wb[j]; uint8_t a2j=(j<8)?ab0[2*j]:ab1[2*(j-8)]; uint8_t a2j1=(j<8)?ab0[2*j+1]:ab1[2*(j-8)+1];
+                    sub += gv_e4m3(a2j)  * gv_fp4(byte&0xF);
+                    sub += gv_e4m3(a2j1) * gv_fp4((byte>>4)&0xF);
+                }
+                if(u==0) acc0 += sub * asc * ws; else acc1 += sub * asc * ws;
             }
-            acc += sub * asc * ws;
         }
+        // reduce and store each of the BN output columns
         #pragma unroll
-        for(int o=16;o>0;o>>=1) acc+=__shfl_down_sync(0xffffffff,acc,o);
-        if(lane==0) out[(size_t)(row0+r)*N + n]=acc;
+        for(int o=16;o>0;o>>=1) acc0+=__shfl_down_sync(0xffffffff,acc0,o);
+        #pragma unroll
+        for(int o=16;o>0;o>>=1) acc1+=__shfl_down_sync(0xffffffff,acc1,o);
+        if(lane==0){
+            out[(size_t)(row0+r)*N + nbase] = acc0;
+            if(nact>1) out[(size_t)(row0+r)*N + nbase+1] = acc1;
+        }
     }
 }
 void tc_fp4_grouped_gemv_e8m0(float* out, const uint8_t* Xq, const float* Xs, const uint8_t* const* wptr_d,
         const uint8_t* const* sptr_d, const int* off_d, const int* tile_e, const int* tile_row0, const int* ntiles_d,
         int maxtiles, int N, int K, cudaStream_t s){
-    int threads=128; dim3 grid((N*32+threads-1)/threads, maxtiles);
+    // BN=2 output columns per warp -> half the warps. 128 threads/block matched the measured
+    // optimum (BN=2 @128 thr = 242-249 GB/s; 256 thr was consistently worse at every BN).
+    const int BN=2, warps_needed=(N+BN-1)/BN;
+    int threads=128; dim3 grid((warps_needed*32+threads-1)/threads, maxtiles);
     k_grouped_fp4_gemv_e8m0<<<grid, threads, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, Xq, Xs, N, K);
 }
 

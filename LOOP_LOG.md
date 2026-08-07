@@ -1388,3 +1388,54 @@ a real lever or a paper one.** Until it passes, this finding is "the instruction
 "the hardware does the math".
 
 `tools/tcgen05_probe.cu` + the extended `scripts/arch_probe.sh` now cover both families.
+
+---
+
+## 2026-08-06 — Tier-1 #1: MoE output-column blocking BN=2. Real, gated, and NOT ENOUGH.
+
+Implemented the top item from `IMPLEMENTATION_PLAN.md`: the MoE GEMV used **one warp per output
+column**, so the activation `uint4` pair was re-loaded for every output even though all columns at
+the same `k` read the same activation. Now BN=2 columns per warp, activation loaded once, grid
+halved, 128 threads/block (the measured optimum).
+
+**Gated:** `gate_fp4_gemv` **cosine 1.0000000**, `maxabs 6.10e-05`; Gate K all MoE paths
+**cosine 1.0000000**. Per-column accumulation order over `kb` unchanged.
+
+**Measured:** GEMV **91.0 → 108.4 GB/s (+19%)**. A real improvement to that kernel.
+
+**But it delivers zero end-to-end**, because the GEMV still loses to the m16 mma path
+(**121.6 GB/s at M=1**) and is therefore off by default. So the change is banked, not adopted.
+
+### Why we do not reach the 242 GB/s the research measured
+
+The agent's kernel and ours differ in the inner loop, and the gap is instruction count, not memory:
+
+```
+ours,  per 16 B weight block (32 fp4 weights):
+  32x gv_fp4()   __constant__ LUT lookup + sign branch      SCALAR
+  32x gv_e4m3()  __nv_cvt_fp8_to_halfraw + __half2float     SCALAR
+  32x scalar FMA
+  => ~96 scalar ops per 16 B
+
+theirs (measured 242-249 GB/s):
+  __nv_cvt_fp4x2_to_halfraw2   2 weights per instruction
+  __hfma2                      2 MACs per instruction
+  => ~32 ops per 16 B          = 3x fewer instructions
+```
+
+Issue-rate budget: 20 SMs x 4 schedulers x 1.575 GHz = **126 G warp-inst/s**. At 240 GB/s a warp
+must consume 512 B in ~270 warp-instructions; **our GEMV needs roughly 3x that.**
+
+**The measured signature confirms it:** our GEMV is **flat at 108-109 GB/s across M = 1, 2, 3, 5, 8**
+while the mma path *rises* 121 → 131 over the same sweep. Flat-in-M is the compute-bound signature;
+BN=2 removed the activation-reload overhead and simply exposed the next wall.
+
+**So the remaining work on this lever is a dequant rewrite, not a blocking change:** replace the
+scalar `GEMV_E2M1` LUT + per-nibble float math with `__nv_cvt_fp4x2_to_halfraw2` + `__hfma2`, i.e.
+the same hardware path the grouped mma kernel already uses (`tcm_fp4x2`). That changes accumulation
+from f32 to half2 and therefore **cannot** hold the current cosine-1.0 gate — it needs a tolerance
+gate, which is a deliberate change of gate class and the reason it is scoped rather than done here.
+
+**Recorded rather than quietly dropped**, because "BN=2 didn't help" is misleading: BN=2 worked
+exactly as the research predicted (+19%), and what it revealed is that our GEMV was never
+bandwidth-bound in the first place. The research number was achievable — with a different inner loop.
