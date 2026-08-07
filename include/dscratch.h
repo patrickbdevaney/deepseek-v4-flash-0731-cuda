@@ -35,6 +35,25 @@ static inline void dfree(void* p){ if(!g_arena_on && p) cudaFree(p); }
 void dsync_at(cudaStream_t s, const char* file, int line);
 #define dsync(s) dsync_at((s), __FILE__, __LINE__)
 
+// FAULT LOCALISATION (DSV4_SYNCPROBE=1). Off by default and compiled to one predicted branch.
+//
+// Why this exists. Three cycles chased "an illegal memory access at kernels/indexer.cu:91" and then
+// ":96" as if the line named a kernel. It does not: both are `CUI(cudaStreamSynchronize(stream))` at
+// the end of indexer_forward, and that is the FIRST REAL SYNC in the whole layer's attention path —
+// every launch from compressed_attn.cu:36 onward (the q chain, the kv chain, compressor_forward, the
+// indexer's own GEMMs) is still in flight when it runs, because the sub-functions' own dsync() calls
+// are no-ops while the arena is on. An asynchronous fault from ANY of ~20 launches surfaces there.
+// So the line number was never evidence about the location, and every hypothesis built on "the fault
+// is in the top-k" or "the fault is in the indexer" was reading a sync as a stack frame.
+//
+// dprobe() is a real, checked sync placed after individual launches. Under DSV4_SYNCPROBE it turns
+// the prefill path into a serialised, fully-attributed walk and stops at the FIRST fault with the
+// exact file:line of the launch that caused it. It destroys prefill throughput, which is fine —
+// prefill timing is not a measured quantity here, and decode is untouched because nothing on the
+// decode path calls it.
+void dprobe_at(cudaStream_t s, const char* file, int line);
+#define dprobe(s) dprobe_at((s), __FILE__, __LINE__)
+
 void arena_init(size_t cap);   // allocate the slab once, set g_arena_on
 void arena_reset();            // g_arena_off = 0 (call at the top of each layer's work)
 
@@ -50,5 +69,11 @@ void arena_reset();            // g_arena_off = 0 (call at the top of each layer
 // join with g_side_join, which is the capturable fork/join pattern. `g_side` is null when
 // arena_init was never called — every gate that links these kernels without an arena keeps working
 // on the single-stream path, which is also the NO_MOESPLIT=1 fallback.
-extern cudaStream_t g_side;
-extern cudaEvent_t  g_side_fork, g_side_join;
+// TWO independent side streams, because the forks NEST. `compressed_verify_step_indexer` forks the
+// compressor emits onto g_side and then calls build_qKV *inside* that region, so a second fork in
+// build_qKV must not reuse g_side's event pair — recording g_side_fork again while the first pair is
+// still outstanding silently rewires the dependency graph and still produces plausible numbers.
+// Each fork site owns exactly one pair. Add a third pair here, do not share one.
+extern cudaStream_t g_side, g_side2;
+extern cudaEvent_t  g_side_fork,  g_side_join;
+extern cudaEvent_t  g_side2_fork, g_side2_join;

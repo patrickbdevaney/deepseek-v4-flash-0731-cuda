@@ -1,5 +1,6 @@
 // compressed_attn.cu — full compressed-layer MLA forward (prefill). See compressed_attn.h.
 #include "compressed_attn.h"
+#include "dscratch.h"
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"
 #include "compressor.h"
@@ -33,25 +34,25 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
     CU(cudaMalloc(&ogq,(size_t)bs*OB)); CU(cudaMalloc(&ogs,(size_t)bs*(OB/128)*4));
 
     // --- q ---
-    act_quant_fp8(xq, xs, x, bs, DIM, 128, stream);
-    fp8_block_gemm(qr, xq, xs, a.wq_a, a.wq_a_s, bs, Q_LORA, DIM, stream);
+    act_quant_fp8(xq, xs, x, bs, DIM, 128, stream); dprobe(stream);
+    fp8_block_gemm(qr, xq, xs, a.wq_a, a.wq_a_s, bs, Q_LORA, DIM, stream); dprobe(stream);
     rmsnorm(qr, qr, a.q_norm, bs, Q_LORA, eps, true, stream);
     act_quant_fp8(qrq, qrs, qr, bs, Q_LORA, 128, stream);
-    fp8_block_gemm(q, qrq, qrs, a.wq_b, a.wq_b_s, bs, Kd, Q_LORA, stream);
+    fp8_block_gemm(q, qrq, qrs, a.wq_b, a.wq_b_s, bs, Kd, Q_LORA, stream); dprobe(stream);
     rmsnorm(q, q, nullptr, bs * N_HEADS, HEAD_DIM, eps, false, stream);
-    rope_interleaved(q + NOPE_DIM, a.cosT, a.sinT, bs * N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream);
+    rope_interleaved(q + NOPE_DIM, a.cosT, a.sinT, bs * N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream); dprobe(stream);
 
     // --- window kv ---
-    fp8_block_gemm(kv_win, xq, xs, a.wkv, a.wkv_s, bs, HEAD_DIM, DIM, stream);
+    fp8_block_gemm(kv_win, xq, xs, a.wkv, a.wkv_s, bs, HEAD_DIM, DIM, stream); dprobe(stream);
     rmsnorm(kv_win, kv_win, a.kv_norm, bs, HEAD_DIM, eps, true, stream);
     rope_interleaved(kv_win + NOPE_DIM, a.cosT, a.sinT, bs, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(kv_win, bs, NOPE_DIM, 64, HEAD_DIM, stream);
+    act_quant_fp8sim(kv_win, bs, NOPE_DIM, 64, HEAD_DIM, stream); dprobe(stream);
 
     // --- main compressor -> compressed kv, then combined kv = [window ⊕ compressed] ---
     // ratio==4: overlapping compressor + DSA indexer. ratio==128: non-overlap compressor + strided idxs.
     const bool overlap = (ratio == 4), has_indexer = (ratio == 4);
     compressor_forward(kv_comp, x, w.mc_wkv, w.mc_wgate, w.mc_ape, w.mc_norm, w.cc_cos, w.cc_sin,
-                       s, DIM, HEAD_DIM, ratio, overlap, ROPE_DIM, eps, false, stream);
+                       s, DIM, HEAD_DIM, ratio, overlap, ROPE_DIM, eps, false, stream); dprobe(stream);
     CU(cudaMemcpyAsync(kv_all, kv_win, (size_t)bs*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
     CU(cudaMemcpyAsync(kv_all + (size_t)bs*HEAD_DIM, kv_comp, (size_t)T*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
 
@@ -81,15 +82,15 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
     int* window_dev; CU(cudaMalloc(&window_dev,(size_t)s*wwidth*4));
     CU(cudaMemcpyAsync(window_dev, hw.data(), (size_t)s*wwidth*4, cudaMemcpyHostToDevice, stream));
     int tot = wwidth + itopk; int* combined; CU(cudaMalloc(&combined,(size_t)s*tot*4));
-    k_combine_idxs<<<(s*tot+255)/256,256,0,stream>>>(combined, window_dev, compress_topk, s, wwidth, itopk);
+    k_combine_idxs<<<(s*tot+255)/256,256,0,stream>>>(combined, window_dev, compress_topk, s, wwidth, itopk); dprobe(stream);
 
     // --- sparse attention over combined KV, then de-rotate + grouped o-LoRA + wo_b ---
-    sparse_attn(o, q, kv_all, a.attn_sink, combined, 1, s, N_HEADS, HEAD_DIM, s + T, tot, scale, stream);
+    sparse_attn(o, q, kv_all, a.attn_sink, combined, 1, s, N_HEADS, HEAD_DIM, s + T, tot, scale, stream); dprobe(stream);
     rope_interleaved(o + NOPE_DIM, a.cosT, a.sinT, bs * N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og, o, a.wo_a_fp8, a.wo_a_sc, bs, O_GROUPS, O_LORA, GKd, stream);
     else              ogroup_gemm    (og, o, a.wo_a,                bs, O_GROUPS, O_LORA, GKd, stream);
     act_quant_fp8(ogq, ogs, og, bs, OB, 128, stream);
-    fp8_block_gemm(out, ogq, ogs, a.wo_b, a.wo_b_s, bs, DIM, OB, stream);
+    fp8_block_gemm(out, ogq, ogs, a.wo_b, a.wo_b_s, bs, DIM, OB, stream); dprobe(stream);
 
     CU(cudaStreamSynchronize(stream));
     cudaFree(xq);cudaFree(xs);cudaFree(qr);cudaFree(qrq);cudaFree(qrs);cudaFree(q);cudaFree(kv_win);

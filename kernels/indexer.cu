@@ -1,5 +1,6 @@
 // indexer.cu — DSA Indexer primitives, correctness-first (Gate K: ref/gen_units gen_hadamard/gen_index_score).
 #include "indexer.h"
+#include "dscratch.h"
 
 // Hadamard: y[r,j] = D^-0.5 * Σ_i x[r,i] * (-1)^popcount(i&j). One thread per (row, j).
 __global__ void hadamard_kernel(float* __restrict__ y, const float* __restrict__ x, int rows, int D, float scale) {
@@ -81,18 +82,18 @@ void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, con
     CUI(cudaMalloc(&q,(size_t)s*QD*4)); CUI(cudaMalloc(&qtmp,(size_t)s*QD*4));
     CUI(cudaMalloc(&ckv,(size_t)T*idx_hd*4)); CUI(cudaMalloc(&weights,(size_t)s*n_heads*4));
 
-    act_quant_fp8(qrq, qrs, qr, s, q_lora, 128, stream);
-    fp8_block_gemm(q, qrq, qrs, wq_b, wq_b_s, s, QD, q_lora, stream);              // [s, n_heads*idx_hd]
-    rope_interleaved(q + (idx_hd - rd), q_cos, q_sin, s*n_heads, rd, false, idx_hd, n_heads, stream);
-    hadamard(qtmp, q, s*n_heads, idx_hd, stream);                                 // out!=in
-    act_quant_fp4sim(qtmp, s*n_heads, idx_hd, 32, idx_hd, stream);                // fp4-sim
-    compressor_forward(ckv, x, c_wkv, c_wgate, c_ape, c_norm, c_cos, c_sin, s, dim, idx_hd, ratio, true, rd, eps, true, stream);
-    gemm_fp32(weights, x, weights_proj, s, n_heads, dim, stream);
-    k_scale<<<(s*n_heads+255)/256,256,0,stream>>>(weights, wscale, s*n_heads);
-    index_score(index_score_out, qtmp, ckv, weights, s, T, n_heads, idx_hd, stream);
-    k_causal_mask<<<(s*T+255)/256,256,0,stream>>>(index_score_out, s, T, ratio);
+    act_quant_fp8(qrq, qrs, qr, s, q_lora, 128, stream); dprobe(stream);
+    fp8_block_gemm(q, qrq, qrs, wq_b, wq_b_s, s, QD, q_lora, stream); dprobe(stream);              // [s, n_heads*idx_hd]
+    rope_interleaved(q + (idx_hd - rd), q_cos, q_sin, s*n_heads, rd, false, idx_hd, n_heads, stream); dprobe(stream);
+    hadamard(qtmp, q, s*n_heads, idx_hd, stream); dprobe(stream);                                 // out!=in
+    act_quant_fp4sim(qtmp, s*n_heads, idx_hd, 32, idx_hd, stream); dprobe(stream);                // fp4-sim
+    compressor_forward(ckv, x, c_wkv, c_wgate, c_ape, c_norm, c_cos, c_sin, s, dim, idx_hd, ratio, true, rd, eps, true, stream); dprobe(stream);
+    gemm_fp32(weights, x, weights_proj, s, n_heads, dim, stream); dprobe(stream);
+    k_scale<<<(s*n_heads+255)/256,256,0,stream>>>(weights, wscale, s*n_heads); dprobe(stream);
+    index_score(index_score_out, qtmp, ckv, weights, s, T, n_heads, idx_hd, stream); dprobe(stream);
+    k_causal_mask<<<(s*T+255)/256,256,0,stream>>>(index_score_out, s, T, ratio); dprobe(stream);
     int topk = index_topk < T ? index_topk : T;
-    k_topk_offset<<<s, 32, topk_scan_smem(T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
+    k_topk_offset<<<s, 32, topk_scan_smem(T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset); dprobe(stream);
     CUI(cudaStreamSynchronize(stream));
     cudaFree(qrq);cudaFree(qrs);cudaFree(q);cudaFree(qtmp);cudaFree(ckv);cudaFree(weights);
 }

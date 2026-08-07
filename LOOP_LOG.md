@@ -2932,3 +2932,148 @@ byte model, which over-predicted by ~3x here.
 
 Corroborated three independent ways, all moving together: dprof TOTAL −1.7 %, ksweep K=5 −1.7 %,
 end-to-end spec +1.6 % and base AR +1.9 %.
+
+---
+
+## Finding 57 — C1: the kv chain forked off the q chain, and the pricing model needed refitting
+
+**ADOPTED, small.** `cattn:q_proj` **23.85 → 19.99 ms**; K=5 verify **153.48 → 152.26 ms** (−0.8 %);
+spec **17.48 → 17.61 tok/s** (+0.7 %). Token sequence byte-identical; all gates PASS.
+
+The kv chain (`wkv` GEMM → rmsnorm → rope → `act_quant_fp8sim`) consumes `xq/xs` and nothing else, so
+it is independent of the whole `wq_a → rmsnorm → act_quant → wq_b` chain that follows it in
+`build_qKV`. `wkv [512,4096]` is the **worst shape on `overlap_probe`** — 47.8 GB/s standalone at M=5
+against 150.4 on four streams — because 512 rows is 32 m16 tiles, and 32 blocks cannot cover DRAM
+latency on 20 SMs.
+
+### The nesting hazard, and why there are now two side streams
+
+`compressed_verify_step_indexer` forks the compressor emits onto `g_side` and then calls `build_qKV`
+**inside** that region. A second fork there reusing `g_side_fork`/`g_side_join` would re-record an
+event whose first pair is still outstanding — which does not fail, does not warn, and silently
+rewires the dependency graph. So `dscratch` now carries a second stream and a second event pair, and
+the rule is written at the declaration: **one fork site owns exactly one pair; add a third, never
+share one.**
+
+### The pricing model was wrong low, and is refit
+
+Finding 56 said "expect ~20-25 % of the hidden op's standalone cost". This predicted ~0.4-0.5 ms and
+delivered **1.22 ms** — 2.5x the prediction, which is exactly the falsification condition the queue
+entry named. Refit across all three pairs, using the measured drop in the region that *contained* the
+hidden work as the denominator:
+
+| pair | hidden | partner's state | recovered |
+|---|---|---|---|
+| shared expert ∥ routed experts | 10.37 ms | routed at roofline (241 GB/s) | 2.78 = **27 %** |
+| compressor emits ∥ `build_qKV` | 8.56 | q chain, mixed (contains the saturated `wq_b`) | 1.74 = **20 %** |
+| kv chain ∥ q chain | 3.86 | q chain, and `wkv` is the most starved shape in the engine | 1.22 = **32 %** |
+
+**Recovery is 20-32 %, and it rises the more starved BOTH sides are.** The byte model (which predicts
+~80 %) remains wrong by 3-4x and should not be used. The mechanism for the shortfall is visible in the
+numbers every time: the hidden op's cost does not vanish, it reappears in the partner region, because
+two concurrent kernels contend for SMs and L2 as well as for DRAM.
+
+### Honest scale
+
+This is a +0.7 % end-to-end change sitting right at the ±1 % cross-run band, and it would not be
+adoptable on the end-to-end number alone. It is adopted on the two tighter within-run measurements
+that agree with it and with each other — `cattn:q_proj` −3.86 ms and ksweep K=5 −1.22 ms are GPU-event
+sums over 41 and 43 layers, not single-run wall clock — plus a byte-identical token sequence. The
+concurrency lever's large wins are now taken; what remains in this class is sub-1 % per pair.
+
+---
+
+## Finding 58 — I3 is refuted by direct measurement, and the line number was never a location
+
+Three cycles chased `an illegal memory access at kernels/indexer.cu:91`, then `:96`. **Both are
+`CUI(cudaStreamSynchronize(stream))` at the end of `indexer_forward`** — and that is the *first real
+sync in the whole layer's attention path*. Every launch from `compressed_attn.cu:36` onward (the q
+chain, the kv chain, `compressor_forward`, the indexer's own GEMMs, ~20 launches) is still in flight
+when it runs, because the sub-functions' own `dsync()` calls are no-ops while the arena is on. An
+asynchronous fault from any of them surfaces there.
+
+So the line number was never evidence about *where*, and every hypothesis built on it — "the fault is
+in the top-k", "the fault is length-dependent", "something accumulates" — was reading a sync point as
+a stack frame. That is the finding, independent of the fault itself.
+
+### Instruments added (both permanent)
+
+- **`DSV4_SYNCPROBE=1`** → `dprobe()`, a real checked sync placed after 21 individual launches across
+  `compressed_attn.cu` and `indexer.cu`. It stops at the FIRST fault with the exact file:line of the
+  launch that caused it. Off by default, one predicted branch; decode is untouched because nothing on
+  the decode path calls it.
+- **`DSV4_MEMTRACE=1`** → `cudaMemGetInfo` at every sweep-point boundary, which is precisely the
+  measurement I3's falsification criterion asked for and which nothing had ever printed.
+- **`DSV4_BALLAST_GB=n`** → reserves device memory, so the headroom the faulting run had is settable
+  instead of hoped for.
+
+### The accumulation frame is dead
+
+I3 predicted free memory would decay across sweep points, with the longest prompt being the first
+allocation big enough to fall off the end. Measured, 17 points, at the faulting run's own headroom:
+
+```
+point  0 (prompt 0): free 10.360 GiB      point  9 (prompt 1): free 11.241
+point  4 (prompt 2): free 10.732          point 12 (prompt 4): free 11.407
+point  8 (prompt 0): free 11.180          point 16 (prompt 0): free 11.608
+```
+
+Free memory does not decay — it **rises monotonically**, 10.360 → 11.608 GiB. The criterion said "if
+FLAT, the accumulation frame is dead"; it is not even flat. Nothing leaks; the allocator consolidates
+as the run proceeds. **Do not re-queue an allocator-accumulation hypothesis for this fault.**
+
+### The fault does not reproduce on the current tree
+
+Three full 17-point runs of a faithful reconstruction of cycle 5's sweep — same point order, same
+prompt lengths, the long prompt first appearing at point 12 where cycle 5 died, `NGEN0=60`:
+
+| run | condition | result |
+|---|---|---|
+| `crashprobe.log` | `DSV4_SYNCPROBE=1` (prefill fully serialised + checked) | **17/17 clean** |
+| `crashctl.log` | control, no probe | **17/17 clean** |
+| `crashballast.log` | `DSV4_BALLAST_GB=3` → 111.6/122.8 GiB, free 11.27 (cycle 5 sat at 111.5) | **17/17 clean** |
+
+What is NOT controlled: cycle 5's exact prompt token ids are not recoverable from the transcripts
+(the recovered `DSV4_PROMPTS` is cycle 3's set, whose SMAX is 18, not 28), so a data-dependent fault
+in the top-k → `combined` → `sparse_attn` gather cannot be excluded. **Disposition: not reproducible,
+not closed.** The honest state is that the instrument now exists and the next recurrence gets
+attributed to a launch in one run instead of costing a cycle to re-frame. Do not spend another cycle
+hypothesising about this fault without a reproduction.
+
+---
+
+## Finding 59 — adaptive verify width is worth 7x what the log says, because it was measured on the one prompt where it does nothing
+
+D1 is fixed (a negative `adaptK` in a sweep entry now means fixed width), which produced the **first
+fixed-width control since Finding 49**. Adaptive width has been ON by default since then on the
+strength of **+2.1 % measured on the canonical prompt**. Across five prompts:
+
+| prompt | adaptive (1.5) | fixed | adaptive gain |
+|---|---|---|---|
+| 0 — canonical | 17.42 / 17.65 | 17.65 / 17.71 | **−0.5 % (a wash)** |
+| 1 (11 ids) | 16.01 | 14.62 | **+9.5 %** |
+| 2 (18 ids) | 19.03 | 14.87 | **+28.0 %** |
+| 3 (15 ids) | 11.52 | 10.68 | **+7.9 %** |
+| 4 (29 ids) | 15.41 | 13.74 | **+12.2 %** |
+
+**Finding 49's +2.1 % was measured on the single prompt where the lever is worth nothing.** On four
+prompts it had never seen it is worth +8 % to +28 %.
+
+### Losslessness is now actually tested
+
+Every prior check compared adaptive against adaptive at a different threshold (1.5 vs 1.0 vs 2.5) —
+which cannot detect a lever that is lossy in the same way at every threshold. Fixed width was not
+expressible until this cycle, so the comparison that matters had never been run. It has now:
+**all five prompts emit byte-identical 40-token sequences under adaptive and fixed width.** The
+losslessness claim survives its first real test.
+
+### The methodology consequence, which is the bigger half
+
+Every baseline number this project has ever quoted comes from prompt 0. Across these five prompts the
+same engine runs **11.5 to 19.0 tok/s** — the canonical prompt is not representative, and it is
+specifically *insensitive* to verify-width adaptation, i.e. to the whole class of levers that trade
+verify width against acceptance. A lever measured only there will be systematically under-valued by
+this class of error, and Finding 49 is a worked example: 7x.
+
+**Quote the canonical number as the canonical number, and gate any acceptance/width lever on the
+multi-prompt sweep.** `17.6 tok/s` is prompt 0; the engine's range on varied prompts is 11.5-19.0.

@@ -249,17 +249,39 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
     qr=(float*)dmalloc((size_t)K*Q_LORA*4); qrq=(uint8_t*)dmalloc((size_t)K*Q_LORA); qrs=(float*)dmalloc((size_t)K*(Q_LORA/128)*4);
     dprof_begin(DP_C_QPROJ,stream);
     act_quant_fp8(xq,xs,xK,K,DIM,128,stream);
+    // C1 (Finding 55/56). The kv chain consumes `xq/xs` and nothing else — it is independent of the
+    // whole wq_a -> rmsnorm -> act_quant -> wq_b chain that follows, and `wkv [512,4096]` is the
+    // WORST shape on overlap_probe: 47.8 GB/s standalone at M=5 against 150.4 on four streams
+    // (3.15x), because 512 rows is 32 m16 tiles and 32 blocks cannot cover DRAM latency on 20 SMs.
+    //
+    // g_side2, NOT g_side: this fork nests inside the compressor fork in
+    // compressed_verify_step_indexer, which owns g_side. Re-recording g_side_fork here while that
+    // pair is outstanding would rewire the dependency graph and still return plausible numbers.
+    // NO_KV_SPLIT=1 restores the serial order for A/B.
+    const bool kvsplit = g_side2 && !getenv("NO_KV_SPLIT");
+    cudaStream_t ks = kvsplit ? g_side2 : stream;
+    float* kvn=win_kv+(size_t)pos*HEAD_DIM;
+    if(kvsplit){
+        cudaEventRecord(g_side2_fork,stream); cudaStreamWaitEvent(ks,g_side2_fork,0);
+        fp8_block_gemm(kvn,xq,xs,a.wkv,a.wkv_s,K,HEAD_DIM,DIM,ks);
+        rmsnorm(kvn,kvn,a.kv_norm,K,HEAD_DIM,eps,true,ks);
+        rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,ks);
+        act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,ks);
+        cudaEventRecord(g_side2_join,ks);
+    }
     fp8_block_gemm(qr,xq,xs,a.wq_a,a.wq_a_s,K,Q_LORA,DIM,stream);
     rmsnorm(qr,qr,a.q_norm,K,Q_LORA,eps,true,stream);
     act_quant_fp8(qrq,qrs,qr,K,Q_LORA,128,stream);
     fp8_block_gemm(qOut,qrq,qrs,a.wq_b,a.wq_b_s,K,Kd,Q_LORA,stream);
     rmsnorm(qOut,qOut,nullptr,K*N_HEADS,HEAD_DIM,eps,false,stream);
     rope_interleaved(qOut+NOPE_DIM,cosP,sinP,K*N_HEADS,ROPE_DIM,false,HEAD_DIM,N_HEADS,stream);
-    float* kvn=win_kv+(size_t)pos*HEAD_DIM;
-    fp8_block_gemm(kvn,xq,xs,a.wkv,a.wkv_s,K,HEAD_DIM,DIM,stream);
-    rmsnorm(kvn,kvn,a.kv_norm,K,HEAD_DIM,eps,true,stream);
-    rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,stream);
-    act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,stream);
+    if(kvsplit){ cudaStreamWaitEvent(stream,g_side2_join,0); }        // win_kv is read by the caller
+    else {
+        fp8_block_gemm(kvn,xq,xs,a.wkv,a.wkv_s,K,HEAD_DIM,DIM,stream);
+        rmsnorm(kvn,kvn,a.kv_norm,K,HEAD_DIM,eps,true,stream);
+        rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,stream);
+        act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,stream);
+    }
     dprof_end(DP_C_QPROJ,stream);
     // The indexer needs act_quant(rmsnorm(wq_a @ x)) — byte-for-byte what `qrq/qrs` already hold.
     // It used to rebuild them from x: act_quant(x) + the whole wq_a GEMM (4.19 MB/layer) + rmsnorm

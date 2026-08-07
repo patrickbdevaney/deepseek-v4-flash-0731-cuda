@@ -292,6 +292,21 @@ int main(int argc, char** argv){
     printf("[decode] building 43 layer structs once (persistent)...\n");
     for(int Lyr=0; Lyr<N_LAYERS; ++Lyr) build_layer(Lyr);       // all dequant done ONCE, resident (~2 GB)
     { size_t fb,tb; cudaMemGetInfo(&fb,&tb); printf("[decode] structs built. mem %.1f/%.1f GiB\n",(tb-fb)/1073741824.0,tb/1073741824.0); }
+    // I3 STRESS KNOB (DSV4_BALLAST_GB=n). The run that faulted (cycle 5) sat at 111.5/122.8 GiB after
+    // building its structs; a faithful re-run of its sweep on the current tree sits at 108.8 and does
+    // NOT fault, twice, with and without the sync probe. Headroom is the one variable that differs and
+    // it is the exact variable I3's hypothesis is about, so make it settable instead of hoping the
+    // environment reproduces it. This reserves device memory and never frees it.
+    if(const char* bg = getenv("DSV4_BALLAST_GB")){
+        double gb = atof(bg);
+        if(gb > 0){ void* bp=nullptr; size_t nb=(size_t)(gb*1073741824.0);
+            cudaError_t be = cudaMalloc(&bp, nb);
+            size_t fb,tb; cudaMemGetInfo(&fb,&tb);
+            printf("[ballast] reserved %.2f GiB -> %s; mem now %.1f/%.1f GiB (free %.2f)\n",
+                   gb, be==cudaSuccess?"ok":cudaGetErrorString(be),
+                   (tb-fb)/1073741824.0, tb/1073741824.0, fb/1073741824.0);
+            if(be!=cudaSuccess) cudaGetLastError(); }
+    }
     arena_init((size_t)512<<20);                            // 512 MB decode scratch arena (bump, reset per layer)
     printf("[decode] prefill %d positions...\n", PS);
     for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset();
@@ -626,13 +641,31 @@ int main(int argc, char** argv){
         // requested value labels those rows 0.00 while they ran at 1.5. Cycle 2 lost a run to
         // exactly that. Print both until the semantics are fixed and re-gated.
         std::vector<float> sweep_akeff(blkSweep.size());
+      // I3 INSTRUMENT (DSV4_MEMTRACE=1). The standing hypothesis for the fault that killed cycles 3
+      // and 5 is that "something ACCUMULATES across sweep points and the longest prompt is merely
+      // the first allocation big enough to fall off the end of it" — the suspect being the 8 raw
+      // cudaMalloc/cudaFree per indexer layer per call inside a pool with only ~11 GiB headroom.
+      // That is a claim about free memory over time, and nothing has ever printed free memory over
+      // time. If this column is FLAT across points, the accumulation frame is dead and the next
+      // suspect is arena_reset / the per-point head rebuild, not the allocator.
+      const bool memtrace = getenv("DSV4_MEMTRACE")!=nullptr;
       for(size_t bsi=0; bsi<blkSweep.size(); ++bsi){
+        if(memtrace){ size_t fb,tb; cudaMemGetInfo(&fb,&tb);
+            printf("[memtrace] entering point %zu (prompt %d): free %.3f GiB of %.1f\n",
+                   bsi, promptSweep[bsi], fb/1073741824.0, tb/1073741824.0); fflush(stdout); }
         const int BLK = blkSweep[bsi], NPASS = passSweep[bsi];
         // adaptK = 0 means fixed width, i.e. exactly the previous behaviour. The default comes from
         // a within-run A/B (Finding 49): 3694 -> 3616 ms for the SAME 61 tokens, +2.1%. The
         // threshold is fitted on 18 verifies of one prompt, so it is deliberately on the permissive
         // side — a too-low threshold degrades to fixed width, a too-high one costs accepted tokens.
-        const float adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi]
+        // D1 FIXED. A sweep entry of `:0` USED to fall through to the 1.5 default, so fixed width was
+        // not expressible per point and NO run since Finding 49 has contained a fixed-width control —
+        // the +2.1% that justified adaptive verify width has never been re-checked on any prompt but
+        // the one it was fitted on. A NEGATIVE adaptK now means "fixed width", e.g. `5:1:-1:2` runs
+        // prompt 2 at a fixed verify width. `:0` keeps its old meaning (fall through to the default)
+        // so every recorded sweep string still means what it meant when it was run.
+        const float adaptK = adaptSweep[bsi] < 0.f ? 0.f
+                           : adaptSweep[bsi] > 0.f ? adaptSweep[bsi]
                            : (getenv("NO_ADAPTK") ? 0.f : 1.5f);
         // This point's prompt. Named `pids`/`ps`/`PSp`, NOT `ids`/`s`/`PS`: the previous version
         // shadowed the outer names, and `run_layer` — a [&] lambda defined at outer scope — went on
