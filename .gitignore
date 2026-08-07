@@ -2,3 +2,5 @@ build/
 *.o
 *.bin
 cache/
+.flywheel_cycles/
+.flywheel_last_run.*

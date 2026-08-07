@@ -117,15 +117,32 @@ phaseB_top_history entries are equal), advance the phase per DECODE_FLYWHEEL.md 
 EOP
 )
 
+# stream-json so the iteration is WATCHABLE, not just auditable after the fact. `--verbose` is
+# required for stream-json under -p. Rendered by scripts/flywheel_watch.py; kept per cycle so a
+# finished iteration can be replayed rather than only tailed.
+mkdir -p "$ROOT/.flywheel_cycles"
+CYCLE_JSONL="$ROOT/.flywheel_cycles/$(printf 'cycle%04d-%s' "$CYCLE" "$(date +%Y%m%d-%H%M)").jsonl"
+LIVE="$ROOT/.flywheel_last_run.jsonl"
+: > "$CYCLE_JSONL"; ln -sf "$CYCLE_JSONL" "$LIVE"
+
 set +e
 claude -p "$PROMPT" \
+  --output-format stream-json --verbose --include-partial-messages \
   --permission-mode acceptEdits \
   --max-turns "$TURNS" \
   --add-dir "$HOME" \
   --append-system-prompt "You are running headless and unattended on a Jetson Thor. Never run git push. Never run a second full-model process. Prefer stopping and recording a halt over guessing." \
-  > "$ROOT/.flywheel_last_run.txt" 2>&1
+  >> "$CYCLE_JSONL" 2>&1
 RC=$?
 set -e
+# plain-text mirror of the final answer, for grepping without the renderer
+python3 - "$CYCLE_JSONL" > "$ROOT/.flywheel_last_run.txt" 2>/dev/null <<'PY'
+import json,sys
+for ln in open(sys.argv[1]):
+    if ln.startswith('{"type":"result'):
+        try: print(json.loads(ln).get("result",""))
+        except Exception: pass
+PY
 log "agent exited rc=$RC"
 
 # ---- postflight ------------------------------------------------------------------------------

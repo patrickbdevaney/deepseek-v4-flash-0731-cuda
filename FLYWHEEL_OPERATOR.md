@@ -28,6 +28,39 @@ One `claude -p` invocation (bounded at 140 turns) and at most one full-model run
 100.4 GiB plus a few minutes of decode. Budget ~30-40 min of wall clock and one build. The hourly
 cadence leaves slack; `flock` makes an overrun skip the next tick rather than stack.
 
+## Watching it
+
+The agent runs with `--output-format stream-json --verbose`, so every cycle is a JSONL transcript of
+the whole agentic loop. `scripts/flywheel_watch.py` renders it as colourised dialogue — assistant
+prose, tool calls with a per-tool one-line summary of the input, tool results with line/byte counts,
+and a closing block with turns, wall time, token usage and cost.
+
+```bash
+scripts/flywheel_watch.py                       # follow the LIVE cycle (survives cycle rollover)
+scripts/flywheel_watch.py --list                # every captured cycle: turns, duration, cost
+scripts/flywheel_watch.py .flywheel_cycles/cycle0003-*.jsonl     # replay one
+scripts/flywheel_watch.py -q      <file>        # tool calls and results only, no prose
+scripts/flywheel_watch.py --full  <file>        # do not truncate tool output
+```
+
+Tool output is trimmed in the middle by default (head + tail, with a count of what was elided),
+because a single `dprof` or `gemm_bench` result is hundreds of lines and the point of this view is
+the *shape* of the iteration — what it decided, what it ran, what came back. The raw output is in
+`~/*.log` anyway. `--full` when you are debugging a specific step.
+
+Raw JSON if you would rather use your own tooling:
+```bash
+jq -c 'select(.type=="assistant") | .message.content[] | select(.type=="tool_use") | {name, input}' \
+   .flywheel_last_run.jsonl
+```
+
+**One thing you will go looking for and not find: thinking TEXT.** The CLI redacts it — the
+`thinking_delta` events carry `{"thinking": "", "estimated_tokens": N}` and the completed block has
+a signature with empty content. The renderer therefore shows *that* the agent deliberated and
+roughly how much (`* thinking (~150 tok, content not exposed on the stream)`), which is enough to
+see where it paused to reason, but the reasoning itself is not available to any consumer of
+stream-json. An empty thinking block does not mean it did not think.
+
 ## Reading it
 
 - `FLYWHEEL_JOURNAL.md` — the watch log, one entry per cycle, plus the observer's checklist.

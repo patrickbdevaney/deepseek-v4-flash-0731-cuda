@@ -2,7 +2,10 @@
   "cycle": 0,
   "phase": "A",
   "consecutive_sub_half_pct": 3,
-  "phaseB_top_history": ["moe-latency", "moe-latency"],
+  "phaseB_top_history": [
+    "moe-latency",
+    "moe-latency"
+  ],
   "baseline": {
     "spec_tok_s": 16.86,
     "base_tok_s": 12.61,
@@ -13,10 +16,30 @@
     "note": "spec measured with NGEN0=60 (18 verifies). Short 24-token runs understate it ~10%."
   },
   "queue": [
-    {"id": "A1", "what": "intra-expert activation sparsity", "expect": "+11-17%", "risk": "runtime-only, no artifact change"},
-    {"id": "A6", "what": "CUTLASS reg_reconfig.h missing 1100 clause", "expect": "1.74x on FMHA upstream", "risk": "two-line local patch"},
-    {"id": "S4", "what": "reduced draft vocabulary + d2t", "expect": "~5 ms of the 27 ms draft", "risk": "needs a principled token subset, NOT an invented one"},
-    {"id": "R1", "what": "re-fit adaptK across scripts/prompt_suite.json", "expect": "validate the 1.5 default", "risk": "threshold currently fitted on 18 verifies of one prompt"}
+    {
+      "id": "A1",
+      "what": "intra-expert activation sparsity",
+      "expect": "+11-17%",
+      "risk": "runtime-only, no artifact change"
+    },
+    {
+      "id": "A6",
+      "what": "CUTLASS reg_reconfig.h missing 1100 clause",
+      "expect": "1.74x on FMHA upstream",
+      "risk": "two-line local patch"
+    },
+    {
+      "id": "S4",
+      "what": "reduced draft vocabulary + d2t",
+      "expect": "~5 ms of the 27 ms draft",
+      "risk": "needs a principled token subset, NOT an invented one"
+    },
+    {
+      "id": "R1",
+      "what": "re-fit adaptK across scripts/prompt_suite.json",
+      "expect": "validate the 1.5 default",
+      "risk": "threshold currently fitted on 18 verifies of one prompt"
+    }
   ],
   "halt": false,
   "halt_reason": "",
