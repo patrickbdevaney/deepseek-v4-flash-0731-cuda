@@ -94,7 +94,17 @@ int main(int argc, char** argv){
     int NDEC = argc>3?atoi(argv[3]):6;                 // tokens to decode (autoregressive) after prefill
     int NGEN0 = argc>5?atoi(argv[5]):24;               // spec-decode tokens (if head given)
     int PS = s-1;                                      // prefill positions 0..PS-1; decode starts at pos PS (=s-1)
-    int seqmax = s + (NDEC>NGEN0?NDEC:NGEN0) + DSPARK_BLOCK + 8;   // room for spec block overshoot
+    // DSV4_BLKSWEEP="5,8,12,16" runs the spec-decode loop once per block size in ONE process. Each
+    // full-model measurement otherwise costs a ~10-minute cold load of a 100 GiB checkpoint, which
+    // makes a four-point sweep of the single most consequential speculation parameter a whole
+    // afternoon. The sweep re-prefills between points, so the runs are independent.
+    std::vector<int> blkSweep;
+    if(const char* bsz=getenv("DSV4_BLKSWEEP")){ const char* q=bsz;
+        while(*q){ int v=atoi(q); if(v>=2&&v<=16) blkSweep.push_back(v);
+                   while(*q && *q!=',') ++q; if(*q==',') ++q; } }
+    if(blkSweep.empty()) blkSweep.push_back(DSPARK_BLOCK);
+    int BLKMAX=0; for(int v:blkSweep) if(v>BLKMAX) BLKMAX=v;
+    int seqmax = s + (NDEC>NGEN0?NDEC:NGEN0) + BLKMAX + 8;   // room for spec block overshoot
     printf("[decode] loading %s ... s=%d NDEC=%d seqmax=%d\n", dir, s, NDEC, seqmax);
     st::WeightStore W(dir, key_map); Loader L(W);
     printf("[decode] loaded %.2f GiB, %zu tensors\n", W.loadedGiB(), W.count());
@@ -430,7 +440,7 @@ int main(int argc, char** argv){
     const char* headdir = (argc>4) ? argv[4] : (have_embedded_mtp ? dir : nullptr);
     const bool separate_head = (headdir && strcmp(headdir, dir) != 0);
     if(headdir){
-        const int BLK=DSPARK_BLOCK, hf=ROPE_DIM/2;
+        const int hf=ROPE_DIM/2;
         std::unique_ptr<st::WeightStore> WHp; std::unique_ptr<Loader> LHp;
         if(separate_head){
             printf("\n[spec] loading EXTERNAL DSpark head %s ...\n", headdir);
@@ -447,7 +457,8 @@ int main(int argc, char** argv){
         const float* main_norm=LH.bf16("mtp.0.main_norm.weight");
         int NSTAGE=0; while(WH.has("mtp."+std::to_string(NSTAGE)+".attn_norm.weight")) NSTAGE++;
         int NE=0; while(WH.has("mtp.0.ffn.experts."+std::to_string(NE)+".w1.weight")) NE++;
-        printf("[spec] NSTAGE=%d head-experts=%d BLK=%d\n", NSTAGE, NE, BLK);
+        printf("[spec] NSTAGE=%d head-experts=%d BLK sweep:", NSTAGE, NE);
+        for(int v:blkSweep) printf(" %d",v); printf("\n");
         std::vector<BlockWeights> mb(NSTAGE); std::vector<float*> mkv(NSTAGE);
         std::vector<std::vector<const uint8_t*>> HP1(NSTAGE),HP2(NSTAGE),HP3(NSTAGE);
         // NATIVE e8m0 expert scales, exactly as fill_moe does for the main model. These used to be
@@ -488,17 +499,24 @@ int main(int argc, char** argv){
 
         // main_x accumulator + tapped re-prefill over [0..PS-1]
         float *main_x,*mh_pre; CU(cudaMalloc(&main_x,(size_t)seqmax*d*4)); CU(cudaMalloc(&mh_pre,(size_t)PS*3*d*4));
+
+        // buffers, sized once at the largest block in the sweep
+        int *dbid,*dfid,*dout; CU(cudaMalloc(&dbid,BLKMAX*4)); CU(cudaMalloc(&dfid,4)); CU(cudaMalloc(&dout,(BLKMAX+1)*4));
+        float *xemb,*xa,*xb; CU(cudaMalloc(&xemb,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&xa,(size_t)BLKMAX*hc*d*4)); CU(cudaMalloc(&xb,(size_t)BLKMAX*hc*d*4));
+        float *hv,*hv2,*collK,*logK,*mh_v; CU(cudaMalloc(&hv,(size_t)BLKMAX*hc*d*4)); CU(cudaMalloc(&hv2,(size_t)BLKMAX*hc*d*4));
+        CU(cudaMalloc(&collK,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&logK,(size_t)BLKMAX*VOCAB*4)); CU(cudaMalloc(&mh_v,(size_t)BLKMAX*3*d*4));
+        std::vector<double> sweep_mstok(blkSweep.size()), sweep_acc(blkSweep.size());
+      for(size_t bsi=0; bsi<blkSweep.size(); ++bsi){
+        const int BLK = blkSweep[bsi];
+        // Re-prefill so each block size starts from the same state: the spec loop mutates the
+        // window/compressed caches and main_x, and a sweep point that inherited them would be
+        // measuring a different sequence, not a different block size.
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
         k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,emb,d_ids,PS,d); k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids); std::swap(h,h2);
             if(Lyr==40) dspark_tap_pool(mh_pre,h,PS,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_pre,h,PS,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_pre,h,PS,hc,d,2,3); }
         dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PS, d, EPS); CU(cudaDeviceSynchronize());
-
-        // buffers
-        int *dbid,*dfid,*dout; CU(cudaMalloc(&dbid,BLK*4)); CU(cudaMalloc(&dfid,4)); CU(cudaMalloc(&dout,(BLK+1)*4));
-        float *xemb,*xa,*xb; CU(cudaMalloc(&xemb,(size_t)BLK*d*4)); CU(cudaMalloc(&xa,(size_t)BLK*hc*d*4)); CU(cudaMalloc(&xb,(size_t)BLK*hc*d*4));
-        float *hv,*hv2,*collK,*logK,*mh_v; CU(cudaMalloc(&hv,(size_t)BLK*hc*d*4)); CU(cudaMalloc(&hv2,(size_t)BLK*hc*d*4));
-        CU(cudaMalloc(&collK,(size_t)BLK*d*4)); CU(cudaMalloc(&logK,(size_t)BLK*VOCAB*4)); CU(cudaMalloc(&mh_v,(size_t)BLK*3*d*4));
+        CU(cudaMemcpy(d_ids,ids.data(),(size_t)s*4,cudaMemcpyHostToDevice));
         int NGEN=NGEN0;
         int cur=ids[s-1], cpos=PS;                 // cur = token at position cpos (=PS=s-1), not yet in cache
         std::vector<int> sgen; int nverify=0, timed_tok=0; float spec_ms=0; cudaEvent_t s0,s1; cudaEventCreate(&s0); cudaEventCreate(&s1);
@@ -566,7 +584,7 @@ int main(int argc, char** argv){
             printf("[specprof]   draft: main_kv  %7.2f  (%4.1f%%)\n", acc_kv/nprof,  100*acc_kv /nprof/tot);
             printf("[specprof]   draft: 3 blocks %7.2f  (%4.1f%%)\n", acc_blk/nprof, 100*acc_blk/nprof/tot);
             printf("[specprof]   draft: fwd_head %7.2f  (%4.1f%%)  <- host AR loop over %d positions\n",
-                   acc_head/nprof, 100*acc_head/nprof/tot, DSPARK_BLOCK);
+                   acc_head/nprof, 100*acc_head/nprof/tot, BLK);
             printf("[specprof]   verify 43 layer %7.2f  (%4.1f%%)\n", acc_ver/nprof, 100*acc_ver/nprof/tot);
             printf("[specprof]   TOTAL           %7.2f\n", tot);
         }
@@ -574,6 +592,14 @@ int main(int argc, char** argv){
         printf("[spec] tokens:"); for(int i=0;i<(int)sgen.size() && i<40;++i) printf(" %d",sgen[i]); printf("\n");
         printf("[spec] SPEC-DECODE: %.1f ms/tok = %.2f tok/s  (vs base M=1 %.1f ms/tok = %.2f tok/s -> %.2fx)\n",
                ms_per_tok, ms_per_tok>0?1000.0/ms_per_tok:0, warm_ms, 1000.0/warm_ms, ms_per_tok>0?warm_ms/ms_per_tok:0);
+        sweep_mstok[bsi]=ms_per_tok; sweep_acc[bsi]=avg_acc;
+      }
+      if(blkSweep.size()>1){
+        printf("\n[blksweep]  BLK | mean tok/verify | ms/tok | tok/s | vs base %.2f tok/s\n", 1000.0/warm_ms);
+        for(size_t i2=0;i2<blkSweep.size();++i2)
+            printf("[blksweep] %4d | %15.2f | %6.1f | %5.2f | %.2fx\n", blkSweep[i2], sweep_acc[i2],
+                   sweep_mstok[i2], 1000.0/sweep_mstok[i2], warm_ms/sweep_mstok[i2]);
+      }
     }
     size_t fb,tb; cudaMemGetInfo(&fb,&tb); printf("[decode] mem %.1f/%.1f GiB\n",(tb-fb)/1073741824.0,tb/1073741824.0);
     return first_am==EXPECT?0:1;

@@ -78,10 +78,37 @@ int main(){
     CU(cudaMemcpy(cs.data(),Cscl,rows*4,cudaMemcpyDeviceToHost));
 
     Cmp a=compare(cs,cv), b=compare(cr,cv), c=compare(cr,cs);
-    printf("[oggemv vec4 vs scalar] cos=%.9f rms_rel=%.2e rel_max=%.2e -> %s\n", a.cos,a.rms_rel,a.rel_max, ok(a)?"PASS":"FAIL");
-    printf("[oggemv vec4 vs f32   ] cos=%.9f rms_rel=%.2e rel_max=%.2e -> %s\n", b.cos,b.rms_rel,b.rel_max, ok(b)?"PASS":"FAIL");
-    printf("[oggemv scal vs f32   ] cos=%.9f rms_rel=%.2e rel_max=%.2e -> %s\n", c.cos,c.rms_rel,c.rel_max, ok(c)?"PASS":"FAIL");
-    bool pass = ok(a) && ok(b) && ok(c);
+    printf("[oggemv M=1 vec4 vs scalar] cos=%.9f rms_rel=%.2e rel_max=%.2e -> %s\n", a.cos,a.rms_rel,a.rel_max, ok(a)?"PASS":"FAIL");
+    printf("[oggemv M=1 vec4 vs f32   ] cos=%.9f rms_rel=%.2e rel_max=%.2e -> %s\n", b.cos,b.rms_rel,b.rel_max, ok(b)?"PASS":"FAIL");
+    printf("[oggemv M=1 scal vs f32   ] cos=%.9f rms_rel=%.2e rel_max=%.2e -> %s\n", c.cos,c.rms_rel,c.rel_max, ok(c)?"PASS":"FAIL");
+
+    // M>1: the spec-decode verify path, which had no coverage at all. Two comparisons per M —
+    // multi-row (NR=4/2) against the NR=1 kernel that Finding 40 gated, and against the f32
+    // oracle run one row at a time. NR only changes which warp owns which output row, so the
+    // first should be bit-identical; the second is the real correctness statement.
+    bool mkok = true;
+    for (int M : {2,3,5,8,12,16}) {
+        std::vector<float> ob((size_t)M*G*Kd);
+        for(auto&x:ob) x=(rand()%2000-1000)/1000.f;
+        float *dob,*Cnr,*C1,*Coracle;
+        CU(cudaMalloc(&dob,ob.size()*4)); CU(cudaMemcpy(dob,ob.data(),ob.size()*4,cudaMemcpyHostToDevice));
+        CU(cudaMalloc(&Cnr,(size_t)M*rows*4)); CU(cudaMalloc(&C1,(size_t)M*rows*4)); CU(cudaMalloc(&Coracle,(size_t)M*rows*4));
+        unsetenv("NO_OGNR"); ogroup_gemm_fp8(Cnr,dob,dw,dsc,M,G,R,Kd,0);
+        setenv("NO_OGNR","1",1); ogroup_gemm_fp8(C1,dob,dw,dsc,M,G,R,Kd,0);
+        unsetenv("NO_OGNR");
+        for(int m=0;m<M;++m) ogroup_gemm(Coracle+(size_t)m*rows, dob+(size_t)m*G*Kd, dwf,1,G,R,Kd,0);
+        CU(cudaDeviceSynchronize());
+        std::vector<float> vnr((size_t)M*rows), v1((size_t)M*rows), vo((size_t)M*rows);
+        CU(cudaMemcpy(vnr.data(),Cnr,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
+        CU(cudaMemcpy(v1.data(),C1,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
+        CU(cudaMemcpy(vo.data(),Coracle,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
+        Cmp p=compare(vnr,v1), q=compare(vnr,vo);
+        bool o2 = ok(p) && ok(q); mkok = mkok && o2;
+        printf("[oggemv M=%-2d NR vs NR=1] cos=%.9f rms=%.1e %-4s | vs f32 oracle cos=%.9f rms=%.1e %-4s\n",
+               M, p.cos,p.rms_rel, ok(p)?"PASS":"FAIL", q.cos,q.rms_rel, ok(q)?"PASS":"FAIL");
+        cudaFree(dob); cudaFree(Cnr); cudaFree(C1); cudaFree(Coracle);
+    }
+    bool pass = ok(a) && ok(b) && ok(c) && mkok;
     printf("\nGate OGGEMV: %s\n", pass?"PASS":"FAIL");
     return pass?0:1;
 }

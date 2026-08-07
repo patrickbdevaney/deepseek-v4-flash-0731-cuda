@@ -54,8 +54,54 @@ __global__ void gemm_fp32_kernel(float* __restrict__ C, const float* __restrict_
 static inline int gemm_vec4_ok(const void* A, const void* B, int K) {
     return ((K & 3) == 0) && ((((uintptr_t)A) & 15) == 0) && ((((uintptr_t)B) & 15) == 0);
 }
+// M=K variant, same defect and same fix as Finding 42's lm_head. `compressor_emit_group` calls
+// gemm_fp32 with M = ntok = 2*ratio = 8 on `wkv`/`wgate`, which Finding 33 made f32 = 16.8 MB each
+// — so one group emit read 8 x 33.6 MB where it needed 33.6. By the dprof marks `cattn:compress` is
+// 10.11 ms of a K=5 verify and fires every `ratio` steps in base decode too.
+//
+// Chunked in 8s rather than templated on the full M, because ntok is 2*ratio and ratio is 128 for
+// twenty of the layers: a 128-row template would spill, and B re-read ceil(M/8) times is already
+// 16x better than M times.
+template<int MM>
+__global__ void gemm_fp32_mk_kernel(float* __restrict__ C, const float* __restrict__ A,
+                                    const float* __restrict__ B, int m0, int N, int K){
+    const int n = blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5);
+    if (n >= N) return;
+    const int lane = threadIdx.x & 31;
+    const float4* b4 = (const float4*)(B + (size_t)n*K);
+    const int n4 = K >> 2;
+    // Four independent chains per row, exactly as the M=1 kernel: same operation order, so every
+    // row is BIT-identical to what the old path produced and the gate can assert rms == 0.
+    float acc[MM][4];
+    #pragma unroll
+    for (int m=0;m<MM;++m){ acc[m][0]=acc[m][1]=acc[m][2]=acc[m][3]=0.f; }
+    for (int k = lane; k < n4; k += 32) {
+        const float4 bv = b4[k];
+        #pragma unroll
+        for (int m=0;m<MM;++m){
+            const float4 av = ((const float4*)(A + (size_t)(m0+m)*K))[k];
+            acc[m][0]=fmaf(av.x,bv.x,acc[m][0]); acc[m][1]=fmaf(av.y,bv.y,acc[m][1]);
+            acc[m][2]=fmaf(av.z,bv.z,acc[m][2]); acc[m][3]=fmaf(av.w,bv.w,acc[m][3]);
+        }
+    }
+    #pragma unroll
+    for (int m=0;m<MM;++m){ float a=(acc[m][0]+acc[m][1])+(acc[m][2]+acc[m][3]);
+        #pragma unroll
+        for (int o=16;o>0;o>>=1) a += __shfl_down_sync(0xffffffff,a,o);
+        if (lane==0) C[(size_t)(m0+m)*N + n] = a; }
+}
 void gemm_fp32(float* C, const float* A, const float* B, int M, int N, int K, cudaStream_t stream) {
     const int wpb = 4, threads = 32*wpb;
+    if (M >= 2 && gemm_vec4_ok(A, B, K) && getenv("NO_FP32MK")==nullptr) {
+        const int blocks = (N + wpb - 1)/wpb;
+        for (int m0 = 0; m0 < M; m0 += 8) {
+            const int r = (M - m0 < 8) ? (M - m0) : 8;
+            #define F32MK(MM) case MM: gemm_fp32_mk_kernel<MM><<<blocks,threads,0,stream>>>(C,A,B,m0,N,K); break;
+            switch(r){ F32MK(1) F32MK(2) F32MK(3) F32MK(4) F32MK(5) F32MK(6) F32MK(7) F32MK(8) }
+            #undef F32MK
+        }
+        return;
+    }
     dim3 grid((N + wpb - 1)/wpb, M);
     gemm_fp32_kernel<<<grid, threads, 0, stream>>>(C, A, B, M, N, K, gemm_vec4_ok(A, B, K));
 }
@@ -188,11 +234,12 @@ void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K
                    : ((((K & 1) == 0) && ((((uintptr_t)Bbf16) & 3) == 0)) ? 1 : 0);
     // M=K path: only when the vectorised alignment holds (it is the only variant implemented) and
     // only up to M=8, past which MM accumulators plus 2 float4 A loads per m stop paying.
-    if (vec2 >= 1 && M >= 2 && M <= 8 && getenv("NO_BF16MK")==nullptr) {
+    if (vec2 >= 1 && M >= 2 && M <= 16 && getenv("NO_BF16MK")==nullptr) {
         const int blocks = (N + wpb - 1)/wpb; const bool v8 = (vec2 == 2);
         #define BFMK(MM) case MM: if(v8) gemm_bf16w_mk_kernel<MM,true ><<<blocks,threads,0,stream>>>(C,A,(const __nv_bfloat16*)Bbf16,N,K); \
                                   else   gemm_bf16w_mk_kernel<MM,false><<<blocks,threads,0,stream>>>(C,A,(const __nv_bfloat16*)Bbf16,N,K); return;
-        switch(M){ BFMK(2) BFMK(3) BFMK(4) BFMK(5) BFMK(6) BFMK(7) BFMK(8) default: break; }
+        switch(M){ BFMK(2)  BFMK(3)  BFMK(4)  BFMK(5)  BFMK(6)  BFMK(7)  BFMK(8) BFMK(9)
+                   BFMK(10) BFMK(11) BFMK(12) BFMK(13) BFMK(14) BFMK(15) BFMK(16) default: break; }
         #undef BFMK
     }
     dim3 grid((N + wpb - 1)/wpb, M);

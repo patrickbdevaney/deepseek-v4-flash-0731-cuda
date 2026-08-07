@@ -1783,3 +1783,47 @@ is the one outcome worse than either fast path.
 
 GATE PASS, verify argmax == AR tokens 5/5, generated token stream byte-identical.
 Acceptance unchanged at 3.00/5 — this is entirely `c_v`, which was the correct target.
+
+## Finding 43 — two more "read B once" fixes, and the block-size question closed
+
+**Block size is not a lever.** `DSV4_BLKSWEEP` runs the spec loop once per block size in one process
+(each point re-prefills, so they are independent), which turns a four-point sweep of the most
+consequential speculation parameter from four 10-minute checkpoint loads into one:
+
+| BLK | mean tok/verify | ms/tok | tok/s | vs base |
+|---|---|---|---|---|
+| 5  | 3.00 | 69.7  | 14.35 | **1.39x** |
+| 8  | 3.00 | 94.1  | 10.63 | 1.03x |
+| 12 | 3.00 | 130.2 | 7.68  | 0.74x |
+| 16 | 2.89 | 178.9 | 5.59  | 0.54x |
+
+The per-verify accept sequence at BLK=8 is *identical* to BLK=5 — 1,1,1,1,4,1,4,1,4 — so the fifth
+through eighth proposals are always wrong. The draft saturates at four correct tokens in its best
+case and one in its common case, and extra block width buys only verify cost. With three chained MTP
+stages that is a property of the head, not of the search. **Acceptance, not block width, is what is
+left on the speculation side.** Retired with a measurement; do not re-queue block-size sweeps.
+
+**Finding 42's defect twice more.** `ogroup_gemv_mk` reads the weight once per M rows but M*512
+bytes of f32 `o` per 128 weight bytes — 4M times the weight traffic, 20x at M=5, ~27 GB of L2 per
+verify. `o` depends only on the group and gr = g*R + r, so NR consecutive rows share it exactly:
+give each warp NR=4 rows and the ratio falls to 4M/NR. And `gemm_fp32` is warp-per-output-element,
+so `compressor_emit_group` read its two 16.8 MB f32 weights eight times each (M = 2*ratio = 8) per
+group emit; chunked in 8s because ratio is 128 for twenty layers and a 128-row template would spill.
+
+Both gate **bit-identical** to the kernels they replace (rms = 0.0 at every M, including the chunk
+tails at M=13 and the sixteen-chunk M=128), because both keep the operation order exactly.
+
+| phase (K=5, ms) | before | after |
+|---|---|---|
+| cattn:ogroup | 28.02 | 24.28 |
+| cattn:compress | 10.11 | 8.46 |
+| M=5 verify | 179.4 | **173.5** |
+| spec-decode | 14.36 tok/s | **14.76 tok/s** |
+
+**Both under-delivered against prediction by more than 2x** (predicted ~10 and ~7 ms, got 3.7 and
+1.7), which by the flywheel's own rule means the ranking model is wrong, not the levers. It is: both
+phases are chains of small kernels — a group emit is ~8 launches per layer across 21 layers — and
+the byte model attributes all of a phase's time to its GEMMs when much of it is launch-bound glue
+moving almost nothing. **The next ranking pass must separate byte-carrying time from glue time.**
+Doing that on the K=1 profile splits base AR cleanly: ~59 ms carrying 8.67 GB (147 GB/s) and ~37 ms
+of glue carrying almost nothing — and the 37 ms is the larger of the two gaps to the 240 GB/s roof.

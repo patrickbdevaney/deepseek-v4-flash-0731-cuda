@@ -55,6 +55,34 @@ int main(){
         if(!ok) ++fail;
         cudaFree(B);cudaFree(Bf);cudaFree(A);cudaFree(C1);cudaFree(C2);
     }
+    // gemm_fp32's own M=K path (Finding 43). It is reached by compressor_emit_group at M=2*ratio,
+    // and by gemm_bf16w's reference above, so a silent error here would be invisible in the
+    // comparison it feeds. Chunked in 8s, so M=8 (one full chunk), M=13 (chunk + 5-row tail) and
+    // M=128 (sixteen chunks, the ratio-128 layers) are the three shapes that fail differently.
+    {
+        printf("\n-- gemm_fp32 M=K vs the warp-per-output-element path --\n");
+        const int N=1024, K=4096;
+        std::vector<float> hb((size_t)N*K); for(auto&x:hb) x=(rand()%2000-1000)/1000.f;
+        float* dB; CU(cudaMalloc(&dB,hb.size()*4)); CU(cudaMemcpy(dB,hb.data(),hb.size()*4,cudaMemcpyHostToDevice));
+        for (int M : {1,2,5,8,13,16,128}) {
+            std::vector<float> ha((size_t)M*K); for(auto&x:ha) x=(rand()%2000-1000)/1000.f;
+            float *dA,*C1,*C2; CU(cudaMalloc(&dA,ha.size()*4));
+            CU(cudaMemcpy(dA,ha.data(),ha.size()*4,cudaMemcpyHostToDevice));
+            CU(cudaMalloc(&C1,(size_t)M*N*4)); CU(cudaMalloc(&C2,(size_t)M*N*4));
+            setenv("NO_FP32MK","1",1); gemm_fp32(C1,dA,dB,M,N,K,0);
+            unsetenv("NO_FP32MK");     gemm_fp32(C2,dA,dB,M,N,K,0);
+            CU(cudaDeviceSynchronize());
+            std::vector<float> v1((size_t)M*N), v2((size_t)M*N);
+            CU(cudaMemcpy(v1.data(),C1,(size_t)M*N*4,cudaMemcpyDeviceToHost));
+            CU(cudaMemcpy(v2.data(),C2,(size_t)M*N*4,cudaMemcpyDeviceToHost));
+            double md=0; for(size_t i=0;i<v1.size();++i) md=fmax(md,fabs((double)v1[i]-v2[i]));
+            bool o = (md==0.0);   // same operation order by construction: anything but 0 is a bug
+            printf("[gemm_fp32 M=%-3d] max|diff| = %.3e -> %s\n", M, md, o?"PASS":"FAIL");
+            if(!o) ++fail;
+            cudaFree(dA); cudaFree(C1); cudaFree(C2);
+        }
+        cudaFree(dB);
+    }
     printf("\nGate BF16W: %s\n", fail?"FAIL":"PASS");
     return fail?1:0;
 }
