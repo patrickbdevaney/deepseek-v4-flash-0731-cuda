@@ -296,7 +296,7 @@ int main(int argc, char** argv){
                 float* tmp=cur; cur=nxt; nxt=tmp;
             }
             CU(cudaMemcpy(dfid,&ids[t+1],4,cudaMemcpyHostToDevice));
-            dspark_forward_head(dout1, cur, dfid, hh_fn,hh_sc,hh_ba, hnorm, lm, mw1, mw2, 1, BLK, hc, d, VOCAB, DSPARK_MARKOV_RANK, EPS);
+            dspark_forward_head(dout1, cur, dfid, hh_fn,hh_sc,hh_ba, hnorm, lm, mw1, mw2, 1, BLK, hc, d, VOCAB, DSPARK_MARKOV_RANK, EPS, nullptr);
             std::vector<int> oo(BLK+1); CU(cudaMemcpy(oo.data(),dout1,(size_t)(BLK+1)*4,cudaMemcpyDeviceToHost));
             int acc=0; for(int i=0;i<BLK && t+2+i<=s-1; ++i){ if(oo[1+i]==ids[t+2+i]) acc++; else break; }
             blkacc.push_back(acc); matched+=acc; total++;

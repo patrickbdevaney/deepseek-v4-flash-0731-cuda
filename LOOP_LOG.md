@@ -2088,3 +2088,78 @@ split N ways and walked in sequence: **192.1 / 182.9 / 181.4 / 183.3 / 183.6 GB/
 What is left is what ncu already said: latency, with memory throughput at 14-25% and
 `long_scoreboard` at 66-84%. Base AR moves 12.26 GB in 79.3 ms = 155 GB/s of weight traffic against
 a 234 GB/s strided ceiling. Every structural fix for that has now been tried and measured.
+
+## Finding 49 — Phase D, run 1: the loop had been treating a decision variable as a constant
+
+**Trigger.** Three consecutive levers under 0.5% and two Phase-B re-rankings returning the same top
+entry. Per the revised entry condition (DECODE_FLYWHEEL §Phase D), a queue that keeps re-deriving
+the same answer signals an exhausted *model*, not exhausted levers.
+
+**Method.** `RESEARCH_PROMPT_v2.md` — written against the measured residual, not the topic. v1 asked
+"how do we move more bytes"; that question was answered by Findings 44/47 and it was the wrong one.
+v2 asks six questions, each naming the measurement that would falsify its answer, and §Q6 asks what
+the project is *not* asking. Queried the arXiv API directly (`abs:"speculative decoding" AND
+abs:"mixture of experts"`, sorted by date) rather than web search: complete, dated, not SEO-shaped.
+
+**What came back.** The residual the loop had accepted as physics —
+
+> *"the verify at K=5 reads the union of ~25 of 160 experts per layer instead of 6, so the MoE (52%
+> of the step) gets almost no weight-sharing benefit from batching; measured `c_v` 1.82 against a
+> byte-model floor of 1.84, so the K-scaling is already optimal"*
+
+— is an actively-worked 2026 problem with a name, **expert scattering**, and a family of solutions,
+several of them training-free *and* lossless:
+
+| paper | arXiv | what it does | lossless? | reported |
+|---|---|---|---|---|
+| **EVICT** | 2605.00342 | truncates the draft **before** verification, keeping only the cost-effective prefix, from drafter signals + offline-profiled verify cost | **yes** | 2.35x over AR, 1.21x over EAGLE-3 |
+| **EcoSpec** | 2607.12696 | adds predicted **marginal expert activation cost** to draft selection; favours paths reusing already-covered experts | **yes** (target verification rule unmodified) | up to 1.62x on DeepSeek-V3.1 |
+| MoE-Spec | 2602.16052 | verification-time expert budgeting, loads only high-contribution experts | no (approximates) | 10-30% over EAGLE-3 |
+| EdgeXpert | 2608.05303 | prompt-wise expert reuse + depth-aware coalescing, **edge devices** | — | 56.3% latency reduction |
+| AcceptMoE | 2608.02989 | verifier-side expert selector from target-router + commitment scores | no (-0.27 pp) | 2.06x under offloading |
+| SP-MoE | 2510.10302 | SD-aware expert prefetching from draft/target correspondence | yes | 1.07-3.5x TPOT |
+
+**The correction to our own model.** Findings 43/45 concluded "acceptance is fixed at 3.00 and `c_v`
+is at its byte floor, therefore speculation is finished". Both halves are true and the conclusion
+still does not follow: **the floor itself is a function of how many positions we choose to verify,
+and we were choosing a constant 5.** The union is a decision variable. Seven rounds treated it as a
+constant of nature.
+
+**The lever this yields here.** Our draft is a linear chain, not a tree, so EcoSpec's path selection
+has nothing to choose between — but EVICT's truncation applies directly as **adaptive verify width**.
+Priced from our own ksweep, with the draft head's top1-top2 logit margin as the drafter signal
+(computed for free inside the argmax it already does):
+
+```
+cycle(K)          106.9  137.9  161.3  176.6  198.5 ms   for K=1..5
+marginal cost            31.0   23.3   15.3   21.9 ms
+break-even P(accept)     0.47   0.35   0.23   0.33        (marginal_ms / 66.2 ms-per-token)
+measured marginal acceptance rate: 0.33
+```
+
+**The measured acceptance rate straddles its own break-even thresholds** — precisely the regime
+where a per-verify signal beats any fixed width. Oracle bound on the observed accept pattern (six
+verifies accepting 1, three accepting 4): **18.97 vs 15.12 tok/s, +25%.**
+
+Truncation is **lossless by construction**: verifying fewer proposals cannot change what the target
+emits, only how many tokens one verify commits. No accuracy argument is needed, which is what
+separates this from S5/AcceptMoE.
+
+**Implementation.** `k_argmax_row` gained an optional top1-minus-top2 output (one extra shared array
+and reduction over an already-loaded row; the vocab=129,280 scan is unchanged). `DSV4_BLKSWEEP`
+entries became `BLK[:passes[:adaptK]]` so thresholds sweep in one checkpoint load. `adaptK=0` is
+byte-identical to the previous behaviour, so the sweep carries its own control.
+
+Two bugs found by printing the signal instead of trusting it:
+- **Off-by-one in the gate.** `VK=k` verifies `[cur, draft[0..k-2]]`, so extending to `k+1` adds
+  `draft[k-1]` and must gate on `hmarg[VK-1]`. The first version gated on `hmarg[VK-2]` — a token
+  already inside the block, which always passes for a confident `draft[0]`.
+- **The signal is not perfectly calibrated.** Verify 3 had margins `5.15 5.09 7.23 0.74 2.69` and
+  still accepted only 1: the drafter was confident about a token the target did not choose. So the
+  threshold is fitted from a printed calibration set (every verify's margins against what was
+  actually accepted) rather than swept blind across 15-minute runs.
+
+**Next lever if the margin proves too weak:** the draft's own MoE routers pick experts at every
+block position over the same 160 experts. The union of *those* picks is a direct on-device estimate
+of the union the verify would activate — EcoSpec's "lightweight expert predictor" without a separate
+model. Signal already computed, currently discarded.

@@ -26,4 +26,5 @@ void dspark_tap_pool(float* main_hidden, const float* h, int s, int hc, int d, i
 void dspark_forward_head(int* output_ids, const float* x_block, const int* first_ids,
                          const float* hc_head_fn, const float* hc_head_scale, const float* hc_head_base,
                          const float* norm, const void* lm_head, const void* markov_w1, const void* markov_w2,
-                         int s, int block, int hc, int d, int vocab, int rank, float eps, cudaStream_t stream = 0);
+                         int s, int block, int hc, int d, int vocab, int rank, float eps,
+                         float* margins = nullptr, cudaStream_t stream = 0);

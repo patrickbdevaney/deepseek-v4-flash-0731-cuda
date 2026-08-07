@@ -55,20 +55,37 @@ __global__ void k_add_bias(float* logits, const float* bias, int n, int vocab){ 
     size_t i=blockIdx.x*(size_t)blockDim.x+threadIdx.x; if(i<(size_t)n*vocab) logits[i]+=bias[i];
 }
 // Device-side greedy argmax over one logits row. One block per row; grid-stride + shared reduce.
+//
+// `mo` (optional) also returns the TOP-1 MINUS TOP-2 logit margin — the drafter confidence signal
+// that adaptive verification needs (LOOP_LOG Finding 49 / EVICT, arXiv 2605.00342). The second
+// maximum costs one more shared array and one more reduction over an already-loaded row; the row
+// scan itself, which is the expensive part at vocab=129,280, is unchanged.
 __global__ void k_argmax_row(int* __restrict__ out, const float* __restrict__ logits,
-                             int vocab, int row_stride, const int* __restrict__ rows, int nrow){
+                             int vocab, int row_stride, const int* __restrict__ rows, int nrow,
+                             float* __restrict__ mo){
     const int r = blockIdx.x; if (r >= nrow) return;
     const float* lg = logits + (size_t)rows[r] * row_stride;
-    __shared__ float sv[256]; __shared__ int si[256];
-    float bv = -1e30f; int bi = 0;
-    for (int v = threadIdx.x; v < vocab; v += blockDim.x) if (lg[v] > bv) { bv = lg[v]; bi = v; }
-    sv[threadIdx.x] = bv; si[threadIdx.x] = bi; __syncthreads();
+    __shared__ float sv[256]; __shared__ int si[256]; __shared__ float s2[256];
+    float bv = -1e30f, b2 = -1e30f; int bi = 0;
+    for (int v = threadIdx.x; v < vocab; v += blockDim.x) {
+        const float x = lg[v];
+        if (x > bv) { b2 = bv; bv = x; bi = v; } else if (x > b2) { b2 = x; }
+    }
+    sv[threadIdx.x] = bv; si[threadIdx.x] = bi; s2[threadIdx.x] = b2; __syncthreads();
     for (int k = blockDim.x >> 1; k > 0; k >>= 1) {
-        if (threadIdx.x < k && sv[threadIdx.x + k] > sv[threadIdx.x]) {
-            sv[threadIdx.x] = sv[threadIdx.x + k]; si[threadIdx.x] = si[threadIdx.x + k]; }
+        if (threadIdx.x < k) {
+            // merging two (max, second) pairs: the loser's max becomes a second-place candidate
+            const float ov = sv[threadIdx.x + k], o2 = s2[threadIdx.x + k];
+            if (ov > sv[threadIdx.x]) {
+                s2[threadIdx.x] = fmaxf(sv[threadIdx.x], o2);
+                sv[threadIdx.x] = ov; si[threadIdx.x] = si[threadIdx.x + k];
+            } else {
+                s2[threadIdx.x] = fmaxf(s2[threadIdx.x], ov);
+            }
+        }
         __syncthreads();
     }
-    if (threadIdx.x == 0) out[r] = si[0];
+    if (threadIdx.x == 0) { out[r] = si[0]; if (mo) mo[r] = sv[0] - s2[0]; }
 }
 // out_ids[t,i+1] <- argmax; also copy first_ids into out_ids[t,0]
 __global__ void k_seed_first(int* out_ids, const int* first_ids, int s, int block){
@@ -84,10 +101,12 @@ __global__ void k_store(int* out_ids, const int* am, int s, int block, int i){
     int t = blockIdx.x*blockDim.x + threadIdx.x; if (t < s) out_ids[(size_t)t*(block+1) + i + 1] = am[t];
 }
 
+// `margins` (optional, device, [block][s]) receives the top1-top2 logit margin per proposal.
 void dspark_forward_head(int* output_ids, const float* x_block, const int* first_ids,
                          const float* hc_head_fn, const float* hc_head_scale, const float* hc_head_base,
                          const float* norm, const void* lm_head, const void* markov_w1, const void* markov_w2,
-                         int s, int block, int hc, int d, int vocab, int rank, float eps, cudaStream_t stream){
+                         int s, int block, int hc, int d, int vocab, int rank, float eps,
+                         float* margins, cudaStream_t stream){
     const int N=s*block;
     float *collapsed,*logits,*bias,*membed; int *cur,*rows,*am;
     CU(cudaMalloc(&collapsed,(size_t)N*d*4)); CU(cudaMalloc(&logits,(size_t)N*vocab*4));
@@ -109,7 +128,7 @@ void dspark_forward_head(int* output_ids, const float* x_block, const int* first
         k_pick<<<(s+63)/64,64,0,stream>>>(cur, rows, output_ids, s, block, i);
         dspark_markov(bias, membed, cur, markov_w1, markov_w2, s, vocab, rank, stream);
         for(int t=0;t<s;++t) k_add_bias<<<(vocab+255)/256,256,0,stream>>>(logits+((size_t)t*block+i)*vocab, bias+(size_t)t*vocab, 1, vocab);
-        k_argmax_row<<<s,256,0,stream>>>(am, logits, vocab, vocab, rows, s);
+        k_argmax_row<<<s,256,0,stream>>>(am, logits, vocab, vocab, rows, s, margins? margins+(size_t)i*s : nullptr);
         k_store<<<(s+63)/64,64,0,stream>>>(output_ids, am, s, block, i);
     }
     cudaFree(collapsed);cudaFree(logits);cudaFree(bias);cudaFree(membed);cudaFree(cur);cudaFree(rows);cudaFree(am);

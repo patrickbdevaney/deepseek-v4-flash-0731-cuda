@@ -102,26 +102,79 @@ Each exploration ends in either a measured adopt/reject or a written statement o
 impossible on `sm_110a` — **never in silence**, because a silently-dropped option is
 indistinguishable from an option that was never seen.
 
-### Phase D — RESEARCH (only when A, B and C are dry)
+### Phase D — RESEARCH (question-driven, and it has now been run once)
 
-Entry condition, strictly: the LEVER QUEUE is empty, the profile shows no phase below 80%, and §4
-is exhausted. Research is expensive and, run speculatively, produces surveys instead of answers.
+**Entry condition — REVISED.** v1 said "enter when the queue is empty". That is wrong, and Finding
+49 is why: the queue was empty *because the loop's model of its own bottleneck had stopped
+generating levers*, not because the levers were gone. The literature had moved past our framing
+while we were still optimising inside it. The real trigger is:
 
-**Research is question-driven, not survey-driven.** Every query must be generated from a *specific
-measured residual*, in this form:
+> **Enter Phase D when three consecutive levers measure under 0.5% AND the last two Phase-B
+> re-rankings produced the same top entry.** The second clause is the important one: a queue that
+> keeps re-deriving the same answer is a queue whose *model* is exhausted, which is exactly when
+> outside information is worth more than another measurement.
 
-> "`<phase>` reads `<bytes>` and achieves `<X>` GB/s against a `<Y>` GB/s working-set ceiling on a
-> `<shape>` GEMV. What technique closes a gap of this shape at batch 1?"
+**Protocol.**
 
-Then: implement → gate → measure → back to A. Research output that is not implemented and measured
-within the same loop iteration is not an answer; it is a citation.
+1. **Write the prompt against the measured state, not the topic.** `RESEARCH_PROMPT_v2.md` is the
+   template. It must carry: the current profile, the ncu diagnosis, the measured roofline for *this*
+   allocator, the full retired-with-a-measurement list, and the standing instrument caveats. A
+   prompt that describes the model and hardware but not the *residual* gets a survey back.
+2. **Every question names its falsifying measurement.** "What technique closes a gap of this shape"
+   is answerable; "how do we go faster" is not.
+3. **Ask what we are not asking.** §Q6 of the prompt. This is the question that found Finding 49.
+4. **Run it against primary sources.** The arXiv API (`export.arxiv.org/api/query`) with
+   `search_query=abs:"..."+AND+abs:"..."` sorted by `submittedDate` beats a web search: it is
+   complete, dated, and not SEO-shaped. Fetch the abstracts of the top hits directly — the abstract
+   usually states losslessness and the headline number, which is enough to rank.
+5. **Convert to levers with the §4 output contract**, then re-enter Phase A. **Research output that
+   is not implemented and measured in the same cycle is a citation, not a lever.**
+6. **Record the negative space too.** If the literature has nothing for a residual, that is a
+   finding — it means the residual is either novel or physical.
 
-**Standing caution, learned twice on this project (Findings 29 and 30):** negative capability claims
-("Thor has no FP4", "`tcgen05` unsupported") are the least trustworthy class of claim and both of
-this project's were wrong. Probe every instruction family — `mma.sync`, `wgmma`, `tcgen05` — before
-recording an absence.
+**Cycle artifact.** Each Phase D produces a dated `RESEARCH_PROMPT_vN.md` grounded in that cycle's
+measurements, a candidate list with falsification tests, and additions to the retired list. The
+prompts are kept, not overwritten: the diff between vN and vN+1 is the record of how the project's
+understanding of its own bottleneck changed, and v1 -> v2 already shows one full inversion
+(bandwidth -> latency).
+
+**Run 1 (2026-08-07) — what it returned.** See Finding 49. The residual "speculation gains nothing
+from batching because the MoE expert union grows with K" turned out to be an actively-worked 2026
+problem with a name (*expert scattering*) and a family of solutions, several training-free and
+lossless: EVICT (2605.00342), EcoSpec (2607.12696), MoE-Spec (2602.16052), EdgeXpert (2608.05303),
+AcceptMoE (2608.02989), SP-MoE (2510.10302). The loop had spent seven rounds treating the union as
+a constant of nature. It is a decision variable.
 
 ---
+
+## 1b. The continuous loop, as a standing procedure
+
+```
+  A EXPLOIT ──► B EXHAUST ──► A ... ──► C EXPLORE ──► A ...
+      ▲                                                │
+      │            three levers < 0.5%  AND            │
+      └──────── D RESEARCH ◄── same top entry twice ◄───┘
+```
+
+- **A** cashes queued levers. Stop after three consecutive < 0.5%.
+- **B** regenerates the queue from a fresh profile. Never from intuition. Rank by
+  `phase_ms x (1 - achieved/ceiling)`, then apply the correction rules in §2.
+- **C** takes the structural swings. Each ends in a measured adopt/reject **or** a written statement
+  of why it is impossible — never silence.
+- **D** brings in outside information, on the trigger above, with the protocol above.
+- **Every phase writes to `LOOP_LOG.md` whether it succeeded or not.** The retired-with-a-measurement
+  list is the most valuable artifact the loop produces: it is what stops the next cycle from paying
+  twice for the same negative result.
+
+**Two standing instrument caveats, both paid for:**
+
+1. **Microbenchmarks overstate end-to-end value by 2-4x** (Finding 47). `gemm_bench` relaunches a
+   kernel on rotating weights so consecutive launches overlap; the engine serialises every kernel
+   behind a data dependency, exposing its tail wave. Valid for *ranking two kernels*, invalid for
+   *predicting end-to-end gain*. Always confirm in situ before writing a number in the log.
+2. **A gate that allocates its own inputs cannot test alignment** (Finding 41). `cudaMalloc` returns
+   256-byte-aligned memory; every weight in this engine is a 4-byte-aligned pointer into a mapped
+   file. Gates must reproduce the real alignment, and now do (`B+0` and `B+4`).
 
 ## 2. The ranking model (and how it has been wrong)
 

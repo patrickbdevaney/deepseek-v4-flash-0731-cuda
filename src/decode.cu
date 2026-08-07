@@ -99,14 +99,18 @@ int main(int argc, char** argv){
     // makes a four-point sweep of the single most consequential speculation parameter a whole
     // afternoon. The sweep re-prefills between points, so the runs are independent.
     // Entries are "BLK" or "BLK:passes", e.g. "5:1,5:2" to A/B draft refinement at one block size.
-    std::vector<int> blkSweep, passSweep;
+    // Entries are "BLK[:passes[:adaptK]]", e.g. "5:1:0,5:1:0.5,5:1:1.5" to sweep the adaptive-verify
+    // margin threshold at one block size. Each point re-prefills, so they are independent — one
+    // checkpoint load answers what would otherwise be one 15-minute run per threshold.
+    std::vector<int> blkSweep, passSweep; std::vector<float> adaptSweep;
     if(const char* bsz=getenv("DSV4_BLKSWEEP")){ const char* q=bsz;
-        while(*q){ int v=atoi(q); int np=1;
+        while(*q){ int v=atoi(q); int np=1; float ak=0.f;
                    const char* c=q; while(*c && *c!=',' && *c!=':') ++c;
-                   if(*c==':') np=atoi(c+1);
-                   if(v>=2&&v<=16){ blkSweep.push_back(v); passSweep.push_back(np<1?1:np); }
+                   if(*c==':'){ np=atoi(c+1); const char* c2=c+1; while(*c2 && *c2!=',' && *c2!=':') ++c2;
+                                if(*c2==':') ak=(float)atof(c2+1); }
+                   if(v>=2&&v<=16){ blkSweep.push_back(v); passSweep.push_back(np<1?1:np); adaptSweep.push_back(ak); }
                    while(*q && *q!=',') ++q; if(*q==',') ++q; } }
-    if(blkSweep.empty()){ blkSweep.push_back(DSPARK_BLOCK); passSweep.push_back(1); }
+    if(blkSweep.empty()){ blkSweep.push_back(DSPARK_BLOCK); passSweep.push_back(1); adaptSweep.push_back(0.f); }
     int BLKMAX=0; for(int v:blkSweep) if(v>BLKMAX) BLKMAX=v;
     int seqmax = s + (NDEC>NGEN0?NDEC:NGEN0) + BLKMAX + 8;   // room for spec block overshoot
     printf("[decode] loading %s ... s=%d NDEC=%d seqmax=%d\n", dir, s, NDEC, seqmax);
@@ -499,7 +503,9 @@ int main(int argc, char** argv){
     // the main store by default, and only open a separate one if an explicit *different* head
     // directory is passed (kept for backward compatibility with an external head).
     const bool have_embedded_mtp = W.has("mtp.0.attn_norm.weight");
-    const char* headdir = (argc>4) ? argv[4] : (have_embedded_mtp ? dir : nullptr);
+    // An EMPTY argv[4] means "no external head, I just want to reach argv[5]" — treat it as
+    // absent rather than as a path, which threw `open failed: /model.safetensors.index.json`.
+    const char* headdir = (argc>4 && argv[4][0]) ? argv[4] : (have_embedded_mtp ? dir : nullptr);
     const bool separate_head = (headdir && strcmp(headdir, dir) != 0);
     if(headdir){
         const int hf=ROPE_DIM/2;
@@ -564,12 +570,15 @@ int main(int argc, char** argv){
 
         // buffers, sized once at the largest block in the sweep
         int *dbid,*dfid,*dout; CU(cudaMalloc(&dbid,BLKMAX*4)); CU(cudaMalloc(&dfid,4)); CU(cudaMalloc(&dout,(BLKMAX+1)*4));
+        float* dmarg; CU(cudaMalloc(&dmarg,BLKMAX*4));       // per-proposal top1-top2 logit margin
         float *xemb,*xa,*xb; CU(cudaMalloc(&xemb,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&xa,(size_t)BLKMAX*hc*d*4)); CU(cudaMalloc(&xb,(size_t)BLKMAX*hc*d*4));
         float *hv,*hv2,*collK,*logK,*mh_v; CU(cudaMalloc(&hv,(size_t)BLKMAX*hc*d*4)); CU(cudaMalloc(&hv2,(size_t)BLKMAX*hc*d*4));
         CU(cudaMalloc(&collK,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&logK,(size_t)BLKMAX*VOCAB*4)); CU(cudaMalloc(&mh_v,(size_t)BLKMAX*3*d*4));
         std::vector<double> sweep_mstok(blkSweep.size()), sweep_acc(blkSweep.size());
       for(size_t bsi=0; bsi<blkSweep.size(); ++bsi){
         const int BLK = blkSweep[bsi], NPASS = passSweep[bsi];
+        // adaptK = 0 means fixed width, i.e. exactly the previous behaviour.
+        const float adaptK = adaptSweep[bsi];
         // Re-prefill so each block size starts from the same state: the spec loop mutates the
         // window/compressed caches and main_x, and a sweep point that inherited them would be
         // measuring a different sequence, not a different block size.
@@ -587,7 +596,7 @@ int main(int argc, char** argv){
         const bool specprof = getenv("DSV4_SPECPROF")!=nullptr;
         cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
         double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
-        printf("[spec] decoding %d tokens (block=%d, draft passes=%d)...\n", NGEN, BLK, NPASS);
+        printf("[spec] decoding %d tokens (block=%d, draft passes=%d, adaptK=%.2f)...\n", NGEN, BLK, NPASS, adaptK);
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]
@@ -605,7 +614,7 @@ int main(int argc, char** argv){
             // proposal and the verify is unchanged — and costs one more block chain + head, so it
             // pays iff mean tokens/verify rises by more than that fraction of the cycle.
             std::vector<int> bid(BLK,DSPARK_NOISE_TID); bid[0]=cur;
-            std::vector<int> oo(BLK+1), draft(BLK);
+            std::vector<int> oo(BLK+1), draft(BLK); std::vector<float> hmarg(BLK,0.f);
             float *cb=nullptr,*nb=nullptr;
             for(int pass=0; pass<NPASS; ++pass){
                 arena_reset();     // each pass re-dmallocs the whole block chain; 3 passes overflow without this
@@ -615,29 +624,56 @@ int main(int argc, char** argv){
                 for(int st=0;st<NSTAGE;++st){ dspark_block_forward(nb,cb,dbid,mkv[st],anchor,mb[st],blk_cos+(size_t)ctx*hf,blk_sin+(size_t)ctx*hf,BLK,WINDOW,HC_SINKHORN_ITERS,EPS); std::swap(cb,nb); }
                 if(specprof && pass==NPASS-1) cudaEventRecord(p2);
                 CU(cudaMemcpy(dfid,&cur,4,cudaMemcpyHostToDevice));
-                dspark_forward_head(dout,cb,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,VOCAB,DSPARK_MARKOV_RANK,EPS); CU(cudaDeviceSynchronize());
+                dspark_forward_head(dout,cb,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,VOCAB,DSPARK_MARKOV_RANK,EPS,dmarg); CU(cudaDeviceSynchronize());
                 CU(cudaMemcpy(oo.data(),dout,(BLK+1)*4,cudaMemcpyDeviceToHost));
+                CU(cudaMemcpy(hmarg.data(),dmarg,BLK*4,cudaMemcpyDeviceToHost));
                 for(int i=0;i<BLK;++i) draft[i]=oo[1+i];   // proposals for cpos+1..cpos+BLK
                 for(int i=1;i<BLK;++i) bid[i]=draft[i-1];  // feed them back for the next pass
             }
             if(specprof) cudaEventRecord(p3);
-            // VERIFY block [cur, draft[0..BLK-2]] at [cpos..cpos+BLK-1]
-            std::vector<int> vtok(BLK); vtok[0]=cur; for(int i=1;i<BLK;++i) vtok[i]=draft[i-1];
+            // ---- ADAPTIVE VERIFY WIDTH (LOOP_LOG Finding 49; EVICT, arXiv 2605.00342) ----
+            // Verifying the k-th block position is only worth it if the probability it is accepted
+            // exceeds its marginal cost in tokens. On a dense model that cost is ~0 and you always
+            // take the widest block; on a sparse MoE it is dominated by the EXPANDING UNION OF
+            // EXPERTS the extra position activates, and our own ksweep prices it:
+            //
+            //   cycle(K) = 106.9 / 137.9 / 161.3 / 176.6 / 198.5 ms for K=1..5
+            //   break-even P(accept) = marginal_ms / ms_per_tok = 0.47 / 0.35 / 0.23 / 0.33
+            //
+            // The measured marginal acceptance rate is 0.33 — straddling those thresholds, which is
+            // exactly the regime where a per-verify signal decides rather than a fixed width. The
+            // signal is the draft head's own top1-top2 logit margin, already computed while it takes
+            // the argmax. Truncating is LOSSLESS: verifying fewer proposals cannot change what the
+            // target emits, only how many tokens one verify can commit.
+            int VK = BLK;
+            if(adaptK > 0.f){
+                VK = 2;                                        // always verify at least cur + one proposal
+                // VK=k verifies [cur, draft[0..k-2]], so extending to k+1 ADDS draft[k-1]: the gate
+                // is that proposal's own margin, hmarg[VK-1]. (hmarg[VK-2] gates a token already in
+                // the block, which is the wrong one and always passes for a confident draft[0].)
+                while(VK < BLK && hmarg[VK-1] >= adaptK) ++VK;
+            }
+            // Print every verify's margins: one adaptK=0 run is then a CALIBRATION SET (margin vs
+            // whether that proposal was actually accepted), from which the threshold is fitted
+            // offline instead of swept blind across 15-minute runs.
+            printf("  [margins]"); for(int i=0;i<BLK;++i) printf(" %.2f",hmarg[i]); printf("  K=%d\n", VK);
+            const int VB = VK;
+            std::vector<int> vtok(VB); vtok[0]=cur; for(int i=1;i<VB;++i) vtok[i]=draft[i-1];
             std::vector<int> Tbefore(N_LAYERS); for(int L=0;L<N_LAYERS;++L) Tbefore[L]=KV[L].T;
-            int* dvt; dvt=d_ids+cpos; CU(cudaMemcpy(dvt,vtok.data(),BLK*4,cudaMemcpyHostToDevice));
-            k_embed<<<((size_t)BLK*d+255)/256,256>>>(h0,emb,dvt,BLK,d); k_hc_expand<<<((size_t)BLK*hc*d+255)/256,256>>>(hv,h0,BLK,hc,d); CU(cudaDeviceSynchronize());
+            int* dvt; dvt=d_ids+cpos; CU(cudaMemcpy(dvt,vtok.data(),VB*4,cudaMemcpyHostToDevice));
+            k_embed<<<((size_t)VB*d+255)/256,256>>>(h0,emb,dvt,VB,d); k_hc_expand<<<((size_t)VB*hc*d+255)/256,256>>>(hv,h0,VB,hc,d); CU(cudaDeviceSynchronize());
             float* vin=hv; float* vout=hv2;
             for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); int ratio=compress_ratio(Lyr);
-                if(ratio==0) block_verify_step (vout,vin,dvt,BW[Lyr],cpos,BLK,HC_SINKHORN_ITERS,EPS,KV[Lyr]);
-                else         cblock_verify_step (vout,vin,dvt,CW[Lyr],cpos,BLK,HC_SINKHORN_ITERS,EPS,KV[Lyr]);
+                if(ratio==0) block_verify_step (vout,vin,dvt,BW[Lyr],cpos,VB,HC_SINKHORN_ITERS,EPS,KV[Lyr]);
+                else         cblock_verify_step (vout,vin,dvt,CW[Lyr],cpos,VB,HC_SINKHORN_ITERS,EPS,KV[Lyr]);
                 std::swap(vin,vout);
-                if(Lyr==40) dspark_tap_pool(mh_v,vin,BLK,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_v,vin,BLK,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_v,vin,BLK,hc,d,2,3); }
-            hc_head(collK,vin,hc_fn,hc_sc,hc_bs,BLK,hc,d,HC_EPS); rmsnorm(collK,collK,norm_w,BLK,d,EPS,true,0);
-            gemm_bf16w(logK,collK,head_bf,BLK,VOCAB,d,0); CU(cudaDeviceSynchronize());
-            std::vector<float> lg((size_t)BLK*VOCAB); CU(cudaMemcpy(lg.data(),logK,(size_t)BLK*VOCAB*4,cudaMemcpyDeviceToHost));
-            std::vector<int> tam(BLK); for(int i=0;i<BLK;++i){const float*r=&lg[(size_t)i*VOCAB];int aa=0;for(int v=1;v<VOCAB;++v)if(r[v]>r[aa])aa=v;tam[i]=aa;}
+                if(Lyr==40) dspark_tap_pool(mh_v,vin,VB,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_v,vin,VB,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_v,vin,VB,hc,d,2,3); }
+            hc_head(collK,vin,hc_fn,hc_sc,hc_bs,VB,hc,d,HC_EPS); rmsnorm(collK,collK,norm_w,VB,d,EPS,true,0);
+            gemm_bf16w(logK,collK,head_bf,VB,VOCAB,d,0); CU(cudaDeviceSynchronize());
+            std::vector<float> lg((size_t)VB*VOCAB); CU(cudaMemcpy(lg.data(),logK,(size_t)VB*VOCAB*4,cudaMemcpyDeviceToHost));
+            std::vector<int> tam(VB); for(int i=0;i<VB;++i){const float*r=&lg[(size_t)i*VOCAB];int aa=0;for(int v=1;v<VOCAB;++v)if(r[v]>r[aa])aa=v;tam[i]=aa;}
             // ACCEPT longest matching prefix: draft[i]==tam[i] (target's token for pos cpos+1+i)
-            int acc=0; while(acc<BLK-1 && draft[acc]==tam[acc]) ++acc;
+            int acc=0; while(acc<VB-1 && draft[acc]==tam[acc]) ++acc;
             int correction=tam[acc];                        // target's token for pos cpos+acc+1
             for(int i=0;i<acc;++i) sgen.push_back(draft[i]); sgen.push_back(correction);
             // update main_x for the accepted range [cpos..cpos+acc] from verify taps; rollback compressor T
@@ -651,7 +687,7 @@ int main(int argc, char** argv){
                 cudaEventElapsedTime(&c,p2,p3); cudaEventElapsedTime(&e,p3,p4);
                 if(nverify>0){ acc_kv+=a; acc_blk+=b; acc_head+=c; acc_ver+=e; ++nprof; } }
             if(nverify>0){ spec_ms+=ms; timed_tok+=acc+1; } ++nverify;   // exclude round 0 (warmup: head repack)
-            printf("  verify %d: accepted %d/%d + correction -> +%d tokens (%.1f ms)  cpos=%d\n", nverify, acc, BLK-1, acc+1, ms, cpos);
+            printf("  verify %d: accepted %d/%d (K=%d) + correction -> +%d tokens (%.1f ms)  cpos=%d\n", nverify, acc, VB-1, VB, acc+1, ms, cpos);
         }
         double avg_acc=(double)sgen.size()/nverify;
         double ms_per_tok = timed_tok>0 ? spec_ms/timed_tok : 0;
@@ -672,10 +708,10 @@ int main(int argc, char** argv){
         sweep_mstok[bsi]=ms_per_tok; sweep_acc[bsi]=avg_acc;
       }
       if(blkSweep.size()>1){
-        printf("\n[blksweep]  BLK  passes | mean tok/verify | ms/tok | tok/s | vs base %.2f tok/s\n", 1000.0/warm_ms);
+        printf("\n[blksweep]  BLK passes adaptK | mean tok/verify | ms/tok | tok/s | vs base %.2f tok/s\n", 1000.0/warm_ms);
         for(size_t i2=0;i2<blkSweep.size();++i2)
-            printf("[blksweep] %4d %7d | %15.2f | %6.1f | %5.2f | %.2fx\n", blkSweep[i2], passSweep[i2], sweep_acc[i2],
-                   sweep_mstok[i2], 1000.0/sweep_mstok[i2], warm_ms/sweep_mstok[i2]);
+            printf("[blksweep] %4d %6d %6.2f | %15.2f | %6.1f | %5.2f | %.2fx\n", blkSweep[i2], passSweep[i2], adaptSweep[i2],
+                   sweep_acc[i2], sweep_mstok[i2], 1000.0/sweep_mstok[i2], warm_ms/sweep_mstok[i2]);
       }
     }
     size_t fb,tb; cudaMemGetInfo(&fb,&tb); printf("[decode] mem %.1f/%.1f GiB\n",(tb-fb)/1073741824.0,tb/1073741824.0);
