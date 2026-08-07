@@ -70,3 +70,41 @@ gemma-4 tokenizer does not match this checkpoint and R1 needs another id source;
 ~20-line `DSV4_BLKSWEEP` prompt-index change and one multi-prompt adaptK A/B.
 **Do not re-enter Phase D** on the armed counters: D ran on 2026-08-07 and this queue is still
 consuming its output.
+
+## Cycle 2 — 2026-08-07 — R1 attempted, BLOCKED. Two instrument defects, both measured. 0.0% end-to-end.
+
+Bash works this cycle, so cycle 1's halt is cleared. I took queue[0] (R1, re-fit adaptK across
+prompts), got as far as a 17-point full-model run, and am reporting **no adaptK number**, because
+the instrument that produced it is unsound. That is the result.
+
+- **Id source settled.** Built and fired cycle 1's `tools/encode_prompt.cpp` gate: **FAIL** —
+  `The capital of France is` → `671 464 388 367 79666 ...`, not `671 6102 294 8760 344`.
+  `include/tokenizer.h` is a gemma-4 sentencepiece encoder; this checkpoint is ByteLevel BPE. The
+  gate refused to print, exactly as designed. Deleted it. `tools/encode_prompt.py` (already at HEAD
+  from a quarantined cycle) passes the same gate plus 6/6 round-trip.
+- **Run:** `~/cycle2.log`, base-AR gate **PASS** (11111), base AR 10.27 tok/s (adaptk3: 10.31).
+  Canonical prompt at the shipped adaptK=1.5, three replicates: **16.77 / 16.94 / 16.95 tok/s** —
+  the 16.86 baseline is confirmed, not moved.
+- **D1 — `adaptK=0` in a sweep entry is not fixed width.** It falls through to the 1.5 default
+  unless `NO_ADAPTK=1` is in the environment, and the table printed the *requested* value. All four
+  of my control points ran at 1.5. Finding 49 survives: adaptk3.log set `NO_ADAPTK=1`.
+- **D2 — the multi-prompt harness leaks state.** My designed leakage gate (canonical prompt first
+  AND last, twelve points apart) **passed byte-identically** — and was not enough. On prompt 2, two
+  points at identical effective settings emitted *different token sequences*, and points 9/10/11
+  agree with each other while disagreeing with 8: deterministic contamination, not noise. Replicate
+  spread at one setting: **1.1% canonical, 6.1% / 8.5% / 15.6% on the other three prompts.**
+
+**Conclusion: every adaptK difference this run could have reported is smaller than the replicate
+spread of the setting itself.** No prior number is impugned — the one prompt whose replicates are
+stable is the one this project has always measured on — but R1's premise is false as implemented.
+
+**Next iteration takes I1: make one process run the same point twice and get the same answer.** The
+gate is written and already failing; `FLYWHEEL_STATE.json` carries three places to look, the best
+being that the divergence is visible in the *draft* before a point's first verify. Then D1, then R1.
+**Do not advance to B or D** — the counter says the stopping rule fired, but ranking residuals off
+an instrument with a 15% error bar is how the loop buys a wrong answer twice.
+
+Two process notes for the observer: I ran `git rm --cached` on the deleted tool before remembering
+the harness owns git (harmless — it stages the same deletion `git add -A` would), and I overwrote
+`tools/encode_prompt.py` before checking that a quarantined cycle had already committed a better
+version. Restored it verbatim from HEAD and re-ran its gates.

@@ -1,7 +1,7 @@
 {
-  "cycle": 1,
+  "cycle": 2,
   "phase": "A",
-  "consecutive_sub_half_pct": 3,
+  "consecutive_sub_half_pct": 4,
   "phaseB_top_history": [
     "moe-latency",
     "moe-latency"
@@ -13,18 +13,34 @@
     "verify_ms": 167.5,
     "source_log": "~/adaptk3.log",
     "measured": "2026-08-07",
-    "note": "spec measured with NGEN0=60 (18 verifies). Short 24-token runs understate it ~10%. UNCHANGED by cycle 1: cycle 1 measured nothing."
+    "note": "spec measured with NGEN0=60 (18 verifies). UNCHANGED by cycle 2, and CONFIRMED by it: the canonical prompt at the shipped adaptK=1.5 measured 16.77 / 16.94 / 16.95 tok/s across three replicates in ~/cycle2.log, against 16.96 in adaptk3.log. Base AR 10.27 tok/s without the CUDA graph (adaptk3: 10.31); the 12.61 figure is with GRAPH=1, not exercised this cycle."
   },
   "queue": [
+    {
+      "id": "I1",
+      "what": "make one process able to run the same sweep point twice and get the same answer",
+      "expect": "no end-to-end movement; this is instrument repair and it blocks every future spec measurement",
+      "why_now": "Finding 51 D2: on prompt 2, two points at identical effective settings emitted DIFFERENT token sequences (the later ones resembling another prompt's continuation); on prompt 3 they agreed on every token but disagreed on the draft from verify 1 and needed 22 vs 20 verifies for the same 64 tokens. Replicate spread in tok/s at ONE setting: 1.1% on the canonical prompt, 6.1% / 8.5% / 15.6% on the other three. Every adaptK difference is smaller than that.",
+      "gate": "ALREADY WRITTEN AND ALREADY FAILING: run the same (prompt, adaptK) point twice in one process on a NON-canonical prompt; the emitted sequence and the per-verify accept/K split must both be identical. The canonical prompt passes this today (cycle2 points 0 and 16 are byte-identical) and is therefore not a sufficient gate.",
+      "where_to_look": [
+        "the reset between sweep points is `for(L) KV[L].T=0` + re-prefill; that is not a full reset when the prompt LENGTH changes",
+        "the divergence is visible in the DRAFT before the first verify of a point (margins differ at verify 1), so suspect draft state: main_x / mh_pre / mkv[st] / per-stage caches in dspark_real.cu, and any per-layer window or compressor state not covered by KV[L].T",
+        "d_ids beyond the current prompt holds the PREVIOUS point's tokens and feeds MoE hash routing (see the `ids for hash routing at [PS..]` comment); a kernel reading BLK ids where only VK were written would consume them"
+      ]
+    },
+    {
+      "id": "D1",
+      "what": "make DSV4_BLKSWEEP's adaptK field mean what it says",
+      "expect": "no end-to-end movement; removes a demonstrated mislabelling",
+      "detail": "adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi] : (getenv(\"NO_ADAPTK\") ? 0.f : 1.5f) — an entry of 0 is indistinguishable from unset and falls through to the 1.5 default. Cycle 2's four fixed-width control points all silently ran at 1.5. Mitigated for now by printing requested AND effective adaptK (display only, compile- and parse-gated, NOT re-measured). The fix is a sentinel for 'unset' (e.g. -1) so 0 can mean 0; it must be re-gated with DSV4_PARSE_ONLY=1 and one within-run point.",
+      "note": "Finding 49 is NOT affected: ~/adaptk3.log was launched with NO_ADAPTK=1, which its per-point `adaptK=0.00` line confirms."
+    },
     {
       "id": "R1",
       "what": "re-fit adaptK across a multi-prompt within-run A/B",
       "expect": "validate or re-fit the shipped 1.5 default; end-to-end movement expected ~0",
-      "risk": "threshold currently fitted on 18 verifies of ONE prompt",
-      "blocked_on": [
-        "build + run the self-gate in tools/encode_prompt.cpp (never compiled)",
-        "extend DSV4_BLKSWEEP entries with a prompt index; per-point ids/s/PS; size mh_pre at the longest prompt (~20 lines in src/decode.cu)"
-      ]
+      "state": "BLOCKED on I1 and D1. The harness now exists (DSV4_PROMPTS + a prompt index in DSV4_BLKSWEEP + DSV4_PARSE_ONLY, all gated) and the id source is settled, but no multi-prompt number is admissible until a replicate reproduces.",
+      "risk": "threshold currently fitted on 18 verifies of ONE prompt, exactly as Finding 49 warned"
     },
     {
       "id": "S4",
@@ -35,27 +51,31 @@
   ],
   "retired_this_cycle": [
     {
-      "id": "A6",
-      "verdict": "retired, expected end-to-end value zero",
-      "evidence": "no engine TU includes cutlass_moe.h; the only callers of cutlass_nvfp4_gemm are inside kernels/cutlass_moe.cu's own self-tests (lines 136,177); build/cutlass_moe.o is linked but never launched; the only setmaxnreg in-tree is tools/cap_probe.cu:104. Code evidence, not a measurement."
-    },
-    {
-      "id": "A1",
-      "verdict": "removed from the Phase-A queue -> Phase C / user decision",
-      "evidence": "not lossless (changes logits, no accuracy harness in-repo); research/MOE_DECODE.md:98 already recorded MXFP4 32-element blocks as blocking sub-block skips, so only w3 of {w1,w2,w3} is skippable; and ranking-model rule 1 says byte reduction does not pay on the MoE phase, which Finding 47 measured latency-bound (25% memory throughput, 84% long_scoreboard)."
+      "id": "tools/encode_prompt.cpp",
+      "verdict": "deleted — it fails its own canonical gate on this checkpoint",
+      "evidence": "`The capital of France is` -> 671 464 388 367 79666 464 388 367 2154 ... instead of 671 6102 294 8760 344. include/tokenizer.h is a gemma-4 sentencepiece encoder; this checkpoint's tokenizer.json is a ByteLevel BPE. tools/encode_prompt.py (tokenizers 0.23.1, the checkpoint's own tokenizer.json) passes the identical gate and a 6/6 round-trip gate."
     }
   ],
   "halt": false,
   "halt_reason": "",
+  "halt_considered": "Yes. The run's own gate PASSED (first decoded token argmax 11111) and the canonical-prompt replicate is byte-identical, so the engine and every prior number are intact; what failed is a replicate gate on measurement code introduced THIS cycle, on a path no shipped configuration uses (one prompt per process). Recorded as a blocking queue entry instead of a global halt. If the observer's policy is that any failed gate halts, this qualifies — flip halt to true and nothing is lost, because I1 is the next lever either way.",
   "last_result": {
-    "cycle": 1,
-    "lever": "A1 (queue[0]) -> disposed by inspection; A6 likewise; R1 prepared, not run",
-    "measured": null,
-    "why_null": "no execute permission; invariant 3 forbids writing a number that was not run this iteration",
+    "cycle": 2,
+    "lever": "R1 (queue[0]) — attempted, BLOCKED. Result is the two instrument defects, both measured.",
+    "measured": {
+      "end_to_end_pct": 0.0,
+      "run": "~/cycle2.log, 17 within-run points, base-AR gate PASS (11111)",
+      "canonical_replicates_tok_s": [16.77, 16.94, 16.95],
+      "canonical_replicate_spread_pct": 1.1,
+      "noncanonical_replicate_spread_pct": {"p1_code": 6.1, "p2_qa": 8.5, "p3_prose": 15.6},
+      "why_no_adaptk_number": "the four fixed-width control points ran at adaptK=1.5 (defect D1), and the non-canonical replicates do not reproduce (defect D2), so no adaptK comparison in this run is admissible"
+    },
     "artifacts": [
-      "LOOP_LOG.md Finding 50",
-      "tools/encode_prompt.cpp (NEW, unbuilt, ungated)"
+      "LOOP_LOG.md Finding 51",
+      "src/decode.cu: DSV4_PROMPTS, a prompt index in DSV4_BLKSWEEP entries, DSV4_PARSE_ONLY=1 self-gate, buffers sized at the longest prompt, effective-adaptK column",
+      "tools/encode_prompt.py (restored verbatim from HEAD; both gates run and passing)",
+      "tools/encode_prompt.cpp DELETED"
     ]
   },
-  "counter_note": "consecutive_sub_half_pct left at 3 deliberately: cycle 1 measured no lever, so neither the increment nor the reset rule applies. The observer should note it is arguably stale in the other direction too - the last MEASURED lever (Finding 49) moved +2.1%, which by the reset rule would put it at 0. It was seeded at 3 by hand. Both clauses of the Phase-D trigger currently read as satisfied, but Phase D ran on 2026-08-07 and its output (A1/A6/S4) is what this queue is still consuming, so re-entering D would re-buy information already bought."
+  "counter_note": "consecutive_sub_half_pct 3 -> 4: this lever moved end-to-end 0.0% (nothing in the engine changed). The Phase-A stopping rule has fired and both clauses of the Phase-D trigger read as satisfied, but do NOT advance the phase yet: I1 is instrument repair, not a lever, and entering B or D on an instrument that cannot reproduce its own measurement would rank residuals off numbers with a 15% error bar. Advance only after I1's replicate gate passes."
 }

@@ -94,25 +94,63 @@ int main(int argc, char** argv){
     int NDEC = argc>3?atoi(argv[3]):6;                 // tokens to decode (autoregressive) after prefill
     int NGEN0 = argc>5?atoi(argv[5]):24;               // spec-decode tokens (if head given)
     int PS = s-1;                                      // prefill positions 0..PS-1; decode starts at pos PS (=s-1)
+    // PROMPT SET. argv[2] is prompt 0 and stays the gate prompt: the base-AR path below is
+    // unchanged and still returns nonzero unless it emits 11111. DSV4_PROMPTS appends prompts
+    // 1..N as ';'-separated id lists, which a sweep entry then selects by index. This exists
+    // because the adaptive-verify threshold (Finding 49) was fitted on 18 verifies of ONE prompt,
+    // and re-fitting it across prompts otherwise costs one 15-minute checkpoint load per prompt.
+    // The ids must come from the checkpoint's own tokenizer (`tools/encode_prompt.py`, which gates
+    // itself on reproducing prompt 0); inventing them is the mistake invariant "no invented model
+    // constants" exists to stop.
+    std::vector<std::vector<int>> prompts{ids};
+    if(const char* pv=getenv("DSV4_PROMPTS")){ std::vector<int> cur; const char* q=pv;
+        while(*q){ if(*q==';'){ if(cur.size()>=2) prompts.push_back(cur); cur.clear(); ++q; }
+                   else if(*q==','||*q==' '){ ++q; }
+                   else { cur.push_back(atoi(q)); while(*q && *q!=',' && *q!=';' && *q!=' ') ++q; } }
+        if(cur.size()>=2) prompts.push_back(cur); }
     // DSV4_BLKSWEEP="5,8,12,16" runs the spec-decode loop once per block size in ONE process. Each
     // full-model measurement otherwise costs a ~10-minute cold load of a 100 GiB checkpoint, which
     // makes a four-point sweep of the single most consequential speculation parameter a whole
     // afternoon. The sweep re-prefills between points, so the runs are independent.
     // Entries are "BLK" or "BLK:passes", e.g. "5:1,5:2" to A/B draft refinement at one block size.
-    // Entries are "BLK[:passes[:adaptK]]", e.g. "5:1:0,5:1:0.5,5:1:1.5" to sweep the adaptive-verify
-    // margin threshold at one block size. Each point re-prefills, so they are independent — one
-    // checkpoint load answers what would otherwise be one 15-minute run per threshold.
-    std::vector<int> blkSweep, passSweep; std::vector<float> adaptSweep;
+    // Entries are "BLK[:passes[:adaptK[:prompt]]]", e.g. "5:1:0,5:1:0.5,5:1:1.5" to sweep the
+    // adaptive-verify margin threshold at one block size, or "5:1:1.5:2" to run that setting on
+    // prompt 2 of DSV4_PROMPTS. Each point re-prefills, so they are independent — one checkpoint
+    // load answers what would otherwise be one 15-minute run per (threshold, prompt) pair.
+    std::vector<int> blkSweep, passSweep, promptSweep; std::vector<float> adaptSweep;
     if(const char* bsz=getenv("DSV4_BLKSWEEP")){ const char* q=bsz;
-        while(*q){ int v=atoi(q); int np=1; float ak=0.f;
+        while(*q){ int v=atoi(q); int np=1; float ak=0.f; int pi=0;
                    const char* c=q; while(*c && *c!=',' && *c!=':') ++c;
                    if(*c==':'){ np=atoi(c+1); const char* c2=c+1; while(*c2 && *c2!=',' && *c2!=':') ++c2;
-                                if(*c2==':') ak=(float)atof(c2+1); }
-                   if(v>=2&&v<=16){ blkSweep.push_back(v); passSweep.push_back(np<1?1:np); adaptSweep.push_back(ak); }
+                                if(*c2==':'){ ak=(float)atof(c2+1); const char* c3=c2+1;
+                                              while(*c3 && *c3!=',' && *c3!=':') ++c3;
+                                              if(*c3==':') pi=atoi(c3+1); } }
+                   if(v>=2&&v<=16){ blkSweep.push_back(v); passSweep.push_back(np<1?1:np); adaptSweep.push_back(ak);
+                                    promptSweep.push_back(pi); }
                    while(*q && *q!=',') ++q; if(*q==',') ++q; } }
-    if(blkSweep.empty()){ blkSweep.push_back(DSPARK_BLOCK); passSweep.push_back(1); adaptSweep.push_back(0.f); }
+    if(blkSweep.empty()){ blkSweep.push_back(DSPARK_BLOCK); passSweep.push_back(1); adaptSweep.push_back(0.f); promptSweep.push_back(0); }
+    // A sweep point naming a prompt that was not supplied would silently run prompt 0 and report a
+    // number against the wrong sequence. Refuse the whole run instead — a 10-minute load producing
+    // a mislabelled table is the expensive failure here.
+    for(size_t i2=0;i2<promptSweep.size();++i2)
+        if(promptSweep[i2]<0 || promptSweep[i2]>=(int)prompts.size()){
+            fprintf(stderr,"[decode] SWEEP FAIL: entry %zu names prompt %d but only %zu prompt(s) supplied "
+                           "(argv[2] is prompt 0; DSV4_PROMPTS adds the rest)\n", i2, promptSweep[i2], prompts.size());
+            return 2; }
     int BLKMAX=0; for(int v:blkSweep) if(v>BLKMAX) BLKMAX=v;
-    int seqmax = s + (NDEC>NGEN0?NDEC:NGEN0) + BLKMAX + 8;   // room for spec block overshoot
+    int SMAX=0; for(const auto& p:prompts) if((int)p.size()>SMAX) SMAX=(int)p.size();
+    int seqmax = SMAX + (NDEC>NGEN0?NDEC:NGEN0) + BLKMAX + 8;   // longest prompt + room for spec block overshoot
+    // Parse-only self-gate: the sweep table is the thing most likely to be wrong, and checking it
+    // after a 10-minute checkpoint load is checking it too late. DSV4_PARSE_ONLY=1 prints what was
+    // parsed and exits before the load, so the table can be gated in milliseconds.
+    if(getenv("DSV4_PARSE_ONLY")){
+        printf("[parse] %zu prompt(s), SMAX=%d, BLKMAX=%d, seqmax=%d\n", prompts.size(), SMAX, BLKMAX, seqmax);
+        for(size_t i2=0;i2<prompts.size();++i2){ printf("[parse] prompt %zu (%zu ids):", i2, prompts[i2].size());
+            for(int v:prompts[i2]) printf(" %d", v); printf("\n"); }
+        for(size_t i2=0;i2<blkSweep.size();++i2)
+            printf("[parse] point %zu: BLK=%d passes=%d adaptK=%.2f prompt=%d\n",
+                   i2, blkSweep[i2], passSweep[i2], adaptSweep[i2], promptSweep[i2]);
+        return 0; }
     printf("[decode] loading %s ... s=%d NDEC=%d seqmax=%d\n", dir, s, NDEC, seqmax);
     st::WeightStore W(dir, key_map); Loader L(W);
     printf("[decode] loaded %.2f GiB, %zu tensors  (weights in %s memory)\n",
@@ -566,7 +604,9 @@ int main(int argc, char** argv){
         { size_t fb,tb; cudaMemGetInfo(&fb,&tb); printf("[spec] head built. mem %.1f/%.1f GiB\n",(tb-fb)/1073741824.0,tb/1073741824.0); }
 
         // main_x accumulator + tapped re-prefill over [0..PS-1]
-        float *main_x,*mh_pre; CU(cudaMalloc(&main_x,(size_t)seqmax*d*4)); CU(cudaMalloc(&mh_pre,(size_t)PS*3*d*4));
+        // mh_pre is the only spec buffer not already sized by seqmax, and a multi-prompt sweep can
+        // prefill a LONGER prompt than argv[2]: size it at the longest prompt, not this one.
+        float *main_x,*mh_pre; CU(cudaMalloc(&main_x,(size_t)seqmax*d*4)); CU(cudaMalloc(&mh_pre,(size_t)(SMAX-1)*3*d*4));
 
         // buffers, sized once at the largest block in the sweep
         int *dbid,*dfid,*dout; CU(cudaMalloc(&dbid,BLKMAX*4)); CU(cudaMalloc(&dfid,4)); CU(cudaMalloc(&dout,(BLKMAX+1)*4));
@@ -575,6 +615,11 @@ int main(int argc, char** argv){
         float *hv,*hv2,*collK,*logK,*mh_v; CU(cudaMalloc(&hv,(size_t)BLKMAX*hc*d*4)); CU(cudaMalloc(&hv2,(size_t)BLKMAX*hc*d*4));
         CU(cudaMalloc(&collK,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&logK,(size_t)BLKMAX*VOCAB*4)); CU(cudaMalloc(&mh_v,(size_t)BLKMAX*3*d*4));
         std::vector<double> sweep_mstok(blkSweep.size()), sweep_acc(blkSweep.size());
+        // The EFFECTIVE adaptK, which is not the requested one: a sweep entry of 0 falls through to
+        // the 1.5 default unless NO_ADAPTK=1 is also in the environment, so a table printing the
+        // requested value labels those rows 0.00 while they ran at 1.5. Cycle 2 lost a run to
+        // exactly that. Print both until the semantics are fixed and re-gated.
+        std::vector<float> sweep_akeff(blkSweep.size());
       for(size_t bsi=0; bsi<blkSweep.size(); ++bsi){
         const int BLK = blkSweep[bsi], NPASS = passSweep[bsi];
         // adaptK = 0 means fixed width, i.e. exactly the previous behaviour. The default comes from
@@ -583,15 +628,20 @@ int main(int argc, char** argv){
         // side — a too-low threshold degrades to fixed width, a too-high one costs accepted tokens.
         const float adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi]
                            : (getenv("NO_ADAPTK") ? 0.f : 1.5f);
-        // Re-prefill so each block size starts from the same state: the spec loop mutates the
+        // This point's prompt shadows the argv prompt for the rest of the iteration. Everything
+        // below reads `ids`/`s`/`PS`; every device buffer above is sized at the longest prompt.
+        const std::vector<int>& ids = prompts[promptSweep[bsi]];
+        const int s = (int)ids.size(), PS = s-1;
+        // Re-prefill so each point starts from the same state: the spec loop mutates the
         // window/compressed caches and main_x, and a sweep point that inherited them would be
-        // measuring a different sequence, not a different block size.
+        // measuring a different sequence, not a different setting. d_ids must be reloaded BEFORE
+        // the prefill, not after it — the previous point may have left a different prompt there.
+        CU(cudaMemcpy(d_ids,ids.data(),(size_t)s*4,cudaMemcpyHostToDevice));
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
         k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,emb,d_ids,PS,d); k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids); std::swap(h,h2);
             if(Lyr==40) dspark_tap_pool(mh_pre,h,PS,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_pre,h,PS,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_pre,h,PS,hc,d,2,3); }
         dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PS, d, EPS); CU(cudaDeviceSynchronize());
-        CU(cudaMemcpy(d_ids,ids.data(),(size_t)s*4,cudaMemcpyHostToDevice));
         int NGEN=NGEN0;
         int cur=ids[s-1], cpos=PS;                 // cur = token at position cpos (=PS=s-1), not yet in cache
         std::vector<int> sgen; int nverify=0, timed_tok=0; float spec_ms=0; cudaEvent_t s0,s1; cudaEventCreate(&s0); cudaEventCreate(&s1);
@@ -600,7 +650,8 @@ int main(int argc, char** argv){
         const bool specprof = getenv("DSV4_SPECPROF")!=nullptr;
         cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
         double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
-        printf("[spec] decoding %d tokens (block=%d, draft passes=%d, adaptK=%.2f)...\n", NGEN, BLK, NPASS, adaptK);
+        printf("[spec] decoding %d tokens (block=%d, draft passes=%d, adaptK=%.2f, prompt=%d s=%d)...\n",
+               NGEN, BLK, NPASS, adaptK, promptSweep[bsi], s);
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]
@@ -709,13 +760,13 @@ int main(int argc, char** argv){
         printf("[spec] tokens:"); for(int i=0;i<(int)sgen.size() && i<40;++i) printf(" %d",sgen[i]); printf("\n");
         printf("[spec] SPEC-DECODE: %.1f ms/tok = %.2f tok/s  (vs base M=1 %.1f ms/tok = %.2f tok/s -> %.2fx)\n",
                ms_per_tok, ms_per_tok>0?1000.0/ms_per_tok:0, warm_ms, 1000.0/warm_ms, ms_per_tok>0?warm_ms/ms_per_tok:0);
-        sweep_mstok[bsi]=ms_per_tok; sweep_acc[bsi]=avg_acc;
+        sweep_mstok[bsi]=ms_per_tok; sweep_acc[bsi]=avg_acc; sweep_akeff[bsi]=adaptK;
       }
       if(blkSweep.size()>1){
-        printf("\n[blksweep]  BLK passes adaptK | mean tok/verify | ms/tok | tok/s | vs base %.2f tok/s\n", 1000.0/warm_ms);
+        printf("\n[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base %.2f tok/s\n", 1000.0/warm_ms);
         for(size_t i2=0;i2<blkSweep.size();++i2)
-            printf("[blksweep] %4d %6d %6.2f | %15.2f | %6.1f | %5.2f | %.2fx\n", blkSweep[i2], passSweep[i2], adaptSweep[i2],
-                   sweep_acc[i2], sweep_mstok[i2], 1000.0/sweep_mstok[i2], warm_ms/sweep_mstok[i2]);
+            printf("[blksweep] %4d %6d %6.2f %6.2f %6d | %15.2f | %6.1f | %5.2f | %.2fx\n", blkSweep[i2], passSweep[i2], adaptSweep[i2],
+                   sweep_akeff[i2], promptSweep[i2], sweep_acc[i2], sweep_mstok[i2], 1000.0/sweep_mstok[i2], warm_ms/sweep_mstok[i2]);
       }
     }
     size_t fb,tb; cudaMemGetInfo(&fb,&tb); printf("[decode] mem %.1f/%.1f GiB\n",(tb-fb)/1073741824.0,tb/1073741824.0);

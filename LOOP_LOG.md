@@ -2326,3 +2326,104 @@ entry syntax extended with a prompt index and the `bsi` loop re-prefilling per p
 `ids` become per-point; `mh_pre` must be sized at the longest prompt, it is currently `PS*3*d*4`).
 That is a ~20-line change to `src/decode.cu`, and **committing an uncompilable edit to the
 measurement harness would have been worse than committing nothing.** It is scoped, not done.
+
+---
+
+## Finding 51 — R1 is BLOCKED, and the two defects that block it are the cycle's result
+
+**Cycle 2. One full-model run (`~/cycle2.log`, 17 within-run points, base-AR gate PASS: first decoded
+token argmax 11111). No adaptK re-fit number is quoted from it, because the instrument that produced
+it is unsound in two independent ways, both demonstrated below.** End-to-end movement on the shipped
+configuration: **0%** — nothing in the engine changed; the canonical prompt reproduces
+**16.77–16.95 tok/s** against the 16.86 baseline, inside the ±1% band.
+
+### First: the id source. The in-tree tokenizer FAILS this checkpoint; the reference one passes.
+
+Cycle 1 left `tools/encode_prompt.cpp` unbuilt with its gate never fired. Fired this cycle:
+
+```
+[encode] GATE canonical: got 671 464 388 367 79666 464 388 367 2154 464 388 367 51725 464 388 367 278
+                        want 671 6102 294 8760 344   -> GATE FAIL
+```
+
+`include/tokenizer.h` is a gemma-4 BPE carried over from this codebase's ancestor. It reads
+DeepSeek's `tokenizer.json` (vocab 128000 by its count, 129280 by the reference) and gets the first
+token right, then byte-falls-back on every word boundary — it does not implement the GPT-2
+byte-level space mapping the merges are written in (`Ġcapital`, not `▁capital`). **The gate did its
+job: the tool refused to print.** The same gate against `tokenizers` 0.23.1 reading the checkpoint's
+own `tokenizer.json`:
+
+```
+[encode] GATE canonical: got [671, 6102, 294, 8760, 344]  want [671, 6102, 294, 8760, 344] -> GATE PASS
+```
+
+`tools/encode_prompt.cpp` is therefore **deleted**. `tools/encode_prompt.py` (already at HEAD from a
+quarantined cycle, kept verbatim) supersedes it: same canonical self-gate, plus a round-trip gate
+over every prompt it emits, and it prints a ready `DSV4_PROMPTS=` line. Both its gates pass —
+canonical exact, **6/6 round-trip**.
+
+The four prompts this run actually used, passed on argv rather than taken from the tool's built-in
+suite (record them here; the run is not reproducible from the tool alone):
+
+| p | text | ids |
+|---|---|---|
+| 0 | `The capital of France is` | `0,671,6102,294,8760,344` |
+| 1 | `def fibonacci(n):\n    if n <= 1:\n        return n\n    return` | `0,3465,55155,3913,3395,361,855,313,8593,223,19,1137,528,1354,313,201,361,1354` |
+| 2 | `Q: What is the largest planet in the solar system?\nA:` | `0,51,28,1999,344,270,9152,13540,295,270,11250,1487,2755,35,28` |
+| 3 | `In 1969, humans first walked on the surface of the` | `0,1124,223,2722,27,14,11212,1257,13577,377,270,4433,294,270` |
+
+### Defect D1 — `adaptK=0` in a sweep entry does not mean fixed width
+
+`src/decode.cu`: `adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi] : (getenv("NO_ADAPTK") ? 0.f : 1.5f)`.
+A sweep entry of `0` is indistinguishable from *unset*, so it falls through to the **1.5 default**
+unless `NO_ADAPTK=1` is also in the environment. The `[blksweep]` table printed the *requested*
+value. So the four fixed-width control points in this run — one per prompt — silently ran at 1.5,
+and were printed as `0.00`. **This run therefore contains no fixed-width control at all.**
+
+`~/adaptk3.log` (Finding 49) escaped this only because it was launched with `NO_ADAPTK=1` in the
+environment, which the per-point `[spec] decoding ... adaptK=0.00` line confirms. Finding 49's
+numbers stand. But the field's meaning depends on an env var, which is the exact shape of a
+silently-mislabelled table. Mitigated this cycle by printing both requested and effective adaptK
+(display only, compile- and parse-gated, **not** re-measured); the semantics still need fixing.
+
+### Defect D2 — the multi-prompt harness leaks state, so non-first points are not trustworthy
+
+The run was designed with the canonical prompt as both the **first** and the **last** point at the
+same setting, so that cross-prompt leakage would show up as a divergence. On the canonical prompt it
+**passed**: points 0 and 16 are byte-identical — same 61 tokens over 21 verifies, mean 2.90, and the
+same printed token sequence — with twelve points on three other prompts of different lengths in
+between. That gate would have been the whole basis for trusting the instrument. It is not enough:
+
+- **Prompt 2, two points at identical effective settings, emitted DIFFERENT token sequences.**
+  Point 8 (first p2 point): `539 51 28 1999 344 270 6102 294 8760 2755 35 28 11111 ...` — a plausible
+  continuation of its own prompt. Points 9, 10, 11: `455 6102 294 29585 344 76405 16 455 6102 294 ...`
+  — the *canonical* prompt's "capital of X is Y" pattern. Points 9/10/11 agree exactly with each
+  other and disagree with 8, so this is deterministic-but-contaminated, not noise.
+- **Prompt 3, two points at identical effective settings (12 and 14), agree on every emitted token
+  but disagree on the draft from verify 1 onward:** margins `1.22 0.20 5.42 0.03 1.79 K=2` vs
+  `0.44 0.79 0.48 2.06 0.44 K=2`, and 22 vs 20 verifies for the same 64 tokens.
+
+Replicate spread in tok/s at one identical setting, same prompt, same process:
+
+| prompt | replicates at effective adaptK=1.5 | spread |
+|---|---|---|
+| 0 (canonical) | 16.77, 16.94, 16.95 | **1.1%** |
+| 1 (code) | 13.05, 13.85 | 6.1% |
+| 2 (QA) | 19.96, 18.39 | 8.5% |
+| 3 (prose) | 16.53, 19.11 | **15.6%** |
+
+**Every adaptK difference this run could have reported is smaller than the replicate spread of the
+setting itself.** The one prompt whose replicates are stable is the one every number in this project
+was measured on, so no prior finding is impugned — but R1's premise, that a multi-prompt within-run
+A/B is worth more than separate runs, is **false as implemented**. `KV[L].T=0` plus a re-prefill is
+not a full reset when the prompt *length* changes; something in the draft/main_x/window path
+survives it. Not root-caused this cycle, deliberately: that is the next lever, not this one.
+
+### Disposition
+
+**R1 stays at the head of the queue, blocked, behind a new lever I1: make one process able to run
+the same point twice and get the same answer.** Its gate is already written and already failed —
+the same prompt at the same setting twice in a row, on a *non-canonical* prompt, must emit an
+identical sequence and an identical verify split. Until that passes, no multi-prompt number is
+admissible, and the adaptive-verify threshold shipped at 1.5 remains fitted on 18 verifies of one
+prompt exactly as Finding 49 warned.
