@@ -118,6 +118,7 @@ byte-identical unless noted.
 | F42 bf16 alignment fallback | 97.7 | 179.4 | **14.36 (1.40x)** | `head_bf` is only 4-byte aligned |
 | F43 ogroup NR + gemm_fp32 M=K | 96.5 | 173.5 | 14.76 (1.42x) | |
 | **F44 weights -> managed device-preferred** | **92.8** | **168.8** | **15.49 (1.44x)** | + CUDA graph: 81.3 ms = 12.30 tok/s |
+| F43b ogroup NR lookup (confirmation run) | 92.9 | 170.6 | 15.32 (1.42x) | + graph: 80.3 ms = **12.46 tok/s**; within the run-to-run band |
 
 **1.54x on speculative decode; 1.05x on base AR, 1.23x with the CUDA graph.**
 
