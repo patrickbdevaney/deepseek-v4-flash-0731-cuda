@@ -2163,3 +2163,65 @@ Two bugs found by printing the signal instead of trusting it:
 block position over the same 160 experts. The union of *those* picks is a direct on-device estimate
 of the union the verify would activate — EcoSpec's "lightweight expert predictor" without a separate
 model. Signal already computed, currently discarded.
+
+### Finding 49, measured: +2.1%, lossless, and the mechanism explains why it is not more
+
+Within-run A/B (same prompt, same state, four thresholds in one checkpoint load), 61 tokens over
+18 verifies at every setting:
+
+| adaptK | total ms | tokens | ms/tok | tok/s |
+|---|---|---|---|---|
+| 0.00 (fixed width — control) | 3694 | 61 | 60.5 | 16.52 |
+| 0.50 | 3666 | 61 | 60.1 | 16.65 |
+| **1.50** | **3616** | **61** | **59.3** | **16.86** |
+| 4.00 | 3635 | 61 | 59.6 | 16.78 |
+
+**The generated token sequence is byte-identical at all four thresholds** — losslessness confirmed
+empirically, not just argued. +2.1%, and because it is a within-run A/B rather than four separate
+15-minute runs, it sits above the +/-1% cross-run noise band.
+
+**The drafter's margin is genuinely predictive** — the calibration set (every verify's margins
+against what the target actually accepted) gives:
+
+| position | reached | accepted (mean margin) | rejected (mean margin) | AUC |
+|---|---|---|---|---|
+| draft[0] | 18x | 18, 4.96 | 0 | — |
+| **draft[1]** | 18x | 9, 3.67 | 9, 1.25 | **0.78** |
+| draft[2] | 9x | 8, 4.60 | 1, 0.37 | 1.00 |
+| draft[3] | 8x | 8, 3.81 | 0 | — |
+
+So the signal is not the limit. **The cost structure is**, and the per-K table says why:
+
+```
+K   mean ms/verify   mean tokens   ms/token
+2       142.4            2.00         71.2     <- truncating all the way is the WORST rate
+3       165.1            2.50-3.00    55-66
+4       180-185          3.50-4.00    46-53
+5       203-205          3.39-3.83    53-61
+```
+
+Two facts kill the large win my own arithmetic predicted:
+
+1. **The fixed part of a verify is 54% of the widest one** (`cycle(1)` 106.9 vs `cycle(5)` 198.5).
+   Truncation can only ever recover the other 46%, and only on the verifies it truncates correctly.
+2. **Our expert union at K=5 is ~25 of 160 = 15.6%.** EVICT and EcoSpec report 1.2-1.6x in a regime
+   where a draft **tree** of 30+ nodes scatters across a far larger union. **A linear chain of 5 has
+   very little to cut.** The mechanism is right; our instance of it is small.
+
+This is the honest shape of the result: the frame correction in Finding 49 was real and the loop was
+wrong to treat the union as a constant — but for *this* draft topology the decision variable has a
+narrow range. **The technique's value here is bounded by the draft being a chain, not a tree**, and
+building a tree draft is gated by the same thing everything else is: acceptance comes from three
+frozen MTP heads that saturate at four correct proposals.
+
+Adopted at `adaptK=1.5` (`NO_ADAPTK=1` restores fixed width). Caveat recorded: the threshold is
+fitted on 18 verifies of one prompt. `scripts/prompt_suite.json` exists and this should be
+re-fitted across it before the number is trusted beyond this benchmark.
+
+### Baseline correction
+
+The control point in this run measures **16.52-16.86 tok/s**, not the 15.3 carried since Finding 47.
+The difference is the generation length: `NGEN0=60` gives 18 verifies and mean 3.39 tokens/verify,
+where the 24-token runs gave 9 verifies and 3.00. **The short run was dominated by the early,
+less-repetitive part of the sequence and understated steady-state speculation by ~10%.** All
+speculative numbers before this one are low by roughly that much; base AR is unaffected.

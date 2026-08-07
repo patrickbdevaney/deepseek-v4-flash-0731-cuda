@@ -577,8 +577,12 @@ int main(int argc, char** argv){
         std::vector<double> sweep_mstok(blkSweep.size()), sweep_acc(blkSweep.size());
       for(size_t bsi=0; bsi<blkSweep.size(); ++bsi){
         const int BLK = blkSweep[bsi], NPASS = passSweep[bsi];
-        // adaptK = 0 means fixed width, i.e. exactly the previous behaviour.
-        const float adaptK = adaptSweep[bsi];
+        // adaptK = 0 means fixed width, i.e. exactly the previous behaviour. The default comes from
+        // a within-run A/B (Finding 49): 3694 -> 3616 ms for the SAME 61 tokens, +2.1%. The
+        // threshold is fitted on 18 verifies of one prompt, so it is deliberately on the permissive
+        // side — a too-low threshold degrades to fixed width, a too-high one costs accepted tokens.
+        const float adaptK = adaptSweep[bsi] > 0.f ? adaptSweep[bsi]
+                           : (getenv("NO_ADAPTK") ? 0.f : 1.5f);
         // Re-prefill so each block size starts from the same state: the spec loop mutates the
         // window/compressed caches and main_x, and a sweep point that inherited them would be
         // measuring a different sequence, not a different block size.
