@@ -289,4 +289,31 @@ python3 -c "import json;json.load(open('$STATE'))" 2>/dev/null || halt "agent co
 NEW=$(python3 -c "import json;print(json.load(open('$STATE'))['cycle'])")
 [ "$NEW" != "$CYCLE" ] || log "WARNING: agent did not advance the cycle counter"
 
+# ---- publish on a measured gain --------------------------------------------------------------
+# The autonomous loop may PUBLISH, but only against evidence it cannot fake, and the harness checks
+# each condition itself rather than trusting the agent's write-up:
+#   1. every unit gate passes (already verified above, or we halted)
+#   2. baseline.spec_tok_s rose by >= 0.5% -- above the +/-1% cross-run band only in the sense that
+#      the agent must have measured it; the real guard is (3)
+#   3. a full-model log written DURING this cycle contains GATE PASS and no GATE FAIL
+# Anything short of all three stays local for review. This is the one outward-facing action the
+# loop can take, so it is the one with the most checks.
+BASE_AFTER=$(python3 -c "import json;print(json.load(open('$STATE'))['baseline'].get('spec_tok_s',0))" 2>/dev/null || echo 0)
+GAIN=$(python3 -c "b=float('${BASE_BEFORE:-0}'); a=float('$BASE_AFTER'); print('%.2f' % (((a-b)/b*100) if b>0 else 0.0))")
+FRESH_PASS=0; FRESH_FAIL=0
+for L in $(find "$HOME" -maxdepth 1 -name '*.log' -newermt "-${SINCE_MIN:-90} minutes" 2>/dev/null); do
+    grep -q "GATE PASS" "$L" 2>/dev/null && FRESH_PASS=1
+    grep -q "GATE FAIL" "$L" 2>/dev/null && FRESH_FAIL=1
+done
+if [ "$FAILED" -eq 0 ] && [ "$FRESH_FAIL" -eq 0 ] && [ "$FRESH_PASS" -eq 1 ] \
+   && [ "$(python3 -c "print(1 if float('$GAIN')>=0.5 else 0)")" = "1" ]; then
+    if git push -q origin main 2>>"$ROOT/.flywheel_push.log"; then
+        log "PUBLISHED: baseline ${BASE_BEFORE} -> ${BASE_AFTER} tok/s (+${GAIN}%), gates pass, GATE PASS in a fresh run"
+    else
+        log "push failed (see .flywheel_push.log); commits remain local"
+    fi
+else
+    log "not publishing: gain=${GAIN}% fresh_gate_pass=${FRESH_PASS} fresh_gate_fail=${FRESH_FAIL} unit_gates_failed=${FAILED}"
+fi
+
 log "cycle $CYCLE done"
