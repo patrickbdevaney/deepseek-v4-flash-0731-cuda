@@ -816,6 +816,11 @@ int main(int argc, char** argv){
         const bool specprof = getenv("DSV4_SPECPROF")!=nullptr;
         cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
         double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
+        // Finding 82: the draft path's RAW allocator cost, split draft-half vs rest-of-round. See
+        // the instrument in dscratch.h — the verify path is on the arena, the DSpark draft path
+        // never was, and nobody has ever measured what that costs at the current baseline.
+        double acc_dral=0, acc_drsy=0, acc_rral=0, acc_rrsy=0; long long acc_dn=0, acc_dsn=0, acc_rn=0, acc_rsn=0;
+        double raw0=0, rsy0=0, rawd=0, rsyd=0; long long rawn0=0, rsyn0=0, rawnd=0, rsynd=0;
         // ---- S6 COUNTERFACTUAL SUFFIX-DRAFT PROBE (DSV4_SUFFIXPROBE=1, default OFF) ----
         // LEVERS.md S6 proposes a suffix-automaton / prompt-lookup drafter ahead of the MTP, and its
         // own falsification says the win is NOT the skipped draft head (13 ms of a 151 ms cycle) but
@@ -846,7 +851,7 @@ int main(int argc, char** argv){
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]
-            if(specprof) cudaEventRecord(p0);
+            if(specprof){ cudaEventRecord(p0); raw0=g_raw_ms; rsy0=g_rawsync_ms; rawn0=g_raw_n; rsyn0=g_rawsync_n; }
             // rebuild head main-KV over the context
             for(int st=0;st<NSTAGE;++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctx, EPS);
             if(specprof) cudaEventRecord(p1);
@@ -876,7 +881,8 @@ int main(int argc, char** argv){
                 for(int i=0;i<BLK;++i) draft[i]=oo[1+i];   // proposals for cpos+1..cpos+BLK
                 for(int i=1;i<BLK;++i) bid[i]=draft[i-1];  // feed them back for the next pass
             }
-            if(specprof) cudaEventRecord(p3);
+            if(specprof){ cudaEventRecord(p3);
+                rawd=g_raw_ms-raw0; rsyd=g_rawsync_ms-rsy0; rawnd=g_raw_n-rawn0; rsynd=g_rawsync_n-rsyn0; }
             // ---- ADAPTIVE VERIFY WIDTH (LOOP_LOG Finding 49; EVICT, arXiv 2605.00342) ----
             // Verifying the k-th block position is only worth it if the probability it is accepted
             // exceeds its marginal cost in tokens. On a dense model that cost is ~0 and you always
@@ -951,7 +957,12 @@ int main(int argc, char** argv){
             if(specprof){ cudaEventRecord(p4); CU(cudaDeviceSynchronize());
                 float a,b,c,e; cudaEventElapsedTime(&a,p0,p1); cudaEventElapsedTime(&b,p1,p2);
                 cudaEventElapsedTime(&c,p2,p3); cudaEventElapsedTime(&e,p3,p4);
-                if(nverify>0){ acc_kv+=a; acc_blk+=b; acc_head+=c; acc_ver+=e; ++nprof; } }
+                if(nverify>0){ acc_kv+=a; acc_blk+=b; acc_head+=c; acc_ver+=e; ++nprof;
+                    acc_dral+=rawd; acc_drsy+=rsyd; acc_dn+=rawnd; acc_dsn+=rsynd;
+                    // the remainder of the round: dspark_main_x is the only instrumented call after
+                    // p3, so this isolates the commit half from the draft half.
+                    acc_rral+=(g_raw_ms-raw0)-rawd;   acc_rn +=(g_raw_n-rawn0)-rawnd;
+                    acc_rrsy+=(g_rawsync_ms-rsy0)-rsyd; acc_rsn+=(g_rawsync_n-rsyn0)-rsynd; } }
             if(nverify>0){ spec_ms+=ms; timed_tok+=acc+1; } ++nverify;   // exclude round 0 (warmup: head repack)
             printf("  verify %d: accepted %d/%d (K=%d) + correction -> +%d tokens (%.1f ms)  cpos=%d\n", nverify, acc, VB-1, VB, acc+1, ms, cpos);
         }
@@ -962,10 +973,24 @@ int main(int argc, char** argv){
             printf("\n[specprof] per verify round, mean of %d (ms):\n", nprof);
             printf("[specprof]   draft: main_kv  %7.2f  (%4.1f%%)\n", acc_kv/nprof,  100*acc_kv /nprof/tot);
             printf("[specprof]   draft: 3 blocks %7.2f  (%4.1f%%)\n", acc_blk/nprof, 100*acc_blk/nprof/tot);
-            printf("[specprof]   draft: fwd_head %7.2f  (%4.1f%%)  <- host AR loop over %d positions\n",
+            printf("[specprof]   draft: fwd_head %7.2f  (%4.1f%%)  <- DEVICE-side AR over %d positions (F27)\n",
                    acc_head/nprof, 100*acc_head/nprof/tot, BLK);
             printf("[specprof]   verify 43 layer %7.2f  (%4.1f%%)\n", acc_ver/nprof, 100*acc_ver/nprof/tot);
             printf("[specprof]   TOTAL           %7.2f\n", tot);
+            // Finding 82. HOST time inside raw cudaMalloc/cudaFree/cudaStreamSynchronize on the
+            // DSpark draft path, which never got the arena the verify path runs on. Counts are
+            // integers and are the part of this that no variance floor can touch.
+            const double dral=acc_dral/nprof, drsy=acc_drsy/nprof, rral=acc_rral/nprof, rrsy=acc_rrsy/nprof;
+            printf("[specprof]   -- raw allocator inside the DRAFT half (host time, not device) --\n");
+            printf("[specprof]   cudaMalloc+Free %7.2f  (%4.1f%% of round)   %.1f calls/round\n",
+                   dral, 100*dral/tot, (double)acc_dn/nprof);
+            printf("[specprof]   cudaStreamSync  %7.2f  (%4.1f%% of round)   %.1f calls/round\n",
+                   drsy, 100*drsy/tot, (double)acc_dsn/nprof);
+            printf("[specprof]   draft raw TOTAL %7.2f  (%4.1f%% of round, %4.1f%% of the draft half)\n",
+                   dral+drsy, 100*(dral+drsy)/tot,
+                   (acc_kv+acc_blk+acc_head)>0 ? 100*(dral+drsy)/((acc_kv+acc_blk+acc_head)/nprof) : 0.0);
+            printf("[specprof]   rest-of-round   %7.2f malloc/free + %.2f sync  (%.1f + %.1f calls)  <- dspark_main_x\n",
+                   rral, rrsy, (double)acc_rn/nprof, (double)acc_rsn/nprof);
         }
         if(sfxprobe && sfx_n){
             const double N=(double)sfx_n, base=(double)sfx_mtp;

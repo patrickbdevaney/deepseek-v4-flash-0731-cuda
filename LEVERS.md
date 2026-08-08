@@ -47,6 +47,31 @@ It cannot go stale by three cycles again: `scripts/flywheel.sh` now classifies e
 whether its log carries `[dprof]` marks, maintains `baseline.dprof_runs_since_clean`, and at >= 2
 step 6 makes the next run a mandatory clean re-baseline.
 
+**THE TOP-LEVEL SPLIT WAS A VERIFY TABLE CALLING ITSELF A CYCLE TABLE (Finding 82).** Everything
+below this paragraph is the **verify**. The cycle is verify + draft, and the draft's only attribution
+in this project was `evidence/f47.log` — from before F64/F65/F70/F71/F72/F74, every one of which cut
+the verify and none of which touched the draft. Re-measured at the current baseline
+(`evidence/specprof_f82.log`, `DSV4_SPECPROF=1`, clocks pinned):
+
+| region of ONE verify round | ms | % |
+|---|---|---|
+| verify, 43 layers | 113.50 | 82.6 % |
+| **draft: 3 MTP blocks** | **13.47** | **9.8 %** |
+| **draft: `fwd_head`** (device-side AR over 5 positions, F27) | **10.13** | **7.4 %** |
+| draft: `main_kv` x3 | 0.25 | 0.2 % |
+| **TOTAL** | **137.35** | |
+
+**The draft half is 17.4 %, not the 14 % carried since F47** — it grew as a *share* because the
+verify shrank under it. And **97.2 % of the draft half is host time inside the raw allocator**:
+**`cudaMalloc`+`cudaFree` = 10.19 ms = 7.4 % of the whole cycle, 134 calls at 76 µs**, plus 9
+`cudaStreamSynchronize` at 1.44 ms. **127 of the 134 run after their own function's sync, i.e. on a
+drained GPU.** The verify path has been on `dscratch.h`'s arena since F44; the DSpark draft path
+(`dspark_main_kv`, `dspark_attn_forward`, `dspark_block_forward`, `dspark_forward_head`,
+`dspark_main_x`) never was. **That is lever B10 in §4 and it is the largest open item since F74.**
+The sync time is NOT priced as waste — it is mostly the host awaiting real draft work; what it shows
+is that the draft runs as ten serialised drain-points where the verify runs as one async chain, and
+those drains exist *because* a raw free requires them.
+
 The K=5 verify dprof TOTAL is **127.2 ms** and splits into two populations that behave completely
 differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned):
 
@@ -178,6 +203,7 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | B8'' | **M-gate `OG_SMEM` on: F55's 40 % kill was measured at M=5 ONLY, and the sign flips below M=4** | **~0.4 % — SUB-1 %, does not count toward the pivot queue** | New evidence, not a new argument (F79). F55 swept NR at M=5 and retired the variant on that one column. Sweeping **M** as well, same COLD harness, 3 alternating replicates (`evidence/oglazy_bench.log`), against the NR the dispatch actually picks at each M: **M=2 0.1717 → 0.1533 (−10.7 %), M=3 0.1962 → 0.1729 (−11.9 %), M=5 0.1958 → 0.2729 (+39.4 %, F55's number reproduced), M=8 0.3610 → 0.2810 (−22.2 %)**. So `ogsmem` gated on `bs<=3` is a real candidate. **Priced honestly it is small**: `o:wo_a` is 10.74 ms of an 85.9 ms K=2 verify and 10.26 of 104.7 at K=3, and only 4 of the 9 verifies in a canonical run are K≤3 → **~0.4 % end-to-end**, before the trap-3 discount that F76 (bench −7.6 %→ in situ +0.1 %) and F78 (bench +3.1 % → in situ +2.8 %) both demand. M=4 is unmeasured — the bench skips it and it is on the crossover. |
 | ~~B8-tile~~ | ~~the three tile marks `q:wq_b` + `o:wo_b` + `q:wq_a` = 22.5 ms~~ | **CLOSED, F78** | Kept for the achievability bar it established: **the target was never 233 GB/s** but the M=1 GEMV's own measured rate on the same weight bytes — `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). **Bytes are counted (F74) and it is NOT at roofline.** The target is not 233 GB/s — it is the M=1 GEMV's own measured rate on the same weight bytes: `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). Against that the three tile marks hold ~6.5 ms. **The one remaining move on them is to double-buffer the staged tile so round n+1's loads issue before round n's mma** — F67 closed both reroutes, F68 closed split-K on numerics. **`o:wo_a` (3.3 ms of the old estimate) is NO LONGER a cheap 7 %: F76 attributed it.** `ogroup_gemv_mk_kernel<5,4>` is *latency*-bound (8.1 of 13.0 cycles between issues on an L1TEX scoreboard), spills 44 bytes against a 64-register cap, and sits at a **measured local optimum in both knobs** — NR (1/2/4/8) and `OGMK_BLOCKS_PER_SM` (2/3/4, re-swept in F76 with the spill reduced). Instruction-count cures are retired as a family (§3). The only untried idea that moves ~16 registers instead of 3: **the `OG_SMEM=1` variant reading `o4[m]` lazily per m from shared memory** instead of holding M float4s live — smem makes lazy reads affordable where global loads need the MLP. F55 measured that variant a 40 % regression at NR=4 *with* the 20-register `o4[M]` still in it, so the register argument was never tested; falsify with `ptxas -v` before building anything. |
 | ~~**B8-cpasync**~~ | ~~`cp.async` staging global→shared for the fp8 tile with a ≥4-stage smem ring~~ | **RETIRED, F81 — bench +15 to +53 %, and +2 to +26 % even at ideal alignment** | Built, **bit-exact** (`gate_tc_fp8_kc` **1512/1512**), and it **passed both cheap falsification steps and then lost the bench by a mile**. (1) `ptxas -v`: at UF=1 the ring is **48 regs / 36864 B smem / 5 blocks/SM** against the shipped `smemB<8,2,false>`'s **64 regs / 17408 B / 4** — the register array really is given back and occupancy *rises*; smem was never the binding resource (233 472 B/SM, the shipped kernel uses 30 % of it at 4 blocks). (2) `cp.async.bulk.tensor.2d`, `cp.async.bulk`, `mbarrier.init` and `mbarrier.try_wait.parity` all **assemble at `-arch=sm_110a`**. (3) `gemm_bench` COLD, arms adjacent, M=5 vs `m16+smem B+4`: wq_a **+23.9 %**, wq_b **+38.4 %**, wkv **+52.8 %**, wo_b **+39.9 %**, sw1/3 **+14.9 %**, sw2 **+36.3 %**. **The disambiguation is the valuable half**, because the engine's weights are 4-byte aligned so the ring had to use cp-size 4: re-benched at B+0 (cp-size 16) it recovers ~25 % (wo_b 0.1428 → 0.1067) **and still loses to the ordinary LDG path at 5 of 6 shapes** — wq_a +5.7 %, wq_b +11.7 %, wkv +11.1 %, wo_b **+26.4 %**, sw2 +19.6 %, sw1/3 −3.0 %. **So no alignment work rescues it**, which is what makes this a permanent close rather than a block on F67's shard pad. And **NS=2 beats NS=4 on 4 of 6 shapes** (wo_b 0.0873 vs 0.1067), so *depth is negative* — the direct refutation of the promoted claim. Mechanism, new trap 29: one ring stage is **1** K-block, so `wait_group`+`__syncthreads` runs **once per K-block** where the shipped KC=2 pays it once per two — and F74's win *was* raising bytes-per-barrier. The ring trades the one thing that pays for bytes-in-flight the LDG path already had. Not run in situ: the falsification order says stop at the first no, and trap 3's discount has never turned a large bench negative into a win (F76 −7.6 % → +0.1 %, F78 +3.1 % → +2.8 %). Kept behind `TCB_CPA=<stages>`, default OFF. See §3. |
+| **B10** | **put the DSpark DRAFT path on the existing `dscratch.h` arena** — `dspark_main_kv`, `dspark_attn_forward`, `dspark_block_forward`, `dspark_forward_head`, `dspark_main_x` all call raw `cudaMalloc`/`cudaFree` + a real `cudaStreamSynchronize` per invocation, inside the loop that runs once per verify round | **+5 to +7 % — MEASURED, not modelled (F82). The largest open item since F74** | **The target is a number, not a hypothesis: `evidence/specprof_f82.log` measures 10.19 ms/round = 7.4 % of the 137.35 ms cycle as HOST time inside `cudaMalloc`/`cudaFree`, 134 calls at 76 µs, and 127 of the 134 run after their own function's `cudaStreamSynchronize` — on a drained, idle GPU.** This is the identical change that took base AR 92.5 → 79.3 ms/tok at F44, applied to the one region that predates the arena; `dscratch.h`'s own first line says *"At M=1 the per-call cudaMalloc/cudaFree/cudaStreamSynchronize in every sub-function dominate."* Bit-identical by construction (an allocator swap; `dmalloc` bumps, `dfree`/`dsync` become no-ops). **Do NOT claim the 12.99 ms of sync as recoverable** — 9 calls at 1.44 ms, mostly the host awaiting real draft GPU work; the recoverable part is the launch-gap share that disappears when the draft becomes one async chain, and it is unknown until measured. **How to falsify / what to watch, in order: (1)** arena LIFETIME — `dspark_main_kv` is called *outside* the `for(pass)` loop that calls `arena_reset()`, and `mkv[st]` must survive it; check every buffer that crosses a reset or the draft reads freed bump space (this is the one way the change can be wrong and it will not show as a crash, it will show as wrong tokens, so gate on the byte-identical spec sequence). **(2)** arena CAPACITY — the draft adds ~5 MB/round (`logits` 2.59 MB, `bias` 517 KB, `res2` 327 KB, `kv_all` = ctx x HEAD_DIM x 4) against a 512 MB arena, so it should fit, but the arena **aborts** on overflow and that kills a 15-minute run: print `g_arena_hwm` before trusting it. **(3)** keep the raw path behind an env flag so the A/B is possible, and price it on the **paired per-verify** instrument (9 pairs at identical K), not on tok/s alone. |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |
@@ -188,8 +214,11 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 
 ## 5. Open — speculation (18.13 tok/s, acceptance ~2.9 of 5)
 
-`tok/s = tokens_per_cycle / cycle_ms`. The cycle is verify (~86 %) + draft (~14 %). Since the verify's
-MoE half is at the roofline, **the numerator is the better lever than the denominator.**
+`tok/s = tokens_per_cycle / cycle_ms`. The cycle is verify **82.6 %** + draft **17.4 %** (F82,
+`evidence/specprof_f82.log` — the 86/14 quoted here until now dated to `evidence/f47.log` and was
+stale by six verify-side adoptions). Since the verify's MoE half is near the roofline, **the
+numerator is the better lever than the denominator** — but the denominator is no longer exhausted:
+**7.4 % of the cycle is raw-allocator host time in the draft half, see B10 in §4.**
 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
@@ -394,6 +423,20 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    permanent close, since cp-size 16 **still lost**. **Any future `cp.async`/TMA idea here inherits
    this alignment tax and must be priced at B+4, not B+0** (F81).
 
+32. **A `DSV4_SPECPROF` run is INVISIBLE to the harness's clean/profiling classifier, and it is not a
+   clean run.** `scripts/flywheel.sh` decides whether a cycle's run was a re-baseline by grepping
+   `^\[dprof\]`; `DSV4_SPECPROF` prints `[specprof]`, so a contaminated run scores as clean and would
+   overwrite `baseline.spec_tok_s` with a number no clean run produced. It **is** contaminated: five
+   `cudaEventRecord` on the null stream per round cost **+1.01 % on the nine paired verifies, 9/9 in
+   one direction** (1196.7 → 1208.8 ms), spec 22.06 → 21.84, base 13.83 → 13.72 — a known cause with a
+   consistent sign, which is exactly what an instrument's cost should look like. Set
+   `dprof_runs_since_clean` by hand after one, and never re-baseline from one (F82).
+
+33. **A region's SHARE of the cycle goes stale even when nobody touches it.** The draft half was 14 %
+   at F47 and is **17.4 %** now, unchanged in absolute terms while six adoptions cut the verify around
+   it — so §1's table, which is a *verify* table, was being read as a *cycle* table and the draft was
+   never a candidate. Re-measure the top-level split whenever the thing below it has moved (F82).
+
 ---
 
 ## 7. Instruments available (all off by default)
@@ -401,7 +444,7 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 | knob / tool | what it answers |
 |---|---|
 | `DSV4_DPROF=1` + `DSV4_KSWEEP=1` | per-sub-op ms for K=1..5 — **the** ranking instrument |
-| `DSV4_SPECPROF=1` | draft vs verify split of the spec cycle |
+| `DSV4_SPECPROF=1` | draft vs verify split of the spec cycle, **plus (F82) the draft path's raw `cudaMalloc`/`cudaFree`/`cudaStreamSynchronize` host time and CALL COUNTS** (`rmalloc`/`rfree`/`rsync` in `dscratch.h`). Counts are integers, immune to trap 25. **Costs +1.0 % — see trap 32, never re-baseline from one** |
 | `DSV4_HASH=1` / `=2` | prefill state hash per sweep point / per layer — bisects a divergence to a layer |
 | `DSV4_SYNCPROBE=1` | checked sync after 21 individual launches; names the faulting launch |
 | `DSV4_MEMTRACE=1`, `DSV4_BALLAST_GB` | free memory per sweep point; make headroom settable |

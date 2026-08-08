@@ -26,3 +26,5 @@
 ## 2026-08-08T06:35:51-04:00 — PUSHED 1a120f1abbc2a198f4eae3758cec44e06a5be578
   B8' dead at ptxas: smem spill 396->368 B, not -16 regs. NEGATIVE (F79), B8 fully closed
 ## 2026-08-08T07:36:19-04:00 — PUSH FAILED 7858cf1ab0d5fd1b25ad30fa6fabdf432cdc6a08
+## 2026-08-08T08:48:56-04:00 — PUSHED 60f2936414c923a63638de91b1aa97173a3faa2e
+  B8-cpasync dead: 48 regs vs 64 and 5 blocks/SM vs 4, and 15-53% SLOWER. NEGATIVE (F81), queue now 0

@@ -6,19 +6,20 @@
 #include <vector>
 #include <cmath>
 #include <cstdio>
+#include "dscratch.h"
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 using namespace dsv4;
 
 // main-KV from main_x: wkv -> kv_norm -> rope(per-position) -> act_quant fp8sim(nope). [s,dim]->[s,HEAD_DIM].
 void dspark_main_kv(float* main_kv, const float* main_x, const MLAWeights& w, int s, float eps, cudaStream_t stream){
     uint8_t* xq; float* xs;
-    CU(cudaMalloc(&xq,(size_t)s*DIM)); CU(cudaMalloc(&xs,(size_t)s*(DIM/128)*4));
+    CU(rmalloc(&xq,(size_t)s*DIM)); CU(rmalloc(&xs,(size_t)s*(DIM/128)*4));
     act_quant_fp8(xq, xs, main_x, s, DIM, 128, stream);
     fp8_block_gemm(main_kv, xq, xs, w.wkv, w.wkv_s, s, HEAD_DIM, DIM, stream);
     rmsnorm(main_kv, main_kv, w.kv_norm, s, HEAD_DIM, eps, true, stream);
     rope_interleaved(main_kv + NOPE_DIM, w.cosT, w.sinT, s, ROPE_DIM, false, HEAD_DIM, 1, stream);
     act_quant_fp8sim(main_kv, s, NOPE_DIM, 64, HEAD_DIM, stream);
-    CU(cudaStreamSynchronize(stream)); cudaFree(xq); cudaFree(xs);
+    CU(rsync(stream)); rfree(xq); rfree(xs);
 }
 
 void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int t,
@@ -29,11 +30,11 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
     int nwin = (t+1 < win) ? t+1 : win; int wstart = t+1-nwin; int n = nwin + block;
 
     uint8_t *xq,*qrq,*ogq; float *xs,*qrs,*ogs,*qr,*q,*bkv,*kv_all,*o,*og;
-    CU(cudaMalloc(&xq,(size_t)block*DIM)); CU(cudaMalloc(&xs,(size_t)block*(DIM/128)*4));
-    CU(cudaMalloc(&qr,(size_t)block*Q_LORA*4)); CU(cudaMalloc(&qrq,(size_t)block*Q_LORA)); CU(cudaMalloc(&qrs,(size_t)block*(Q_LORA/128)*4));
-    CU(cudaMalloc(&q,(size_t)block*Kd*4)); CU(cudaMalloc(&bkv,(size_t)block*HEAD_DIM*4));
-    CU(cudaMalloc(&kv_all,(size_t)n*HEAD_DIM*4)); CU(cudaMalloc(&o,(size_t)block*Kd*4)); CU(cudaMalloc(&og,(size_t)block*OB*4));
-    CU(cudaMalloc(&ogq,(size_t)block*OB)); CU(cudaMalloc(&ogs,(size_t)block*(OB/128)*4));
+    CU(rmalloc(&xq,(size_t)block*DIM)); CU(rmalloc(&xs,(size_t)block*(DIM/128)*4));
+    CU(rmalloc(&qr,(size_t)block*Q_LORA*4)); CU(rmalloc(&qrq,(size_t)block*Q_LORA)); CU(rmalloc(&qrs,(size_t)block*(Q_LORA/128)*4));
+    CU(rmalloc(&q,(size_t)block*Kd*4)); CU(rmalloc(&bkv,(size_t)block*HEAD_DIM*4));
+    CU(rmalloc(&kv_all,(size_t)n*HEAD_DIM*4)); CU(rmalloc(&o,(size_t)block*Kd*4)); CU(rmalloc(&og,(size_t)block*OB*4));
+    CU(rmalloc(&ogq,(size_t)block*OB)); CU(rmalloc(&ogs,(size_t)block*(OB/128)*4));
 
     // q
     act_quant_fp8(xq, xs, xin, block, DIM, 128, stream);
@@ -53,15 +54,15 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
     CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, bkv, (size_t)block*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
     // dense idxs [block, n]: every block query attends to all n (window ⊕ block), per get_dspark_topk_idxs
     std::vector<int> hidx((size_t)block*n); for(int m=0;m<block;++m) for(int k=0;k<n;++k) hidx[(size_t)m*n+k]=k;
-    int* idx; CU(cudaMalloc(&idx,(size_t)block*n*4)); CU(cudaMemcpyAsync(idx,hidx.data(),(size_t)block*n*4,cudaMemcpyHostToDevice,stream));
+    int* idx; CU(rmalloc(&idx,(size_t)block*n*4)); CU(cudaMemcpyAsync(idx,hidx.data(),(size_t)block*n*4,cudaMemcpyHostToDevice,stream));
     sparse_attn(o, q, kv_all, w.attn_sink, idx, 1, block, N_HEADS, HEAD_DIM, n, n, scale, stream);
     rope_interleaved(o + NOPE_DIM, cosB, sinB, block*N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
     ogroup_gemm(og, o, w.wo_a, block, O_GROUPS, O_LORA, GKd, stream);
     act_quant_fp8(ogq, ogs, og, block, OB, 128, stream);
     fp8_block_gemm(out, ogq, ogs, w.wo_b, w.wo_b_s, block, DIM, OB, stream);
-    CU(cudaStreamSynchronize(stream));
-    cudaFree(xq);cudaFree(xs);cudaFree(qr);cudaFree(qrq);cudaFree(qrs);cudaFree(q);cudaFree(bkv);
-    cudaFree(kv_all);cudaFree(o);cudaFree(og);cudaFree(ogq);cudaFree(ogs);cudaFree(idx);
+    CU(rsync(stream));
+    rfree(xq);rfree(xs);rfree(qr);rfree(qrq);rfree(qrs);rfree(q);rfree(bkv);
+    rfree(kv_all);rfree(o);rfree(og);rfree(ogq);rfree(ogs);rfree(idx);
 }
 
 // ---- DSparkBlock forward (block_forward with dspark_attn) ----
@@ -72,8 +73,8 @@ void dspark_block_forward(float* out, const float* x, const int* input_ids, cons
                           int iters, float eps, cudaStream_t stream){
     const int d=w.dim, hc=w.hc;
     float *x1,*post,*comb,*sub,*res2;
-    CU(cudaMalloc(&x1,(size_t)block*d*4)); CU(cudaMalloc(&post,(size_t)block*hc*4)); CU(cudaMalloc(&comb,(size_t)block*hc*hc*4));
-    CU(cudaMalloc(&sub,(size_t)block*d*4)); CU(cudaMalloc(&res2,(size_t)block*hc*d*4));
+    CU(rmalloc(&x1,(size_t)block*d*4)); CU(rmalloc(&post,(size_t)block*hc*4)); CU(rmalloc(&comb,(size_t)block*hc*hc*4));
+    CU(rmalloc(&sub,(size_t)block*d*4)); CU(rmalloc(&res2,(size_t)block*hc*d*4));
     hc_pre(x1, post, comb, x, w.hc_attn_fn, w.hc_attn_scale, w.hc_attn_base, block, hc, d, iters, eps, stream);
     rmsnorm(x1, x1, w.attn_norm, block, d, eps, true, stream);
     dspark_attn_forward(sub, x1, main_kv, t, w.attn, cosB, sinB, block, win, eps, stream);
@@ -82,6 +83,6 @@ void dspark_block_forward(float* out, const float* x, const int* input_ids, cons
     rmsnorm(x1, x1, w.ffn_norm, block, d, eps, true, stream);
     moe_forward(sub, x1, input_ids, w.ffn, block, stream);
     hc_post(out, sub, res2, post, comb, block, hc, d, stream);
-    CU(cudaStreamSynchronize(stream));
-    cudaFree(x1);cudaFree(post);cudaFree(comb);cudaFree(sub);cudaFree(res2);
+    CU(rsync(stream));
+    rfree(x1);rfree(post);rfree(comb);rfree(sub);rfree(res2);
 }

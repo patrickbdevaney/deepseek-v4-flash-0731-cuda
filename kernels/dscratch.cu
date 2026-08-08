@@ -1,5 +1,16 @@
 // dscratch.cu — decode scratch arena globals. See dscratch.h.
 #include "dscratch.h"
+#include <chrono>
+// See the draft-path instrument in dscratch.h. steady_clock, not the CUDA event timeline: what is
+// being measured is HOST time inside the driver call, which is exactly the cost the arena removes.
+double    g_raw_ms     = 0.0;
+long long g_raw_n      = 0;
+double    g_rawsync_ms = 0.0;
+long long g_rawsync_n  = 0;
+double dsv4_now_ms(){
+    return std::chrono::duration<double,std::milli>(
+               std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 bool   g_arena_on  = false;
 char*  g_arena     = nullptr;
 size_t g_arena_off = 0;

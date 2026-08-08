@@ -20,6 +20,39 @@ static inline void* dmalloc(size_t n){
 }
 static inline void dfree(void* p){ if(!g_arena_on && p) cudaFree(p); }
 
+// DRAFT-PATH RAW-ALLOCATOR INSTRUMENT (LOOP_LOG Finding 82).
+//
+// The arena above was built for the decode/verify path and the whole verify is on it. The DSpark
+// DRAFT path never was: `dspark_main_kv`, `dspark_attn_forward`, `dspark_block_forward`,
+// `dspark_main_x` and `dspark_forward_head` all call raw cudaMalloc/cudaFree per invocation, plus a
+// real `cudaStreamSynchronize` at the end of each — inside the loop that runs once per verify round.
+// The 86 %/14 % verify/draft split quoted in LEVERS.md §1 dates to `evidence/f47.log`, BEFORE every
+// verify-side adoption (F64/F65/F70/F71/F72/F74), so the draft's share is unmeasured at the current
+// baseline and its *composition* has never been measured at all.
+//
+// These wrappers are drop-in replacements that accumulate the HOST time spent inside the driver
+// call. Two `steady_clock` reads per call (~25 ns) against a call that costs microseconds; the
+// counters are reported only under DSV4_SPECPROF, so the shipped path is unchanged in behaviour and
+// unmeasurably changed in cost. `g_raw_n` is a COUNTED INTEGER and therefore immune to trap 25.
+extern double    g_raw_ms;      // cudaMalloc + cudaFree host time
+extern long long g_raw_n;       // number of such calls
+extern double    g_rawsync_ms;  // cudaStreamSynchronize host time
+extern long long g_rawsync_n;
+double dsv4_now_ms();
+
+template<class T> static inline cudaError_t rmalloc(T** p, size_t n){
+    const double t0 = dsv4_now_ms(); cudaError_t e = cudaMalloc(p, n);
+    g_raw_ms += dsv4_now_ms() - t0; ++g_raw_n; return e;
+}
+static inline void rfree(void* p){
+    if(!p) return; const double t0 = dsv4_now_ms(); cudaFree(p);
+    g_raw_ms += dsv4_now_ms() - t0; ++g_raw_n;
+}
+static inline cudaError_t rsync(cudaStream_t s){
+    const double t0 = dsv4_now_ms(); cudaError_t e = cudaStreamSynchronize(s);
+    g_rawsync_ms += dsv4_now_ms() - t0; ++g_rawsync_n; return e;
+}
+
 // LOOP_LOG Finding 53. A kernel LAUNCH failure — gridDim 0, too much dynamic shared memory, a bad
 // block shape — is reported only through the thread's last-error slot. `cudaStreamSynchronize` does
 // NOT return it (measured on this box: a gridDim-0 launch leaves cudaErrorInvalidValue pending and

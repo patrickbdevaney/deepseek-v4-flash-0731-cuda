@@ -4767,3 +4767,108 @@ audit from firing — but the first arm fired two cycles ago and F80 and F81 hav
 items the cycle-14 pivot analysis named as remaining (S6: oracle ceiling **+0.0 %**; B8-cpasync:
 **+15–53 %** in the bench). **S5 — the draft-head fine-tune, lossless by construction, +24 % at
 acceptance 3.6 — is now the only lever in the project with an unmeasured upside.**
+
+---
+
+## Finding 82 — the DRAFT half never got the arena the verify runs on: **10.19 ms/round, 7.4 % of the spec cycle, is host time inside raw `cudaMalloc`/`cudaFree` on an already-drained device**
+
+**Cycle 17. POSITIVE — a lever, priced, not yet built.** The kernel queue was **0** at ORIENT, so
+`RESEARCH_LOG.md` §1 made the research phase mandatory. It ran (seven queries, axes A–F, all written
+back) and **promoted nothing** — but two independent 2026 sources name *host/launch-side overhead* as
+the leak in batch-1 MoE decode, this project has measured that claim on its **verify** half (F46,
+`VERIFYGRAPH` = 1.05x) and **never on its draft half**, and the draft half's only attribution in the
+whole project is `evidence/f47.log`, from **before every verify-side adoption**. Reading the draft
+path for that reason found this.
+
+### What the code says, before any measurement
+
+`include/dscratch.h`'s own opening line has said it since F44: *"At M=1 the per-call
+cudaMalloc/cudaFree/cudaStreamSynchronize in every sub-function dominate."* The whole verify path is
+on that arena. The DSpark **draft** path is not, and never was:
+
+| draft function | file | raw allocs | raw sync |
+|---|---|---|---|
+| `dspark_main_kv` x3 stages | `dspark_attn.cu:13` | 2 malloc + 2 free each | 1 each |
+| `dspark_attn_forward` x3 | `dspark_attn.cu:24` | 14 malloc + 14 free each | 1 each |
+| `dspark_block_forward` x3 | `dspark_attn.cu:70` | 5 malloc + 5 free each | 1 each |
+| `dspark_forward_head` x1 | `dspark_real.cu:105` | 7 malloc + 7 free | — |
+| `dspark_main_x` x1 (commit) | `dspark_real.cu:12` | 2 malloc + 2 free | 1 |
+
+Predicted ~140 malloc/free and 9–10 syncs per verify round. **Measured 134 and 9.** Every one of
+these functions calls `cudaStreamSynchronize` and *then* frees, so the frees run on a device that has
+already been drained — which is what makes their cost attributable rather than arguable.
+
+### The instrument (this cycle's one change, default-invisible)
+
+`rmalloc`/`rfree`/`rsync` in `dscratch.h`: drop-in wrappers that accumulate **host** time inside the
+driver call, two `steady_clock` reads (~25 ns) against a call that costs microseconds. Applied to the
+three draft files only. Counters print **only** under `DSV4_SPECPROF`, so the shipped path is
+unchanged in behaviour; `g_raw_n` is a **counted integer** and immune to trap 25. The stale
+`fwd_head` label ("host AR loop") was also corrected — that loop went device-side at F27.
+
+### The numbers (`evidence/specprof_f82.log`, clocks pinned, caches dropped, ONE run)
+
+```
+[specprof] per verify round, mean of 8 (ms):
+[specprof]   draft: main_kv     0.25  ( 0.2%)
+[specprof]   draft: 3 blocks   13.47  ( 9.8%)
+[specprof]   draft: fwd_head   10.13  ( 7.4%)  <- DEVICE-side AR over 5 positions (F27)
+[specprof]   verify 43 layer  113.50  (82.6%)
+[specprof]   TOTAL            137.35
+[specprof]   cudaMalloc+Free   10.19  ( 7.4% of round)   134.0 calls/round
+[specprof]   cudaStreamSync    12.99  ( 9.5% of round)     9.0 calls/round
+[specprof]   draft raw TOTAL   23.18  (16.9% of round, 97.2% of the draft half)
+[specprof]   rest-of-round      0.03 malloc/free + 0.38 sync  (4.0 + 1.0 calls)
+```
+
+**The draft half is 23.85 ms of a 137.35 ms round = 17.4 %**, not the 14 % LEVERS.md §1 has carried
+since F47. It grew as a *share* because the verify shrank under F64/F65/F70/F71/F72/F74 while the
+draft was never touched.
+
+**10.19 ms — 7.4 % of the entire spec cycle — is host time inside `cudaMalloc`/`cudaFree`**, 134 calls
+at a mean of **76 µs each**. 127 of those 134 run after their function's own
+`cudaStreamSynchronize`, i.e. **on a drained, idle GPU**; only `dspark_forward_head`'s 7 frees (5 %)
+could be absorbing device wait. So **≥ 7.0 % of the cycle is provably GPU-idle allocator time.**
+
+**What is NOT claimed:** the 12.99 ms of `cudaStreamSynchronize` is 9 calls at 1.44 ms and is mostly
+the host *waiting for real draft GPU work*. It is not waste and this finding does not price it as
+waste. What it does show is that the draft runs as **ten serialised drain-points**, where the verify
+runs as one asynchronous chain — and those syncs exist **because** the raw allocator requires a drain
+before free. They go away with the arena as a consequence, not as a separate claim.
+
+### Control — the default arm is untouched, and the instrument's own cost is measured
+
+Spec token sequence and base-AR sequence are both **byte-identical** to `clean_post_f81.log`;
+acceptance **2.89**; first token 11111; GATE PASS, MATCH, LOSSLESS GATE PASS. The nine verifies pair
+1:1 at identical K: **1196.7 → 1208.8 ms = +1.01 %, 9/9 in one direction** (+1.29/+0.79/+1.53/+0.35/
++0.78/+0.16/+0.39/+0.39/+3.36 %), spec 22.06 → **21.84** (−1.0 %), base 13.83 → **13.72** (−0.8 %).
+That is **the `DSV4_SPECPROF` instrument's own cost** — five `cudaEventRecord` on the null stream per
+round — with a known cause and a consistent sign, so **this run is a PROFILING run and the baseline
+is NOT updated from it.** `baseline.dprof_runs_since_clean` → **1**.
+
+**New trap 32:** `scripts/flywheel.sh` classifies a run clean/profiling by grepping `^\[dprof\]`. A
+`DSV4_SPECPROF` run prints `[specprof]` and is invisible to that grep, so the harness would score
+this contaminated run as a clean re-baseline. The counter is set by hand this cycle and the gap is
+recorded so the next cycle does not inherit a 21.84 baseline that no clean run ever produced.
+
+### Gates
+
+**20/20 PASS** (`evidence/gates_f82.log`), every one with a verdict line — including `gate_encoding`,
+run with **no argument**, which is trap 26 for the fifth time and this time it was avoided rather than
+diagnosed. `gate_tc_fp8_kc` 1512/1512 exact.
+
+### Disposition — the queue is NOT empty
+
+**New lever B10** (LEVERS.md §4): *put the DSpark draft path on the existing arena.* It is the same
+change that took base AR 92.5 → 79.3 ms/tok at F44, applied to the one region that never got it, and
+the target is measured rather than modelled: **7.4 % of the cycle in the allocator, plus whatever
+share of the ten forced drains is launch gap rather than work.** Expected **+5 to +7 %**, which is
+larger than anything the project has had open since F74. `pivot_criterion.open_nontraining_levers`
+goes **0 → 1**, so the queue-empty arm of the pivot does **not** fire a second time.
+
+**Two rules this cycle earns.** (1) *A region's SHARE goes stale even when its absolute cost does
+not.* The draft was 14 % at F47 and is 17.4 % now with nobody having touched it; §1's table was a
+verify table calling itself a cycle table. (2) *An empty research phase is not a wasted one if it
+tells you where to read.* The seven queries promoted nothing — but "batch-1 decode leaks on the host
+side" pointed at the one half of our cycle that had never been checked for it, and the answer was a
+7.4 % lever sitting in five functions that predate the arena.
