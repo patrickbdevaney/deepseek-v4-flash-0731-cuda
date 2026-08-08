@@ -345,6 +345,65 @@ __global__ void tc_ogroup_fp8_kernel(float* out, const __half* o16, const uint8_
     if(r8<bs && n0+cn  <R) out[((size_t)r8*G+gg)*R + n0+cn  ]=c[2];
     if(r8<bs && n0+cn+1<R) out[((size_t)r8*G+gg)*R + n0+cn+1]=c[3];
 }
+// ===================== B9: m-tile-amortised tc_ogroup (prefill) =====================
+// tc_ogroup_fp8_kernel above is the bs>16 path, i.e. the one PREFILL takes, and it was written for
+// the verify's small bs. At bs=1022 it launches (R/8, G, bs/16) = 128 x 8 x 64 = 65,536 blocks of
+// ONE WARP, and — the expensive part — every one of those 64 m-tiles re-loads and re-DEQUANTISES
+// the same weight row: two exp2f, four scalar byte reads and four fp8->half converts per k-step,
+// repeated 64 times for bytes that never change.
+//
+// This is the F64 row-amortisation transformation applied to the ogroup TC path: hoist the weight
+// load and dequant out of an m-tile loop so MT tiles share one dequant. Weight work drops MT-fold;
+// the activation loads stay per-tile because they genuinely differ.
+//
+// BIT-EXACT: each output (r,n) still accumulates over k0 in the same order through the same mma
+// sequence. Only the ORDER IN WHICH DIFFERENT OUTPUTS are computed changes, and they are
+// independent. `gate_ogroup_gemv` memcmps this family.
+template<int MT>
+__global__ void tc_ogroup_fp8_mt_kernel(float* out, const __half* o16, const uint8_t* wo,
+                                        const uint8_t* wsc, int bs, int G, int R, int Kd){
+    int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
+    int gg=blockIdx.y, n0=blockIdx.x*8; if(n0>=R) return;
+    const uint8_t* Bg = wo + (size_t)gg*R*Kd; int scw=Kd/128;
+    int n=n0+gid; const uint8_t* wr = Bg + (size_t)n*Kd; size_t grow=(size_t)gg*R+n;
+    const int mb0 = blockIdx.z*(16*MT);
+    float c[MT][4];
+    #pragma unroll
+    for(int t=0;t<MT;++t){ c[t][0]=c[t][1]=c[t][2]=c[t][3]=0.f; }
+    for(int k0=0;k0<Kd;k0+=16){
+        // ---- weight: loaded and dequantised ONCE for all MT m-tiles ----
+        unsigned b[2];
+        if(n<R){ int kk=k0+2*t4;
+            float s0=exp2f((float)wsc[(grow/128)*scw + kk/128]-127.f);
+            float s1=exp2f((float)wsc[(grow/128)*scw + (kk+8)/128]-127.f);
+            __half2 p0=__halves2half2(__float2half(ogm_e4m3(wr[kk])*s0),   __float2half(ogm_e4m3(wr[kk+1])*s0));
+            __half2 p1=__halves2half2(__float2half(ogm_e4m3(wr[kk+8])*s1), __float2half(ogm_e4m3(wr[kk+9])*s1));
+            b[0]=*(unsigned*)&p0; b[1]=*(unsigned*)&p1;
+        } else { b[0]=0u; b[1]=0u; }
+        #pragma unroll
+        for(int t=0;t<MT;++t){
+            const int mb=mb0+t*16, r0=mb+gid, r8=mb+gid+8;
+            if(mb>=bs) continue;
+            const __half* xg0 = o16 + ((size_t)r0*G+gg)*Kd;
+            const __half* xg8 = o16 + ((size_t)r8*G+gg)*Kd;
+            bool m0=r0<bs, m8=r8<bs;
+            unsigned a[4];
+            a[0]=m0?*(const unsigned*)(xg0+k0+2*t4):0u; a[1]=m8?*(const unsigned*)(xg8+k0+2*t4):0u;
+            a[2]=m0?*(const unsigned*)(xg0+k0+2*t4+8):0u; a[3]=m8?*(const unsigned*)(xg8+k0+2*t4+8):0u;
+            ogm_mma(c[t],a,b);
+        }
+    }
+    int cn=2*t4;
+    #pragma unroll
+    for(int t=0;t<MT;++t){
+        const int mb=mb0+t*16, r0=mb+gid, r8=mb+gid+8;
+        if(mb>=bs) continue;
+        if(r0<bs && n0+cn  <R) out[((size_t)r0*G+gg)*R + n0+cn  ]=c[t][0];
+        if(r0<bs && n0+cn+1<R) out[((size_t)r0*G+gg)*R + n0+cn+1]=c[t][1];
+        if(r8<bs && n0+cn  <R) out[((size_t)r8*G+gg)*R + n0+cn  ]=c[t][2];
+        if(r8<bs && n0+cn+1<R) out[((size_t)r8*G+gg)*R + n0+cn+1]=c[t][3];
+    }
+}
 bool g_tc_ogroup = false;   // forward.cu sets true; gates use the warp-per-output oracle
 // M=1 ogroup GEMV: one warp per output (g,r), out[g*R+r] = sum_d o[g][d]*fp8(wo[gr][d])*e8m0scale. Coalesced
 // strided reads (lanes read consecutive bytes), NO mma waste (bs=1). Kills the tc_ogroup's scalar-byte m16 mma
@@ -728,7 +787,21 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
     }
     __half* o16; o16=(__half*)dmalloc((size_t)bs*G*Kd*2);
     k_f2h<<<((size_t)bs*G*Kd+255)/256,256,0,stream>>>(o16,o,(size_t)bs*G*Kd);
-    dim3 grid((R+7)/8, G, (bs+15)/16); tc_ogroup_fp8_kernel<<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd);
+    // MT amortises the weight dequant across m-tiles. It only pays when there ARE many m-tiles, so
+    // it follows bs: the verify (bs<=16) never reaches here, and a shape with one m-tile gets MT=1,
+    // which is the original kernel. OG_TC_MT=1 forces the original for the A/B.
+    {   const char* mte = getenv("OG_TC_MT");
+        int ntile = (bs+15)/16;
+        int MT = mte ? atoi(mte) : (ntile>=8 ? 8 : ntile>=4 ? 4 : ntile>=2 ? 2 : 1);
+        if(MT!=1&&MT!=2&&MT!=4&&MT!=8) MT=1;
+        if(MT==1){ dim3 grid((R+7)/8, G, ntile);
+                   tc_ogroup_fp8_kernel<<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); }
+        else {     dim3 grid((R+7)/8, G, (ntile+MT-1)/MT);
+                   switch(MT){
+                     case 2: tc_ogroup_fp8_mt_kernel<2><<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break;
+                     case 4: tc_ogroup_fp8_mt_kernel<4><<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break;
+                     default:tc_ogroup_fp8_mt_kernel<8><<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break; } }
+    }
     dsync(stream); dfree(o16);
 }
 void ogroup_gemm(float* out, const float* o, const float* wo_a,

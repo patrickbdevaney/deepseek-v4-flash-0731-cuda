@@ -4983,7 +4983,7 @@ falsification order said it would be.
 
 ---
 
-## Finding 84 — HALT. The operator set the kill switch at 12:29:25 while this cycle was already inside its 20-minute preflight, and the pivot the loop was about to declare is suppressed by that same file
+## Finding 84-HALT — HALT. The operator set the kill switch at 12:29:25 while this cycle was already inside its 20-minute preflight, and the pivot the loop was about to declare is suppressed by that same file
 
 **Cycle 19 (the cron script's "cycle 18"). NO lever was picked, NO code was changed, NO model run
 was taken.** `DERIVED-ONLY:` this finding contains no performance number of its own — every number in
@@ -5052,6 +5052,13 @@ knobs. `B0`, `B2`, `B4`, `B8`, `B8'`, `B8-cpasync`, `S1`, `S6` retired with numb
 **The disposition of the loop: stopped at `spec 22.15 tok/s / base 13.78` (`evidence/clean_post_f83.log`),
 queue 0, pivot due and suppressed, remaining lever S5 — the draft-head fine-tune, lossless by
 construction, and not a kernel change.**
+
+> **Numbering note.** Cycle 19 wrote its own halt record as "Finding 84" while my kill switch was
+> landing, and I then numbered this one 84 as well without checking. The halt record is a
+> `DERIVED-ONLY:` entry with no measurement in it and is referenced nowhere; these operator findings
+> 84-87 are cited by four commit messages and by `LEVERS.md`. So the halt record is relabelled
+> **84-HALT** and the performance numbering is left alone. Renumbering the cited ones to fix a
+> cosmetic collision would have broken the references that make the log worth keeping.
 
 ## Finding 84 — prefill attributed to 99.98 %: it is TWO equal halves, and the MoE moves **3.26x the bytes it needs to** — measured, not modelled
 
@@ -5349,3 +5356,48 @@ Sizing the two rewrites against measured peaks:
    is blocked on `sm_110a` and Thor reaches FP4 only via `tcgen05`, which needs tensor-memory
    allocation and matrix descriptors. The MoE at 5.1 TFLOPS against a 92 TFLOPS fp8 peak looks like
    5 % — but the honest statement is that its ceiling has not been measured.
+
+## Finding 88 — the ogroup tensor-core path re-dequantised every weight row **64 times**: -33 % on the mark, +6.0 % prefill
+
+**B9, operator-run.** `evidence/prefill_ogmt_b9g.log`, `MOE_MMA=1` held constant, two PS=1022 points
+agreeing to 0.1 %.
+
+Prefill at bs>16 already *reached* tensor cores — `tc_ogroup_fp8_kernel`, which F62 wrote to fix a
+correctness bug (rows 16+ were never written) and which nobody has looked at for speed since. Three
+defects, all the now-familiar shape:
+
+1. `<<<grid,32>>>` — **one warp per block**, 65,536 blocks at bs=1022.
+2. The weight row is loaded and **dequantised once per m-tile** — two `exp2f`, four scalar byte reads
+   and four fp8->half converts per k-step, repeated for all **64** m-tiles, for bytes that never change.
+3. Scalar byte weight loads. F35 fixed exactly this in the M=1 GEMV; the TC path never got it.
+
+Fixing (2) subsumes (3): hoist the load+dequant out of an m-tile loop so MT tiles share one dequant —
+the F64 row-amortisation transformation applied to the ogroup TC path. **Bit-exact**: each output
+(r,n) still accumulates over k0 through the same mma sequence; only the order in which independent
+outputs are produced changes. `gate_compressed_decode` runs at s=256 = 16 m-tiles = the MT=8 path and
+returns `rms=0.00e+00`; `gate_ogroup_gemv` PASS.
+
+MT follows the m-tile count, so the verify (bs<=16, never reaches here) and any single-tile shape get
+MT=1, which is the original kernel. `OG_TC_MT=1` forces it for the A/B.
+
+| | before | after | |
+|---|---|---|---|
+| prefill | 17364 ms / 58.9 tok/s | **16373 ms / 62.4 tok/s** | **+6.0 %** |
+| `cattn:ogroup` | 2786.1 ms | **1866.1 ms** | **-33.0 %** |
+
+### Cumulative B9
+
+| stage | prefill | tok/s | |
+|---|---|---|---|
+| baseline (F84) | 21351.6 ms | 47.9 | |
+| `MOE_MMA=1` (F85) | 18300 ms | 55.9 | +16.7 % |
+| sparse PER/HPB (F86) | 17364 ms | 58.9 | +5.4 % |
+| ogroup m-tile (F88) | **16373 ms** | **62.4** | **+6.0 %** |
+
+**+30.3 % cumulative, all bit-exact.** 20K-sample capture: 4.9 d -> **3.8 d**.
+
+**The pattern is now four for four.** Every one of these was a correct decision for the batch size it
+was made at, applied unchanged to a batch 1000x larger: MoE `RB=4` (1-5 rows/expert at decode), MoE
+GEMV-vs-mma (M=1 inverts at M=1022), `sparse_attn` registers + 1 warp/block (generic `d<=1024`, 64
+warps total), and now ogroup m-tile dequant (bs<=16 has 1 m-tile, bs=1022 has 64). **None is a bug.**
+Seventeen cycles optimised decode inside functions prefill shares, and prefill was never measured.
