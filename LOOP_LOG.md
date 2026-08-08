@@ -4215,3 +4215,38 @@ removes ~16 registers rather than 3 — would want both.
 - `tools/dprof_diff.sh` added: pairs two dprof+ksweep logs by (K, sub-op). Every cycle since F70 has
   read these tables by eye, and F73's lesson was that the decisive number is the control the change
   must *not* have moved. It is the tool that produced the K=1 row above.
+
+## Finding 77 — the clean re-baseline F73 and F74 both skipped: 21.76 / 13.64
+
+Cycles 10 and 11 each spent their one sanctioned run on `DSV4_DPROF=1`, so two adopted findings landed
+against a baseline of 20.44/13.50 that predated both. `evidence/clean_post_f76.log`, no dprof, no
+ksweep, matching `final6.log`'s config exactly:
+
+```
+first decoded token argmax = 11111  -> GATE PASS
+WARM decode: 73.3 ms/tok = 13.64 tok/s
+generated 26 tokens over 9 verifies: mean tokens/verify = 2.89 (block=5, max 5)
+LOSSLESS GATE: first 8 tokens match base AR -> PASS
+SPEC-DECODE: 46.0 ms/tok = 21.76 tok/s  (-> 1.60x)
+```
+
+**21.76 / 13.64, up from 20.44 / 13.50: +6.5 % spec, +1.0 % base.**
+
+Two things this settles beyond the headline:
+
+- **Acceptance is unchanged at 2.89** (final6: 2.89). F73 and F74 claimed to be bit-identical; a pure
+  kernel win must leave drafting untouched, and it does. If acceptance had moved, the "bit-identical"
+  claim would have been wrong regardless of what the gates said.
+- **dprof overhead is ~0.4 %** — 21.76 clean against 21.68 with dprof, inside the run-to-run band.
+  Finding 73 reached the same conclusion from the other side when its dprof run read `base` 13.75
+  against a clean 13.50. So the profiler is not distorting the marks it reports.
+
+Session arc: **16.86 -> 21.76 spec (+29.1 %)**, **10.30 -> 13.64 base (+32.4 %)**. Against the measured
+ceilings that is 70.6 % of the 30.8 tok/s spec cycle floor at acceptance 2.89, and 71.8 % of the 19.0
+tok/s base roofline.
+
+The process fix that came with it is in `scripts/flywheel.sh`: the harness now classifies each cycle's
+run and maintains `baseline.dprof_runs_since_clean`, and at >= 2 step 6 makes the next run a mandatory
+clean re-baseline. The executor had already *noticed* this and written an honest note refusing to
+overwrite a clean baseline with a contaminated one -- but noticing is not a mechanism, and it went two
+cycles anyway.

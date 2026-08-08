@@ -134,6 +134,12 @@ PHASES, in order:
    pass. If a gate fails, fix it or revert — never proceed past a red gate.
 
 6. MEASURE. ONE full-model run via scripts/run_model.sh (never two; never a second `decode`).
+   FIRST read `baseline.dprof_runs_since_clean` in FLYWHEEL_STATE.json. **If it is >= 2, your run this
+   cycle is not yours to choose**: it MUST be a CLEAN run with no DSV4_DPROF and no DSV4_KSWEEP, and
+   you MUST then write the measured numbers into `baseline.spec_tok_s`, `baseline.base_tok_s` and
+   `baseline.source_log`. A profiling run tells you where time goes but leaves the headline number
+   unmeasured, and two of those in a row is how F73 and F74 both landed against a stale 20.44 while
+   the engine was really at 21.68-with-dprof. Profile only once the baseline is current.
    Compare against the newest evidence/*.log for the same configuration. Quote the tight within-run
    marks (ksweep K=5, the dprof sub-op) as well as end-to-end tok/s.
    If the run prints a spec tok/s, the log MUST contain "LOSSLESS GATE ... PASS". A change that
@@ -217,6 +223,31 @@ for L in $(find "$HOME" -maxdepth 1 -name '*.log' -newer "$ROOT/.flywheel_selfte
     B=$(basename "$L")
     cp "$L" "$ROOT/evidence/$(printf 'cycle%03d' "$CYCLE")-$B" 2>/dev/null &&         log "archived evidence: $(printf 'cycle%03d' "$CYCLE")-$B ($(wc -l < "$L") lines)"
 done
+
+# A cycle gets ONE model run. Cycles 10 and 11 both spent theirs on DSV4_DPROF=1, so two adopted
+# findings (F73, F74) landed with no clean end-to-end number behind them and the recorded baseline
+# went stale at 20.44 while the engine measured 21.68-with-dprof. The executor NOTICED and wrote so
+# in its own state note -- correctly refusing to overwrite a clean baseline with a contaminated one --
+# but noticing is not a mechanism, and it went two cycles regardless. So the harness counts it now:
+# a run whose log contains [dprof] marks is a profiling run; one that reports a rate with no [dprof]
+# is a clean re-baseline. At >=2 the prompt (step 6) makes the next run non-negotiable.
+CLEAN_RUN=0; DPROF_RUN=0
+for L in "$ROOT"/evidence/$(printf 'cycle%03d' "$CYCLE")-*.log; do
+    [ -f "$L" ] || continue
+    grep -q "SPEC-DECODE\|WARM decode" "$L" 2>/dev/null || continue
+    if grep -q "^\[dprof\]" "$L" 2>/dev/null; then DPROF_RUN=1; else CLEAN_RUN=1; fi
+done
+if [ "$CLEAN_RUN" = 1 ] || [ "$DPROF_RUN" = 1 ]; then
+    python3 - "$STATE" "$CLEAN_RUN" <<'PYEOF' 2>/dev/null || true
+import json,sys
+p,clean=sys.argv[1],sys.argv[2]=="1"
+d=json.load(open(p)); b=d.setdefault("baseline",{})
+b["dprof_runs_since_clean"]=0 if clean else b.get("dprof_runs_since_clean",0)+1
+json.dump(d,open(p,"w"),indent=2)
+print("baseline.dprof_runs_since_clean ->", b["dprof_runs_since_clean"])
+PYEOF
+    log "re-baseline counter: dprof_runs_since_clean=$(python3 -c "import json;print(json.load(open('$STATE'))['baseline'].get('dprof_runs_since_clean',0))" 2>/dev/null || echo '?')"
+fi
 
 # ---- commit on the agent's behalf --------------------------------------------------------------
 # Clerical work belongs to the harness, not to the agent's turn budget. The agent writes a message;

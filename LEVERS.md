@@ -16,13 +16,22 @@ Rules of the road:
 
 ## 1. Where the time actually goes
 
-Current baseline (prompt 0, clocks pinned, post-Finding-72): **20.44 tok/s speculative**,
-**13.50 tok/s base AR** (74.1 ms/tok). `evidence/final6.log`. **Not re-measured since**: F73 and F74
-both spent their one run with `DSV4_DPROF=1`, so the newest end-to-end numbers (21.68 spec / 13.78
-base AR, `evidence/kchunk.log`) carry dprof overhead and are only comparable to each other. F76
-spent its run reproducing that pair like-for-like (21.67 / 13.72, `evidence/ogws1.log`), so a clean
-non-dprof number is now **THREE cycles overdue** — the next cycle that has no kernel change worth a
-dprof profile should spend its run without `DSV4_DPROF` and re-establish the headline.
+Current baseline (prompt 0, clocks pinned, **post-Finding-76, CLEAN**): **21.76 tok/s speculative**,
+**13.64 tok/s base AR** (73.3 ms/tok), acceptance **2.89**, speedup **1.60x**.
+`evidence/clean_post_f76.log` — no `DSV4_DPROF`, no `DSV4_KSWEEP`, matching `final6.log`'s config
+exactly, GATE PASS and LOSSLESS GATE PASS. Supersedes the 20.44/13.50 of `final6.log`: **+6.5 % spec,
++1.0 % base**.
+
+The re-baseline that was three cycles overdue is done (Finding 77), and it settled two things the
+stale line could not. **Acceptance is unchanged at 2.89** against final6's 2.89 — F73 and F74 both
+claimed bit-identical, and a pure kernel win must leave drafting untouched, so this is the claim
+holding where it could have failed silently. And **dprof overhead is ~0.4 %** (21.76 clean vs 21.68
+with dprof), inside the run-to-run band — the profiler is not distorting the marks it reports, which
+is Finding 73's observation confirmed from the other side.
+
+It cannot go stale by three cycles again: `scripts/flywheel.sh` now classifies each cycle's run by
+whether its log carries `[dprof]` marks, maintains `baseline.dprof_runs_since_clean`, and at >= 2
+step 6 makes the next run a mandatory clean re-baseline.
 
 The K=5 verify dprof TOTAL is **127.2 ms** and splits into two populations that behave completely
 differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned):

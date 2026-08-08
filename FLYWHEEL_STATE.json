@@ -7,12 +7,14 @@
     "moe-latency"
   ],
   "baseline": {
-    "spec_tok_s": 20.44,
-    "base_tok_s": 13.5,
-    "verify_k5_ms": 132.53,
-    "source_log": "evidence/final6.log",
-    "measured": "2026-08-07",
-    "note": "prompt 0, clocks PINNED (jetson_clocks). 20.44/13.50 is evidence/final6.log, a CLEAN non-dprof run at the F72 build. Cycles 10 (F73), 11 (F74) and 12 (F76) ALL spent their one sanctioned run on DSV4_DPROF=1, so there is still NO clean non-dprof end-to-end number after F74: evidence/kchunk.log reads 21.68/13.78 and evidence/ogws1.log reads 21.67/13.72, both WITH dprof overhead and comparable only to each other. F76 adopted nothing, so the shipped engine is behaviourally the F74 build and 21.68/13.78 remains the like-for-like line. A clean non-dprof run is now THREE cycles overdue and should be the next cycle's run if that cycle has no kernel change needing sub-op attribution."
+    "spec_tok_s": 21.76,
+    "base_tok_s": 13.64,
+    "acceptance": 2.89,
+    "speedup": 1.6,
+    "source_log": "evidence/clean_post_f76.log",
+    "measured": "2026-08-08",
+    "dprof_runs_since_clean": 0,
+    "note": "CLEAN run -- no DSV4_DPROF, no DSV4_KSWEEP -- at the post-F76 build, matching final6.log's config exactly (NDEC=8, 24 spec tokens, block=5, passes=1, adaptK=1.50, prompt 0, clocks pinned). GATE PASS and LOSSLESS GATE PASS. Supersedes the stale 20.44/13.50 of final6.log, which predated F73/F74. Acceptance is UNCHANGED at 2.89 vs final6's 2.89, so F73+F74 are pure kernel wins with no drafting change -- exactly what a bit-identical claim predicts. Also settles the dprof-overhead question the state note flagged: 21.76 clean vs 21.68 with dprof is 0.4%, inside the run-to-run band, confirming F73's observation from the other side."
   },
   "queue": [
     {
@@ -81,7 +83,7 @@
     ]
   },
   "counter_note": "consecutive_sub_half_pct 0 -> 1: F76 adopted nothing. The change is bit-identical and free but measured +0.1% on the tightest available instrument, so it ships DEFAULT OFF behind OG_WS1=1 rather than entering the baseline unmeasured. Two more cycles adopting nothing >=1% fires the pivot.",
-  "note_for_executor": "YOU CANNOT RUN GIT — write .flywheel_commit_msg and stop; the harness commits and the auditor publishes. Cycles 9 and 10 both did correct work and were left uncommitted because the prompt told them to commit. Read LEVERS.md and RESEARCH_LOG.md first. ATTRIBUTE BEFORE OPTIMISING, and read the STALL REASON, not just the achieved GB/s: F76 is the worked example of a kernel that is 29% below its own demonstrated rate and cannot be helped by touching its instructions. `nvcc -Xptxas -v` and `ncu --set full` on build/ncu_target both cost one recompile and answer questions gemm_bench can only rank. Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log.",
+  "note_for_executor": "YOU CANNOT RUN GIT \u2014 write .flywheel_commit_msg and stop; the harness commits and the auditor publishes. Cycles 9 and 10 both did correct work and were left uncommitted because the prompt told them to commit. Read LEVERS.md and RESEARCH_LOG.md first. ATTRIBUTE BEFORE OPTIMISING, and read the STALL REASON, not just the achieved GB/s: F76 is the worked example of a kernel that is 29% below its own demonstrated rate and cannot be helped by touching its instructions. `nvcc -Xptxas -v` and `ncu --set full` on build/ncu_target both cost one recompile and answer questions gemm_bench can only rank. Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log.",
   "loop": {
     "executor": "scripts/flywheel.sh (one lever per tick, commits locally, cannot push)",
     "auditor": "scripts/flywheel_audit.sh (deterministic, ~70 lines, the ONLY thing that pushes)",
