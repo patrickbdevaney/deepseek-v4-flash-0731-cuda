@@ -154,7 +154,8 @@ PHASES, in order:
 
 HARD RULES
   - Numbers come from a log you produced this cycle. A number you cannot grep is a number that did
-    not happen.
+    not happen. If a commit's numbers are all DERIVED (a roofline, a projection, a ceiling) rather
+    than run, say so with a line starting `DERIVED-ONLY:` — the auditor holds unexplained numbers.
   - One change per measurement.
   - Prefer reverting to keeping something unmeasured.
   - Never run git. Write .flywheel_commit_msg instead (see phase 7).

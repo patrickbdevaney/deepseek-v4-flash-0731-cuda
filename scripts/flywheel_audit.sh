@@ -51,13 +51,24 @@ if echo "$TOUCHED" | grep -qE '^(kernels|src|include)/'; then
 fi
 
 # ---- 3. the measurement. Only applies if the cycle claims a tok/s number. ----
+# "newest evidence" must be an actual MODEL RUN, not any file that landed in evidence/. The first
+# version took `ls -t evidence/*.log | head -1` and picked up an archived CRON log, then reported the
+# commit as unverifiable. Select on content, not on mtime and a glob.
 CLAIM=$(git log -1 --format=%B | grep -oE '[0-9]+\.[0-9]+ tok/s' | head -1 | grep -oE '[0-9]+\.[0-9]+' || true)
-NEWEST=$(ls -t evidence/*.log 2>/dev/null | head -1)
+NEWEST=$(grep -lE "SPEC-DECODE|WARM decode" evidence/*.log 2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
+# Some commits legitimately carry numbers that were DERIVED, not run: a roofline, a projection, a
+# ceiling. Trying to tell those apart by keyword failed twice (a commit about "MEASURED bytes" is
+# about arithmetic on measured bytes, not about a run). So the executor DECLARES it: a commit whose
+# numbers are all derived must contain a line starting `DERIVED-ONLY:` with the reason. Explicit,
+# auditable, and impossible to trip accidentally — which a keyword heuristic is not.
+git log -1 --format=%B | grep -q "^DERIVED-ONLY:" && CLAIM=""
 if [ -n "$CLAIM" ]; then
     if [ -z "$NEWEST" ]; then note "commit claims $CLAIM tok/s but evidence/ has no log"
     else
         # Finding 33: a number that cannot be traced to a run did not happen.
-        grep -q "$CLAIM" "$NEWEST" || note "claimed $CLAIM tok/s not found in $(basename "$NEWEST")"
+        # Traceable to ANY archived run, not only the newest — a cycle may legitimately quote its
+        # control. Finding 33 requires the number to have happened, not to be the most recent thing.
+        grep -ql "$CLAIM" evidence/*.log 2>/dev/null || note "claimed $CLAIM tok/s not found in any evidence/ log"
         # Finding 68: a speedup that is a quality collapse passes every other gate.
         if grep -q "SPEC-DECODE" "$NEWEST"; then
             grep -q "LOSSLESS GATE.*PASS" "$NEWEST" || note "no passing LOSSLESS gate in $(basename "$NEWEST")"
