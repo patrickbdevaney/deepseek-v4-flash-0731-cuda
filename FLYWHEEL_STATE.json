@@ -74,5 +74,20 @@
     ],
     "stop": "touch FLYWHEEL_STOP",
     "untested": "the RESEARCH phase has never actually run: this session's web-search budget was exhausted (200/200) before it could be exercised. Headless cycles get their own budget, but the first cycle that takes the research branch is unverified. Everything else ran end to end, including a deliberate bad commit that the auditor correctly HELD."
+  },
+  "pivot_criterion": {
+    "why": "S5 (draft-head re-alignment) is a TRAINING job the autonomous loop cannot do. Kernel work and training compete for the same operator attention, so the loop must say plainly when kernel work has stopped paying rather than grinding sub-1% levers forever.",
+    "trigger": "PIVOT when open_nontraining_levers == 0 on TWO consecutive audits, OR when three consecutive cycles adopt nothing >=1%. Either fires -> the auditor writes a PIVOT banner to FLYWHEEL_AUDIT.md and creates FLYWHEEL_PIVOT.",
+    "open_nontraining_levers": 2,
+    "note": "The executor MUST update open_nontraining_levers every cycle: the count of LEVERS.md items that are open, expected >=1%, and implementable without training or relaxing a standing constraint. S5/S6/S7 are speculation-side; S5 and S7 need training and do NOT count. S6 (suffix-automaton drafting) needs no training and DOES count.",
+    "position_at_definition": {
+      "spec_tok_s": 20.44,
+      "spec_ceiling_at_acceptance_2.90": 30.8,
+      "pct_of_ceiling": "66%",
+      "base_tok_s": 13.5,
+      "base_roofline": 19.0,
+      "pct_of_roofline": "71%",
+      "reading": "The remaining kernel headroom is ~30% and is spread across many sub-1% items; the acceptance multiplier alone is worth 1.4x. When the kernel queue empties, the pivot is not a defeat -- it is the point where the larger lever becomes the only lever."
+    }
   }
 }

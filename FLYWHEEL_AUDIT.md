@@ -12,3 +12,5 @@
   the real ceiling from measured bytes, and three operator-supplied methods triaged
 ## 2026-08-08T00:10:06-04:00 — PUSHED b6782b9196dcf0e43d63125330ef6efb27782e09
   triage the deep-research dossier: 4 promoted, 6 already done here, 3 inapplicable
+## 2026-08-08T00:18:53-04:00 — PUSHED 8af1eb51103b939929ebde69edcf1905fb2eea7d
+  untrack FLYWHEEL_STOP: origin/main was shipping a committed stop flag

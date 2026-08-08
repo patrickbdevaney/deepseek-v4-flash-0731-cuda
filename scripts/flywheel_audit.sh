@@ -31,7 +31,24 @@ HEAD_SHA=$(git rev-parse HEAD)
 SEEN=$(cat "$ROOT/.flywheel_audited" 2>/dev/null || echo "")
 [ "$HEAD_SHA" = "$SEEN" ] && { say "no new commit"; exit 0; }
 UNPUSHED=$(git log --oneline origin/main..HEAD 2>/dev/null | wc -l)
-[ "$UNPUSHED" -eq 0 ] && { echo "$HEAD_SHA" > "$ROOT/.flywheel_audited"; say "nothing unpushed"; exit 0; }
+[ "$UNPUSHED" -eq 0 ] && { # ---- 5. PIVOT. Kernel work and the draft-head fine-tune compete for the same attention, so the loop
+# declares exhaustion mechanically instead of grinding sub-1% levers forever. See
+# FLYWHEEL_STATE.json:pivot_criterion. Two consecutive audits with an empty non-training queue. ----
+OPEN=$(python3 -c "import json;print(json.load(open('FLYWHEEL_STATE.json')).get('pivot_criterion',{}).get('open_nontraining_levers',99))" 2>/dev/null || echo 99)
+PREV=$(cat "$ROOT/.flywheel_openprev" 2>/dev/null || echo 99)
+echo "$OPEN" > "$ROOT/.flywheel_openprev"
+if [ "$OPEN" = "0" ] && [ "$PREV" = "0" ] && [ ! -f "$ROOT/FLYWHEEL_PIVOT" ]; then
+    touch "$ROOT/FLYWHEEL_PIVOT"
+    { echo "## $(date -Is) — ** PIVOT **"
+      echo "  Two consecutive audits with no open non-training lever >=1%."
+      echo "  Kernel optimisation is exhausted for this checkpoint. The remaining lever is S5:"
+      echo "  re-align the DSpark MTP draft head. That is a TRAINING job -- the loop cannot do it."
+      echo "  Position: $(grep -oE '\"spec_tok_s\": [0-9.]+' FLYWHEEL_STATE.json | head -1) vs a ceiling of 30.8 at acceptance 2.90."
+    } >> "$ROOT/FLYWHEEL_AUDIT.md"
+    say "** PIVOT ** kernel work exhausted; the remaining lever is training (S5). See FLYWHEEL_AUDIT.md"
+fi
+
+echo "$HEAD_SHA" > "$ROOT/.flywheel_audited"; say "nothing unpushed"; exit 0; }
 
 # ---- 1. gates. A cycle that leaves the tree failing must never be published. ----
 bash scripts/build_gate.sh >/tmp/dsv4-audit-build.log 2>&1 || note "build_gate.sh failed"

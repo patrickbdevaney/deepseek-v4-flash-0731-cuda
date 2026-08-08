@@ -140,6 +140,12 @@ PHASES, in order:
    raises tok/s while failing it has degraded the output — Finding 68 is the worked example, a fake
    +28% that passed every other gate.
 
+6b. COUNT THE QUEUE. Update `pivot_criterion.open_nontraining_levers` in FLYWHEEL_STATE.json: how many
+   LEVERS.md items are open, expected >=1%, and doable WITHOUT training or relaxing a standing
+   constraint. Count honestly — inflating it to keep the loop alive is the one failure mode that
+   cannot be caught by a gate. When it reaches 0 twice the auditor declares a PIVOT to the draft-head
+   fine-tune, which is the correct outcome, not a failure.
+
 7. WRITE BACK. Append one LOOP_LOG.md finding: what you tried, the numbers, and the mechanism —
    including for a FAILURE, with the number that killed it. Move the lever in LEVERS.md into adopted
    or retired. Copy the run log into evidence/.
