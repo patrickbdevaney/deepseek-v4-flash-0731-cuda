@@ -5281,3 +5281,71 @@ Remaining attention marks: `cattn:ogroup` 2786, `cattn:compress` 2239, `cattn:in
 shuffles and **no tensor cores at all** — 5 shuffles plus a broadcast to reduce 16 FMAs of useful
 work. The remaining order of magnitude is a flash-attention-style tensor-core kernel for the
 score path (`sparse` + `indexer` = 4.1 s together), not more tuning of this one.
+
+## Finding 87 — the compute peak, measured at last: **FP32 5.45 / BF16 53.1 / FP8 92.2 TFLOPS** — and my "1 % of peak" claims in F84-F86 were wrong by an order of magnitude
+
+**Operator-run, `tools/flops_probe.cu`, clocks pinned.** Every roofline in this project has been a
+BANDWIDTH roofline (`bw_probe`, 233 GB/s). Compute was never measured, and F84/F85/F86 each leaned
+on "that TFLOPS number is low" — an assumption, not a measurement, that decides whether the
+remaining prefill work is a tensor-core rewrite or fine tuning.
+
+```
+device: NVIDIA Thor  SMs=20  clock=1.049 GHz  cc=11.0
+FP32 FFMA                  5.45 TFLOPS      (reference for 128 cores/SM: 5.37 -> core count confirmed)
+FP16 mma m16n8k16         53.07 TFLOPS
+BF16 mma m16n8k16         53.08 TFLOPS
+FP8 e4m3 mma m16n8k32     92.18 TFLOPS
+```
+
+`NACC=32` independent FFMA chains, so this is throughput- not latency-bound — one dependent chain
+would have measured FFMA latency and reported ~1/4 of peak, the classic way this benchmark lies.
+
+### The correction I owe
+
+I wrote that prefill at 1.47 TFLOPS was "~1-2 % of plausible peak" and that `cattn:sparse` at
+0.72 TFLOPS was catastrophic. **Both assumed a ~100 TFLOPS peak that exists only in FP8 tensor
+cores.** Against the real FP32 ceiling:
+
+| | measured | % of **5.45 TFLOPS** FP32 peak |
+|---|---|---|
+| whole prefill | 1.47 TFLOPS | **27 %** |
+| `cattn:sparse` (post-F86) | 1.04 TFLOPS | **19 %** |
+| `cattn:ogroup` | 1.98 TFLOPS | **36 %** |
+
+The fp32 attention path is running at a *reasonable* fraction of what fp32 on this chip can do. It
+was never 1 % of anything. **Thor's compute lives almost entirely in the tensor cores — bf16 is
+9.7x fp32, fp8 is 16.9x — and not one kernel in our attention path touches them.**
+
+### What this settles
+
+- **fp32 tuning is nearly exhausted.** `cattn:sparse` at 19 % of the fp32 peak has ~5x left in
+  theory and realistically ~2x. The four remaining attention marks are each worth tenths of a
+  second, not seconds. **F86's own suggestion — "three or four more changes of the kind just made" —
+  is worth far less than I priced it at.**
+- **The tensor-core rewrite is confirmed as the order-of-magnitude lever, with a real number behind
+  it now.** A bf16 flash-attention score path at a conservative 30-50 % of the 53.1 TFLOPS peak is
+  **15-25x** on `cattn:sparse` alone.
+
+Sizing the two rewrites against measured peaks:
+
+| step | saves | prefill | tok/s |
+|---|---|---|---|
+| today (post-F86) | — | 17.36 s | 58.9 |
+| `sparse`+`indexer` -> bf16 TC @40 % of peak | 3.90 s | 13.47 s | 75.9 |
+| + `ogroup` -> fp8 TC @30 % of peak | 2.58 s | 10.88 s | **93.9** |
+
+**20K-sample capture: 4.0 days -> 2.5 days.**
+
+### Caveats that belong with these numbers
+
+1. **30-50 % of mma peak is an assumption**, and a friendly one. It is what well-written
+   flash-attention kernels reach on datacenter parts; our sparse path gathers keys through an index
+   list, which is harder. Treat 93.9 tok/s as the optimistic end.
+2. **Bit-exactness is off the table.** Every prefill change so far (F85, F86) was bit-exact and
+   gated on `rms=0.00e+00`. A bf16 tensor-core score path is a numerics change and needs a
+   cosine-tolerance gate instead — a different, weaker guarantee, and the LOSSLESS spec gate becomes
+   the thing that must hold.
+3. **MXFP4 tensor cores are NOT covered by this probe.** `HARDWARE.md` records that `mma.sync` FP4
+   is blocked on `sm_110a` and Thor reaches FP4 only via `tcgen05`, which needs tensor-memory
+   allocation and matrix descriptors. The MoE at 5.1 TFLOPS against a 92 TFLOPS fp8 peak looks like
+   5 % — but the honest statement is that its ceiling has not been measured.
