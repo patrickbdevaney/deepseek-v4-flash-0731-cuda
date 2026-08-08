@@ -34,6 +34,7 @@ using namespace dsv4;
 extern bool g_tc_fp8;
 void fp8_set_gemv_mk_maxm(int m);
 void tc_fp8_set_smem(int on);
+void tc_fp8_set_cpa(int ns);   // cp.async ring depth (LEVERS.md B8-cpasync); 0 = the shipped KC kernel
 
 static void* dalloc(size_t n){ void* p; CU(cudaMalloc(&p,n)); CU(cudaMemset(p,0x11,n)); return p; }
 
@@ -275,8 +276,12 @@ int main(int argc, char** argv) {
             { 512,4096,"wkv    [512,4096]"},  {4096,4096,"wo_b   [4096,4096]"},
             {2048,4096,"sw1/3  [2048,4096]"}, {4096,2048,"sw2    [4096,2048]"},
         };
+        // The cp.async arms sit at sweep positions 4-6, i.e. ADJACENT to variant 3 (m16+smem B+4),
+        // which is the arm they have to beat because B+4 is the alignment the real weights have
+        // (Finding 66). Adjacency is trap 5: replicate 1 of a long sweep ran 14% slow.
         printf("\n--- COLD crossover on the real verify shapes: ms (GB/s) ---\n");
-        printf("%-20s %-6s %14s %14s %14s %14s\n","shape","M","GEMV","m16 plain","m16+smem","m16+smem B+4");
+        printf("%-20s %-6s %14s %14s %14s %14s %14s %14s %14s\n","shape","M",
+               "GEMV","m16 plain","m16+smem","m16+smem B+4","cpa NS4 B+4","cpa NS4 B+0","cpa NS2 B+0");
         for (auto& s : shp){
             const size_t wb=(size_t)s.N*s.K;
             const int NC = (int)std::max<size_t>(4, (size_t)(400ull<<20)/wb);   // >=400 MB rotation
@@ -285,18 +290,23 @@ int main(int argc, char** argv) {
             for (int M : {1,2,3,5,8}){
                 uint8_t* A=(uint8_t*)dalloc((size_t)M*s.K); float* as=(float*)dalloc((size_t)M*(s.K/128)*4);
                 float* C=(float*)dalloc((size_t)M*s.N*4);
-                double t[4];
-                for (int variant=0; variant<4; ++variant){
+                double t[7];
+                for (int variant=0; variant<7; ++variant){
                     // 0: GEMV (m1 kernel at M=1, mkT at M>=2)   1: m16 register   2: m16 smem-staged
+                    // 3: m16 smem-staged at B+4                 4-6: cp.async ring NS=2/4/8 at B+4
                     if(variant==0){ setenv("TC_MK","",0); unsetenv("TC_MK"); fp8_set_gemv_mk_maxm(8); }
                     else          { setenv("TC_MK","1",1); fp8_set_gemv_mk_maxm(0); }
                     tc_fp8_set_smem(variant>=2);
-                    int c=0; const int boff = (variant==3) ? 4 : 0;   // real weights are only 4-byte aligned
+                    // 4 = NS=4 at B+4 -> AL16=false -> cp-size 4 (the alignment real weights have)
+                    // 5 = NS=4 at B+0 -> AL16=true  -> cp-size 16, the ONLY cp.async size on the fast
+                    // 6 = NS=2 at B+0    path; compare 5 against variant 2, which is also B+0.
+                    tc_fp8_set_cpa(variant==4||variant==5 ? 4 : (variant==6 ? 2 : 0));
+                    int c=0; const int boff = (variant==3||variant==4) ? 4 : 0;
                     t[variant]=timeit([&]{ int i=c++%NC; fp8_block_gemm(C,A,as,W[i]+boff,SS[i],M,s.N,s.K,0); }, 24);
                 }
-                unsetenv("TC_MK"); fp8_set_gemv_mk_maxm(4); tc_fp8_set_smem(1);
+                unsetenv("TC_MK"); fp8_set_gemv_mk_maxm(4); tc_fp8_set_smem(1); tc_fp8_set_cpa(0);
                 printf("%-20s M=%-4d", s.nm, M);
-                for(int v=0;v<4;++v) printf(" %8.4f(%3.0f)", t[v], wb/t[v]/1e6);
+                for(int v=0;v<7;++v) printf(" %8.4f(%3.0f)", t[v], wb/t[v]/1e6);
                 printf("\n");
                 CU(cudaFree(A)); CU(cudaFree(as)); CU(cudaFree(C));
             }

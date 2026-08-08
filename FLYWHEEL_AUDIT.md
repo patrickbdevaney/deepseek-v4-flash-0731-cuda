@@ -25,3 +25,4 @@
   fp8 tile double-buffer: bit-identical, +0.28% in situ. NEGATIVE (F78), B8's tile half closed
 ## 2026-08-08T06:35:51-04:00 — PUSHED 1a120f1abbc2a198f4eae3758cec44e06a5be578
   B8' dead at ptxas: smem spill 396->368 B, not -16 regs. NEGATIVE (F79), B8 fully closed
+## 2026-08-08T07:36:19-04:00 — PUSH FAILED 7858cf1ab0d5fd1b25ad30fa6fabdf432cdc6a08

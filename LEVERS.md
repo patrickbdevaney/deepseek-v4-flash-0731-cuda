@@ -16,23 +16,26 @@ Rules of the road:
 
 ## 1. Where the time actually goes
 
-Current baseline (prompt 0, clocks pinned, **post-Finding-79, CLEAN**): **22.07 tok/s speculative**,
-**13.78 tok/s base AR** (72.6 ms/tok), acceptance **2.89**, speedup **1.60x**.
-`evidence/clean_post_f79.log` — no `DSV4_DPROF`, no `DSV4_KSWEEP`, GATE PASS and LOSSLESS GATE PASS.
+Current baseline (prompt 0, clocks pinned, **post-Finding-81, CLEAN**): **22.06 tok/s speculative**,
+**13.83 tok/s base AR** (72.3 ms/tok), acceptance **2.89**, speedup **1.60x**.
+`evidence/clean_post_f81.log` — no `DSV4_DPROF`, no `DSV4_KSWEEP`, no `TCB_CPA`, GATE PASS and LOSSLESS
+GATE PASS. F81's lever ships default OFF and this run's spec token sequence is **byte-identical** to
+`clean_post_f79.log`, so it measures the same default arm — which is what makes it a variance control.
 
-**Read that as a variance measurement, not a gain.** F79's lever shipped default OFF and the engine's
-default arm is byte-for-byte the arm that produced `evidence/clean_post_f76.log` (21.76 / 13.64) —
-`ptxas -v` confirms `ogroup_gemv_mk_kernel<5,4,false>` unchanged at 64 registers / 44 bytes spill. So
-**+1.4 % spec and +1.0 % base is what two CLEAN runs of an identical binary differ by**, and the nine
-paired verifies say the same thing more sharply: 1212.4 → **1194.7 ms, −1.5 %, all nine in the same
-direction** at identical K and identical accept counts.
+**Trap 25 is now measured twice and it does NOT read as a 1.5 % noise band.** Two identical-arm clean
+pairs on the nine-paired-verify instrument: f76 → f79 was **−1.5 %, 9/9 in one direction**; f79 → f81 is
+**+0.17 %, 2/9**, per-verify spread +0.00 % to +1.21 %, spec −0.05 %, base +0.36 %. So the instrument
+*can* reproduce to ~0.2 %, and the 1.5 % was an occasional **systematic shift**. Practical rule: a
+*single* cross-run claim under ~1.5 % is still unsupportable — you cannot tell which kind of pair you
+drew — but a sub-1 % effect **is** resolvable with **two** pairs. That is the only route left to
+anything in §4, all of which is sub-1 %.
 
-That is the control this project never had, and it **re-prices its own instrument**. The
-nine-paired-verify spread quoted as ±0.8 % in F76/F78 is the spread *within* a matched pair; the
-floor for the **cross-run** comparison those findings actually made is **~1.5 %, and it can be
-systematic in one direction**. F76 (+0.1 %) and F78 (+0.28 %) were called null and stay null. F74's
-+6.1 % clears it 4x. But **no future cross-run claim below ~1.5 % is supportable on this instrument** —
-which is exactly the size of every lever now left in §4.
+The first of those two pairs is F79's, and it is the reason the floor exists at all: F79 also shipped
+default OFF, so its clean run measured the same arm as `clean_post_f76.log` (21.76 / 13.64) — `ptxas -v`
+confirmed `ogroup_gemv_mk_kernel<5,4,false>` unchanged at 64 registers / 44 bytes spill — and yet
+**+1.4 % spec, +1.0 % base, and −1.5 % on all nine paired verifies at identical K and accept counts**.
+The ±0.8 % quoted in F76/F78 is the spread *within* a matched pair, not across runs. F76 (+0.1 %) and
+F78 (+0.28 %) were called null and stay null; F74's +6.1 % clears either pair 4x.
 
 The previous re-baseline (Finding 77) settled two things the stale line could not. **Acceptance is unchanged at 2.89** against final6's 2.89 — F73 and F74 both
 claimed bit-identical, and a pure kernel win must leave drafting untouched, so this is the claim
@@ -60,9 +63,12 @@ differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, cloc
 **The fp8 GEMM block (`q_proj` + `ogroup` = 33.8 ms, 27 %) is still the largest region outside the
 MoE, and F74 proved it is not at the roofline. F78 closed the tile half and F79 closed `o:wo_a`, so
 after F79 it had no untried named move; the cycle-15 research phase re-opened exactly one —
-`B8-cpasync`, a *decoupled producer warp* filling a ≥4-stage smem ring, which is a different
-mechanism from the 2-stage register buffer F78 measured at +0.28 % and is now the only open ≥1 %
-non-training lever in the project (see §4).** Its four marks are two different kernels: `q:wq_b`, `q:wq_a`, `o:wo_b` are the
+`B8-cpasync`, a ≥4-stage `cp.async` smem ring — and **F81 built it and retired it: bit-exact, 16
+registers handed back, occupancy UP 4 → 5 blocks/SM, and 15–53 % SLOWER in the bench; +2 to +26 %
+even when re-benched at the 16-byte alignment the engine does not have.** With that the whole fp8
+GEMM block is closed on every named idea, and `open_nontraining_levers` is **0** (see §4).**
+
+Its four marks are two different kernels: `q:wq_b`, `q:wq_a`, `o:wo_b` are the
 smem-staged fp8 tile (F74 fixed their MLP; **F78 measured its double buffer at +0.28 %, the last
 named move, and the mark it targeted, `o:wo_b`, went +2.8 % the wrong way**), and `o:wo_a` is
 `ogroup_gemv_mk_kernel`. **F76 attributed `o:wo_a` and it is not the cheap one:** it is
@@ -145,6 +151,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **any instruction-count cure for `ogroup_gemv_mk_kernel`** (WS1 scale hoist, and by the same argument the fp8x2 cvt pairing and `exp2f`→`__int_as_float(e<<23)`) | **the kernel is LATENCY-bound, so deleted instructions return nothing.** ncu: 8.1 of its 13.0 cycles between issues are L1TEX scoreboard stalls; Memory Throughput 41 %, Compute 49 %. WS1 removes NR−1 redundant scale loads and `exp2f` per k-block, is **72/72 bit-identical** (`gate_og_ws1`), and gemm_bench scored it −7.6 % at M=2/NR=2 and −14.8 % at M=3/NR=4 — in situ it is worth **+0.1 %** on the nine paired spec verifies (1219.4 → 1220.8 ms), spec 21.68 → 21.67 tok/s, every ksweep K inside ±0.5 %. Kept behind `OG_WS1=1`, default OFF. A change here must move the kernel's **memory** behaviour or it is priced at zero (F76) |
 | **double-buffering the fp8 tile's staged K-chunk** (issue round n+1's global loads before round n's mma) | **bit-identical (`gate_tc_fp8_kc` 1134/1134) and +0.28 %** on the nine paired spec verifies (1219.4 → 1222.8 ms); spec 21.68 → 21.62, ksweep K=5 +0.1 %. The mark it targeted went the WRONG way at every K≥2: `o:wo_b` **+2.8 %** at K=5, matching the bench's +3.1 % in sign and size. Mechanism: the prefetch works, but one KC=2 round is 8 mma plus L1/L2-resident A loads — a few hundred cycles against a ~600-cycle miss — so it hides only part of the latency and pays a second live register array for the rest. **Unbounded it also costs 4 registers, 64 → 68, which at 256 threads is 4 → 3 blocks/SM and cost up to +38.5 % in the bench** (see the trap). Kept behind `TCB_DB=1`, default OFF (F78) |
 | **B8': the `OG_SMEM` variant reading `o4[m]` LAZILY per m from shared memory** | **`ptxas -v` killed it before the bench, which is what the falsification criterion asked for.** The premise was that `float4 o4[M]` is 4M = 20 live registers at M=5 in a kernel already 8 over its 64-register cap, and that giving them back would cross an occupancy step (trap 21). ptxas says the live set barely moves: `ogroup_gemv_mk_smem_kernel<5,4>` goes **396 → 368 bytes of spill at an unchanged 64 registers (−7%, not −16 registers)**, because ptxas *re-hoists* the smem loads back to where `o4[M]` was — that is the better schedule and the source cannot forbid it. The bench agrees: at the shipped M=5/NR=4 it is **−1.1 %** against the `OG_SMEM` arm it modifies and still **+37.8 %** against the kernel that ships (0.2697 vs 0.1958 ms), and across every (M, NR) the lazy-vs-smem delta is inside ±3.4 %. Bit-identical at all 9 M (`gate_ogroup_gemv`, extended to sweep it). Kept behind `OG_SMEM_LAZY=1`, default OFF. **This was B8's last named idea, so `o:wo_a` now has none** (F79) |
+| **B8-cpasync: a ≥4-stage `cp.async` smem ring for the fp8 tile** (one K-block per stage, no register staging array at all) | **the bench, by 15–53 %, after the two cheap steps both said go.** `ptxas -v` said the mechanism works — **48 registers / 36864 B / 5 blocks/SM** vs the shipped `smemB<8,2,false>`'s **64 / 17408 / 4**, i.e. 16 registers handed back and occupancy *up* 25 % — and sm_110a assembles the whole TMA family. It is **bit-exact** (`gate_tc_fp8_kc` 1512/1512, +378 new cases). Then `gemm_bench` COLD at M=5 vs `m16+smem B+4`: **wq_a +23.9 %, wq_b +38.4 %, wkv +52.8 %, wo_b +39.9 %, sw1/3 +14.9 %, sw2 +36.3 %**. Re-benched at B+0 so the ring could use **cp-size 16** instead of the cp-size 4 the engine's 4-byte-aligned weights force: recovers ~25 % (wo_b 0.1428 → 0.1067) and **still loses at 5 of 6 shapes** (wq_a +5.7, wq_b +11.7, wkv +11.1, wo_b +26.4, sw2 +19.6, sw1/3 −3.0 %). **NS=2 beats NS=4 on 4 of 6 shapes**, so depth is negative. **Occupancy rose and it lost anyway** — at 4 blocks/SM the kernel was already saturating DRAM, so the 5th block only adds contention. Default OFF behind `TCB_CPA` (F81) |
 | hoisting a loop-invariant **pointer** in a register-starved kernel | not a lever, a trap, but it belongs here with its number: hoisting `wsc + (gr0/128)*scw` out of the k-loop took `<5,4>` from **44 to 60 bytes of spill** and cost 4.4 %. Two permanently-live registers beat three short-lived ones only when there are registers to spare. A 32-bit offset restored it (F76) |
 
 **Whole hypothesis classes**
@@ -170,7 +177,7 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | ~~B8'~~ | ~~`o:wo_a`: the `OG_SMEM=1` variant reading `o4[m]` LAZILY per m from shared memory~~ | **RETIRED, F79** | `ptxas -v` answered before the bench, exactly as the criterion demanded: spill **396 → 368 bytes at an unchanged 64 registers**, a −7 % move where ~16 registers were predicted, because ptxas re-hoists the smem loads back to where `o4[M]` was. Bench: **−1.1 %** vs the `OG_SMEM` arm, **+37.8 %** vs the shipped kernel. See §3. **`o:wo_a` now has no untried named idea at all**, and with it B8 is fully closed. |
 | B8'' | **M-gate `OG_SMEM` on: F55's 40 % kill was measured at M=5 ONLY, and the sign flips below M=4** | **~0.4 % — SUB-1 %, does not count toward the pivot queue** | New evidence, not a new argument (F79). F55 swept NR at M=5 and retired the variant on that one column. Sweeping **M** as well, same COLD harness, 3 alternating replicates (`evidence/oglazy_bench.log`), against the NR the dispatch actually picks at each M: **M=2 0.1717 → 0.1533 (−10.7 %), M=3 0.1962 → 0.1729 (−11.9 %), M=5 0.1958 → 0.2729 (+39.4 %, F55's number reproduced), M=8 0.3610 → 0.2810 (−22.2 %)**. So `ogsmem` gated on `bs<=3` is a real candidate. **Priced honestly it is small**: `o:wo_a` is 10.74 ms of an 85.9 ms K=2 verify and 10.26 of 104.7 at K=3, and only 4 of the 9 verifies in a canonical run are K≤3 → **~0.4 % end-to-end**, before the trap-3 discount that F76 (bench −7.6 %→ in situ +0.1 %) and F78 (bench +3.1 % → in situ +2.8 %) both demand. M=4 is unmeasured — the bench skips it and it is on the crossover. |
 | ~~B8-tile~~ | ~~the three tile marks `q:wq_b` + `o:wo_b` + `q:wq_a` = 22.5 ms~~ | **CLOSED, F78** | Kept for the achievability bar it established: **the target was never 233 GB/s** but the M=1 GEMV's own measured rate on the same weight bytes — `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). **Bytes are counted (F74) and it is NOT at roofline.** The target is not 233 GB/s — it is the M=1 GEMV's own measured rate on the same weight bytes: `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). Against that the three tile marks hold ~6.5 ms. **The one remaining move on them is to double-buffer the staged tile so round n+1's loads issue before round n's mma** — F67 closed both reroutes, F68 closed split-K on numerics. **`o:wo_a` (3.3 ms of the old estimate) is NO LONGER a cheap 7 %: F76 attributed it.** `ogroup_gemv_mk_kernel<5,4>` is *latency*-bound (8.1 of 13.0 cycles between issues on an L1TEX scoreboard), spills 44 bytes against a 64-register cap, and sits at a **measured local optimum in both knobs** — NR (1/2/4/8) and `OGMK_BLOCKS_PER_SM` (2/3/4, re-swept in F76 with the spill reduced). Instruction-count cures are retired as a family (§3). The only untried idea that moves ~16 registers instead of 3: **the `OG_SMEM=1` variant reading `o4[m]` lazily per m from shared memory** instead of holding M float4s live — smem makes lazy reads affordable where global loads need the MLP. F55 measured that variant a 40 % regression at NR=4 *with* the 20-register `o4[M]` still in it, so the register argument was never tested; falsify with `ptxas -v` before building anything. |
-| **B8-cpasync** | **`cp.async`/TMA staging global→shared for the fp8 tile, with a DECOUPLED PRODUCER WARP and a ≥4-stage smem ring** | **~1–3 % — PROMOTED from "idea, not open" by the 2026-08-08 research phase (axis D)** | **This is new evidence against the specific measurement that killed F78, not a re-argument.** F78 tested a **2-stage register** double-buffer and got **+0.28 %** in situ with `o:wo_b` going **+2.8 % the wrong way**. The literature's consensus design is different in mechanism: a *producer warp* issues `cp.async.bulk.tensor` into a **≥4-stage** shared-memory ring while a consumer warp issues the mma, and the sources name F78's exact failure mode — *"with only 2 stages, a small delay in TMA completion or barrier arrival can stall tensor-core issue almost immediately."* A deeper *register* buffer cannot decouple the two, because the same warp still issues both. It also removes the NH-`uint4` register array outright rather than doubling it, which is the opposite of what F78 did to occupancy. **Falsify in this order, and stop at the first no:** (1) `nvcc -Xptxas -v` — a 4-stage ring must not push smem past the point where blocks/SM falls, and F78 failed exactly this bar; (2) does `sm_110a` expose `cp.async.bulk.tensor` at all — `tools/tcgen05_probe.cu` exists and is the cheapest place to find out; (3) `gemm_bench` on the three tile marks, 3 alternating replicates, COLD; (4) in situ, where it must clear the **~1.5 % cross-run floor** F79 measured. Trap 3 says discount the bench: F76 went −7.6 % bench → +0.1 % in situ, F78 +3.1 % → +2.8 %. |
+| ~~**B8-cpasync**~~ | ~~`cp.async` staging global→shared for the fp8 tile with a ≥4-stage smem ring~~ | **RETIRED, F81 — bench +15 to +53 %, and +2 to +26 % even at ideal alignment** | Built, **bit-exact** (`gate_tc_fp8_kc` **1512/1512**), and it **passed both cheap falsification steps and then lost the bench by a mile**. (1) `ptxas -v`: at UF=1 the ring is **48 regs / 36864 B smem / 5 blocks/SM** against the shipped `smemB<8,2,false>`'s **64 regs / 17408 B / 4** — the register array really is given back and occupancy *rises*; smem was never the binding resource (233 472 B/SM, the shipped kernel uses 30 % of it at 4 blocks). (2) `cp.async.bulk.tensor.2d`, `cp.async.bulk`, `mbarrier.init` and `mbarrier.try_wait.parity` all **assemble at `-arch=sm_110a`**. (3) `gemm_bench` COLD, arms adjacent, M=5 vs `m16+smem B+4`: wq_a **+23.9 %**, wq_b **+38.4 %**, wkv **+52.8 %**, wo_b **+39.9 %**, sw1/3 **+14.9 %**, sw2 **+36.3 %**. **The disambiguation is the valuable half**, because the engine's weights are 4-byte aligned so the ring had to use cp-size 4: re-benched at B+0 (cp-size 16) it recovers ~25 % (wo_b 0.1428 → 0.1067) **and still loses to the ordinary LDG path at 5 of 6 shapes** — wq_a +5.7 %, wq_b +11.7 %, wkv +11.1 %, wo_b **+26.4 %**, sw2 +19.6 %, sw1/3 −3.0 %. **So no alignment work rescues it**, which is what makes this a permanent close rather than a block on F67's shard pad. And **NS=2 beats NS=4 on 4 of 6 shapes** (wo_b 0.0873 vs 0.1067), so *depth is negative* — the direct refutation of the promoted claim. Mechanism, new trap 29: one ring stage is **1** K-block, so `wait_group`+`__syncthreads` runs **once per K-block** where the shipped KC=2 pays it once per two — and F74's win *was* raising bytes-per-barrier. The ring trades the one thing that pays for bytes-in-flight the LDG path already had. Not run in situ: the falsification order says stop at the first no, and trap 3's discount has never turned a large bench negative into a win (F76 −7.6 % → +0.1 %, F78 +3.1 % → +2.8 %). Kept behind `TCB_CPA=<stages>`, default OFF. See §3. |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |
@@ -329,10 +336,16 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    direction.** F79 shipped default OFF, so its clean run measured the identical default arm as
    `clean_post_f76.log`, and the nine verifies pair 1:1 at identical K and accept counts for
    **1212.4 → 1194.7 ms (−1.5 %), all nine negative**; spec 21.76 → 22.07. Nothing changed. The
-   "±0.8 % own spread" quoted in F76/F78 is the *within*-pair figure; the cross-run floor is ~1.5 %
-   and it is not zero-mean over nine points. **Any cross-run end-to-end claim under ~1.5 % is
-   unsupportable on this instrument**, which is the size of everything left in §4 — the reason the
-   pivot criterion exists (F79).
+   "±0.8 % own spread" quoted in F76/F78 is the *within*-pair figure.
+   **AMENDED BY F81, which supplied the second pair this trap was missing.** F81 also shipped default
+   OFF, and f79 → f81 is **+0.17 % over the nine paired verifies, only 2/9 in one direction** (spread
+   +0.00 % to +1.21 %), spec **−0.05 %**, base **+0.36 %**, with the spec token sequence
+   byte-identical. So ~1.5 % is **not** a per-run noise band — the instrument reproduces to ~0.2 % when
+   it behaves, and the F79 pair was an occasional **systematic shift** of everything in one direction.
+   The rule to work by: a **single** cross-run comparison under ~1.5 % is still unsupportable, because
+   you cannot tell from inside one pair which kind you drew — but a sub-1 % effect **is** resolvable
+   with **two** pairs, which is the only route left to anything in §4 and was not obvious from F79
+   alone (F79, F81).
 26. **Do not pass one argument to every gate binary.** Running the suite as `for g in build/gate_*; do
    $g ref/goldens; done` produces **four** red gates that are all harness artefacts: `gate_encoding`
    cannot open `ref/goldens/test_input_1.json`, and `gate_compressed_decode`, `gate_indexer_decode`
@@ -358,6 +371,28 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    without building it (F80, and F67 before it). Measuring the **oracle** over both arms rather than
    one arm's point estimate is what made the result final: a ceiling of zero closes a lever, where a
    small negative would only have invited a better gating rule.
+29. **On this fp8 tile the binding resource is BARRIERS PER BYTE, not bytes in flight — and F74 already
+   said so.** F74's win was staging KC K-blocks per barrier pair instead of 1, i.e. *more bytes per
+   barrier*. B8-cpasync built a 4-stage `cp.async` ring at **one** K-block per stage, which doubles
+   the barrier count back to the pre-F74 rate while adding bytes in flight, and lost **15–53 %** in
+   the bench — with **NS=2 beating NS=4 on 4 of 6 shapes**, so the depth axis is negative. A stage is
+   64 rows x 128 B = 8 KB over 256 threads; there is not enough work per stage to amortise a
+   `wait_group` plus a `__syncthreads`. **Before adding pipeline depth to a kernel, check which of
+   (bytes per barrier, barriers per byte) its last adopted win moved, and do not move it back** (F81).
+30. **More blocks/SM is not more throughput once the kernel already saturates DRAM.** The `cp.async`
+   ring genuinely bought occupancy — `ptxas -v` says **48 registers vs 64, 5 blocks/SM vs 4**, a 25 %
+   gain, exactly the bar F78 failed — and it was **still 15–53 % slower**. The shipped kernel at 4
+   blocks/SM was already at 199 GB/s on `wo_b` against a 233–240 GB/s achievable; the 5th block adds
+   contention, not bandwidth. Occupancy is a *means*, and trap 21's arithmetic tells you when you have
+   lost it, not that winning it pays. **An occupancy win still has to be measured as time** (F81).
+31. **`cp.async` at cp-size 4 costs ~25 % against cp-size 16, and this engine's weights force
+   cp-size 4.** cp.async requires the copy size to equal the natural alignment, and F66 counted the
+   fp8 weights at `data_offset % 16 == 8` (43,470 of 44,436) or 12 (966), **never 0**. The same
+   alignment fact that made the `uint4` staging path need an `AL16` template makes the async path use
+   eight 4-byte DMAs where it wants two 16-byte ones: `wo_b` M=5 is **0.1428 ms at cp-size 4 vs
+   0.1067 at cp-size 16**. Measuring both was what turned F81 from "blocked on alignment" into a
+   permanent close, since cp-size 16 **still lost**. **Any future `cp.async`/TMA idea here inherits
+   this alignment tax and must be priced at B+4, not B+0** (F81).
 
 ---
 
@@ -387,3 +422,5 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 | `TCB_DB=1` | prefetch the fp8 tile's next staged chunk before the current mma. **Bit-identical and worth +0.28 %** — default OFF, see §3 (F78). `TCB_DB_BPS` is the `__launch_bounds__` blocks/SM the DB entry is held to (4) |
 | `DSV4_SUFFIXPROBE=1` | **prices LEVERS.md S6 without building it.** At every verify it runs `suffix_draft()` on the committed sequence and counts what the target would have accepted from a suffix/prompt-lookup draft, against what the MTP actually got — as a **counted integer**, which is the only way anything survives the ~1.5 % cross-run timing floor (trap 25). READ-ONLY: no device buffer, no engine state, so GATE and LOSSLESS GATE are unaffected. `DSV4_SUFFIX_MAXNG` caps the match length (32). Reports a **sound lower bound** and an optimistic estimate — `tam[i]` is only valid ground truth for `i <= acc` (F80) |
 | `tests/gate_suffix_draft` | is the S6 matcher right? 8 host checks, no CUDA, no checkpoint — so the probe cannot retire S6 on a bug |
+| `TCB_CPA=<stages>` | stage the fp8 tile's B rows with a `cp.async` ring `<stages>` deep, one K-block per stage, instead of the KC register array. **Bit-identical and 15–53 % SLOWER** (2–26 % even at cp-size 16) — default OFF, see §3 (F81). `TCB_CPA_UF` is the issue-loop unroll; **1 is required**, since unrolling keeps H addresses live and costs a block/SM (78 regs vs 48) |
+| `tests/gate_tc_fp8_kc` (extended, F81) | now also sweeps `TCB_CPA ∈ {2,4,8}` against KC=1 at every M and both B offsets, **including a depth larger than KB** so the empty-`commit_group` padding that holds `wait_group` at a compile-time depth is exercised. Without that padding the mma reads a stage that has not landed — a race, and trap 9 says a sweep that cannot express the regime confirms itself |

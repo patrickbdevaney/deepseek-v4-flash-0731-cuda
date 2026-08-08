@@ -31,6 +31,13 @@ extern bool g_tc_fp8;
 void tc_fp8_set_smem(int on);
 void tc_fp8_set_kc(int kc);
 void tc_fp8_set_db(int on);
+// cp.async ring depth (LEVERS.md B8-cpasync). Like KC and DB it changes only WHEN and HOW the staged
+// bytes reach smem — one K-block per ring stage, `acc` still takes `cb` in kblk order — so it must be
+// bit-identical to KC=1 too. NS is swept over the depths the dispatcher can pick, INCLUDING a depth
+// larger than KB so the empty-commit_group padding in the prologue/epilogue is exercised: with
+// K=1024, KB=8, and the wait depth held at a compile-time NS-2, a missing pad group would let the mma
+// read a stage that has not landed. That is a race, so it is checked at every M and both offsets.
+void tc_fp8_set_cpa(int ns);
 
 int main(){
     struct Shape { int N, K; const char* name; };
@@ -47,10 +54,12 @@ int main(){
     const int KCs[]  = {2,4,8,-1};                  // -1 = the shipped auto rule
     const int KC1s[] = {1,2,4,8,-1};                // db=1 must also match at KC=1
     const int OFFS[] = {0,4};
+    const int NSs[]  = {2,4,8};                     // cp.async ring depths (clamped per W by smem)
     srand(11);
     bool pass = true; int cases = 0, bad = 0;
     g_tc_fp8 = true; tc_fp8_set_smem(1);
-    printf("KC in {2,4,8,auto} x DB in {0,1} vs KC=1/DB=0, bit-equality; M={1,2,3,5,8,13,16,17,20} x B offset {0,4}\n");
+    printf("KC in {2,4,8,auto} x DB in {0,1} + CPA in {2,4,8} vs KC=1/DB=0/CPA=0, bit-equality;\n");
+    printf("M={1,2,3,5,8,13,16,17,20} x B offset {0,4}\n");
     for (const Shape& sh : shapes){
         const int N=sh.N, K=sh.K, KB=K/128;
         std::vector<uint8_t> B((size_t)N*K);
@@ -76,7 +85,8 @@ int main(){
                 CU(cudaMemcpy(das,asv.data(),asv.size()*4,cudaMemcpyHostToDevice));
 
                 CU(cudaMemset(C1,0xEE,(size_t)M*N*4));
-                tc_fp8_set_kc(1); tc_fp8_set_db(0); tc_fp8_gemm(C1,dA,das,dB,dbs,M,N,K,0);
+                tc_fp8_set_kc(1); tc_fp8_set_db(0); tc_fp8_set_cpa(0);
+                tc_fp8_gemm(C1,dA,das,dB,dbs,M,N,K,0);
                 CU(cudaDeviceSynchronize());
                 std::vector<float> c1((size_t)M*N), ck((size_t)M*N);
                 CU(cudaMemcpy(c1.data(),C1,(size_t)M*N*4,cudaMemcpyDeviceToHost));
@@ -89,7 +99,8 @@ int main(){
                      ki<nk; ++ki){
                     const int kc = (db ? KC1s : KCs)[ki];
                     CU(cudaMemset(Ck,0xEE,(size_t)M*N*4));
-                    tc_fp8_set_kc(kc); tc_fp8_set_db(db); tc_fp8_gemm(Ck,dA,das,dB,dbs,M,N,K,0);
+                    tc_fp8_set_kc(kc); tc_fp8_set_db(db); tc_fp8_set_cpa(0);
+                    tc_fp8_gemm(Ck,dA,das,dB,dbs,M,N,K,0);
                     CU(cudaDeviceSynchronize());
                     CU(cudaMemcpy(ck.data(),Ck,(size_t)M*N*4,cudaMemcpyDeviceToHost));
                     ++cases;
@@ -101,13 +112,29 @@ int main(){
                         shape_ok=false; pass=false; ++bad;
                     }
                 }
+                // --- cp.async ring (B8-cpasync). Same reference: KC=1 / DB=0 / CPA=0. ---
+                for (int ns : NSs){
+                    CU(cudaMemset(Ck,0xEE,(size_t)M*N*4));
+                    tc_fp8_set_kc(-1); tc_fp8_set_db(0); tc_fp8_set_cpa(ns);
+                    tc_fp8_gemm(Ck,dA,das,dB,dbs,M,N,K,0);
+                    CU(cudaDeviceSynchronize());
+                    CU(cudaMemcpy(ck.data(),Ck,(size_t)M*N*4,cudaMemcpyDeviceToHost));
+                    ++cases;
+                    if (memcmp(c1.data(), ck.data(), (size_t)M*N*4) != 0){
+                        size_t i=0; while(i<c1.size() && c1[i]==ck[i]) ++i;
+                        printf("  MISMATCH %-22s M=%-3d B+%d CPA=%-2d      first at [%zu]: %.9g vs %.9g\n",
+                               sh.name, M, boff, ns, i, (double)c1[i], (double)ck[i]);
+                        shape_ok=false; pass=false; ++bad;
+                    }
+                }
+                tc_fp8_set_cpa(0);
                 CU(cudaFree(dA)); CU(cudaFree(das)); CU(cudaFree(C1)); CU(cudaFree(Ck));
             }
         }
         printf("%-24s all M x offset x KC -> %s\n", sh.name, shape_ok?"EXACT":"MISMATCH");
         CU(cudaFree(dBbase)); CU(cudaFree(dbs));
     }
-    tc_fp8_set_kc(-1); tc_fp8_set_db(-1);
+    tc_fp8_set_kc(-1); tc_fp8_set_db(-1); tc_fp8_set_cpa(-1);
     printf("\nGate TC_FP8_KC: %d/%d exact -> %s\n", cases-bad, cases, pass?"PASS":"FAIL");
     return pass?0:1;
 }

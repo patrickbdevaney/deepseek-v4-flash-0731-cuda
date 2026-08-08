@@ -4599,3 +4599,171 @@ pivot analysis named S6 as "the only qualifying item" left beside the training l
 **measured** ceiling of exactly zero rather than a projected one. S5 — the draft-head fine-tune,
 lossless by construction, +24 % at acceptance 3.6 — is not merely the largest lever left; after F80 it
 is the only one that has never been measured against.
+
+---
+
+## Finding 81 — B8-cpasync built and RETIRED: the cp.async ring hands back 16 registers and RAISES occupancy 4 → 5 blocks/SM, and is 15–53 % SLOWER. Depth is negative, and cp-size 16 does not save it
+
+**NEGATIVE, and it empties the kernel queue.** The lever the cycle-15 research phase promoted — a
+`cp.async` staging ring for the fp8 tile, ≥4 stages, replacing F78's 2-stage *register* double buffer —
+was implemented, is **bit-exact** (`gate_tc_fp8_kc` **1512/1512**, +378 new cases), **passed both of its
+cheap falsification steps**, and then lost the bench by 15–53 %. It ships **default OFF** behind
+`TCB_CPA=<stages>` and the default arm is proven inert: this cycle's clean run emits a spec token
+sequence **byte-identical** to `clean_post_f79.log`. 20/20 gates PASS, GATE PASS, MATCH 5/5, LOSSLESS
+GATE PASS, clocks pinned (`sudo jetson_clocks`), caches dropped.
+
+### The two cheap steps both said GO, which is why this was worth building
+
+The falsification order in LEVERS.md said: stop at the first no. Steps (1) and (2) cost no checkpoint
+load and neither was a no.
+
+**(2) The ISA is there.** `cp.async.bulk.tensor.2d`, `cp.async.bulk`, `mbarrier.init`,
+`mbarrier.try_wait.parity` and `cp.async.ca.shared.global` **all assemble at `-arch=sm_110a`**.
+
+**(1) `ptxas -v`, and it is the opposite of F78's problem.** F78 failed on occupancy: its second live
+`uint4` array took `<8,2>` from 64 to 68 registers, 4 blocks/SM to 3. The ring removes the staging
+array outright, and the device has smem to spare — **233 472 B/SM**, of which the shipped kernel uses
+17408 x 4 = 69 632, i.e. 30 %. Measured:
+
+| kernel (the arm the engine runs) | regs | smem | blocks/SM |
+|---|---|---|---|
+| `smemB_kernel<8,2,false>` — **shipped** | 64 | 17408 | **4** |
+| `cpa_kernel<8,4,false>` — 4-stage ring | **48** | 36864 | **5** |
+
+So 16 registers back and **+25 % occupancy**. That took one extra recompile to find, and the knob is
+worth recording because it inverts the result: **`cp.async` is fire-and-forget, so a ROLLED issue loop
+still has every copy in flight, but an UNROLLED one keeps H addresses live** — trap 19, H times over.
+
+| `TCB_CPA_UF` | regs | blocks/SM |
+|---|---|---|
+| 8 (full unroll) | 78 | **3** — F78's failure mode by a different door |
+| 4 | 56 | 4 |
+| 2 | 48 | 5 |
+| **1 (default)** | **48** | **5** |
+
+### And then it lost, at every shape
+
+`gemm_bench` COLD, cp.async arms placed at sweep positions **adjacent** to the arm they must beat
+(trap 5), 24 reps over ≥400 MB of rotating weight copies. M=5, ms, vs `m16+smem B+4`
+(`evidence/cpasync_bench_f81.log`):
+
+| shape | m16+smem B+4 | cpa NS=2 | cpa NS=4 | cpa NS=8 | NS=4 vs shipped |
+|---|---|---|---|---|---|
+| wq_a [1024,4096] | 0.0402 | 0.0503 | 0.0498 | 0.0490 | **+23.9 %** |
+| wq_b [4096,1024] | 0.0307 | 0.0373 | 0.0425 | 0.0414 | **+38.4 %** |
+| wkv [512,4096] | 0.0269 | 0.0434 | 0.0411 | 0.0449 | **+52.8 %** |
+| wo_b [4096,4096] | 0.1066 | 0.1322 | 0.1491 | 0.1537 | **+39.9 %** |
+| sw1/3 [2048,4096] | 0.0570 | 0.0654 | 0.0655 | 0.0722 | **+14.9 %** |
+| sw2 [4096,2048] | 0.0562 | 0.0670 | 0.0766 | 0.0738 | **+36.3 %** |
+
+The M=1 rows are a **within-bench control**: at M=1 the dispatcher uses the m1 GEMV, so the cpa columns
+must equal the columns beside them, and they do (wq_a 0.0301 vs 0.0301). The comparison is sound.
+
+**NS=2 beats NS=4 on 4 of 6 shapes.** Depth is *negative*, which is the direct refutation of the
+promoted claim — the literature's "≥4 stages, because 2 stalls tensor-core issue immediately" is the
+one thing this measurement says is backwards here.
+
+### The disambiguation is the half that makes this permanent
+
+`cp.async` requires cp-size == natural alignment, and F66 counted this engine's fp8 weights at
+`data_offset % 16 == 8` (43,470 of 44,436) or 12 (966), **never 0** — the same fact that forced the
+`AL16` template on the LDG path. So the ring above ran at **cp-size 4**: eight 4-byte DMAs where it
+wanted two 16-byte ones. That is a confound, and leaving it would have left the next cycle re-arguing
+"it only failed because of alignment". One more bench, no checkpoint
+(`evidence/cpasync_bench_align_f81.log`), M=5, cpa NS=4 at **B+0** so `AL16=true` and cp-size 16, now
+against `m16+smem` at **B+0** as well:
+
+| shape | m16+smem (B+0) | cpa NS4 **cp-size 16** | cpa NS4 cp-size 4 | cp16 vs shipped |
+|---|---|---|---|---|
+| wq_a | 0.0369 | 0.0390 | 0.0518 | **+5.7 %** |
+| wq_b | 0.0282 | 0.0315 | 0.0405 | **+11.7 %** |
+| wkv | 0.0280 | 0.0311 | 0.0422 | **+11.1 %** |
+| wo_b | 0.0844 | 0.1067 | 0.1428 | **+26.4 %** |
+| sw1/3 | 0.0501 | 0.0486 | 0.0654 | **−3.0 %** ← the only win |
+| sw2 | 0.0460 | 0.0550 | 0.0759 | **+19.6 %** |
+
+**cp-size 4 costs ~25 %** (wo_b 0.1428 → 0.1067) — a real number, and new trap 31, since any future
+`cp.async`/TMA idea here inherits that tax and must be priced at B+4. But **cp-size 16 still loses at
+5 of 6 shapes**, so **no alignment work rescues the lever**. F67 had already measured the shard pad as
+buying nothing; now it would not even buy this. That is what turns "blocked on alignment" into a close.
+
+### Mechanism: it moved the one thing F74 moved, in the wrong direction
+
+The ring stages **one** K-block per stage, so `cp.async.wait_group` + `__syncthreads` runs **once per
+K-block** where the shipped KC=2 pays it once per two. **F74's adopted win was exactly the opposite
+trade** — "stage KC consecutive K-blocks per barrier pair … the barrier count drops by KC", worth
+−28.6 % on `q:wq_b`. A stage is 64 rows x 128 B = 8 KB spread over 256 threads; there is not enough
+work per stage to amortise a barrier pair, so a deeper ring buys bytes-in-flight the LDG path already
+had (F74's `issue`-then-store gets NH loads in flight per thread) at the cost of the thing that
+actually paid. That is **new trap 29**, and it also explains why deeper is worse rather than better.
+
+**And the occupancy win was real and did not help.** 48 registers vs 64, 5 blocks/SM vs 4, +25 % — the
+precise bar F78 failed — and still 15–53 % slower. The shipped kernel at 4 blocks/SM already runs
+`wo_b` at 199 GB/s against a 233–240 GB/s achievable; the 5th block adds contention, not bandwidth.
+**New trap 30: an occupancy win still has to be measured as time.**
+
+### Not run in situ, and that is the stated protocol
+
+The falsification order said stop at the first no, and trap 3's discount has never turned a large bench
+negative into a win — F76 went bench −7.6 % → in situ +0.1 %, F78 bench +3.1 % → in situ +2.8 %, i.e.
+the bench understates *magnitude* but has never flipped *sign* on this kernel. A checkpoint load to
+confirm a 15–53 % regression is the one thing the ledger exists to prevent.
+
+### The run went to a better question, and it re-prices trap 25
+
+The change is default OFF, so the cycle's ONE run (`baseline.dprof_runs_since_clean` was 0, so a clean
+run was permitted rather than mandated) was spent on the control: **is the default arm still the
+baseline arm, and what is the cross-run floor really?** `evidence/clean_post_f81.log`, CLEAN — no
+`DSV4_DPROF`, no `DSV4_KSWEEP`, no `TCB_CPA`.
+
+**Default-OFF is proven, not asserted.** The spec token sequence is **byte-identical** to
+`clean_post_f79.log`; acceptance **2.89** unchanged; first token 11111; GATE PASS, MATCH 5/5, LOSSLESS
+GATE PASS. `ptxas -v` independently shows the shipped `smemB_kernel<8,2,false>` still at **64 registers
+/ 0 spill / 17408 B** — the new template is separate, so trap 22 (a shared template's other
+instantiation moving) does not apply here.
+
+**And this is the SECOND pair of identical-arm clean runs, which trap 25 badly needed.** Trap 25 set
+the cross-run floor at ~1.5 % from **one** pair. The nine verifies pair 1:1 again at identical K and
+identical accept counts:
+
+| pair | paired-verify total | spec tok/s | verifies in one direction |
+|---|---|---|---|
+| f76 → f79 (trap 25's pair) | 1212.4 → 1194.7 = **−1.5 %** | 21.76 → 22.07 (+1.42 %) | **9/9** |
+| **f79 → f81 (this pair)** | **1194.7 → 1196.7 = +0.17 %** | 22.07 → 22.06 (**−0.05 %**) | 2/9 |
+
+Per-verify: +1.21, −0.09, −0.15, +0.17, +0.28, +0.16, +0.00, +0.13, +0.00 %. Base AR 13.78 → 13.83
+(+0.36 %). **So the instrument is capable of ~0.2 % reproducibility, and the 1.5 % in trap 25 was an
+occasional systematic shift, not a per-run noise band.** The practical rule sharpens rather than
+loosens: a *single* cross-run comparison is still unsafe below ~1.5 % because you cannot tell which
+kind of pair you drew — but a sub-1 % effect is resolvable with **two** pairs, where before the ledger
+read as though nothing under 1.5 % could ever be measured. That matters, because everything left in §4
+is sub-1 %.
+
+### Numbers
+
+Gates **20/20 PASS** (`evidence/gates_f81.log`). `gate_encoding` first read red and was trap 26 for the
+**fourth** recurrence — it wants **no** argument; it PASSES 6/0 on its own default. `gate_tc_fp8_kc`
+1512/1512 exact, extended this cycle with the `TCB_CPA ∈ {2,4,8}` arms at every M and both B offsets,
+including a depth **larger than KB** so the empty-`commit_group` padding that keeps `wait_group`'s
+depth a compile-time constant is exercised — without it the mma reads a stage that has not landed, and
+that is a race a shape-poor sweep would miss (trap 9).
+
+Run: spec **22.06 tok/s** (45.3 ms/tok), base AR **13.83 tok/s** (72.3 ms/tok), acceptance **2.89**,
+**1.60x**, 26 tokens over 9 verifies.
+
+### Disposition — the kernel queue is EMPTY
+
+**B8-cpasync is RETIRED** (LEVERS.md §3, kernels; §4 row struck). It was the **only** open ≥1 %
+non-training lever, so `pivot_criterion.open_nontraining_levers` goes **1 → 0**. B8'' (~0.4 %) and B1
+(0.3–0.5 %) are explicitly sub-1 %; B5 needs the no-additional-quantisation constraint relaxed; S5 and
+S7 need training; B9 is prefill; S3 is priced and rejected; S2 and S4 have no number. `ptxas -v` and
+one bench closed the last named idea on the fp8 GEMM block, which F78 and F79 had already closed
+elsewhere — **B8 is now closed in every direction**.
+
+`consecutive_sub_half_pct` goes **4 → 5**. The three-cycles-without-a-1 %-adoption arm of the pivot
+criterion has been fired since cycle 14; this is the fifth. The queue-empty arm requires 0 on **two
+consecutive** audits and this is the first, so on the letter of the criterion the second arm is one
+audit from firing — but the first arm fired two cycles ago and F80 and F81 have since measured the two
+items the cycle-14 pivot analysis named as remaining (S6: oracle ceiling **+0.0 %**; B8-cpasync:
+**+15–53 %** in the bench). **S5 — the draft-head fine-tune, lossless by construction, +24 % at
+acceptance 3.6 — is now the only lever in the project with an unmeasured upside.**

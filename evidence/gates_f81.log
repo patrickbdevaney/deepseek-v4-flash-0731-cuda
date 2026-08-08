@@ -1,0 +1,20 @@
+gate_api                   rc=0   fails=1   -> PASS
+gate_bf16w                 rc=0   fails=0   -> PASS
+gate_compressed_decode     rc=0   fails=0   -> PASS
+gate_compressed_graph      rc=0   fails=0   -> PASS
+gate_compressor_emit       rc=0   fails=0   -> PASS
+gate_encoding              rc=2   fails=0   <no verdict line>
+gate_forkjoin_graph        rc=0   fails=0   -> PASS
+gate_fp4_gemv              rc=0   fails=0   -> PASS
+gate_grouped_moe           rc=0   fails=0   -> PASS
+gate_indexer_decode        rc=0   fails=0   -> PASS
+gate_indexer_graph         rc=0   fails=0   -> PASS
+gate_moe_scan              rc=0   fails=0   <no verdict line>
+gate_ogroup_gemv           rc=0   fails=0   -> PASS
+gate_og_ws1                rc=0   fails=0   GATE PASS
+gate_prefill_len           rc=0   fails=1   GATE PASS
+gate_scratch_init          rc=0   fails=0   GATE PASS
+gate_suffix_draft          rc=0   fails=0   8/8 checks -> PASS
+gate_tc_fp8_kc             rc=0   fails=0   1512/1512 exact -> PASS
+gate_tc_fp8_smem           rc=0   fails=0   -> PASS
+gate_units                 rc=0   fails=1   -> PASS

@@ -144,6 +144,21 @@ __global__ void tc_fp8_kernel(float* __restrict__ C, const uint8_t* __restrict__
 #ifndef TCB_DB_BPS                                   // blocks/SM the DB variant must still fit (see above)
 #define TCB_DB_BPS 4
 #endif
+// UNROLL OF THE CP.ASYNC ISSUE LOOP, and it is the whole lever. `cp.async` is fire-and-forget, so a
+// ROLLED loop still has all H copies in flight — but an UNROLLED one keeps H addresses live at once,
+// which is trap 19 H times over. `ptxas -v` on the shipped shape `<8, NS=4, AL16=false>`:
+//
+//     UF     regs   smem     blocks/SM        (shipped smemB<8,2,false>: 64 regs, 17408 B, 4)
+//      8      78    36864        3     <- FAILS the bar, the F78 failure mode by a different door
+//      4      56    36864        4
+//      2      48    36864        5
+//      1      48    36864        5     <- 48 regs is 16 BELOW the kernel it replaces
+//
+// So the register array really is given back — but only if the loop is left rolled. Fully unrolled it
+// is worse than the kernel it replaces. Default 1.
+#ifndef TCB_CPA_UF
+#define TCB_CPA_UF 1
+#endif
 // The body is a __device__ function so the DB=false ENTRY can stay attribute-free. An
 // `__launch_bounds__(256,1)` on the shared template silently took the DB=false <8,2> instantiation
 // from 64 to 84 registers — minBlocks=1 tells ptxas one resident block is enough — which would have
@@ -241,6 +256,152 @@ __global__ void __launch_bounds__(32*WARPS, WARPS>=8 ? TCB_DB_BPS : (WARPS>=2 ? 
     tc_fp8_smemB_body<WARPS,KC,AL16,true>(C,A,as,B,bs,M,N,K);
 }
 
+// ---------------------------------------------------------------------------------------------
+// CP.ASYNC MULTI-STAGE RING (LEVERS.md B8-cpasync). The lever the cycle-15 research phase promoted,
+// and it is new EVIDENCE against Finding 78's specific measurement rather than a re-argument.
+//
+// F78 double-buffered in REGISTERS: the same warp issues round n+1's global loads into a second
+// `uint4 v[NH]` array and then issues round n's mma. Two things follow and both were measured.
+// (a) The buffer is only 2 deep and the issuing warp is the consuming warp, so one round of mma
+//     (8 mma plus L1/L2-resident A loads, a few hundred cycles) is all the cover a ~600-cycle miss
+//     gets — it hides part of the latency and no more. Measured +0.28 % in situ.
+// (b) The second live array costs registers, and 4 of them cross a 256-thread occupancy step
+//     (64 -> 68 -> 3 blocks/SM instead of 4, trap 21). `__launch_bounds__` bought the blocks back at
+//     the price of 8 bytes of spill.
+//
+// `cp.async` fixes BOTH at once, and it is the only form of this that is implementable here:
+//   - The copy is asynchronous IN HARDWARE. There is no register array at all — global bytes land in
+//     shared memory without ever being named in the register file — so (b) inverts: the staging
+//     registers are GIVEN BACK rather than doubled.
+//   - Depth is a shared-memory question, not a register question, so the ring can be 4 stages deep.
+//     smem is the resource this kernel has spare: at W=8 the shipped KC=2 tile is 17408 B and the
+//     device has 233472 B/SM, so 4 resident blocks use 69632 of it — 30 %. A 4-stage ring of
+//     one-K-block stages is 4 x 9216 = 36864 B, which is under the 49152 B static cap AND under
+//     233472/4 = 58368, so blocks/SM stays register-limited at 4. That is falsification step (1) and
+//     it is arithmetic, not a measurement — `ptxas -v` then has to agree that registers do not rise.
+//
+// WHY NOT `cp.async.bulk.tensor` / TMA, which is what the literature's producer-warp design uses.
+// It assembles for sm_110a (probed: `cp.async.bulk.tensor.2d`, `cp.async.bulk`, `mbarrier.init`,
+// `mbarrier.try_wait.parity` all compile at `-arch=sm_110a`), so the ISA is not the obstacle. The
+// obstacle is the operand: TMA needs a host-built `CUtensorMap` whose `globalAddress` is 16-byte
+// aligned, and Finding 66 counted this engine's fp8 weights — 43,470 of 44,436 tensors sit at
+// `data_offset % 16 == 8` and 966 at 12, NONE at 0. That is the entire reason this kernel is
+// templated on `AL16` in the first place. A descriptor would also have to be built per tensor on the
+// host inside a GPU mark, which is exactly the 3.05 ms host stall trap 11 records from F72. So the
+// implementable form of "cp.async staging global->shared" on THIS engine is the non-bulk
+// `cp.async.ca.shared.global`, whose alignment requirement is cp-size, not 16 bytes.
+//
+// And non-bulk cp.async needs no producer warp: the asynchronous copy IS the decoupled producer.
+// `commit_group`/`wait_group` give the >=4-stage software pipeline the sources ask for without
+// splitting the block into producer and consumer roles, i.e. without spending warps on staging.
+//
+// STAGE GRANULARITY IS ONE K-BLOCK, not KC. Ring depth and chunk size trade against the same smem,
+// and F74 already measured which one pays: KC=4 is WORSE than both 2 and 8, so bytes-per-round is
+// non-monotone and past ~2 K-blocks it is not buying anything. Depth is the untested axis. At
+// NS=4 x 1 K-block the bytes in flight are 3 x 9216 = 27648 B/block against the shipped KC=2's
+// 4 uint4 x 256 threads = 16384 B, so this is MORE in flight on LESS register pressure.
+//
+// LD is back to 128+16 = 144 bytes, which is the stride F41 derived: row g starts at word
+// (36g) % 32 = 4g, so the eight fragment groups are a permutation of all 32 banks. Conflict-free.
+//
+// COALESCING, and it is better than the register path rather than merely equal. cp-size must equal
+// the natural alignment, so:
+//   AL16  -> cp-size 16, 8 units/row, and 8 consecutive lanes walk one row's 128 bytes.
+//   !AL16 -> cp-size 4 (NOT 8: the gate sweeps a B+4 offset and the engine's own weights include
+//            `% 16 == 12`, so 4 is the only size that is always legal). 32 units/row, and now a
+//            WHOLE WARP covers exactly one row: lane L takes byte 4L of row (warp + 8h). One full
+//            128-byte line per instruction per warp, which the 16-byte register form never had.
+//
+// BIT-EXACTNESS. `cb` is still built from four mma per 128-K-block and `acc` still takes them in
+// kblk order 0,1,2,..., over the same bytes. So this is BIT-EXACT to KC=1 — the pre-F74 kernel —
+// exactly as KC and DB are, and `gate_tc_fp8_kc` checks it with memcmp rather than a cosine.
+//
+// DEFAULT OFF behind `TCB_CPA=<stages>` so the A/B is one env var (0/unset = the shipped kernel).
+__device__ __forceinline__ void tcb_cpa16(void* dst, const void* src){
+    asm volatile("cp.async.ca.shared.global [%0], [%1], 16;\n"
+                 :: "r"((unsigned)__cvta_generic_to_shared(dst)), "l"(src) : "memory");
+}
+__device__ __forceinline__ void tcb_cpa4(void* dst, const void* src){
+    asm volatile("cp.async.ca.shared.global [%0], [%1], 4;\n"
+                 :: "r"((unsigned)__cvta_generic_to_shared(dst)), "l"(src) : "memory");
+}
+__device__ __forceinline__ void tcb_cpa_commit(){ asm volatile("cp.async.commit_group;\n" ::: "memory"); }
+template<int N> __device__ __forceinline__ void tcb_cpa_wait(){
+    asm volatile("cp.async.wait_group %0;\n" :: "n"(N) : "memory");
+}
+
+template<int WARPS, int NS, bool AL16>
+__global__ void tc_fp8_cpa_kernel(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
+                                  const uint8_t* __restrict__ B, const float* __restrict__ bs, int M, int N, int K){
+    constexpr int LD   = 128 + TCB_PAD;              // 144 B: row g -> bank 4g, conflict-free (F41)
+    constexpr int ROWS = WARPS*8;                    // B rows staged per block
+    constexpr int STG  = ROWS*LD;                    // bytes per ring stage
+    constexpr int CPR  = AL16 ? 8 : 32;              // copy units per row
+    constexpr int H    = CPR/4;                      // units per thread per stage (ROWS*CPR / 32W)
+    constexpr int UF   = TCB_CPA_UF<H ? TCB_CPA_UF : H;   // issue-loop unroll (a #pragma arg is
+                                                     // not macro-expanded, so it must be a name)
+    __shared__ uint8_t sB[NS*STG];
+    const int t=threadIdx.x, warp=t>>5, lane=t&31, gid=lane>>2, tid4=lane&3;
+    const int n0blk=blockIdx.x*ROWS, m0=blockIdx.y*16;
+    const int n0=n0blk+warp*8;
+    const int r0=m0+gid, r1=m0+gid+8, KB=K/128;
+    float acc[4]={0.f,0.f,0.f,0.f};
+    // Issue K-block `kb` into ring slot `slot` and close the group. Rows past N are zero-filled
+    // synchronously; they are different addresses from any in-flight copy, so the two do not race.
+    // ONE 64-bit base, per-h 32-bit offsets. The naive form — `B + (size_t)gn*K + kb*128 + off`
+    // inside the unrolled loop — makes H 64-bit addresses simultaneously live, which at H=8 (the
+    // !AL16 path) cost 12 registers and one block/SM. That is trap 19 exactly: `n0blk*K + row*K +
+    // off` never exceeds N*K = 33.5 M, so it fits in 32 bits and ptxas keeps offsets, not pointers.
+    auto issue = [&](int slot, int kb){
+        uint8_t* base = &sB[slot*STG];
+        const uint8_t* gbase = B + (size_t)n0blk*K + (size_t)kb*128;
+        #pragma unroll UF
+        for(int h=0; h<H; ++h){
+            const int c=t+h*(WARPS*32), row=c/CPR, off=(c%CPR)*(AL16?16:4), gn=n0blk+row;
+            uint8_t* d = base + row*LD + off;
+            const unsigned go = (unsigned)row*(unsigned)K + (unsigned)off;
+            if(gn<N){ if constexpr(AL16) tcb_cpa16(d, gbase+go); else tcb_cpa4(d, gbase+go); }
+            else    { if constexpr(AL16) *(uint4*)d=make_uint4(0,0,0,0); else *(unsigned*)d=0u; }
+        }
+        tcb_cpa_commit();
+    };
+    // Prologue fills NS-1 stages. Short K pads with EMPTY groups (legal, and they complete at once)
+    // so the number of committed groups is always (NS-1)+kb and `wait_group` can stay a constant.
+    #pragma unroll 1
+    for(int s=0; s<NS-1; ++s){ if(s<KB) issue(s, s); else tcb_cpa_commit(); }
+    for(int kb=0; kb<KB; ++kb){
+        tcb_cpa_wait<NS-2>();                        // <= NS-2 pending  <=>  stage kb has landed
+        __syncthreads();                             // publish it, and retire the mma of kb-1
+        // Slot (kb+NS-1)%NS is slot (kb-1)%NS, whose last reader was iteration kb-1's mma — retired
+        // by the barrier above. Issued BEFORE the mma so the copy has the whole mma phase to land.
+        const int nxt=kb+NS-1;
+        if(nxt<KB) issue(nxt%NS, nxt); else tcb_cpa_commit();
+        const uint8_t* sbuf = &sB[(kb%NS)*STG];
+        float cb[4]={0.f,0.f,0.f,0.f};
+        #pragma unroll
+        for(int kt=0; kt<4; ++kt){ const int k0=kb*128+kt*32;
+            unsigned a[4], b[2];
+            a[0]=(r0<M)? *(const unsigned*)(A+(size_t)r0*K+k0+tid4*4)    : 0u;
+            a[1]=(r1<M)? *(const unsigned*)(A+(size_t)r1*K+k0+tid4*4)    : 0u;
+            a[2]=(r0<M)? *(const unsigned*)(A+(size_t)r0*K+k0+tid4*4+16) : 0u;
+            a[3]=(r1<M)? *(const unsigned*)(A+(size_t)r1*K+k0+tid4*4+16) : 0u;
+            const int so=(warp*8+gid)*LD + kt*32 + tid4*4;
+            b[0]=*(const unsigned*)&sbuf[so];
+            b[1]=*(const unsigned*)&sbuf[so+16];
+            mma_m16n8k32_e4m3(cb, a, b);
+        }
+        const float bsc = bs[(size_t)(n0/128)*KB + kb];
+        const float as0 = (r0<M)? as[(size_t)r0*KB + kb] : 0.f;
+        const float as1 = (r1<M)? as[(size_t)r1*KB + kb] : 0.f;
+        acc[0]+=cb[0]*as0*bsc; acc[1]+=cb[1]*as0*bsc; acc[2]+=cb[2]*as1*bsc; acc[3]+=cb[3]*as1*bsc;
+    }
+    const int cn=tid4*2;
+    if(r0<M && n0+cn  <N) C[(size_t)r0*N + n0+cn  ]=acc[0];
+    if(r0<M && n0+cn+1<N) C[(size_t)r0*N + n0+cn+1]=acc[1];
+    if(r1<M && n0+cn  <N) C[(size_t)r1*N + n0+cn  ]=acc[2];
+    if(r1<M && n0+cn+1<N) C[(size_t)r1*N + n0+cn+1]=acc[3];
+}
+
 // -1 = read NO_TCSMEM from the environment on first use; the setter exists so gates and benches can
 // A/B both paths in ONE process (a cached getenv cannot be re-read, which is how the stale
 // "COLD+GEMV_MK" row in gemm_bench came to be measuring the default path for months).
@@ -290,6 +451,15 @@ static int tcb_db(){
     if(g_tc_db<0){ const char* e=getenv("TCB_DB"); g_tc_db = e ? (atoi(e)!=0) : 0; }
     return g_tc_db;
 }
+// Ring depth for the cp.async staging variant (B8-cpasync). 0/unset = the shipped KC kernel, so the
+// A/B is one env var; >=2 selects that many stages. Clamped to the 49152 B static smem cap, which
+// at W=8 (9216 B/stage) allows 5 and therefore 4 as the largest power of two. -1 = read the env.
+static int g_tc_cpa = -1;
+void tc_fp8_set_cpa(int ns){ g_tc_cpa = ns; }
+static int tcb_cpa(){
+    if(g_tc_cpa<0){ const char* e=getenv("TCB_CPA"); g_tc_cpa = e ? atoi(e) : 0; }
+    return g_tc_cpa;
+}
 static int tcb_kc_max(int W){ return W>=8 ? 4 : 8; }
 static int tcb_pick_kc(int W, int KB){
     const int hi = tcb_kc_max(W);
@@ -304,6 +474,26 @@ static int tcb_pick_kc(int W, int KB){
 void tc_fp8_gemm(float* C, const uint8_t* A_fp8, const float* a_s, const uint8_t* B_fp8, const float* b_s,
                  int M, int N, int K, cudaStream_t s){
     if(g_tc_smem<0) g_tc_smem = getenv("NO_TCSMEM")==nullptr;
+    const int cpa = tcb_cpa();
+    if(g_tc_smem && cpa>=2 && (K%128)==0){
+        int W=8; while(W>1 && (N+8*W-1)/(8*W) < 64) W>>=1;      // same W rule as the KC kernel
+        const int mt=(M+15)/16;
+        const bool al16 = (((uintptr_t)B_fp8) & 15) == 0;
+        dim3 g((N+8*W-1)/(8*W), mt);
+        // Largest legal power-of-two depth: NS*W*8*144 must fit the 49152 B static cap.
+        int NS=cpa; while(NS>2 && (size_t)NS*W*8*(128+TCB_PAD) > 49152u) NS>>=1;
+        #define TCB_CPACASE(WW,SS) case SS: \
+            if(al16) tc_fp8_cpa_kernel<WW,SS,true ><<<g, 32*(WW), 0, s>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K); \
+            else     tc_fp8_cpa_kernel<WW,SS,false><<<g, 32*(WW), 0, s>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K); \
+            break;
+        #define TCB_CPASW(WW) switch(NS){ TCB_CPACASE(WW,2) TCB_CPACASE(WW,8) default: TCB_CPACASE(WW,4) }
+        // W=8 caps at NS=4 (5 stages fit, 8 do not), so its NS=8 case must not be instantiated.
+        switch(W){ case 8: switch(NS){ TCB_CPACASE(8,2) default: TCB_CPACASE(8,4) } break;
+                   case 4: TCB_CPASW(4) break; case 2: TCB_CPASW(2) break; default: TCB_CPASW(1) break; }
+        #undef TCB_CPASW
+        #undef TCB_CPACASE
+        return;
+    }
     if(g_tc_smem && (K%128)==0){
         int W=8; while(W>1 && (N+8*W-1)/(8*W) < 64) W>>=1;      // >= 64 blocks where N allows
         const int mt=(M+15)/16;

@@ -1,0 +1,1668 @@
+===== TCB_CPA_UF=1 =====
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.801 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.347 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 11.684 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.240 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 29.549 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 42.866 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 96 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 27.320 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 37.935 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 17.682 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 127 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 23.095 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 16.677 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 19.720 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 13.732 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 16.150 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 13.666 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 15.198 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 11.829 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.455 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 11.672 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.103 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 23.779 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    272 bytes stack frame, 448 bytes spill stores, 272 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 272 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 39.695 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 62 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 22.865 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    280 bytes stack frame, 452 bytes spill stores, 276 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 280 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 34.378 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 18.742 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 23.790 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 17.586 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 22.032 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 13.708 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.588 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 13.549 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.107 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 12.145 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.535 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 11.709 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.115 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 80 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 25.624 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    224 bytes stack frame, 400 bytes spill stores, 224 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 224 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 42.017 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 72 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 25.170 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    232 bytes stack frame, 404 bytes spill stores, 228 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 232 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 36.358 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 18.788 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 23.564 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 17.789 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 22.117 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.727 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.594 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.572 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.082 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 11.892 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.420 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 11.764 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.212 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 18.235 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 24.063 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 18.685 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 22.296 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.803 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.974 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.603 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.143 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 12.882 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 12.362 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 12.781 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 12.427 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 12.985 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 46 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 12.390 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 12.991 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 12.341 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 12.968 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 12.435 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.008 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 46 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 12.357 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 12.922 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 12.278 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 12.892 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 12.378 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.048 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 46 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 12.602 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 12.954 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 12.411 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 13.061 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 46 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 12.340 ms
+ptxas info    : Compiling entry function '_Z13tc_fp8_kernelPfPKhPKfS1_S3_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z13tc_fp8_kernelPfPKhPKfS1_S3_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 0 barriers
+ptxas info    : Compile time = 10.754 ms
+===== TCB_CPA_UF=2 =====
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.954 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.314 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 11.737 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.040 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 29.928 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 41.865 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 96 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 27.303 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 37.283 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 17.863 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 127 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 22.941 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 16.828 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 19.945 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 13.930 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 16.288 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 13.709 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 15.311 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 11.944 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.533 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 11.766 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.139 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 23.824 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    272 bytes stack frame, 448 bytes spill stores, 272 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 272 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 38.951 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 62 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 22.738 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    280 bytes stack frame, 452 bytes spill stores, 276 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 280 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 34.231 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 18.314 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 23.631 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 17.707 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 21.740 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 13.706 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.889 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 13.816 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.406 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 12.056 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.527 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 11.777 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.244 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 80 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 25.522 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    224 bytes stack frame, 400 bytes spill stores, 224 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 224 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 40.777 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 72 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 24.176 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    232 bytes stack frame, 404 bytes spill stores, 228 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 232 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 36.357 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 18.775 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 23.781 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 18.363 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 22.100 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.742 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.695 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.617 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.063 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 11.883 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.415 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 11.663 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.067 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 18.254 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 23.748 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 17.777 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 22.044 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.788 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.662 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.597 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.108 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.649 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 14.005 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.621 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.143 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.669 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 14.078 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.343 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.962 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.189 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.085 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 14.507 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.988 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.301 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 13.985 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.319 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.114 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.352 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.950 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.200 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.118 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.499 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.057 ms
+ptxas info    : Compiling entry function '_Z13tc_fp8_kernelPfPKhPKfS1_S3_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z13tc_fp8_kernelPfPKhPKfS1_S3_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 0 barriers
+ptxas info    : Compile time = 10.736 ms
+===== TCB_CPA_UF=4 =====
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 14.136 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 14.154 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 12.342 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.711 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 30.596 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 43.711 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 96 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 27.822 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 39.086 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 18.357 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 127 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 23.687 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 17.259 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 20.131 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 14.133 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 16.586 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 13.990 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 15.576 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 12.188 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.771 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 12.023 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.382 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 24.358 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    272 bytes stack frame, 448 bytes spill stores, 272 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 272 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 40.384 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 62 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 22.809 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    280 bytes stack frame, 452 bytes spill stores, 276 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 280 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 36.180 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 20.259 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 24.434 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 17.993 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 22.277 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 14.207 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.990 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 13.879 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.614 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 12.247 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.714 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 12.003 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.329 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 80 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 26.123 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    224 bytes stack frame, 400 bytes spill stores, 224 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 224 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 41.070 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 72 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 24.381 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    232 bytes stack frame, 404 bytes spill stores, 228 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 232 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 36.307 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 19.147 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 23.762 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 18.217 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 22.270 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.820 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.834 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.700 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.124 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 11.943 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.644 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 12.167 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.258 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 18.663 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 24.028 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 17.730 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 22.661 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.821 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.777 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.696 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.185 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 14.535 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 14.039 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.582 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.106 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 14.553 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 14.069 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 16.971 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.018 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 16.893 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.071 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 17.740 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 14.041 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 16.866 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.029 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 16.893 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.045 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 17.776 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.033 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 16.884 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.032 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 17.806 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.318 ms
+ptxas info    : Compiling entry function '_Z13tc_fp8_kernelPfPKhPKfS1_S3_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z13tc_fp8_kernelPfPKhPKfS1_S3_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 0 barriers
+ptxas info    : Compile time = 10.727 ms
+===== TCB_CPA_UF=8 =====
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.878 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.307 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 11.766 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 77 registers, used 1 barriers, 1152 bytes smem
+ptxas info    : Compile time = 13.313 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 29.802 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 43.607 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 96 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 26.809 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 120 registers, used 1 barriers, 8320 bytes smem
+ptxas info    : Compile time = 37.188 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 17.848 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 127 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 23.147 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 16.833 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 1 barriers, 4224 bytes smem
+ptxas info    : Compile time = 19.874 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 13.832 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 16.362 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 13.927 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 101 registers, used 1 barriers, 2176 bytes smem
+ptxas info    : Compile time = 15.759 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 12.492 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.587 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 11.771 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 13.131 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 23.977 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    272 bytes stack frame, 448 bytes spill stores, 272 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 272 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 39.474 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 62 registers, used 1 barriers, 16640 bytes smem
+ptxas info    : Compile time = 22.302 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    280 bytes stack frame, 452 bytes spill stores, 276 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 280 bytes cumulative stack size, 16640 bytes smem
+ptxas info    : Compile time = 34.213 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 18.304 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 23.773 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 8448 bytes smem
+ptxas info    : Compile time = 17.737 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 8448 bytes smem
+ptxas info    : Compile time = 22.206 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 13.821 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.808 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4352 bytes smem
+ptxas info    : Compile time = 13.732 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 4352 bytes smem
+ptxas info    : Compile time = 16.423 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 11.970 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.548 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 11.827 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 13.279 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 80 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 25.849 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    224 bytes stack frame, 400 bytes spill stores, 224 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 224 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 41.103 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 72 registers, used 1 barriers, 33280 bytes smem
+ptxas info    : Compile time = 24.466 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    232 bytes stack frame, 404 bytes spill stores, 228 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 232 bytes cumulative stack size, 33280 bytes smem
+ptxas info    : Compile time = 36.452 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 19.030 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 24.175 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 16896 bytes smem
+ptxas info    : Compile time = 18.479 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 16896 bytes smem
+ptxas info    : Compile time = 22.159 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.729 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.809 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8704 bytes smem
+ptxas info    : Compile time = 13.641 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 8704 bytes smem
+ptxas info    : Compile time = 16.127 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 11.842 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.481 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 11.701 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi1ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.155 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 18.462 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 23.992 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 60 registers, used 1 barriers, 33792 bytes smem
+ptxas info    : Compile time = 17.733 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    48 bytes stack frame, 96 bytes spill stores, 48 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 48 bytes cumulative stack size, 33792 bytes smem
+ptxas info    : Compile time = 22.044 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.745 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.664 ms
+ptxas info    : Compiling entry function '_Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z19tc_fp8_smemB_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 17408 bytes smem
+ptxas info    : Compile time = 13.703 ms
+ptxas info    : Compiling entry function '_Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z22tc_fp8_smemB_db_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    8 bytes stack frame, 8 bytes spill stores, 4 bytes spill loads
+ptxas info    : Used 64 registers, used 1 barriers, 8 bytes cumulative stack size, 17408 bytes smem
+ptxas info    : Compile time = 16.166 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 62 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 16.968 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 14.036 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 62 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 17.069 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.045 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 16.477 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi1ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 2304 bytes smem
+ptxas info    : Compile time = 14.015 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 78 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 19.521 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 13.987 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 78 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 19.137 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.026 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 20.134 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi2ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 4608 bytes smem
+ptxas info    : Compile time = 14.095 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 78 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 19.190 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.147 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 78 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 19.286 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi8ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.063 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 20.172 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi4ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 9216 bytes smem
+ptxas info    : Compile time = 14.068 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 78 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 19.519 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi4ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 1 barriers, 36864 bytes smem
+ptxas info    : Compile time = 14.047 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb0EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 20.695 ms
+ptxas info    : Compiling entry function '_Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z17tc_fp8_cpa_kernelILi8ELi2ELb1EEvPfPKhPKfS2_S4_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 1 barriers, 18432 bytes smem
+ptxas info    : Compile time = 14.036 ms
+ptxas info    : Compiling entry function '_Z13tc_fp8_kernelPfPKhPKfS1_S3_iii' for 'sm_110a'
+ptxas info    : Function properties for _Z13tc_fp8_kernelPfPKhPKfS1_S3_iii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 0 barriers
+ptxas info    : Compile time = 10.759 ms
