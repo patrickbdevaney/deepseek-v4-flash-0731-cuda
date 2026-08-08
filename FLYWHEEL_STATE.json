@@ -1,5 +1,5 @@
 {
-  "cycle": 8,
+  "cycle": 9,
   "phase": "A",
   "consecutive_sub_half_pct": 0,
   "phaseB_top_history": [
@@ -7,35 +7,33 @@
     "moe-latency"
   ],
   "baseline": {
-    "spec_tok_s": 18.13,
-    "spec_tok_s_note": "prompt 0, clocks pinned, AFTER the Finding 62 fix. Unchanged from 18.19 pre-fix because prompt 0 is 6 tokens and never reached the buggy tile. Prompt 2 (18 tokens) now measures 19.14/19.26 DETERMINISTICALLY where it used to range 16.90-21.52.",
-    "concurrency_gain_paired": "splits ON 18.09 vs OFF 17.54 over 36 MATCHED identical points = +3.1%. This is the defensible number for the cycle-6/7 concurrency work.",
-    "base_tok_s_nograph_pinned": 12.66,
-    "base_tok_s_nograph_governed": 10.48,
-    "base_tok_s_graphed": 12.52,
-    "verify_k5_ms": 150.56,
-    "prompt_range": "11.5 to 21.1 tok/s across 5 prompts -- prompt 0 is NOT representative",
-    "source_log": "evidence/final2.log (post-fix, clocks pinned)",
-    "measured": "2026-08-07"
+    "spec_tok_s": 20.44,
+    "base_tok_s": 13.5,
+    "verify_k5_ms": 132.53,
+    "source_log": "evidence/final6.log",
+    "measured": "2026-08-07",
+    "note": "prompt 0, clocks PINNED (jetson_clocks). Session start was 16.86 spec / 10.30 base non-graph. The engine is deterministic since F62, so identical configs reproduce exactly -- three baseline runs read 19.13 to the hundredth. Quote same-day controls, not older numbers."
   },
   "queue": [
     {
-      "id": "N1",
-      "stage": "CLOSED \u2014 fixed",
-      "what": "tc_ogroup_fp8_kernel / tc_ogroup_kernel were a single m16 tile with no row-tile loop, so bs>16 left rows 16+ of `og` UNINITIALISED. Prefill runs at bs=PSp, so every prompt of 18+ tokens had garbage in its sliding-layer prefill output. Found with DSV4_HASH bisection + compute-sanitizer --tool initcheck (65536 uninit reads, one site: act_quant_fp8_kernel at mla_attn.cu:159 via mla_forward). Fixed with blockIdx.z row tiles; gate_ogroup_gemv now covers M=17,24,33 and fails without the fix.",
-      "falsify": "CONFIRMED in situ: 4 byte-identical sweep points go from a 5-cycle to 1 distinct prefill state, 1 token sequence, 1 margin vector. The engine is deterministic."
+      "id": "B0",
+      "stage": "open",
+      "what": "audit launch geometry at DECODE shapes. F71 found index_score was one thread per output (95 threads, one block) costing 4.2% of the verify; warp-per-output gave +4.4% spec and +7.1% base AR. Same shape is still present in k_topk_verify (<<<K,32>>> with an early return leaving 5 working threads), k_topk_decode (<<<1,32>>>, one thread) and k_moe_prefix (<<<1,1>>>).",
+      "expected": "each is small today (i:topk is 0.12 ms) but the class produced the biggest win of the session",
+      "falsify": "dprof-mark each before touching it; if the mark is <0.5 ms leave it and say so"
     },
     {
-      "id": "P1",
-      "stage": "measured, adopt as operating requirement",
-      "what": "jetson_clocks. GPU idles at 315/1386 MHz and the MEMORY CONTROLLER at 2750/4266 MHz under a governor. Paired at matched sweep positions: rep1 +6.4%, rep2 +3.5%, rep3 +3.0%; cold base-AR window 10.48 -> 12.65 (+20.7%). Roofline probes never saw this because a long probe ramps the governor by itself.",
-      "falsify": "n/a -- measured. Needs to be written into HARDWARE.md and run_model.sh, and every future measurement must state whether clocks were pinned."
+      "id": "B1",
+      "stage": "open",
+      "what": "more fork sites. The three obvious independent chains are taken (shared expert, compressor emits, kv chain). Remaining candidate: the indexer q-path (idx_wq_b + rope + hadamard + fp4sim) depends only on iqrq/iqrs and could run under wq_b -- needs a THIRD stream/event pair, g_side and g_side2 are both outstanding there.",
+      "expected": "~1%",
+      "falsify": "price with the F56 table: expect 20-32% of the hidden op's standalone cost, and price it against the MAIN stream (F67)"
     },
     {
-      "id": "I3",
-      "stage": "parked, not reproducible",
-      "what": "the indexer fault. Finding 58: :91 and :96 are the SAME cudaStreamSynchronize and were never a location. Accumulation refuted by direct measurement (free memory RISES 10.360 -> 11.608 GiB over 17 points). Three faithful 17-point reruns (probe on, probe off, and at the faulting run's own 111.6 GiB headroom) all 17/17 clean.",
-      "falsify": "DSV4_SYNCPROBE=1 is in place and names the faulting launch. Do not spend another cycle hypothesising without a reproduction."
+      "id": "B5",
+      "stage": "blocked",
+      "what": "FP4 for MLA/dense weights -- moves the byte floor ~1.2x but violates 'no additional quantisation'. Needs an explicit decision from the operator to relax the constraint.",
+      "falsify": "n/a"
     }
   ],
   "halt": false,
@@ -57,5 +55,16 @@
     ]
   },
   "counter_note": "consecutive_sub_half_pct 6 -> 7, incremented because this cycle moved end-to-end 0.0%. It remains MISLEADING and the next executor should read it as such: cycles 2, 3, 4 and 5 were instrument and correctness repair, not levers, so the counter does not count three consecutive LEVERS under 0.5%. The Phase-A stopping rule must not be treated as fired on this number alone. It is now four cycles since a performance lever was measured, and that is the real signal: once I3 is closed, the loop owes itself either a Phase B re-profile or a D pass.",
-  "note_for_executor": "N1 is CLOSED and it was a correctness bug, not nondeterminism: rows 16+ of the ogroup output were never written for bs>16, so every prompt of 18+ tokens had garbage in its prefill. The engine is now deterministic \u2014 identical sweep points give identical everything. That also means the +/-17% measurement caveat from Finding 60 is GONE for prompts that were hitting it, and single-point measurements are trustworthy again. THE STANDING LESSON: every correctness gate in this project ran at the canonical 6-token prompt, which cannot reach a bs>16 code path, while the sweep prompts (11/15/18/29 tokens) had been running through it for cycles. Gate the shape range the engine spans, not the one the canonical prompt uses. Next: re-derive any ranking that used multi-prompt sweep numbers taken before this fix \u2014 they were measuring a partly-garbage prefill."
+  "note_for_executor": "Read LEVERS.md and RESEARCH_LOG.md first; they are the dedup contract and the auditor enforces write-back on engine commits. The last five adoptions came from PROFILING, not literature: attribute before optimising (dprof marks are cheap and killed a lever before it was built, F67). Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log -- F68 is a fake +28% that passed every other gate.",
+  "loop": {
+    "executor": "scripts/flywheel.sh (one lever per tick, commits locally, cannot push)",
+    "auditor": "scripts/flywheel_audit.sh (deterministic, ~70 lines, the ONLY thing that pushes)",
+    "trigger": "crontab hourly -> scripts/flywheel_cron.sh -> executor then auditor",
+    "ledgers": [
+      "LEVERS.md (implementation dedup)",
+      "RESEARCH_LOG.md (search dedup)"
+    ],
+    "stop": "touch FLYWHEEL_STOP",
+    "untested": "the RESEARCH phase has never actually run: this session's web-search budget was exhausted (200/200) before it could be exercised. Headless cycles get their own budget, but the first cycle that takes the research branch is unverified. Everything else ran end to end, including a deliberate bad commit that the auditor correctly HELD."
+  }
 }
