@@ -323,7 +323,9 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
         const int rn = (me-rb < RB) ? (me-rb) : RB;
         float acc[RB][BN];
         #pragma unroll
-        for(int r=0;r<RB;++r){ acc[r][0]=0.f; acc[r][1]=0.f; }
+        for(int r=0;r<RB;++r){
+            #pragma unroll
+            for(int u=0;u<BN;++u) acc[r][u]=0.f; }
         for(int kb=lane; kb<nb32; kb+=32){              // lane -> whole 32-weight block (16B), coalesced
             uint4 WAv[BN], WBv[BN]; float wsv[BN];
             #pragma unroll
@@ -367,15 +369,18 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
                 }
             }
         }
-        for(int r=0;r<rn;++r){
-            float a0v=acc[r][0], a1v=acc[r][1];
+        // Store all BN columns. This used to be hardcoded to two, which silently made BN a lie: at
+        // BN=4 the compiler dead-codes accumulators 2..3 and with them HALF the weight loads, so the
+        // kernel "ran" 1.65x faster while writing half its outputs. Any BN sweep against the old
+        // store was measuring work deletion, not blocking.
+        #pragma unroll
+        for(int r=0;r<RB;++r){ if(r>=rn) break;
             #pragma unroll
-            for(int o=16;o>0;o>>=1) a0v+=__shfl_down_sync(0xffffffff,a0v,o);
-            #pragma unroll
-            for(int o=16;o>0;o>>=1) a1v+=__shfl_down_sync(0xffffffff,a1v,o);
-            if(lane==0){
-                out[(size_t)(row0+rb+r)*N + nbase] = a0v;
-                if(nact>1) out[(size_t)(row0+rb+r)*N + nbase+1] = a1v;
+            for(int u=0;u<BN;++u){ if(u>=nact) break;
+                float av=acc[r][u];
+                #pragma unroll
+                for(int o=16;o>0;o>>=1) av+=__shfl_down_sync(0xffffffff,av,o);
+                if(lane==0) out[(size_t)(row0+rb+r)*N + nbase+u] = av;
             }
         }
     }

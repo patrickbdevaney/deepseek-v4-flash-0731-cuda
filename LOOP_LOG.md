@@ -3613,3 +3613,42 @@ Split-K is **retired**. Not for being slow — `q:wq_a` genuinely improved 14 % 
 reduction-order change is not numerically safe at this depth, and the only way to get the warps is to
 change that order. `wq_a`'s 26 GB/s stands as understood-and-unfixed. Do not re-queue split-K, or any
 other non-bit-exact kernel change, without the lossless gate in the run.
+
+---
+
+## Finding 69 — the MoE GEMV's `BN` sweep was measuring dead-code elimination, and the store was a latent wrong-answer bug
+
+`BN` (output columns per warp) carried a comment recording a measurement — "BN=1 at 155-160 GB/s and
+BN=2 at 242-249" — and BN=4 had never been tried. On the corrected `ncu_target` grouping BN=4 came out
+at **258 µs against BN=2's 426**, a 1.65x win with *identical* registers (61 vs 62) and *identical*
+occupancy (62.9 % vs 63.2 %). A 1.65x speedup that costs no registers and no occupancy is not a
+speedup, and it was not:
+
+```
+if(lane==0){
+    out[... + nbase]   = a0v;
+    if(nact>1) out[... + nbase+1] = a1v;      // <- exactly two columns, whatever BN says
+}
+```
+
+**The store was hardcoded to two columns.** At BN=4 the compiler sees accumulators 2..3 are never
+read, deletes them, and with them **half the weight loads**. The kernel "ran" 1.65x faster while
+writing half its outputs. Any BN sweep against that store was measuring work deletion.
+
+Generalised the store to `BN` columns and re-swept honestly:
+
+| BN | time | registers | occupancy |
+|---|---|---|---|
+| **2** | **431.8 µs** | 64 | 63.2 % |
+| 3 | 459.6 | 78 | 47.4 % |
+| 4 | 492.2 | 87 | 39.6 % |
+| 6 | 555.2 | 114 | 31.9 % |
+
+**BN=2 is optimal and the original choice was right.** Monotonic: more columns per warp means more
+live accumulators and weight registers, and this kernel is occupancy-limited. BN=2 with the fixed
+store costs nothing (431.8 vs 425.6, same band), and the fix removes a hazard that would have produced
+silently wrong results the first time anyone changed `BN` — which is exactly what a "tunable" invites.
+
+**The rule: a parameter that array sizes depend on must be honoured by every loop that touches those
+arrays, or it is not a parameter, it is a comment.** And more generally — a speedup with no cost in
+any resource is a measurement error until proven otherwise. That heuristic caught this in one look.
