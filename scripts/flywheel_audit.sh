@@ -113,8 +113,17 @@ if [ -n "$FAIL" ]; then
     exit 0
 fi
 say "PASS — publishing $HEAD_SHA"
-if git push -q origin main 2>/tmp/dsv4-audit-push.log; then
-    { echo "## $(date -Is) — PUSHED $HEAD_SHA"; git log -1 --format='  %s'; } >> "$ROOT/FLYWHEEL_AUDIT.md"
+# TOCTOU (found 2026-08-08). This audited $HEAD_SHA, captured at line 30, but pushed the REF `main`
+# -- so any commit that landed during the audit window rode along unreviewed. It happened on
+# 2026-08-08T10:37:40: the auditor reviewed 7968962 and published 76bb06e, a commit it had never
+# seen, and FLYWHEEL_AUDIT.md recorded the contradiction in its own entry (header sha 7968962,
+# subject line from 76bb06e, because line 117 logged the sha it audited and the subject of whatever
+# HEAD was by then). The whole point of a separate auditor is that the thing making changes is not
+# the thing publishing them; pushing a moving ref quietly gives that back. Push the reviewed OBJECT.
+if git push -q origin "$HEAD_SHA":refs/heads/main 2>/tmp/dsv4-audit-push.log; then
+    NOW_SHA=$(git rev-parse HEAD)
+    [ "$NOW_SHA" != "$HEAD_SHA" ] && say "note: HEAD moved to ${NOW_SHA:0:7} during the audit; held back for the next tick"
+    { echo "## $(date -Is) — PUSHED $HEAD_SHA"; git log -1 --format='  %s' "$HEAD_SHA"; } >> "$ROOT/FLYWHEEL_AUDIT.md"
 else
     say "push failed: $(tail -1 /tmp/dsv4-audit-push.log)"
     { echo "## $(date -Is) — PUSH FAILED $HEAD_SHA"; } >> "$ROOT/FLYWHEEL_AUDIT.md"
