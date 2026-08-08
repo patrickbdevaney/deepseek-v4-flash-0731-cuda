@@ -16,3 +16,6 @@
   untrack FLYWHEEL_STOP: origin/main was shipping a committed stop flag
 ## 2026-08-08T00:58:29-04:00 — PUSHED 4ae77c62efb844d335f131b9f8abda966715ff97
   audit: lift the pivot check out of the nothing-unpushed branch
+## 2026-08-08T01:15:46-04:00 — HELD 898a979bb4a4ab0d72eae42c2ad52d4d48776b20
+
+  - no passing LOSSLESS gate in prefill_long.log

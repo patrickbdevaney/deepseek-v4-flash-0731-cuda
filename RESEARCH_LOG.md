@@ -185,10 +185,23 @@ Chinese; generation at T=0.6, top-k 20, top-p 0.95, max 4096. Per-position accep
 
 ### The two open questions, in priority order
 
-1. **Is there an autograd stack on aarch64 `sm_110a` for a 210M head?** This engine is pure CUDA
-   inference with no backward pass anywhere. Either PyTorch on JetPack works, or the MTP block needs
-   hand-written backward kernels. **This is upstream of every recipe detail and is the largest
-   unknown in S5** — larger than the data question.
+1. ~~**Is there an autograd stack on aarch64 `sm_110a`?**~~ **ANSWERED — yes, and it is already on this
+   box.** `evidence/autograd_probe.log`, run in `ghcr.io/nvidia-ai-iot/vllm:latest-jetson-thor`:
+
+   ```
+   torch 2.10.0 | cuda build 13.0      device: NVIDIA Thor    capability: (11, 0)
+   arch_list: ['sm_110', 'sm_121']
+     torch.float32   backward OK  grad_finite=True  grad_norm=0.0266
+     torch.bfloat16  backward OK  grad_finite=True  grad_norm=0.0269
+     AdamW(0.9,0.95) lr=5e-5 step OK
+   free/total GiB: [116.4, 122.8]
+   ```
+
+   Not a forward-only smoke test: a 4096x4096 two-layer block at batch 64 produces **finite gradients
+   in both fp32 and bf16**, and AdamW steps with the FastMTP recipe's exact hyperparameters. **116.4
+   GiB free inside the container** against a ~3 GB head working set. The probe is `tools/autograd_probe.py`
+   so this is re-runnable rather than a claim. No hand-written backward kernels are needed; S5's
+   training half is an ordinary PyTorch job, and only the *capture* half needs our CUDA engine.
 2. **Where does acceptance saturate with corpus size?** FastMTP does not say. Medusa- and EAGLE-class
    heads are commonly trained on ShareGPT-scale data (order 60K), which would put 20K within a factor
    of three of the norm — *this needs verifying, it is recollection, not a checked source.*

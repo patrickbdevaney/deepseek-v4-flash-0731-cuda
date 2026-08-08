@@ -1,0 +1,9 @@
+torch 2.10.0 | cuda build 13.0
+available: True
+device: NVIDIA Thor
+capability: (11, 0)
+arch_list: ['sm_110', 'sm_121']
+  torch.float32          backward OK  loss=0.03327  grad_finite=True  grad_norm=0.0268
+  torch.bfloat16         backward OK  loss=0.03328  grad_finite=True  grad_norm=0.0269
+  AdamW(0.9,0.95) lr=5e-5 step OK
+free/total GiB: [114.7, 122.8]

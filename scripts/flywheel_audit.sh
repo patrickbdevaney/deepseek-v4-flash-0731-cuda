@@ -87,8 +87,15 @@ if [ -n "$CLAIM" ]; then
         # control. Finding 33 requires the number to have happened, not to be the most recent thing.
         grep -ql "$CLAIM" evidence/*.log 2>/dev/null || note "claimed $CLAIM tok/s not found in any evidence/ log"
         # Finding 68: a speedup that is a quality collapse passes every other gate.
-        if grep -q "SPEC-DECODE" "$NEWEST"; then
-            grep -q "LOSSLESS GATE.*PASS" "$NEWEST" || note "no passing LOSSLESS gate in $(basename "$NEWEST")"
+        # Demand the LOSSLESS gate only when the CLAIMED number is itself a spec-decode rate. Finding
+        # 68's failure mode is "spec decode got faster by degrading the output", which always shows up
+        # on a SPEC-DECODE line -- so keying on the claim loses none of that protection. Keying on the
+        # mere PRESENCE of a SPEC-DECODE line held Finding 75, whose claim was a PREFILL rate, because
+        # its instrumentation run also happened to emit a degenerate `SPEC-DECODE: 0.00 tok/s` from a
+        # 4-token sweep. An auditor that blocks a measurement for the contents of a line it is not
+        # citing teaches the loop to launder evidence into a second file.
+        if grep -E "SPEC-DECODE" "$NEWEST" | grep -q "$CLAIM"; then
+            grep -q "LOSSLESS GATE.*PASS" "$NEWEST" || note "claimed $CLAIM tok/s is a SPEC-DECODE rate with no passing LOSSLESS gate in $(basename "$NEWEST")"
         fi
         grep -q "GATE FAIL" "$NEWEST" && note "in-run GATE FAIL in $(basename "$NEWEST")"
     fi
