@@ -4980,3 +4980,75 @@ exercises the draft path under an arena** — the only binary that calls `dspark
 `forward`'s gate-2-real, which never calls `arena_init`, so it takes the raw fallback. The gate that
 actually validated B10 is the byte-identical spec sequence in the model run, which is what the
 falsification order said it would be.
+
+---
+
+## Finding 84 — HALT. The operator set the kill switch at 12:29:25 while this cycle was already inside its 20-minute preflight, and the pivot the loop was about to declare is suppressed by that same file
+
+**Cycle 19 (the cron script's "cycle 18"). NO lever was picked, NO code was changed, NO model run
+was taken.** `DERIVED-ONLY:` this finding contains no performance number of its own — every number in
+it is a filesystem birth time, a process start time or a cron-log line, all read this cycle. Nothing
+was measured because nothing should have been.
+
+### The kill switch
+
+```
+STOP birth : 2026-08-08 12:29:25.761773288 -0400   (stat: Birth == Modify == Change, size 0, untracked)
+cron tick  : Sat Aug  8 12:17:00 2026              (ps -o lstart= -p 1634197, still alive)
+cycle start: [flywheel 2026-08-08T12:37:16-04:00] cycle 18 starting; 114 GiB free; HEAD 635fefe
+```
+
+`scripts/flywheel.sh:61` — `[ -f "$ROOT/FLYWHEEL_STOP" ] && exit 0` — is the *first* preflight check,
+and it ran at ~12:17:00, **twelve minutes before the file existed**. Between that check and the agent
+launch the script does `drop_caches`, the free-memory reclaim and `flywheel_selftest.sh`; that took
+20 minutes, and the operator hit stop in the middle of it. **The kill switch was not ignored, it was
+outrun.** The `Birth` timestamp rules out a `touch -d`/`-r` artifact, `git ls-tree HEAD/origin/main`
+shows it untracked, the reflog shows no checkout or reset that could have restored it, and
+`grep -rn FLYWHEEL_STOP scripts/` finds only the three readers (`flywheel.sh:61`,
+`flywheel_audit.sh:25`, `flywheel_observe.sh:18`) and zero writers. An external actor created it.
+
+It was created **4 minutes 28 seconds after `2ece9f9`** — the byte-floor commit whose last line is
+*"Two unrelated methods now agree the kernel path is finished, and the remaining 1.4x lives entirely
+in acceptance."* Stop-after-that-sentence is a coherent instruction, and it is the instruction the
+pivot criterion was written to earn.
+
+### The thing worth recording: the stop file also suppresses the PIVOT
+
+`open_nontraining_levers` is **0** in `FLYWHEEL_STATE.json` and `.flywheel_openprev` is **0** (written
+by the 12:31:27 audit, committed as `635fefe`). That is exactly `OPEN=0 && PREV=0 && ! -f
+FLYWHEEL_PIVOT` — the condition at `flywheel_audit.sh:42`. **The next auditor run is the one that
+declares the PIVOT.** It will never reach it: the `FLYWHEEL_STOP` early-exit is at line **25**, the
+pivot block at line **42**. `FLYWHEEL_PIVOT` is absent and `FLYWHEEL_AUDIT.md` has no banner.
+
+So the loop's own exhaustion declaration — two consecutive audits at an empty non-training queue,
+the outcome the criterion calls "the correct outcome, not a failure" — became due in the same minute
+it was made unreachable. **This is not fixed here.** Reordering the auditor is a harness change, and
+a stopped loop is the wrong place to make one; a cycle that "fixes" its way past a kill switch is the
+failure mode the switch exists to prevent. It is written down so the operator can decide, and the fix
+if wanted is one line: move the pivot block above the STOP check, or run it as
+`bash scripts/flywheel_audit.sh` once with `FLYWHEEL_STOP` moved aside.
+
+### Queue count (phase 6b), counted honestly and unchanged at 0
+
+`B8''` ~0.4 %, `B1` 0.3–1 %, `B3` ~0.5 % — all explicitly sub-1 %. `B7`/`B7'` exhausted in both
+knobs. `B0`, `B2`, `B4`, `B8`, `B8'`, `B8-cpasync`, `S1`, `S6` retired with numbers. `B10` demoted to
+≤0.5 % by its own measurement (F83). `B5` needs the *no additional quantisation* constraint relaxed.
+`B9` is prefill, not decode. `S3` is priced and rejected on arithmetic; `S2` has no idea attached and
+`S4` is bounded small by the measured 17.53 union. `S5` and `S7` are training jobs. **Zero open,
+≥1 %, non-training, no constraint relaxed.** No item was inflated to keep the loop alive.
+
+### What was deliberately NOT done
+
+- **No research phase.** `RESEARCH_LOG.md §1` makes one mandatory at queue 0, and it would have been
+  the second consecutive empty phase that defines "done". Running eight searches against a set kill
+  switch is continuing the loop, not orienting inside it.
+- **`halt: true` was NOT set in `FLYWHEEL_STATE.json`.** The operator chose the file switch, which
+  `flywheel.sh:61` already honours ahead of the `halt` check at line 63. A second latch adds nothing
+  while STOP is present and silently blocks the resume when it is removed. The halt is recorded here
+  and in `halt_considered`; the switch stays the operator's.
+- **No model run, no gates, no build.** Clocks were not pinned and caches were not dropped, because
+  nothing was measured — stated explicitly so no number in this cycle can be mistaken for one.
+
+**The disposition of the loop: stopped at `spec 22.15 tok/s / base 13.78` (`evidence/clean_post_f83.log`),
+queue 0, pivot due and suppressed, remaining lever S5 — the draft-head fine-tune, lossless by
+construction, and not a kernel change.**

@@ -30,3 +30,5 @@
   B8-cpasync dead: 48 regs vs 64 and 5 blocks/SM vs 4, and 15-53% SLOWER. NEGATIVE (F81), queue now 0
 ## 2026-08-08T10:37:40-04:00 — PUSHED 7968962a40f41a0001de9e3afe88faa6f2680cbf
   harness: the clean/profiling classifier knew one instrument out of five (trap 32 FIXED)
+## 2026-08-08T12:31:29-04:00 — PUSHED 1099827e8bbb0d756d452da03a324f5c55cb5bd3
+  B10 built: draft path on the arena, bit-identical, +0.41% spec -- and the priced 7.4% was HOST time, not device time (F83)

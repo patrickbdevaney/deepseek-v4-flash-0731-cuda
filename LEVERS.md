@@ -1,5 +1,22 @@
 # LEVERS.md — what has been tried, what is dead, and what is actually left
 
+> ## ⛔ THE LOOP IS STOPPED — `FLYWHEEL_STOP` created 2026-08-08 12:29:25 (F84)
+>
+> An operator set the kill switch. It is untracked, size 0, and **no script in this repo writes it**
+> (`grep -rn FLYWHEEL_STOP scripts/` → three readers, zero writers). It was created 4m28s after
+> `2ece9f9`, the commit that concluded *"two unrelated methods now agree the kernel path is
+> finished"*. **Do not pick a lever, do not run a research phase, do not take a model run.** If you
+> are an executor cycle reading this, you got past `flywheel.sh:61` because your tick's preflight
+> started before the file existed (F84 has the timestamps) — halt and say so.
+>
+> **Queue: 0** open non-training levers ≥1 %. **The PIVOT is due and is being suppressed**:
+> `open_nontraining_levers` = 0 and `.flywheel_openprev` = 0 satisfy `flywheel_audit.sh:42`, but the
+> `FLYWHEEL_STOP` early-exit at line **25** returns first, so the banner can never be written.
+> Not fixed here on purpose — see F84. The remaining lever is **S5**, and it is a training job.
+>
+> To resume: `rm FLYWHEEL_STOP`. `halt` in `FLYWHEEL_STATE.json` was deliberately left `false` so
+> that is all it takes.
+
 **Read this before proposing any decode optimisation.** `LOOP_LOG.md` is 3,200 lines and 62 findings;
 this is the index. Its job is to stop a cycle spending a 15-minute checkpoint load re-deriving a
 result that is already in the log with a number attached.
