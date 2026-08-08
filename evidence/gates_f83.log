@@ -1,0 +1,20 @@
+gate_api                   rc=0   fails=1   Gate API: 30 passed, 0 failed -> PASS
+gate_bf16w                 rc=0   fails=0   Gate BF16W: PASS
+gate_compressed_decode     rc=0   fails=0   [compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+gate_compressed_graph      rc=0   fails=0   [cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+gate_compressor_emit       rc=0   fails=0   compressor_emit equivalence: PASS
+gate_encoding              rc=0   fails=1   Gate ENCODING: 6 passed, 0 failed -> PASS
+gate_forkjoin_graph        rc=0   fails=0   Gate FORKJOIN_GRAPH: PASS
+gate_fp4_gemv              rc=0   fails=0   [fp4_gemv] N=64 K=256 M=3 cosine=0.9999999 rms_rel=4.04e-04 max_abs/|o|max=5.01e-04 (|o|max=725.131) -> PASS
+gate_grouped_moe           rc=0   fails=0   [grouped W4A8] cosine=0.9999999 rms_rel=3.45e-04 max_abs/|c|max=2.44e-04 -> PASS
+gate_indexer_decode        rc=0   fails=0   [indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+gate_indexer_graph         rc=0   fails=0   [igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+gate_moe_scan              rc=0   fails=0   Gate MOE_SCAN: PASS
+gate_ogroup_gemv           rc=0   fails=0   Gate OGGEMV: PASS
+gate_og_ws1                rc=0   fails=0   GATE PASS
+gate_prefill_len           rc=0   fails=0   [prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+gate_scratch_init          rc=0   fails=0   gate_scratch_init: GATE PASS (no uninitialised read here)
+gate_suffix_draft          rc=0   fails=0   [gate_suffix_draft] 8/8 checks -> PASS
+gate_tc_fp8_kc             rc=0   fails=0   Gate TC_FP8_KC: 1512/1512 exact -> PASS
+gate_tc_fp8_smem           rc=0   fails=0   Gate TC_FP8_SMEM: PASS
+gate_units                 rc=0   fails=0   Gate K (units): PASS

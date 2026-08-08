@@ -53,6 +53,43 @@ static inline cudaError_t rsync(cudaStream_t s){
     g_rawsync_ms += dsv4_now_ms() - t0; ++g_rawsync_n; return e;
 }
 
+// LEVER B10 / Finding 83 — the draft path joins the arena.
+//
+// F82 measured what the raw allocator costs on the DRAFT half at the current baseline: 10.19 ms per
+// verify round = 7.4 % of the whole spec cycle, 134 cudaMalloc/cudaFree at a mean 76 us, and 127 of
+// those 134 run AFTER their own function's cudaStreamSynchronize — i.e. on a drained, idle GPU.
+// That is the same disease dmalloc was written for at F44 (base AR 92.5 -> 79.3 ms/tok); the verify
+// path has been cured since, the draft never was.
+//
+// dkmalloc/dkfree/dksync are the switchable seam. Default = the arena (dmalloc bumps, dfree is a
+// no-op, dksync degrades to dsync's last-error read). DSV4_DRAFT_RAW=1 restores the pre-F83 raw
+// path EXACTLY, including the rmalloc/rfree/rsync instrument, so the A/B is one env var.
+//
+// Why the arena is safe here, stated as the lifetime argument rather than assumed:
+//   * The only buffers that cross an arena_reset() are mkv[st] (decode.cu:646, raw cudaMalloc),
+//     xa/xb/xemb/dout/dmarg (raw) and main_x (raw). Every dkmalloc below is FUNCTION-LOCAL scratch,
+//     allocated and consumed inside one call, and no arena_reset() runs inside any of these
+//     functions.
+//   * decode.cu's for(pass) loop calls arena_reset() and then, before the first dkmalloc of the
+//     pass, does a blocking cudaMemcpy plus an explicit cudaDeviceSynchronize — so the memory the
+//     reset hands back is drained before it is re-issued. That is what makes dropping the ten
+//     per-function syncs legal: they were there to let cudaFree run, not to order the chain, which
+//     is already ordered by being one stream.
+//   * dspark_attn_forward's H2D of `hidx` stays correct without its sync: cudaMemcpyAsync out of
+//     PAGEABLE host memory is specified to copy into the staging buffer before returning, so the
+//     stack vector may die at the closing brace.
+// When arena_init was never called (the `forward` gate-2-real binary, unit gates) g_arena_on is
+// false and dmalloc/dfree/dsync fall back to raw cudaMalloc/cudaFree/sync — zero behaviour change,
+// which is the property F44 relied on and the reason no gate needs touching.
+extern bool g_draft_raw;
+template<class T> static inline cudaError_t dkmalloc(T** p, size_t n){
+    if(g_draft_raw) return rmalloc(p, n);
+    *p = (T*)dmalloc(n); return cudaSuccess;
+}
+static inline void dkfree(void* p){ if(g_draft_raw) rfree(p); else dfree(p); }
+void dksync_at(cudaStream_t s, const char* file, int line);
+#define dksync(s) dksync_at((s), __FILE__, __LINE__)
+
 // LOOP_LOG Finding 53. A kernel LAUNCH failure — gridDim 0, too much dynamic shared memory, a bad
 // block shape — is reported only through the thread's last-error slot. `cudaStreamSynchronize` does
 // NOT return it (measured on this box: a gridDim-0 launch leaves cudaErrorInvalidValue pending and

@@ -28,3 +28,5 @@
 ## 2026-08-08T07:36:19-04:00 — PUSH FAILED 7858cf1ab0d5fd1b25ad30fa6fabdf432cdc6a08
 ## 2026-08-08T08:48:56-04:00 — PUSHED 60f2936414c923a63638de91b1aa97173a3faa2e
   B8-cpasync dead: 48 regs vs 64 and 5 blocks/SM vs 4, and 15-53% SLOWER. NEGATIVE (F81), queue now 0
+## 2026-08-08T10:37:40-04:00 — PUSHED 7968962a40f41a0001de9e3afe88faa6f2680cbf
+  harness: the clean/profiling classifier knew one instrument out of five (trap 32 FIXED)

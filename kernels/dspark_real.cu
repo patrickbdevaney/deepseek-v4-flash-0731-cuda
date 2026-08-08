@@ -15,11 +15,11 @@ void dspark_main_x(float* main_x, const float* main_hidden, const uint8_t* main_
                    const float* main_norm, int s, int dim, float eps, cudaStream_t stream){
     const int K = 3 * dim;                                   // main_hidden is [s, 3d]
     uint8_t* xq; float* xs;
-    CU(rmalloc(&xq,(size_t)s*K)); CU(rmalloc(&xs,(size_t)s*(K/128)*4));
+    CU(dkmalloc(&xq,(size_t)s*K)); CU(dkmalloc(&xs,(size_t)s*(K/128)*4));
     act_quant_fp8(xq, xs, main_hidden, s, K, 128, stream);
     fp8_block_gemm(main_x, xq, xs, main_proj, main_proj_s, s, dim, K, stream);   // [s, dim]
     rmsnorm(main_x, main_x, main_norm, s, dim, eps, true, stream);
-    CU(rsync(stream)); rfree(xq); rfree(xs);
+    dksync(stream); dkfree(xq); dkfree(xs);
 }
 
 // gather markov_w1[token] -> markov_embed[n, rank]  (rows of the rank-256 embedding table)
@@ -110,9 +110,9 @@ void dspark_forward_head(int* output_ids, const float* x_block, const int* first
                          float* margins, cudaStream_t stream){
     const int N=s*block;
     float *collapsed,*logits,*bias,*membed; int *cur,*rows,*am;
-    CU(rmalloc(&collapsed,(size_t)N*d*4)); CU(rmalloc(&logits,(size_t)N*vocab*4));
-    CU(rmalloc(&bias,(size_t)s*vocab*4)); CU(rmalloc(&membed,(size_t)s*rank*4));
-    CU(rmalloc(&cur,(size_t)s*4)); CU(rmalloc(&rows,(size_t)s*4)); CU(rmalloc(&am,(size_t)s*4));
+    CU(dkmalloc(&collapsed,(size_t)N*d*4)); CU(dkmalloc(&logits,(size_t)N*vocab*4));
+    CU(dkmalloc(&bias,(size_t)s*vocab*4)); CU(dkmalloc(&membed,(size_t)s*rank*4));
+    CU(dkmalloc(&cur,(size_t)s*4)); CU(dkmalloc(&rows,(size_t)s*4)); CU(dkmalloc(&am,(size_t)s*4));
     // hc_head (hc 4->1) -> norm -> lm_head  over all N=s*block block-positions
     hc_head(collapsed, x_block, hc_head_fn, hc_head_scale, hc_head_base, N, hc, d, 1e-6f, stream);
     rmsnorm(collapsed, collapsed, norm, N, d, eps, true, stream);
@@ -132,5 +132,5 @@ void dspark_forward_head(int* output_ids, const float* x_block, const int* first
         k_argmax_row<<<s,256,0,stream>>>(am, logits, vocab, vocab, rows, s, margins? margins+(size_t)i*s : nullptr);
         k_store<<<(s+63)/64,64,0,stream>>>(output_ids, am, s, block, i);
     }
-    rfree(collapsed);rfree(logits);rfree(bias);rfree(membed);rfree(cur);rfree(rows);rfree(am);
+    dkfree(collapsed);dkfree(logits);dkfree(bias);dkfree(membed);dkfree(cur);dkfree(rows);dkfree(am);
 }

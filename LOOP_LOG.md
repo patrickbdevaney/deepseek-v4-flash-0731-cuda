@@ -4872,3 +4872,111 @@ verify table calling itself a cycle table. (2) *An empty research phase is not a
 tells you where to read.* The seven queries promoted nothing — but "batch-1 decode leaks on the host
 side" pointed at the one half of our cycle that had never been checked for it, and the answer was a
 7.4 % lever sitting in five functions that predate the arena.
+
+---
+
+## Finding 83 — B10 built: the draft path is on the arena, **134 `cudaMalloc`/`cudaFree` and 10 syncs per round are gone, the output is bit-identical — and it bought 0.50 %, not 7.4 %**
+
+**Cycle 18. The lever SHIPS and its expected value is RETIRED.** F82 priced B10 at +5 to +7 % from a
+measured 10.19 ms/round of host time inside the DSpark draft path's raw allocator. It was built
+exactly as the falsification order specified. **The predicted saving was 10.19 ms/round; the measured
+saving is 0.67 ms/round — 6.5 % of the target, a 15x miss.**
+
+### What was built
+
+`dkmalloc` / `dkfree` / `dksync` in `include/dscratch.h` — a switchable seam over the F44 arena.
+Default = arena (`dmalloc` bumps, `dfree` is a no-op, `dksync` degrades to `dsync`'s Finding-53
+last-error read). `DSV4_DRAFT_RAW=1` restores the pre-F83 raw path **exactly**, including F82's
+`rmalloc`/`rfree`/`rsync` instrument, so the A/B is one env var. Applied to all five draft functions:
+`dspark_main_kv`, `dspark_attn_forward`, `dspark_block_forward` (`kernels/dspark_attn.cu`),
+`dspark_main_x`, `dspark_forward_head` (`kernels/dspark_real.cu`).
+
+The lifetime argument, which is the way this change could have been silently wrong (falsification
+step 1): **every `dkmalloc` is function-local scratch consumed inside one call, and no `arena_reset()`
+runs inside any of these functions.** The buffers that cross a reset — `mkv[st]`, `xa`/`xb`/`xemb`/
+`dout`/`dmarg`, `main_x` — are all raw `cudaMalloc` at `decode.cu:646` and stay that way. Dropping
+the ten per-function syncs is legal because `decode.cu`'s `for(pass)` loop does a blocking
+`cudaMemcpy` **and** an explicit `cudaDeviceSynchronize` after its `arena_reset()` and before the
+first `dkmalloc` of the pass, so reset memory is drained before it is re-issued; the chain's ordering
+never depended on those syncs, it comes from being one stream. `dspark_attn_forward`'s H2D of the
+stack-local `hidx` stays correct without its sync because `cudaMemcpyAsync` out of **pageable** host
+memory is specified to copy into the staging buffer before returning. When `arena_init` was never
+called (the `forward` gate-2-real binary, unit gates) `g_arena_on` is false and `dmalloc`/`dfree`/
+`dsync` fall back to raw — zero behaviour change, which is why no gate needed touching.
+
+### Capacity (falsification step 2) — the estimate was 40x low and it still fits
+
+```
+[arena] first draft: draft footprint 210.72 MB, global hwm 210.72 MB / cap 512.00 MB (41.2%), draft path = ARENA
+```
+
+B10 predicted "~5 MB/round". The real number is **210.72 MB**: with `dfree` a no-op and only one
+`arena_reset()` per pass, the draft accumulates the *whole* 3-stage chain — and each stage's MoE,
+`hc_pre`/`hc_post` and attention scratch were already `dmalloc` (they are shared with the verify
+path), so they now stack 3x instead of being recycled. It fits at 41.2 % of a 512 MB arena, and the
+**draft is now the arena's global high-water mark** — it exceeds the 43-layer prefill at PSp=5. New
+capacity fact for anyone adding a 4th MTP stage or widening BLK.
+
+### The result (`evidence/clean_post_f83.log`, CLEAN — no DPROF, no KSWEEP, no SPECPROF; clocks pinned with `jetson_clocks`, caches dropped; ONE run)
+
+**Bit-identical, checked rather than assumed.** `diff` over the spec token sequence, the base-AR
+token sequence and all 45 drafter margins against `clean_post_f81.log` is **empty**. Every verify
+pairs 1:1 at identical K and identical accept counts. Acceptance **2.89**, first token 11111,
+GATE PASS, MATCH 5/5, LOSSLESS GATE PASS.
+
+| | F81 (raw allocator) | F83 (arena) | Δ |
+|---|---|---|---|
+| spec | 45.3 ms/tok = **22.06** tok/s | 45.1 = **22.15** | **+0.41 %** |
+| base AR (no draft path) | 72.3 ms/tok = **13.83** | 72.6 = **13.78** | −0.36 % |
+| 9 paired verifies, sum | **1196.7 ms** | **1190.7 ms** | **−0.50 %, 9/9 one direction** |
+| acceptance | 2.89 | 2.89 | 0 |
+
+per-verify: **−1.29 / −0.09 / −0.15 / −0.26 / −0.42 / −0.94 / −0.84 / −0.32 / −0.28 %**.
+
+**The three draft-free control marks all moved the OTHER way** — cold prefill 206.1 → 206.9 ms
+(+0.4 %), base AR 72.3 → 72.6 (+0.4 %), warm prefill 137.1 → 137.9 (+0.6 %). So the pair drawn was a
+marginally *slow* one and the nine draft-containing marks still went 9/9 faster. The direction is
+real; the magnitude is 0.50 % and, per trap 25, a single cross-run pair cannot resolve that on its
+own. **Which does not matter, because the kill number needs no timing resolution at all:**
+
+> **F82 priced 10.19 ms/round. All of it was removed. The round got 0.67 ms/round faster.
+> 93.5 % of the priced time was never on the device timeline.**
+
+### Mechanism — trap 34
+
+F82's measurement was correct and its inference was not. It bracketed each driver call with
+`steady_clock` and, seeing that 127 of 134 calls are issued after their own function's
+`cudaStreamSynchronize`, concluded the device was idle for their duration. But "the device was
+drained when this call *started*" does not imply "the device was idle *throughout*": each function
+issues its whole malloc batch at the **top**, and the kernels of the previous function — and, inside
+`dspark_block_forward`, of `hc_pre` and `rmsnorm` before the nested `dspark_attn_forward`'s 13
+mallocs — are still draining underneath. Only the frees genuinely follow a drain, and they are at
+most half the 134. **Host time inside a driver call is not device-timeline time. The instrument that
+would have answered this before the build is the gap between two device events, not a host bracket.**
+F82 declined to price its 12.99 ms of `cudaStreamSynchronize` as waste for exactly this reason; the
+error was applying that instinct to only half the data.
+
+**Left open, one profiling run and a two-line instrument change:** `g_raw_ms` lumps malloc and free.
+Splitting it says which half carried the 76 µs mean, and whether any of the free time was absorbing
+side-stream (`g_side`) MoE work — `cudaStreamSynchronize(0)` does not wait for a non-blocking side
+stream but `cudaFree`'s implicit device sync does. That is a question about F82's number, not a lever.
+
+### Disposition
+
+**KEPT, default ON.** It is bit-identical, never worse (9/9), deletes 134 driver calls and 10 device
+drains per round, and makes the draft path structurally match the verify path; `DSV4_DRAFT_RAW=1`
+keeps the old arm one env var away. **But it is a sub-1 % item, not a 5–7 % one**, so
+`pivot_criterion.open_nontraining_levers` goes **1 → 0**: B8'' (~0.4 %) and B1 (0.3–0.5 %) are
+explicitly sub-1 %, B5 needs the no-additional-quantisation constraint relaxed, S5/S7 need training,
+B9 is prefill. Cycle 17 reset the queue-empty counter, so this is the **first** of the two consecutive
+audits at 0. The other arm — three consecutive cycles adopting nothing ≥1 % — has been fired since
+cycle 14 and this cycle does not clear it.
+
+### Gates
+
+**20/20 PASS** (`evidence/gates_f83.log`), every one with a verdict line, `gate_encoding` run with no
+argument. `gate_tc_fp8_kc` 1512/1512 exact. Note honestly what they do and do not cover: **no gate
+exercises the draft path under an arena** — the only binary that calls `dspark_*` outside `decode` is
+`forward`'s gate-2-real, which never calls `arena_init`, so it takes the raw fallback. The gate that
+actually validated B10 is the byte-identical spec sequence in the model run, which is what the
+falsification order said it would be.

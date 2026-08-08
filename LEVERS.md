@@ -16,9 +16,12 @@ Rules of the road:
 
 ## 1. Where the time actually goes
 
-Current baseline (prompt 0, clocks pinned, **post-Finding-81, CLEAN**): **22.06 tok/s speculative**,
-**13.83 tok/s base AR** (72.3 ms/tok), acceptance **2.89**, speedup **1.60x**.
-`evidence/clean_post_f81.log` — no `DSV4_DPROF`, no `DSV4_KSWEEP`, no `TCB_CPA`, GATE PASS and LOSSLESS
+Current baseline (prompt 0, clocks pinned, **post-Finding-83, CLEAN**): **22.15 tok/s speculative**,
+**13.78 tok/s base AR** (72.6 ms/tok), acceptance **2.89**, speedup **1.61x**.
+`evidence/clean_post_f83.log` — no `DSV4_DPROF`, no `DSV4_KSWEEP`, no `DSV4_SPECPROF`, GATE PASS,
+MATCH 5/5 and LOSSLESS GATE PASS; draft path on the arena (F83), output bit-identical to
+`clean_post_f81.log`. The previous baseline was 22.06 / 13.83 (`evidence/clean_post_f81.log`) —
+no `DSV4_DPROF`, no `DSV4_KSWEEP`, no `TCB_CPA`, GATE PASS and LOSSLESS
 GATE PASS. F81's lever ships default OFF and this run's spec token sequence is **byte-identical** to
 `clean_post_f79.log`, so it measures the same default arm — which is what makes it a variance control.
 
@@ -71,6 +74,19 @@ drained GPU.** The verify path has been on `dscratch.h`'s arena since F44; the D
 The sync time is NOT priced as waste — it is mostly the host awaiting real draft work; what it shows
 is that the draft runs as ten serialised drain-points where the verify runs as one async chain, and
 those drains exist *because* a raw free requires them.
+
+**READ THE PARAGRAPH ABOVE WITH FINDING 83 ATTACHED. B10 WAS BUILT AND THE 7.4 % DID NOT EXIST.**
+The draft path is now on the arena (default ON; `DSV4_DRAFT_RAW=1` restores the raw path), all 134
+`cudaMalloc`/`cudaFree` and all 10 `cudaStreamSynchronize` are gone from it, the output is
+bit-identical — and the round got **0.67 ms/round faster, 6.5 % of the priced 10.19**
+(`evidence/clean_post_f83.log`, nine paired verifies at identical K: 1196.7 → 1190.7 ms = −0.50 %,
+9/9 in one direction; spec 22.06 → 22.15). So **the 7.4 % row above is HOST time, not device-timeline
+time, and 93.5 % of it was never on the critical path** — the mallocs are issued in a batch at the
+top of each function while the GPU is still running the previous function's kernels, and only the
+frees follow a drain. **Trap 34.** The remaining open question, which needs one profiling run and a
+two-line instrument change (`g_raw_ms` currently lumps malloc and free): which half of the 134 was
+the 76 µs mean, and was any of the free time absorbing side-stream (`g_side`) MoE work that
+`cudaStreamSynchronize(0)` does not wait for but `cudaFree`'s implicit device sync does.
 
 The K=5 verify dprof TOTAL is **127.2 ms** and splits into two populations that behave completely
 differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned):
@@ -203,7 +219,7 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | B8'' | **M-gate `OG_SMEM` on: F55's 40 % kill was measured at M=5 ONLY, and the sign flips below M=4** | **~0.4 % — SUB-1 %, does not count toward the pivot queue** | New evidence, not a new argument (F79). F55 swept NR at M=5 and retired the variant on that one column. Sweeping **M** as well, same COLD harness, 3 alternating replicates (`evidence/oglazy_bench.log`), against the NR the dispatch actually picks at each M: **M=2 0.1717 → 0.1533 (−10.7 %), M=3 0.1962 → 0.1729 (−11.9 %), M=5 0.1958 → 0.2729 (+39.4 %, F55's number reproduced), M=8 0.3610 → 0.2810 (−22.2 %)**. So `ogsmem` gated on `bs<=3` is a real candidate. **Priced honestly it is small**: `o:wo_a` is 10.74 ms of an 85.9 ms K=2 verify and 10.26 of 104.7 at K=3, and only 4 of the 9 verifies in a canonical run are K≤3 → **~0.4 % end-to-end**, before the trap-3 discount that F76 (bench −7.6 %→ in situ +0.1 %) and F78 (bench +3.1 % → in situ +2.8 %) both demand. M=4 is unmeasured — the bench skips it and it is on the crossover. |
 | ~~B8-tile~~ | ~~the three tile marks `q:wq_b` + `o:wo_b` + `q:wq_a` = 22.5 ms~~ | **CLOSED, F78** | Kept for the achievability bar it established: **the target was never 233 GB/s** but the M=1 GEMV's own measured rate on the same weight bytes — `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). **Bytes are counted (F74) and it is NOT at roofline.** The target is not 233 GB/s — it is the M=1 GEMV's own measured rate on the same weight bytes: `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). Against that the three tile marks hold ~6.5 ms. **The one remaining move on them is to double-buffer the staged tile so round n+1's loads issue before round n's mma** — F67 closed both reroutes, F68 closed split-K on numerics. **`o:wo_a` (3.3 ms of the old estimate) is NO LONGER a cheap 7 %: F76 attributed it.** `ogroup_gemv_mk_kernel<5,4>` is *latency*-bound (8.1 of 13.0 cycles between issues on an L1TEX scoreboard), spills 44 bytes against a 64-register cap, and sits at a **measured local optimum in both knobs** — NR (1/2/4/8) and `OGMK_BLOCKS_PER_SM` (2/3/4, re-swept in F76 with the spill reduced). Instruction-count cures are retired as a family (§3). The only untried idea that moves ~16 registers instead of 3: **the `OG_SMEM=1` variant reading `o4[m]` lazily per m from shared memory** instead of holding M float4s live — smem makes lazy reads affordable where global loads need the MLP. F55 measured that variant a 40 % regression at NR=4 *with* the 20-register `o4[M]` still in it, so the register argument was never tested; falsify with `ptxas -v` before building anything. |
 | ~~**B8-cpasync**~~ | ~~`cp.async` staging global→shared for the fp8 tile with a ≥4-stage smem ring~~ | **RETIRED, F81 — bench +15 to +53 %, and +2 to +26 % even at ideal alignment** | Built, **bit-exact** (`gate_tc_fp8_kc` **1512/1512**), and it **passed both cheap falsification steps and then lost the bench by a mile**. (1) `ptxas -v`: at UF=1 the ring is **48 regs / 36864 B smem / 5 blocks/SM** against the shipped `smemB<8,2,false>`'s **64 regs / 17408 B / 4** — the register array really is given back and occupancy *rises*; smem was never the binding resource (233 472 B/SM, the shipped kernel uses 30 % of it at 4 blocks). (2) `cp.async.bulk.tensor.2d`, `cp.async.bulk`, `mbarrier.init` and `mbarrier.try_wait.parity` all **assemble at `-arch=sm_110a`**. (3) `gemm_bench` COLD, arms adjacent, M=5 vs `m16+smem B+4`: wq_a **+23.9 %**, wq_b **+38.4 %**, wkv **+52.8 %**, wo_b **+39.9 %**, sw1/3 **+14.9 %**, sw2 **+36.3 %**. **The disambiguation is the valuable half**, because the engine's weights are 4-byte aligned so the ring had to use cp-size 4: re-benched at B+0 (cp-size 16) it recovers ~25 % (wo_b 0.1428 → 0.1067) **and still loses to the ordinary LDG path at 5 of 6 shapes** — wq_a +5.7 %, wq_b +11.7 %, wkv +11.1 %, wo_b **+26.4 %**, sw2 +19.6 %, sw1/3 −3.0 %. **So no alignment work rescues it**, which is what makes this a permanent close rather than a block on F67's shard pad. And **NS=2 beats NS=4 on 4 of 6 shapes** (wo_b 0.0873 vs 0.1067), so *depth is negative* — the direct refutation of the promoted claim. Mechanism, new trap 29: one ring stage is **1** K-block, so `wait_group`+`__syncthreads` runs **once per K-block** where the shipped KC=2 pays it once per two — and F74's win *was* raising bytes-per-barrier. The ring trades the one thing that pays for bytes-in-flight the LDG path already had. Not run in situ: the falsification order says stop at the first no, and trap 3's discount has never turned a large bench negative into a win (F76 −7.6 % → +0.1 %, F78 +3.1 % → +2.8 %). Kept behind `TCB_CPA=<stages>`, default OFF. See §3. |
-| **B10** | **put the DSpark DRAFT path on the existing `dscratch.h` arena** — `dspark_main_kv`, `dspark_attn_forward`, `dspark_block_forward`, `dspark_forward_head`, `dspark_main_x` all call raw `cudaMalloc`/`cudaFree` + a real `cudaStreamSynchronize` per invocation, inside the loop that runs once per verify round | **+5 to +7 % — MEASURED, not modelled (F82). The largest open item since F74** | **The target is a number, not a hypothesis: `evidence/specprof_f82.log` measures 10.19 ms/round = 7.4 % of the 137.35 ms cycle as HOST time inside `cudaMalloc`/`cudaFree`, 134 calls at 76 µs, and 127 of the 134 run after their own function's `cudaStreamSynchronize` — on a drained, idle GPU.** This is the identical change that took base AR 92.5 → 79.3 ms/tok at F44, applied to the one region that predates the arena; `dscratch.h`'s own first line says *"At M=1 the per-call cudaMalloc/cudaFree/cudaStreamSynchronize in every sub-function dominate."* Bit-identical by construction (an allocator swap; `dmalloc` bumps, `dfree`/`dsync` become no-ops). **Do NOT claim the 12.99 ms of sync as recoverable** — 9 calls at 1.44 ms, mostly the host awaiting real draft GPU work; the recoverable part is the launch-gap share that disappears when the draft becomes one async chain, and it is unknown until measured. **How to falsify / what to watch, in order: (1)** arena LIFETIME — `dspark_main_kv` is called *outside* the `for(pass)` loop that calls `arena_reset()`, and `mkv[st]` must survive it; check every buffer that crosses a reset or the draft reads freed bump space (this is the one way the change can be wrong and it will not show as a crash, it will show as wrong tokens, so gate on the byte-identical spec sequence). **(2)** arena CAPACITY — the draft adds ~5 MB/round (`logits` 2.59 MB, `bias` 517 KB, `res2` 327 KB, `kv_all` = ctx x HEAD_DIM x 4) against a 512 MB arena, so it should fit, but the arena **aborts** on overflow and that kills a 15-minute run: print `g_arena_hwm` before trusting it. **(3)** keep the raw path behind an env flag so the A/B is possible, and price it on the **paired per-verify** instrument (9 pairs at identical K), not on tok/s alone. |
+| ~~**B10**~~ | ~~put the DSpark DRAFT path on the existing `dscratch.h` arena~~ | **BUILT AND SHIPPED, but the +5 to +7 % is RETIRED — F83 measured 0.67 ms/round recovered against a predicted 10.19, i.e. 6.5 % of the target. Real value ≤0.5 %, SUB-1 %, does NOT count toward the pivot queue** | Built exactly as specified and it is **bit-identical**: `evidence/clean_post_f83.log` reproduces `clean_post_f81.log`'s spec tokens, base-AR tokens, all 45 drafter margins, every K and every accept count, acceptance 2.89, GATE + MATCH 5/5 + LOSSLESS GATE PASS. All 134 raw `cudaMalloc`/`cudaFree` and all 10 `cudaStreamSynchronize` are gone from the draft path (`dkmalloc`/`dkfree`/`dksync` in `dscratch.h`; `DSV4_DRAFT_RAW=1` restores the raw path exactly). **And it bought 0.50 %.** Nine paired verifies at identical K: 1196.7 → 1190.7 ms, **9/9 in one direction** but only **−0.50 %** (−1.29/−0.09/−0.15/−0.26/−0.42/−0.94/−0.84/−0.32/−0.28 %); spec 22.06 → **22.15** (+0.41 %). **The kill number needs no timing resolution at all: F82 priced 10.19 ms/round of allocator host time; the whole round got 0.67 ms/round faster. 93.5 % of the priced time was never on the device timeline.** The lever is KEPT because it is free and never worse (9/9 direction, and the three draft-free control marks — cold prefill 206.1 → 206.9, base AR 72.3 → 72.6, warm prefill 137.1 → 137.9 — all moved the *other* way, so the pair drawn was a slow one), but it is now a sub-1 % item. **The lesson is trap 34: HOST time inside a driver call is not device-timeline time, even when the device is drained.** |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |
@@ -218,7 +234,9 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 `evidence/specprof_f82.log` — the 86/14 quoted here until now dated to `evidence/f47.log` and was
 stale by six verify-side adoptions). Since the verify's MoE half is near the roofline, **the
 numerator is the better lever than the denominator** — but the denominator is no longer exhausted:
-**7.4 % of the cycle is raw-allocator host time in the draft half, see B10 in §4.**
+~~**7.4 % of the cycle is raw-allocator host time in the draft half, see B10 in §4.**~~ **F83 removed
+all of it and recovered 0.50 %.** The 7.4 % was HOST time, not device-timeline time — trap 34.
+The draft half's remaining cost is real GPU work: 3 MTP blocks 13.47 ms + `fwd_head` 10.13 ms.
 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
@@ -447,6 +465,17 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    at F47 and is **17.4 %** now, unchanged in absolute terms while six adoptions cut the verify around
    it — so §1's table, which is a *verify* table, was being read as a *cycle* table and the draft was
    never a candidate. Re-measure the top-level split whenever the thing below it has moved (F82).
+34. **HOST time inside a driver call is NOT device-timeline time, even on a drained device.** F82
+   measured 10.19 ms/round of host time inside the draft path's `cudaMalloc`/`cudaFree` — a correct
+   measurement — and priced it at 7.4 % of the cycle because 127 of the 134 calls follow their own
+   function's `cudaStreamSynchronize`. F83 removed **all 134 of them plus all 10 syncs**, bit-identical,
+   and the round got **0.67 ms faster: 6.5 % of the prediction, a 15x miss** (`clean_post_f83.log`,
+   9/9 paired verifies, −0.50 %). The flaw is that "the device was drained when this call *started*"
+   does not imply "the device was idle for the duration of this call": each function issues its whole
+   malloc batch at the top, and the kernels of the *previous* function are still draining underneath.
+   **The instrument you want is the gap between two device events, not a `steady_clock` bracket around
+   a host call.** F82's own refusal to price the 12.99 ms of `cudaStreamSynchronize` as waste was the
+   right instinct applied to only half of the data.
 
 ---
 

@@ -814,6 +814,7 @@ int main(int argc, char** argv){
         // Per-phase attribution of the spec step (LOOP_LOG Finding 17: the draft is ~6x off its
         // roofline and it is what keeps speculation at parity). DSV4_SPECPROF=1.
         const bool specprof = getenv("DSV4_SPECPROF")!=nullptr;
+        static bool draft_hwm_shown = false;      // lever B10 capacity print, once per process
         cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
         double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
         // Finding 82: the draft path's RAW allocator cost, split draft-half vs rest-of-round. See
@@ -883,6 +884,22 @@ int main(int argc, char** argv){
             }
             if(specprof){ cudaEventRecord(p3);
                 rawd=g_raw_ms-raw0; rsyd=g_rawsync_ms-rsy0; rawnd=g_raw_n-rawn0; rsynd=g_rawsync_n-rsyn0; }
+            // Lever B10 / Finding 83 capacity check, printed ONCE and in a clean run too. The draft
+            // now dmallocs its whole 3-stage chain + head out of the arena with dfree a no-op and
+            // only one arena_reset() per pass, so the draft's peak is additive on top of whatever
+            // the prefill set. The arena ABORTS on overflow and that kills a 15-minute run, so the
+            // margin is evidence, not an assumption. Printed after the FIRST draft of the point,
+            // when the draft's own contribution is at its high-water mark for the round.
+            if(!draft_hwm_shown){ draft_hwm_shown=true;
+                // g_arena_off here is the draft chain's OWN footprint: the last arena_reset() was at
+                // the top of this pass, so everything above 0 was allocated by the 3 block forwards
+                // (attn + hc + MoE) and the head. g_arena_hwm is the global peak, which the prefill
+                // usually owns.
+                printf("[arena] first draft: draft footprint %.2f MB, global hwm %.2f MB / cap %.2f MB"
+                       " (%.1f%%), draft path = %s\n",
+                       g_arena_off/1048576.0, g_arena_hwm/1048576.0, g_arena_cap/1048576.0,
+                       100.0*g_arena_hwm/g_arena_cap,
+                       g_draft_raw ? "RAW cudaMalloc (DSV4_DRAFT_RAW=1)" : "ARENA"); fflush(stdout); }
             // ---- ADAPTIVE VERIFY WIDTH (LOOP_LOG Finding 49; EVICT, arXiv 2605.00342) ----
             // Verifying the k-th block position is only worth it if the probability it is accepted
             // exceeds its marginal cost in tokens. On a dense model that cost is ~0 and you always

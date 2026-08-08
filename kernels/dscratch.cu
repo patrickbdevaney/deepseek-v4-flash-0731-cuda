@@ -11,6 +11,16 @@ double dsv4_now_ms(){
     return std::chrono::duration<double,std::milli>(
                std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+// Lever B10 / Finding 83. Read ONCE at static-init so the seam costs one predicted branch per call
+// and cannot be flipped mid-run. Default false = the draft path is on the arena.
+bool g_draft_raw = getenv("DSV4_DRAFT_RAW") != nullptr;
+void dksync_at(cudaStream_t s, const char* file, int line){
+    if(g_draft_raw){
+        cudaError_t e = rsync(s);
+        if(e){ fprintf(stderr,"cuda %s:%d %s\n", file, line, cudaGetErrorString(e)); exit(1); }
+    }
+    dsync_at(s, file, line);   // no-op sync under the arena; keeps the Finding-53 last-error read
+}
 bool   g_arena_on  = false;
 char*  g_arena     = nullptr;
 size_t g_arena_off = 0;
