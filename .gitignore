@@ -9,3 +9,9 @@ cache/
 .flywheel_selftest.txt
 .flywheel_failstreak
 .flywheel_commit_msg
+
+# runtime state, never tracked: a committed stop flag silently disables the loop on checkout
+FLYWHEEL_STOP
+.flywheel_audited
+.flywheel_commit_msg
+.flywheel_last_run.jsonl
