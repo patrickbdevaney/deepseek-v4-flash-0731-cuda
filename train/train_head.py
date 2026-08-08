@@ -129,12 +129,14 @@ def main():
     ap.add_argument("--steps", type=int, default=0, help="0 = one pass over the capture (1 epoch)")
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--warmup", type=float, default=0.05)
+    ap.add_argument("--pos-per-seq", type=int, default=8, help="training positions sampled per sequence")
     ap.add_argument("--strict", action="store_true", help="fail on any state_dict mismatch")
     ap.add_argument("--smoke", action="store_true", help="load + one forward + one backward, then stop")
     a = ap.parse_args()
 
     dev = "cuda"
     torch.manual_seed(0)
+    if os.environ.get("ANOMALY"): torch.autograd.set_detect_anomaly(True)
     cfg = json.load(open(os.path.join(a.ckpt, "config.json")))
     print(f"[train] device={dev} torch={torch.__version__}", flush=True)
 
@@ -207,7 +209,9 @@ def main():
     print(f"[train] aux: " + ", ".join(f"{k}{tuple(v.shape)}" for k, v in aux.items()), flush=True)
     for blk in blocks:
         blk.embed = lambda ids, _w=aux["embed.weight"]: F.embedding(ids, _w)
-        blk.head = lambda x, _w=aux["head.weight"]: F.linear(x, _w)
+        # ParallelHead is called as head(x, full_logits=True); with world_size 1 the full logits
+        # ARE the local logits, so the flag is a no-op here -- but it must be accepted.
+        blk.head = lambda x, full_logits=False, _w=aux["head.weight"]: F.linear(x, _w.to(x.dtype))
 
     # Trainable = non-expert parameters of the live modules (so grads reach the real graph).
     tp = [(n, p) for i, b in enumerate(blocks) for n, p in b.named_parameters() if ".experts." not in n]
@@ -220,40 +224,117 @@ def main():
     opt = torch.optim.AdamW([p for _, p in tp], lr=a.lr, betas=(0.9, 0.95), weight_decay=0.0)
 
     gamma = float(margs.dspark_block_size)
+    BS = margs.dspark_block_size
+
+    def forward_head_tf(blk, x, seed, target_ids):
+        """TEACHER-FORCED forward_head. The checkpoint's forward_head is an inference loop:
+
+            output_ids[:, 0] = input_ids
+            for i in range(block_size):
+                bias, emb = markov_head(output_ids[:, i])   # embedding SAVES this view for backward
+                logits[:, i].add_(bias)                     # in-place
+                output_ids[:, i+1] = sample(logits[:, i])   # then MUTATES the saved tensor
+
+        which is both non-differentiable (it samples) and illegal under autograd (the mutation bumps
+        the version of a tensor the embedding still needs) -- that is the LongTensor[1] version
+        error anomaly detection pointed at.
+
+        Training feeds the GROUND TRUTH into the Markov head instead of the model's own samples.
+        That removes the sampling, removes the in-place mutation, and is what the DSpark and FastMTP
+        recipes prescribe. It is also, by construction, the train/inference mismatch HASS addresses
+        -- worth revisiting in stage 1, but teacher forcing is the correct starting point.
+        """
+        x = blk.hc_head(x, blk.hc_head_fn, blk.hc_head_scale, blk.hc_head_base)
+        logits = blk.head(blk.norm(x), full_logits=True)          # (B, BS, V)
+        ids_in = torch.cat([seed, target_ids[:-1]], dim=0).view(1, -1)   # ground-truth prefix
+        out_logits, embeds = [], []
+        for i in range(blk.block_size):
+            bias, emb = blk.markov_head(ids_in[:, i])
+            out_logits.append(logits[:, i] + bias)                # NOT add_
+            embeds.append(emb)
+        conf = blk.confidence_head(x, torch.stack(embeds, dim=1))
+        return torch.stack(out_logits, dim=1), conf
+
+    # ---- TRAINING-MODE FORWARD ----------------------------------------------------------------
+    # The reference is two-phase and the probe found it the hard way: at start_pos == 0 the block
+    # ONLY populates its KV cache and returns without attending, so h came back detached from
+    # main_x and no gradient could reach anything. forward_spec says the same thing plainly --
+    # `if start_pos == 0: return`.
+    #
+    # That two-phase shape is what makes teacher-forced training tractable, and it is much better
+    # than the O(T^2) formulation I feared:
+    #   phase A, ONCE per sequence: start_pos=0 over the full context -> fills the cache, O(T)
+    #   phase B, per training position t: start_pos=t drafts BS tokens against that shared cache,
+    #            costing only BS queries. So T examples cost O(T) cache + O(T * BS * ctx), not
+    #            O(T^2) memory, and one captured sequence yields ~T training examples rather than 1.
+    def draft_at(positions, ids_1d, main_hidden_1T):
+        """-> logits (P, BS, V) for each start position in `positions`."""
+        h0, main_x = blocks[0].forward_embed(main_hidden_1T, ids_1d[:1])
+        hh = h0
+        for blk in blocks:                                   # phase A: fill the cache
+            hh = blk(hh, 0, ids_1d[:1], main_x)
+        outs = []
+        for t in positions:                                  # phase B: draft from each position
+            seed = ids_1d[t:t + 1]
+            # At start_pos>0 the block is in INCREMENTAL mode: it appends ONE context position to
+            # the sliding-window cache (`kv_cache[:bsz, start_pos % win] = main_kv.squeeze(1)`), so
+            # main_x must be (bsz, 1, d) -- the single new hidden state -- not the whole prefix.
+            # Phase A already put positions 0..T-1 in the cache; this rewrites slot t%win with the
+            # same value it already holds.
+            hb, mx = blocks[0].forward_embed(main_hidden_1T[:, t:t + 1], seed)
+            for blk in blocks:
+                hb = blk(hb, int(t), seed, mx)
+            _, logits, conf = blocks[-1].forward_head(hb, seed)
+            outs.append((logits, conf))
+        return outs
+
     for step, r in enumerate(rows):
         sh = load_shard(os.path.join(a.capture, r["file"]), as_float32=True)
-        taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)   # (T,3,d)
+        taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)
         ids = torch.from_numpy(sh["ids"].copy()).to(dev).long()
-        # SHAPE, and the thing that is easy to get wrong: the reference's batch dimension is ONE
-        # DRAFT PER POSITION, not sequence length. At inference `input_ids` is (B,) -- the last
-        # accepted token of each sequence -- and the head drafts block_size tokens from that one
-        # position. So teacher-forced training over T captured positions means B = T.
-        # SHAPES, and the distinction that matters: `main_x` is (bsz, CTX_LEN, d) -- the main
-        # model's context -- while `x` from forward_embed is (bsz, BLOCK_SIZE, hc, d), the draft
-        # block. They are different axes, and conflating them is why the first two attempts failed.
-        # At inference bsz=batch, main_hidden is the whole context, and input_ids is (bsz,): the last
-        # accepted token. So ONE draft per sequence.
-        #
-        # STAGE-1 CONSEQUENCE, surfaced here rather than on day two of a capture: this reference is
-        # written for inference and yields ONE training example per sequence. Teacher-forced training
-        # at every position needs a training-mode forward that runs all T positions in parallel under
-        # a causal mask; doing it the naive way (bsz=T, each row its own prefix) is O(T^2) memory.
-        # That is real work and it belongs to stage 1, not to this gate.
         T = taps.size(0)
-        main_hidden = taps.reshape(1, T, -1)             # (1, T, 3d)
-        pos_ids = ids[T - 1:T]                           # (1,) the last accepted token
-        h, main_x = blocks[0].forward_embed(main_hidden, pos_ids)
-        for blk in blocks:
-            h = blk(h, 0, pos_ids, main_x)
-        print(f"[train] step {step}: forward OK  h{tuple(h.shape)} main_x{tuple(main_x.shape)} "
-              f"finite={bool(torch.isfinite(h).all())}", flush=True)
-        loss = h.float().pow(2).mean()          # stage-0 objective; the DSpark loss lands in stage 1
-        opt.zero_grad(set_to_none=True); loss.backward()
+        main_hidden = taps.reshape(1, T, -1)
+        # A position is trainable only if all BS targets exist after it.
+        usable = [t for t in range(1, T) if t + BS < ids.numel()]
+        if not usable:
+            print(f"[train] step {step}: sequence too short for block={BS}, skipping"); continue
+        sel = usable[:: max(1, len(usable) // max(1, min(len(usable), a.pos_per_seq)))][:a.pos_per_seq]
+        # BACKWARD PER POSITION, not once over the sum. Every position writes the SAME sliding
+        # kv_cache buffer, so a deferred backward hits
+        #   "one of the variables needed for gradient computation has been modified by an inplace
+        #    operation ... is at version 6; expected version 5"
+        # -- earlier positions' cached values are gone by the time the graph is walked. Stepping the
+        # backward immediately after each position's forward keeps each graph valid, and accumulates
+        # into .grad exactly as a summed loss would.
+        opt.zero_grad(set_to_none=True)
+        h0, main_x = blocks[0].forward_embed(main_hidden, ids[:1].clone())
+        hh = h0
+        for blk in blocks:                                   # phase A: fill the cache, O(T)
+            hh = blk(hh, 0, ids[:1].clone(), main_x)
+        tot_loss, nparts, nb = 0.0, {"ce": 0.0, "tv": 0.0, "conf": 0.0}, 0
+        for t in sel:                                        # phase B: draft from each position
+            # clone: `seed` was a VIEW of `ids`, and forward_embed writes through it
+            # (`draft_input_ids[:, 0] = input_ids`), so successive positions bumped the
+            # version counter of a tensor an earlier graph still referenced.
+            seed = ids[t:t + 1].clone()
+            hb, mx = blocks[0].forward_embed(main_hidden[:, t:t + 1], seed)
+            for blk in blocks:
+                hb = blk(hb, int(t), seed, mx)
+            tgt = ids[t + 1:t + 1 + BS]
+            logits, conf = forward_head_tf(blocks[-1], hb, seed, tgt)
+            lg = logits[0]                                   # (BS, V)
+            l, parts = dspark_loss(lg, tgt, lg.detach(), None, None, gamma)
+            (l / len(sel)).backward()
+            tot_loss += float(l.detach()); nb += 1
+            for k2 in nparts: nparts[k2] += parts[k2]
         gn = torch.nn.utils.clip_grad_norm_([p for _, p in tp], 1.0)
         ngrad = sum(1 for _, p in tp if p.grad is not None)
         opt.step()
-        print(f"[train] step {step}: loss={float(loss.detach()):.4f} grad_norm={float(gn):.4f} "
-              f"tensors_with_grad={ngrad}/{len(tp)}", flush=True)
+        loss_sum = torch.tensor(tot_loss)
+        nparts = {k2: v / max(nb, 1) for k2, v in nparts.items()}
+        print(f"[train] step {step}: T={T} positions={len(sel)} "
+              f"loss={tot_loss/max(nb,1):.4f} ce={nparts['ce']:.4f} tv={nparts['tv']:.4f} "
+              f"grad_norm={float(gn):.4f} tensors_with_grad={ngrad}/{len(tp)}", flush=True)
         if ngrad == 0:
             sys.exit("[train] FAIL: no gradients reached the trainable tensors")
         if a.smoke:

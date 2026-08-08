@@ -5546,3 +5546,52 @@ entirely, makes everything differentiable by default, and does not violate no-ad
 The cost is writing plain-PyTorch `sparse_attn` and `hc_split_sinkhorn`. At 476 M trainable
 parameters over ~1 K-token sequences that is fast enough, and it is bounded work with no external
 compiler risk.
+
+## Finding 91 — the checkpoint's reference model is INFERENCE-ONLY by construction, and making it trainable is a port, not a shim
+
+**S5 Gate 1.** Continued from F90. Every remaining blocker traced to the same root cause, found by
+anomaly detection rather than by guessing — after two guesses that were both wrong.
+
+### What now works
+
+* MXFP4/FP8 dequantisation: 12.60 B params, 23.5 GiB bf16; **0 missing / 0 unexpected** on
+  `load_state_dict` across all 3 blocks.
+* The **two-phase forward** — the reference's `start_pos == 0` only fills the KV cache and returns
+  (`forward_spec` says `if start_pos == 0: return`), which is why `h` came back detached. Phase A
+  fills the cache once per sequence at O(T); phase B drafts from each position against that shared
+  cache at O(BS) each. **So one captured sequence yields ~T training examples, not 1, and without
+  the O(T^2) memory I feared in F90.** That was the main open design risk and it is resolved.
+* A **teacher-forced `forward_head`**. The reference version is an autoregressive SAMPLING loop that
+  feeds its own samples forward and mutates `output_ids` after the Markov embedding has saved a view
+  of it. Non-differentiable and illegal under autograd. Teacher forcing removes both and is what the
+  DSpark/FastMTP recipes prescribe anyway.
+
+### The root cause, stated plainly
+
+`inference/model.py` is written to run under `torch.inference_mode()`, where in-place mutation of
+tensors that autograd would need is free. On the DSpark path alone:
+
+```
+10x apply_rotary_emb(x[..., -rd:], ...)   # rotates a SLICE in place
+ 5x act_quant(..., True) / fp4_act_quant(..., True)
+ 1x logits[:, i].add_(bias)
+```
+
+Each one raises `... modified by an inplace operation ... is at version N; expected version M` the
+moment a gradient needs the pre-mutation value. I fixed my own two (`act_quant` via `.data.copy_`,
+a genuine straight-through estimator) and the next site is the model's own `apply_rotary_emb`.
+
+**This is not a shim problem and no amount of kernel substitution fixes it.** Making the reference
+trainable means rewriting ~16 in-place sites out-of-place inside the checkpoint's file — bounded and
+mechanical, but a PORT, and every edit is a chance to diverge from the weights it was written for.
+
+### What this does to the Gate 2 estimate
+
+| | before | now |
+|---|---|---|
+| engineering before capture | "half a day" (F90) | **1-2 days**: port ~16 sites, then re-validate the ported forward against the ENGINE's own draft output, because a silent divergence trains the head against the wrong function |
+| capture | ~1.5 days | unchanged |
+
+The re-validation is not optional. F89 measured that this engine loses **28 % of acceptance** from an
+accumulation-order change alone; a ported forward that differs from the server by more than that is
+worse than no fine-tune. The equivalence gate has to come before the capture, not after.

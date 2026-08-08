@@ -51,7 +51,20 @@ def act_quant(x, block_size=128, scale_fmt=None, scale_dtype=torch.float32, inpl
     q = q.to(torch.float8_e4m3fn).to(xb.dtype)
     if inplace:
         deq = (q * scale).reshape(x.shape).to(x.dtype)
-        x.copy_(deq)
+        # STRAIGHT-THROUGH ESTIMATOR. The cast to float8_e4m3fn is NOT differentiable: it returns a
+        # tensor with no grad_fn, so `x.copy_(deq)` wrote a detached value into the graph and every
+        # gradient downstream vanished -- which is exactly the "element 0 does not require grad"
+        # that blocked stage 0. Forward value stays the quantised one; gradient passes through as
+        # identity, which is the standard quantisation-aware-training treatment and the only way a
+        # simulated-quant step can sit inside a trained graph at all.
+        # `.data.copy_` NOT `.copy_`: the caller ignores our return value and keeps using its own
+        # tensor, so we must mutate in place -- but a tracked in-place write bumps the version
+        # counter of a tensor autograd still needs, which is the
+        #   "[CUDABFloat16Type [1,5,64,512]] ... is at version 2; expected version 0"
+        # failure. Writing through .data changes the VALUE without adding a graph node, so the
+        # forward sees quantised activations and the backward sees identity. That is the straight-
+        # through estimator, done in the only way this call convention allows.
+        x.data.copy_(deq)
         return x
     return q.reshape(x.shape).to(torch.float8_e4m3fn), scale.squeeze(-1).to(scale_dtype)
 
@@ -70,7 +83,7 @@ def fp4_act_quant(x, block_size=32, inplace=False):
     deq = torch.sign(q) * FP4_LEVELS[idx] * scale
     deq = deq.reshape(x.shape).to(x.dtype)
     if inplace:
-        x.copy_(deq)
+        x.data.copy_(deq)                    # STE via .data, same reason as act_quant above
         return x
     return deq
 
@@ -101,7 +114,13 @@ def sparse_attn(q, kv, attn_sink, topk_idxs, softmax_scale):
     topk_idxs (b,s,t) with -1 marking a masked slot; attn_sink (h,) adds to the DENOMINATOR only."""
     b, s, h, d = q.shape
     t = topk_idxs.size(-1)
+    # get_dspark_topk_idxs builds its index on the CPU (the real kernel takes a host pointer);
+    # torch.gather requires index and source on the same device.
+    if topk_idxs.device != kv.device:
+        topk_idxs = topk_idxs.to(kv.device)
     idx = topk_idxs.clamp_min(0)                                   # gather needs a valid index
+    # kv can arrive fp32 (the cache buffer) while q is bf16; einsum will not mix them.
+    kv = kv.to(q.dtype)
     gathered = torch.gather(kv.unsqueeze(1).expand(b, s, kv.size(1), d), 2,
                             idx.unsqueeze(-1).expand(b, s, t, d))  # (b,s,t,d)
     scores = torch.einsum("bshd,bstd->bsht", q, gathered) * softmax_scale
@@ -109,7 +128,7 @@ def sparse_attn(q, kv, attn_sink, topk_idxs, softmax_scale):
     # The sink contributes to the denominator only, so fold it in as an extra logit whose value is
     # attn_sink[h] and whose "value vector" is zero — algebraically identical to the kernel's
     # run_sum += exp(sink - max), and numerically stable through the same softmax.
-    sink = attn_sink.view(1, 1, h, 1).expand(b, s, h, 1)
+    sink = attn_sink.to(q.dtype).view(1, 1, h, 1).expand(b, s, h, 1)
     full = torch.cat([scores, sink], dim=-1)
     p = torch.softmax(full.float(), dim=-1).to(q.dtype)
     p = p[..., :t]                                                 # drop the sink's weight
