@@ -150,11 +150,30 @@ The draft head consumes the backbone's hidden state, and `dspark_tap_pool` alrea
 at layers 40/41/42 in the prefill path. So training = (a) capture states with the engine we have,
 (b) train a small head on them.
 
-### (a) RAM — not the constraint
+### (a) RAM — not the constraint ~~✗ WRONG AS WRITTEN — corrected 2026-08-08~~
 
-FastMTP's head is **210.8M params, <3 % of a 7,833.4M backbone**. AdamW working set: 0.42 GB bf16
+~~FastMTP's head is **210.8M params, <3 % of a 7,833.4M backbone**. AdamW working set: 0.42 GB bf16
 weights + 0.84 GB fp32 master + 1.68 GB moments ≈ **3 GB**, plus activations. Against 122 GiB unified
-this is nothing; the 12.26 GB backbone can stay resident beside it. **RAM was never the problem.**
+this is nothing; the 12.26 GB backbone can stay resident beside it. **RAM was never the problem.**~~
+
+**210.8 M is FastMTP's MiMo-7B head. It is not ours, and it was never checked against the
+checkpoint** — a paper's number was copied into a feasibility conclusion about a different model.
+This is the same failure the "no invented model constants" rule exists to prevent; the rule was
+written for constants pulled from the air, and it turns out a constant pulled from a *paper* is
+just as wrong. Read from the safetensors headers of shards 46–48:
+
+| quantity | value |
+|---|---|
+| stored elements in `mtp.*` | **6.935 B** (2977 tensors) |
+| MoE experts, stored | 6.559 B as `I8` |
+| MoE experts, **real** | **12.08 B** — `w1.weight [2048,2048] I8` vs logical `[2048,4096]`, MXFP4 packed 2/byte |
+| **non-expert** (attn, norms, Markov head, confidence head, projections) | **476 M** = 158.8 M × 3 blocks |
+
+bf16 master + AdamW fp32 moments at 10 B/param: the **whole head is ~116 GiB and infeasible**;
+**non-expert only is 4.44 GiB and comfortable**. The conclusion "RAM was never the problem" survives
+only because the recipe freezes the experts — which is independently what NVIDIA's reference DSpark
+trainer does. Had we planned a full fine-tune on the strength of the 3 GB figure, it would have
+failed at allocation after the capture had already been paid for. See `S5_RECIPE.md` §1.
 
 ### (b) Capture rate — MEASURED, and slower than hoped
 
