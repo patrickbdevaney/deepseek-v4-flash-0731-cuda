@@ -3746,3 +3746,50 @@ the opposite of split-K's situation — there the split changed the summation gr
 K and the perturbation compounded through 43 layers into a repeating loop. **"Not bit-exact" is not
 one category.** The question is whether the perturbation is smaller than the one already present and
 whether the emitted sequence survives, and both are now cheap to answer.
+
+---
+
+## Finding 72 — the funnel was buying alignment the weights already had: two `uint2` loads instead of two `uint4` plus a shift
+
+**ADOPTED. `moe:w1w3` 43.41 → 40.36 ms (−7.0 %); `MoE` 73.14 → 69.56 (−4.9 %); ksweep K=5 136.33 →
+132.53 (−2.8 %); spec 20.16 → 20.44 tok/s; base AR 13.47 → 13.50.** Spec sequence identical, lossless
+gate PASS.
+
+The MoE GEMV loads **two `uint4`** per (lane, kb, operand) and funnel-shifts them, because the expert
+weight pointer is not 16-byte aligned. Finding 66 measured *how* misaligned: 43,470 of 44,436 expert
+tensors sit at `data_offset % 16 == 8`, 966 at 12, none at 0. Residue 8 is not 16-byte aligned — but
+it **is 8-byte aligned**, and two `uint2` loads fetch exactly the sixteen bytes wanted:
+
+| | instructions | bytes requested | funnel ALU | weight registers |
+|---|---|---|---|---|
+| two `uint4` + shift | 2 | 32 | yes | 8 per BN |
+| two `uint2` | 2 | **16** | **none** | **4 per BN** |
+
+Same instruction count, half the traffic, no shift. `ncu`, clean A/B on the measured grouping:
+
+| | funnel | uint2 |
+|---|---|---|
+| RB=2 | 506.98 µs, 64 reg | **486.50, 61 reg** |
+| RB=4 | 525.95 µs, 69 reg | **481.44, 70 reg** |
+
+F66 had retired "skip the funnel when aligned" as impossible because the pointers are *never*
+16-aligned. That was true and it was the wrong question. **The right one is what alignment they
+actually have** — and a constant 8 is a fact you can build on, not an obstacle.
+
+### Two bugs on the way in, both mine, both in the guard rather than the kernel
+
+1. **A `static` cache answered for a struct it never examined.** The flag was computed once from
+   whichever `MoEWeights` called first — the 43 main layers, all 8-aligned — and then applied to the
+   **DSpark MTP draft blocks**, a different struct with different tensors. A `uint2` load at a 4-byte
+   aligned address: `cuda kernels/dspark_attn.cu:85 misaligned address`, which per Finding 58 is the
+   first real sync after the draft's MoE, not the fault site. Now computed per weights struct.
+2. **Per-call was correct and cost 3.05 ms.** `moe:group` went 2.74 → 5.79 — a mark containing none of
+   the changed code. 480 host dereferences of `w.w1p[]` sit between `dprof_begin` and the first kernel
+   launch, so the GPU idles through them and the region absorbs the stall. **A host-side cost can
+   appear inside a GPU mark**; if a region moves and contains nothing that changed, look at what the
+   host is doing between the marks. Fixed with a per-struct cache keyed on the expert-pointer table —
+   ~46 entries, computed once each, and unable to go stale the way the `static` did.
+
+The rule that covers both: **a cached property must be keyed on the thing it describes.** Process-wide
+was too coarse and per-call was too expensive; the struct was the right granularity, and it was the
+granularity the property actually belongs to.

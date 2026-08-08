@@ -278,7 +278,7 @@ void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d
 __constant__ float GEMV_E2M1[8] = {0.f,0.5f,1.f,1.5f,2.f,3.f,4.f,6.f};
 __device__ __forceinline__ float gv_fp4(uint8_t nib){ float m=GEMV_E2M1[nib&7]; return (nib&8)?-m:m; }
 __device__ __forceinline__ float gv_e4m3(uint8_t b){ __half_raw r=__nv_cvt_fp8_to_halfraw((__nv_fp8_storage_t)b,__NV_E4M3); return __half2float(*reinterpret_cast<__half*>(&r)); }
-template<int RB>
+template<int RB, bool ALIGN8>
 __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, const uint8_t* const* sptr,
         const int* __restrict__ tile_e, const int* __restrict__ tile_row0, const int* __restrict__ ntiles,
         const int* __restrict__ off, const uint8_t* Xq, const float* Xs, int N, int K){
@@ -327,14 +327,32 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
             #pragma unroll
             for(int u=0;u<BN;++u) acc[r][u]=0.f; }
         for(int kb=lane; kb<nb32; kb+=32){              // lane -> whole 32-weight block (16B), coalesced
+            // FUNNEL vs TWO uint2 (LOOP_LOG Finding 72). The funnel exists because expert weight
+            // pointers are misaligned, and F66 measured that they are misaligned by a CONSTANT 8
+            // bytes: 43,470 of 44,436 expert tensors at data_offset%16 == 8, 966 at 12, none at 0.
+            // Residue 8 means the address is not 16-byte aligned but IS 8-byte aligned — so two
+            // `uint2` loads fetch exactly the 16 bytes wanted, with no second 16-byte load, no
+            // funnel shift, and half the weight registers (2 uint2 = 4 regs vs 2 uint4 = 8, per BN).
+            // Same instruction count, half the bytes requested, and this kernel is occupancy-limited
+            // at 69 registers / 54.7% (ncu, RB=4).
+            //
+            // ALIGN8 is decided on the HOST by checking every expert pointer, not per block: the
+            // residue is a property of the shard and 966 tensors really are at 12, so a kernel-side
+            // branch would keep both paths live and give back the registers it was trying to save.
             uint4 WAv[BN], WBv[BN]; float wsv[BN];
             #pragma unroll
             for(int u=0; u<BN; ++u){
                 if(u>=nact) break;
                 const uint8_t* Wn = wptr[e] + (size_t)(nbase+u)*(K/2);
                 const uint8_t* Sn = sptr[e] + (size_t)(nbase+u)*(K/32);
-                const uint8_t* wa=Wn+(size_t)kb*16-off_b;
-                WAv[u]=__ldcs((const uint4*)wa); WBv[u]=__ldcs((const uint4*)(wa+16));
+                if(ALIGN8){
+                    const uint8_t* wa=Wn+(size_t)kb*16;                 // == off_b (mod 16) -> 8B aligned
+                    uint2 lo=__ldcs((const uint2*)wa), hi=__ldcs((const uint2*)(wa+8));
+                    WAv[u]=make_uint4(lo.x,lo.y,hi.x,hi.y);
+                } else {
+                    const uint8_t* wa=Wn+(size_t)kb*16-off_b;
+                    WAv[u]=__ldcs((const uint4*)wa); WBv[u]=__ldcs((const uint4*)(wa+16));
+                }
                 wsv[u]=exp2f((float)Sn[kb]-127.f);
             }
             for(int r=0;r<rn;++r){
@@ -348,7 +366,7 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
                 for(int u=0; u<BN; ++u){
                     if(u>=nact) break;
                     const float ws=wsv[u];
-                    uint4 w16=tcm_funnel16(WAv[u],WBv[u],k0f,shf);
+                    uint4 w16 = ALIGN8 ? WAv[u] : tcm_funnel16(WAv[u],WBv[u],k0f,shf);
                     const uint8_t* wb=(const uint8_t*)&w16;
                     // Dequant is REDONE per row rather than cached: it is ALU on a memory-bound
                     // kernel, and holding the dequantised half2 values across the row loop is the
@@ -388,7 +406,7 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
 
 void tc_fp4_grouped_gemv_e8m0(float* out, const uint8_t* Xq, const float* Xs, const uint8_t* const* wptr_d,
         const uint8_t* const* sptr_d, const int* off_d, const int* tile_e, const int* tile_row0, const int* ntiles_d,
-        int maxtiles, int N, int K, cudaStream_t s, int rows_hint){
+        int maxtiles, int N, int K, cudaStream_t s, int rows_hint, int align8){
     // BN=2 output columns per warp -> half the warps. 128 threads/block matched the measured
     // optimum (BN=2 @128 thr = 242-249 GB/s; 256 thr was consistently worse at every BN).
     const int BN=2, warps_needed=(N+BN-1)/BN;
@@ -421,12 +439,11 @@ void tc_fp4_grouped_gemv_e8m0(float* out, const uint8_t* Xq, const float* Xs, co
     // the original kernel byte-for-byte.
     const char* e_=getenv("MOE_RB"); int RB = e_ ? atoi(e_) : (rows_hint<=1 ? 1 : rows_hint<=2 ? 2 : 4);
     if(RB!=1&&RB!=2&&RB!=4&&RB!=8) RB=8;
-    switch(RB){
-        case 1: k_grouped_fp4_gemv_e8m0<1><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
-        case 2: k_grouped_fp4_gemv_e8m0<2><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
-        case 4: k_grouped_fp4_gemv_e8m0<4><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
-        default:k_grouped_fp4_gemv_e8m0<8><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;
-    }
+    #define GV_LAUNCH(RBV) { if(align8) k_grouped_fp4_gemv_e8m0<RBV,true ><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); \
+                             else       k_grouped_fp4_gemv_e8m0<RBV,false><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); }
+    switch(RB){ case 1: GV_LAUNCH(1) break; case 2: GV_LAUNCH(2) break;
+                case 4: GV_LAUNCH(4) break; default: GV_LAUNCH(8) break; }
+    #undef GV_LAUNCH
 }
 
 // NATIVE-e8m0 grouped GEMM: scale ptrs point to the ORIGINAL e8m0 scale BYTES (F8_E8M0) in the WeightStore —

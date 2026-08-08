@@ -93,6 +93,7 @@ void moe_router_score(float* weights, int* indices, const float* x, const float*
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"
 #include <vector>
+#include <unordered_map>
 #include <cstdio>
 void tc_fp4_gemm(float*, const uint8_t*, const float*, const uint8_t*, const float*, int, int, int, cudaStream_t); // Marlin TC W4A8 (tc_moe_gemm.cu)
 bool g_moe_grouped=false;   // STRUCTURAL_PLAN Step 1b: zero-sync grouped-GEMM MoE (removes off[] D2H, graph-capturable)
@@ -259,9 +260,39 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         void tc_fp4_grouped_gemm_e8m0(float*, const __half*, const uint8_t* const*, const uint8_t* const*,
                                  const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
         void tc_fp4_grouped_gemv_e8m0(float*, const uint8_t*, const float*, const uint8_t* const*, const uint8_t* const*,
-                                 const int*, const int*, const int*, const int*, int, int, int, cudaStream_t, int);
+                                 const int*, const int*, const int*, const int*, int, int, int, cudaStream_t, int, int);
         extern bool g_moe_gemv;
         const int maxm = bs*na;
+        // ALIGN8 for the GEMV's uint2 path (Finding 72). PER WEIGHTS STRUCT, not process-wide.
+        // The first version cached this in a `static` computed from whichever MoEWeights called
+        // moe_forward first — the 43 main layers, whose expert tensors are all at data_offset%16 == 8
+        // and so 8-byte aligned. The DSpark MTP draft blocks are a DIFFERENT struct with different
+        // tensors, and applying the main layers' answer to them issued a uint2 load at a 4-byte
+        // aligned address: `cuda kernels/dspark_attn.cu:85 misaligned address`, i.e. the first real
+        // sync after the draft's MoE (Finding 58's rule about line numbers again).
+        // 480 host pointer compares per call is nothing against a 1.6 ms kernel; a cache keyed on the
+        // struct would be correct too, but this cannot go stale.
+        // Cached PER STRUCT (keyed on the expert-pointer table), computed once. Doing it per call was
+        // correct but cost 3.05 ms: `moe:group` went 2.74 -> 5.79. Those 480 host dereferences per
+        // call sit between dprof_begin and the first kernel launch, so the GPU idles through them and
+        // the region absorbs the stall — a host-side cost showing up in a GPU mark. There are only
+        // ~46 distinct MoEWeights (43 layers + 3 MTP blocks), so one entry each is free and, unlike a
+        // process-wide static, cannot answer for a struct it never examined.
+        static std::unordered_map<const void*,int> a8cache;
+        int align8_cache;
+        { auto it = a8cache.find((const void*)w.w1p);
+          if(it != a8cache.end()) align8_cache = it->second;
+          else {
+              int ok = (getenv("NO_MOE_A8") == nullptr);
+              for(int e=0;e<nr && ok;++e){
+                  if(w.w1p && (((uintptr_t)w.w1p[e]) & 7)) ok = 0;
+                  if(w.w3p && (((uintptr_t)w.w3p[e]) & 7)) ok = 0;
+                  if(w.w2p && (((uintptr_t)w.w2p[e]) & 7)) ok = 0;
+              }
+              a8cache[(const void*)w.w1p] = ok; align8_cache = ok;
+              if(getenv("DSV4_MOEUNION"))
+                  printf("[moe] nr=%d expert table %p: 8B-aligned %s\n", nr, (const void*)w.w1p, ok?"yes -> uint2":"no -> funnel");
+          } }
         // -- device counting-sort grouping (off_d KEPT on device; NO D2H) --
         int *counts,*off_d,*cursor,*alltok_d,*allslot_d; float* allwt_d;
         counts=(decltype(counts))dmalloc(nr*4); off_d=(decltype(off_d))dmalloc((nr+1)*4); cursor=(decltype(cursor))dmalloc(nr*4);
@@ -375,8 +406,8 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         const bool use_gemv = g_moe_gemv && w.e8m0_scales;
         dprof_begin(DP_M_W13,stream);
         if(use_gemv){                                          // fp4 GEMV on ORIGINAL fp4 (act stays fp8)
-            tc_fp4_grouped_gemv_e8m0(Gb,Xeq,Xes,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim, stream, bs);
-            tc_fp4_grouped_gemv_e8m0(Ub,Xeq,Xes,w3d,(const uint8_t* const*)s3d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim, stream, bs);
+            tc_fp4_grouped_gemv_e8m0(Gb,Xeq,Xes,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim, stream, bs, align8_cache);
+            tc_fp4_grouped_gemv_e8m0(Ub,Xeq,Xes,w3d,(const uint8_t* const*)s3d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim, stream, bs, align8_cache);
         } else if(w.e8m0_scales){
             tc_a_to_fp16(x16,Xeq,Xes,maxm,dim,stream);
             tc_fp4_grouped_gemm_e8m0(Gb,x16,w1d,(const uint8_t* const*)s1d,off_d,tile_e,tile_row0,ntiles_d,maxm,inter,dim,stream);
@@ -392,7 +423,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         act_quant_fp8(Hqb,Hsb,Hb,maxm,inter,128,stream);
         dprof_end(DP_M_ACT,stream);
         dprof_begin(DP_M_W2,stream);
-        if(use_gemv)           tc_fp4_grouped_gemv_e8m0(OEb,Hqb,Hsb,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter, stream, bs);
+        if(use_gemv)           tc_fp4_grouped_gemv_e8m0(OEb,Hqb,Hsb,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter, stream, bs, align8_cache);
         else if(w.e8m0_scales){tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm_e8m0(OEb,h16,w2d,(const uint8_t* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
         else                  {tc_a_to_fp16(h16,Hqb,Hsb,maxm,inter,stream); tc_fp4_grouped_gemm(OEb,h16,w2d,(const float* const*)s2d,off_d,tile_e,tile_row0,ntiles_d,maxm,dim,inter,stream);}
         dprof_end(DP_M_W2,stream);

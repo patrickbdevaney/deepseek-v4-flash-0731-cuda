@@ -16,8 +16,8 @@ Rules of the road:
 
 ## 1. Where the time actually goes
 
-Current baseline (prompt 0, clocks pinned, post-Finding-71): **20.16 tok/s speculative**,
-**13.47 tok/s base AR** (74.2 ms/tok). `evidence/final5.log`.
+Current baseline (prompt 0, clocks pinned, post-Finding-72): **20.44 tok/s speculative**,
+**13.50 tok/s base AR** (74.1 ms/tok). `evidence/final6.log`.
 
 The K=5 verify is **157.0 ms** and splits into two populations that behave completely differently
 (`evidence/pinned.log`, `DSV4_DPROF=1 DSV4_KSWEEP=1`):
@@ -61,6 +61,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **ogroup row-tile fix** | correctness, not speed — see §6 | **62** |
 | **MoE row amortisation, RB=4 fitted to the measured histogram** | **+7.4 % spec, +2.3 % base AR; verify −9.3 %** | **64, 65, 70** |
 | **`index_score` warp-per-output** | **+4.4 % spec, +7.1 % base AR** (`i:score` −87 %) | **71** |
+| **MoE GEMV `uint2` weight loads (no funnel)** | **verify −2.8 %, `moe:w1w3` −7.0 %** | **72** |
 
 ---
 
@@ -184,7 +185,11 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    Each time the apparatus encoded an assumption and the sweep confirmed it.
 10. **A probe predicts ranking, not magnitude.** F70's probe said −6.5 %, in situ gave −1.3 %, because
    the kernel is at 76 % of roofline and a byte cut does not convert 1:1.
-11. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
+11. **A cached property must be keyed on the thing it describes.** F72 shipped a `static` flag computed
+   from the main layers' weights and applied it to the MTP draft blocks — different tensors, different
+   alignment, `misaligned address`. Process-wide was too coarse; per-call was correct but cost 3.05 ms
+   of host stall *inside a GPU mark*. The struct was the right key.
+12. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
    `dsync` is a no-op under the arena, so the first real sync in a layer absorbs ~20 launches' worth of
    asynchronous faults. Use `DSV4_SYNCPROBE=1`.
 
