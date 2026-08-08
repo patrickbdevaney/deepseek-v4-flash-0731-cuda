@@ -211,6 +211,28 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is **52.6 ms/tok =
 19.0 tok/s**; graphed we are at 79.9 ms, so ~34 % of the base step is not bytes.
 
+> **19.0 IS A NORMALISATION CONSTANT, NOT A TARGET — computed 2026-08-08, `tools/byte_floor.py`.**
+> It assumes every kernel moves bytes at full DRAM bandwidth AND that the non-byte part of the step
+> is zero. Neither holds. Byte-weighting the K=1 dprof marks against shapes read from the
+> checkpoint's own `config.json` (self-checked: it reproduces this file's hand-derived 115/195/185/168
+> to within 2.1 %) gives **22.3 ms of the 71.4 ms step that is not bytes at all** — launch floors,
+> Sinkhorn, activations, the latency-bound `ogroup` of F76 — and a byte-mark average of **191 GB/s,
+> not 233**. The only mark above the probe is `moe:w2` at 246 GB/s, which is L2 reuse of the expert
+> set `w1w3` just touched, not a kernel beating DRAM, so it is excluded as a target rate.
+>
+> | floor | ms/tok | tok/s |
+> |---|---|---|
+> | every byte mark at 233 GB/s (optimistic) | 62.6 | **15.98** |
+> | every byte mark at 198 GB/s (`q:wq_b` cold, realistic) | 69.8 | **14.33** |
+> | now | 71.4 | 14.01 |
+>
+> **Total remaining kernel headroom on base AR: 2.2 % realistic, 12.3 % optimistic** — against 37 %
+> implied by 19.0. Scaled by acceptance the spec ceiling is **23.2–25.9 tok/s, not 30.8**.
+> Caveat that cuts the other way: the model covers 77 % of `B_tok`; the missing 23 % (indexer,
+> compressor, norms, embed) is charged at measured time as if fixed, so these are pessimistic on
+> that axis. **F83 is the independent confirmation** — B10 was the largest remaining item, priced at
+> +5–7 %, and delivered +0.41 %. Two unrelated methods now agree the kernel path is done.
+
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
 | ~~B0~~ | ~~audit every kernel for thread-per-output at decode shapes~~ | **NAMED LIST EXHAUSTED, F71 + F73** | `index_score` **+4.4 %** (F71). `k_moe_prefix` and `k_build_tiles`, both `<<<1,1>>>` over `nr=160`, fixed in F73: `moe:group` −20.3 %, and both now sit at the **launch-latency floor** (0.24–0.25 ms / 43 layers, vs 0.19 for a trivially parallel neighbour). The rest are measured under B0's own 0.5 ms bar: `k_topk_verify`/`k_topk_decode` → `i:topk` = **0.12 ms**; `k_dg`/`k_advance_T`/`k_incr` are genuinely one scalar's work. **The class paid twice and is now dry** — reopening needs a *new* kernel with a bad geometry, not another pass over these. |
