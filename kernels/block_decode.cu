@@ -22,15 +22,17 @@ void block_prefill_cache(float* out, const float* x, const int* input_ids, const
     float *x1,*post,*comb,*sub,*res2;
     x1=(decltype(x1))dmalloc((size_t)bs*d*4); post=(decltype(post))dmalloc((size_t)bs*hc*4); comb=(decltype(comb))dmalloc((size_t)bs*hc*hc*4);
     sub=(decltype(sub))dmalloc((size_t)bs*d*4); res2=(decltype(res2))dmalloc((size_t)bs*hc*d*4);
-    hc_pre(x1,post,comb,x,w.hc_attn_fn,w.hc_attn_scale,w.hc_attn_base,bs,hc,d,iters,eps,stream);
-    rmsnorm(x1,x1,w.attn_norm,bs,d,eps,true,stream);
-    mla_cache_kv(kv.win_kv, x1, w.attn, s, stream);           // populate window-KV from the attention input
-    mla_forward(sub, x1, w.attn, 1, s, stream);
-    hc_post(res2,sub,x,post,comb,bs,hc,d,stream);
-    hc_pre(x1,post,comb,res2,w.hc_ffn_fn,w.hc_ffn_scale,w.hc_ffn_base,bs,hc,d,iters,eps,stream);
-    rmsnorm(x1,x1,w.ffn_norm,bs,d,eps,true,stream);
-    moe_forward(sub,x1,input_ids,w.ffn,bs,stream);
-    hc_post(out,sub,res2,post,comb,bs,hc,d,stream);
+    // B9 marks, same ids as the compressed path — without these the 2 pure-sliding layers drop out
+    // of the prefill TOTAL and the report understates itself by exactly the control group.
+    dprof_begin(DP_HC_PRE_ATTN,stream);  hc_pre(x1,post,comb,x,w.hc_attn_fn,w.hc_attn_scale,w.hc_attn_base,bs,hc,d,iters,eps,stream); dprof_end(DP_HC_PRE_ATTN,stream);
+    dprof_begin(DP_RMSNORM_ATTN,stream); rmsnorm(x1,x1,w.attn_norm,bs,d,eps,true,stream);                                             dprof_end(DP_RMSNORM_ATTN,stream);
+    dprof_begin(DP_A_KV,stream);         mla_cache_kv(kv.win_kv, x1, w.attn, s, stream);                                              dprof_end(DP_A_KV,stream);
+    dprof_begin(DP_ATTN,stream);         mla_forward(sub, x1, w.attn, 1, s, stream);                                                  dprof_end(DP_ATTN,stream);
+    dprof_begin(DP_HC_POST_ATTN,stream); hc_post(res2,sub,x,post,comb,bs,hc,d,stream);                                                dprof_end(DP_HC_POST_ATTN,stream);
+    dprof_begin(DP_HC_PRE_FFN,stream);   hc_pre(x1,post,comb,res2,w.hc_ffn_fn,w.hc_ffn_scale,w.hc_ffn_base,bs,hc,d,iters,eps,stream); dprof_end(DP_HC_PRE_FFN,stream);
+    dprof_begin(DP_RMSNORM_FFN,stream);  rmsnorm(x1,x1,w.ffn_norm,bs,d,eps,true,stream);                                              dprof_end(DP_RMSNORM_FFN,stream);
+    dprof_begin(DP_MOE,stream);          moe_forward(sub,x1,input_ids,w.ffn,bs,stream);                                               dprof_end(DP_MOE,stream);
+    dprof_begin(DP_HC_POST_FFN,stream);  hc_post(out,sub,res2,post,comb,bs,hc,d,stream);                                              dprof_end(DP_HC_POST_FFN,stream);
     dsync(stream);
     dfree(x1);dfree(post);dfree(comb);dfree(sub);dfree(res2);
 }
@@ -62,18 +64,28 @@ void cblock_prefill_cache(float* out, const float* x, const int* input_ids, cons
     float *x1,*post,*comb,*sub,*res2;
     x1=(decltype(x1))dmalloc((size_t)bs*d*4); post=(decltype(post))dmalloc((size_t)bs*hc*4); comb=(decltype(comb))dmalloc((size_t)bs*hc*hc*4);
     sub=(decltype(sub))dmalloc((size_t)bs*d*4); res2=(decltype(res2))dmalloc((size_t)bs*hc*d*4);
-    hc_pre(x1,post,comb,x,w.hc_attn_fn,w.hc_attn_scale,w.hc_attn_base,bs,hc,d,iters,eps,stream);
-    rmsnorm(x1,x1,w.attn_norm,bs,d,eps,true,stream);
+    // B9. This path carried NO dprof marks, so the first prefill profile attributed only the MoE
+    // (whose marks live inside moe_forward) and left 57.4% of a 21.4 s prefill unaccounted — the
+    // report caught itself with "moe children > MoE 0.00 ms" only because of its parent/child check.
+    // Same ids as block_verify_step so the prefill and verify tables are directly comparable.
+    dprof_begin(DP_HC_PRE_ATTN,stream);  hc_pre(x1,post,comb,x,w.hc_attn_fn,w.hc_attn_scale,w.hc_attn_base,bs,hc,d,iters,eps,stream); dprof_end(DP_HC_PRE_ATTN,stream);
+    dprof_begin(DP_RMSNORM_ATTN,stream); rmsnorm(x1,x1,w.attn_norm,bs,d,eps,true,stream);                                             dprof_end(DP_RMSNORM_ATTN,stream);
     // retain attention-input history + populate KV caches from x1
+    dprof_begin(DP_KV_XIN,stream);
     k_copy<<<((size_t)s*d+255)/256,256,0,stream>>>(kv.xin, x1, (size_t)s*d);
+    dprof_end(DP_KV_XIN,stream);
+    // Cache population has no decode analogue (decode appends one position); DP_C_COMPRESS is the
+    // honest id for it — this IS the compressor, run over the whole prompt.
+    dprof_begin(DP_C_COMPRESS,stream);
     if(w.ratio==4) compressed_attn_cache_r4(kv.win_kv, kv.comp_kv, kv.idx_ckv, &kv.T, x1, w.attn, s, w.ratio, eps, stream);
     else           compressed_attn_cache   (kv.win_kv, kv.comp_kv,             &kv.T, x1, w.attn, s, w.ratio, eps, stream);
-    compressed_attn_forward(sub, x1, w.attn, s, w.win, w.ratio, eps, stream);
-    hc_post(res2,sub,x,post,comb,bs,hc,d,stream);
-    hc_pre(x1,post,comb,res2,w.hc_ffn_fn,w.hc_ffn_scale,w.hc_ffn_base,bs,hc,d,iters,eps,stream);
-    rmsnorm(x1,x1,w.ffn_norm,bs,d,eps,true,stream);
-    moe_forward(sub,x1,input_ids,w.ffn,bs,stream);
-    hc_post(out,sub,res2,post,comb,bs,hc,d,stream);
+    dprof_end(DP_C_COMPRESS,stream);
+    dprof_begin(DP_ATTN,stream);         compressed_attn_forward(sub, x1, w.attn, s, w.win, w.ratio, eps, stream);                    dprof_end(DP_ATTN,stream);
+    dprof_begin(DP_HC_POST_ATTN,stream); hc_post(res2,sub,x,post,comb,bs,hc,d,stream);                                                dprof_end(DP_HC_POST_ATTN,stream);
+    dprof_begin(DP_HC_PRE_FFN,stream);   hc_pre(x1,post,comb,res2,w.hc_ffn_fn,w.hc_ffn_scale,w.hc_ffn_base,bs,hc,d,iters,eps,stream); dprof_end(DP_HC_PRE_FFN,stream);
+    dprof_begin(DP_RMSNORM_FFN,stream);  rmsnorm(x1,x1,w.ffn_norm,bs,d,eps,true,stream);                                              dprof_end(DP_RMSNORM_FFN,stream);
+    dprof_begin(DP_MOE,stream);          moe_forward(sub,x1,input_ids,w.ffn,bs,stream);                                               dprof_end(DP_MOE,stream);
+    dprof_begin(DP_HC_POST_FFN,stream);  hc_post(out,sub,res2,post,comb,bs,hc,d,stream);                                              dprof_end(DP_HC_POST_FFN,stream);
     dsync(stream);
     dfree(x1);dfree(post);dfree(comb);dfree(sub);dfree(res2);
 }

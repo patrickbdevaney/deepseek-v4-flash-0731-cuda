@@ -318,6 +318,14 @@ int main(int argc, char** argv){
     size_t arena_bytes = (size_t)512<<20;
     if(SMAX > 512) arena_bytes = (size_t)(512 + (size_t)SMAX*2) << 20;
     arena_init(arena_bytes);
+    // dprof_init() used to be called ONLY inside the DSV4_KSWEEP branch, which runs after the
+    // prefill -- so g_dprof_on was still false while the prefill executed and every mark in it was
+    // silently dropped. The first B9 profiling run cost a full 20-minute checkpoint load and
+    // produced a log with no [dprof] line at all, which is the cheap version of this failure: the
+    // expensive version is a report that looks complete because the marks it is missing never
+    // announce themselves. init here, before any model work; it is idempotent and compiles to a
+    // branch when DSV4_DPROF is unset.
+    dprof_init();
     printf("[decode] prefill %d positions...\n", PS);
     // Timed because prefill throughput -- not the M=1 decode rate -- is what sizes a teacher-forced
     // hidden-state capture for a draft-head fine-tune (LEVERS.md S5). One batched forward over PS
@@ -764,6 +772,19 @@ int main(int argc, char** argv){
                 for(int b=0;b<4;++b){ v^=(u>>(b*8))&0xff; v*=1099511628211ULL; } }
             return v; };
         CU(cudaDeviceSynchronize());
+        // B9. Prefill has never been profiled: F75 measured it end-to-end (48 tok/s, only 3.5x the
+        // M=1 decode rate for ~1000x the work) and stopped there. The dprof marks already live
+        // inside run_layer, so a reset/report pair around this loop attributes the whole prefill at
+        // no cost -- and, more importantly, keeps prefill's marks OUT of the verify table. That
+        // mixing is the reason nobody could read them before: a K=1 report over a run that also
+        // prefilled 1023 positions is two regimes summed into one column.
+        if(g_dprof_on) dprof_reset();
+        // The MoE union/tile counters are cumulative and were never reset, so the first byte-count
+        // run swept up the PS=5 prefill, the first-token gate and all 344 warm-decode calls at bs=1
+        // alongside the 43 prefill calls. Those run one row per expert -- redundancy exactly 1.0 --
+        // so they DILUTE the average toward 1 and the printed 2.27x was a lower bound, not the
+        // measurement. Reset here so the [moebytes] line describes the prefill and nothing else.
+        g_moe_tiles_sum = 0; g_moe_union_sum = 0; g_moe_rows_sum = 0; g_moe_union_calls = 0;
         auto pfs_t0 = std::chrono::steady_clock::now();
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PSp); std::swap(h,h2);
             if(hashlvl>=2){ CU(cudaDeviceSynchronize());
@@ -774,6 +795,24 @@ int main(int argc, char** argv){
         { double ms = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-pfs_t0).count();
           printf("[decode] PREFILL: %d positions in %.1f ms = %.1f tok/s (%.3f ms/tok)\n",
                  PSp, ms, PSp*1000.0/ms, ms/PSp); fflush(stdout); }
+        // Reported AFTER the wall-clock print above so dprof_report's own sync cannot land inside
+        // the interval it is describing.
+        if(g_dprof_on){ char tg[48]; snprintf(tg,sizeof tg,"PREFILL PS=%d",PSp); dprof_report(tg); }
+        // B9 byte count. The prefill MoE achieved 10.1 GB/s against the IDEAL 92 GB (each expert read
+        // once). That is 4.3% of roofline and reads as latency-bound — but the ideal is a LOWER bound,
+        // and the ceiling (233 GB/s x 9.09 s = 2.1 TB) is 23x higher, so "latency-bound" and "moving
+        // 23x too many bytes" were both consistent with the same measurement. Tiles settle it.
+        if(getenv("DSV4_MOEUNION") && g_moe_union_calls){
+            const double BPW = 0.5 + 1.0/32.0;                       // MXFP4: 4 bits + one e8m0 per 32
+            double per_tile = 3.0*(double)MOE_INTER*(double)d*BPW;   // w1 + w3 + w2 for one expert
+            double tiles = (double)g_moe_tiles_sum, ideal = (double)g_moe_union_sum;
+            printf("[moebytes] PS=%d  calls %d  union/call %.1f  rows/call %.1f  tiles/call %.1f\n",
+                   PSp, g_moe_union_calls, ideal/g_moe_union_calls,
+                   (double)g_moe_rows_sum/g_moe_union_calls, tiles/g_moe_union_calls);
+            printf("[moebytes] expert weight traffic: ACTUAL %.1f GB (tiles) vs IDEAL %.1f GB (union)"
+                   "  -> redundancy %.2fx\n", tiles*per_tile/1e9, ideal*per_tile/1e9, tiles/ideal);
+            fflush(stdout);
+        }
         // GATE (in-run, every point). A compressed layer emits exactly floor(PSp/ratio) rows during
         // prefill, so KV[L].T is a direct readout of the length the prefill ACTUALLY ran at. This is
         // the assertion whose absence cost cycle 2 its whole run: with the Finding-52 bug and

@@ -1,0 +1,125 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=1060
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 109.3/122.8 GiB
+[dprof] enabled, 8192 marks
+[decode] prefill 5 positions...
+[moe] nr=160 expert table 0xaaaaf1cafaf0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1cb5d90: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1cc0a80: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1cc89a0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1cd2e90: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1cdaef0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1ce5c50: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1cedcb0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1cf86e0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1d00740: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1b64e50: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1b6ceb0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1b770d0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1b7f9f0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1b89d50: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1b926c0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1b9d420: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1ba5480: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1baf6a0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1bb7700: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1bc2460: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1bca4c0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1bd46e0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c19300: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c24060: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c2c0c0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c36550: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c3e5b0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c49310: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c51230: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c5d1a0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c65200: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c6f420: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c77480: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c821e0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1c8a240: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf190b7f0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1913850: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf191e5b0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1926610: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1930830: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf1938c80: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf19439e0: 8B-aligned yes -> uint2
+[decode] PREFILL: 5 positions in 224.7 ms = 22.3 tok/s (44.933 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (74.3 ms warmup)
+  step 1 pos 6 -> token 16  (74.3 ms)
+  step 2 pos 7 -> token 455  (82.4 ms)
+  step 3 pos 8 -> token 6102  (74.8 ms)
+  step 4 pos 9 -> token 294  (73.7 ms)
+  step 5 pos 10 -> token 16603  (74.7 ms)
+  step 6 pos 11 -> token 344  (82.5 ms)
+  step 7 pos 12 -> token 29168  (74.7 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 76.7 ms/tok = 13.03 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 132.3 ms (= 26.5 ms/tok if all accepted vs 76.7 M=1 -> 2.90x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5
+[spec] head built. mem 112.3/122.8 GiB
+[decode] PREFILL: 1022 positions in 21371.4 ms = 47.8 tok/s (20.911 ms/tok)
+
+[dprof] PREFILL PS=1022 — verify step by sub-op, summed over all layers (901 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)       327.38     1.7%         43
+[dprof] rmsnorm (attn)         4.43     0.0%         43
+[dprof] ATTENTION           9115.29    47.6%         43
+[dprof] hc_post (attn)        60.66     0.3%         43
+[dprof] hc_pre  (ffn)        475.51     2.5%         43
+[dprof] rmsnorm (ffn)          4.44     0.0%         43
+[dprof] MoE                 9093.02    47.5%         43
+[dprof] hc_post (ffn)         53.22     0.3%         43
+[dprof] kv xin copy            3.32     0.0%         41
+[dprof]   attn:kv_write        2.74     0.0%          2
+[dprof]   cattn:compress    2229.58    11.7%         41
+[dprof]   moe:router          82.27     0.4%         43
+[dprof]   moe:group          315.18     1.6%         43
+[dprof]   moe:w1w3          5501.49    28.7%         43
+[dprof]   moe:act            243.06     1.3%         43
+[dprof]   moe:w2            2866.67    15.0%         43
+[dprof]   moe:combine         73.53     0.4%         43
+[dprof]   moe:shared           7.54     0.0%         43
+[dprof]       mg:count         0.32     0.0%         43
+[dprof]       mg:prefix        0.26     0.0%         43
+[dprof]       mg:scatter       0.39     0.0%         43
+[dprof]       mg:tiles         0.55     0.0%         43
+[dprof] TOTAL              19137.25
+[moebytes] PS=1022  calls 516  union/call 21.0  rows/call 522.5  tiles/call 47.6
+[moebytes] expert weight traffic: ACTUAL 328.3 GB (tiles) vs IDEAL 144.6 GB (union)  -> redundancy 2.27x
+[spec] decoding 24 tokens (block=5, draft passes=1, adaptK=1.50, prompt=1 s=1023)...
+[moe] nr=160 expert table 0xaaaaf4f8ed80: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf4f969b0: 8B-aligned yes -> uint2
+[moe] nr=160 expert table 0xaaaaf4f9e600: 8B-aligned no -> funnel
+[arena] first draft: draft footprint 211.44 MB, global hwm 806.91 MB / cap 2558.00 MB (31.5%), draft path = ARENA
+  [margins] 18.07 15.54 14.03 14.66 11.97  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (244.6 ms)  cpos=1027
+  [margins] 8.96 6.03 0.61 1.68 5.05  K=3
+  verify 2: accepted 2/2 (K=3) + correction -> +3 tokens (165.0 ms)  cpos=1030
+  [margins] 2.28 6.40 5.99 9.27 9.88  K=5
+  verify 3: accepted 4/4 (K=5) + correction -> +5 tokens (197.8 ms)  cpos=1035
+  [margins] 1.05 2.59 1.35 1.10 0.13  K=3
+  verify 4: accepted 0/2 (K=3) + correction -> +1 tokens (166.6 ms)  cpos=1036
+  [margins] 6.36 3.33 7.37 5.09 8.88  K=5
+  verify 5: accepted 4/4 (K=5) + correction -> +5 tokens (195.2 ms)  cpos=1041
+  [margins] 1.53 1.11 0.77 6.85 14.57  K=2
+  verify 6: accepted 1/1 (K=2) + correction -> +2 tokens (143.7 ms)  cpos=1043
+  [margins] 2.41 6.12 14.46 1.96 2.90  K=5
+  verify 7: accepted 4/4 (K=5) + correction -> +5 tokens (201.7 ms)  cpos=1048
+
+[spec] generated 26 tokens over 7 verifies: mean tokens/verify = 3.71 (block=5, max 5)
+[spec] tokens: 521 19525 484 425 17507 14 5662 14 81297 31 14979 4084 4611 15531 361 1351 6058 6666 14 1527 28 34536 5903 14772 11 6248
+[spec] SPEC-DECODE: 51.0 ms/tok = 19.63 tok/s  (vs base M=1 76.7 ms/tok = 13.03 tok/s -> 1.51x)
+[decode] mem 112.3/122.8 GiB

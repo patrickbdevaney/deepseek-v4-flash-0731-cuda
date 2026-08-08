@@ -5052,3 +5052,91 @@ knobs. `B0`, `B2`, `B4`, `B8`, `B8'`, `B8-cpasync`, `S1`, `S6` retired with numb
 **The disposition of the loop: stopped at `spec 22.15 tok/s / base 13.78` (`evidence/clean_post_f83.log`),
 queue 0, pivot due and suppressed, remaining lever S5 — the draft-head fine-tune, lossless by
 construction, and not a kernel change.**
+
+## Finding 84 — prefill attributed to 99.98 %: it is TWO equal halves, and the MoE moves **3.26x the bytes it needs to** — measured, not modelled
+
+**B9, operator-run (the flywheel is stopped).** F75 measured prefill end-to-end at 48 tok/s and stopped.
+Three runs later it is fully attributed. `evidence/prefill_dprof_b9d.log`, PS=1022, clocks pinned,
+caches dropped, prompt = 1023 real ids from the checkpoint's own tokenizer (`inference/model.py`
+text, self-gated on `The capital of France is` -> 671,6102,294,8760,344).
+
+**The instrument is free.** 21351.6 ms with full marks + the MoE byte counter, against 21362.4 ms
+clean = **-0.05 %**. So the composition below is trustworthy, which is not a given: `DSV4_MOEUNION`
+adds a `cudaStreamSynchronize` + D2H per MoE call and drains the pipeline 43 times.
+
+### Where the 21.35 s goes
+
+| region | ms | % |
+|---|---|---|
+| **MoE** | 9100.0 | **42.6** |
+| **ATTENTION** (`compressed_attn_forward`) | 9086.0 | **42.6** |
+| **KV cache population** (`compressed_attn_cache_r4`) | 2233.5 | **10.5** |
+| `hc_pre` (attn+ffn) | 805.9 | 3.8 |
+| everything else | 121.5 | 0.6 |
+| **SUM** | **21346.9** | **99.98** |
+
+| sub-op | ms | % |
+|---|---|---|
+| `moe:w1w3` | 5503.5 | 25.8 |
+| `cattn:sparse` | 2926.8 | 13.7 |
+| `moe:w2` | 2867.8 | 13.4 |
+| `cattn:ogroup` | 2847.4 | 13.3 |
+| `cattn:indexer` | 2083.0 | 9.8 |
+| `cattn:q_proj` | 801.5 | 3.8 |
+
+### The measurement that matters: 3.26x byte redundancy
+
+`tc_build_tiles` emits `tile_row0 = r0 + 16*j` — a tile is **16 rows**, and every tile re-reads its
+expert's entire weight matrix. At bs=1 that is invisible (one row, one tile, redundancy 1.0), which
+is exactly why seventeen cycles of decode optimisation never surfaced it.
+
+```
+[moebytes] PS=1022  calls 43  union/call 141.2  rows/call 6132.0  tiles/call 460.7
+[moebytes] expert weight traffic: ACTUAL 264.8 GB vs IDEAL 81.2 GB  -> redundancy 3.26x
+```
+
+`rows/call 6132.0` = 1022 x top-6 exactly, so the counter is reading the real routing. 460.7 tiles
+against 141.2 experts touched is the redundancy, and it is **measured, not inferred**.
+
+**264.8 GB in 9.100 s = 29.1 GB/s = 12.5 % of the 233 GB/s roofline.** So the MoE is doing BOTH
+things wrong at once: moving 3.26x the necessary bytes, *and* moving them at an eighth of roofline.
+Fixing only the redundancy, at today's poor rate, is 9.10 s -> 2.79 s.
+
+### The attention half is not bandwidth at all — it is compute, and it is idle
+
+- `cattn:sparse`  2.10 TFLOP / 2.927 s = **0.72 TFLOPS**
+- `cattn:ogroup`  5.62 TFLOP / 2.847 s = **1.98 TFLOPS**
+
+At 1022 positions we are 5-10x past the compute/bandwidth crossover, so these should be compute-bound
+and near peak. They are running at single-digit-percent of any plausible peak. **Caveat stated
+because it is load-bearing: this project has NEVER measured this box's compute peak** — every
+roofline in the ledger is a bandwidth roofline from `tools/bw_probe.cu`. "0.72 TFLOPS is bad" rests
+on a spec-sheet-class assumption, and closing that with a `gemm_bench` at prefill shapes should
+precede any target-setting.
+
+### Three process notes
+
+1. **The first B9 run was wasted and the reason generalises.** `dprof_init()` was called only inside
+   the `DSV4_KSWEEP` branch, which runs *after* the prefill, so `g_dprof_on` was false throughout and
+   every mark was silently dropped — a 20-minute checkpoint load producing a log with no `[dprof]`
+   line. That is the cheap failure. The expensive one is a report that looks complete because the
+   marks it is missing never announce themselves.
+2. **The second run's byte count was contaminated and I nearly published it.** The union/tile
+   counters are cumulative and were never reset, so they swept up the PS=5 prefill, the first-token
+   gate and 344 warm-decode calls at bs=1 — all redundancy 1.0 by construction, all diluting the
+   average. The printed 2.27x was a lower bound, not the measurement. It was caught by arithmetic,
+   not by the instrument: backing out the prefill-only union gave 173 experts against a hard maximum
+   of 160. **An impossible intermediate is worth more than a plausible one.**
+3. **The report's `*** INVALID: attn children > ATTENTION` is an artifact of MY id choice, not an
+   inconsistency.** `DP_C_COMPRESS` was assigned to the KV cache population, which lives *outside*
+   `DP_ATTN` in `cblock_prefill_cache`; the checker assumes every `cattn:*` is a child of ATTENTION.
+   The 99.98 % accounting above is what settles it. Left as-is rather than silenced — a self-check
+   that cries wolf is still the reason the first run's missing marks were noticed.
+
+### What this makes B9 worth
+
+Two named, independent fixes: (a) larger MoE tiles so an expert's weights are read once across all
+its rows, (b) prefill-shaped attention kernels instead of the M=1-shaped ones inherited from decode.
+Conservatively 21.35 s -> ~5 s is **4x**, which turns the S5 capture arithmetic from 4.9 days at 20K
+samples into roughly one. **Prefill was never a decode lever and still is not; it is a multiplier on
+the fine-tune's cost, which is why it goes first.**

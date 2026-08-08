@@ -1,0 +1,65 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=1060
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 109.1/122.8 GiB
+[dprof] enabled, 8192 marks
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 220.6 ms = 22.7 tok/s (44.114 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (72.0 ms warmup)
+  step 1 pos 6 -> token 16  (71.9 ms)
+  step 2 pos 7 -> token 455  (79.4 ms)
+  step 3 pos 8 -> token 6102  (72.0 ms)
+  step 4 pos 9 -> token 294  (71.2 ms)
+  step 5 pos 10 -> token 16603  (71.6 ms)
+  step 6 pos 11 -> token 344  (78.6 ms)
+  step 7 pos 12 -> token 29168  (72.6 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 73.9 ms/tok = 13.53 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 129.8 ms (= 26.0 ms/tok if all accepted vs 73.9 M=1 -> 2.85x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5
+[spec] head built. mem 112.0/122.8 GiB
+[decode] PREFILL: 1022 positions in 21362.4 ms = 47.8 tok/s (20.903 ms/tok)
+
+[dprof] PREFILL PS=1022 — verify step by sub-op, summed over all layers (473 marks)
+[dprof] phase                    ms        %      calls
+[dprof]   moe:router          82.76     inf%         43
+[dprof]   moe:group          139.75     inf%         43
+[dprof]   moe:w1w3          5668.44     inf%         43
+[dprof]   moe:act             82.33     inf%         43
+[dprof]   moe:w2            3036.05     inf%         43
+[dprof]   moe:combine         77.52     inf%         43
+[dprof]   moe:shared           7.41     inf%         43
+[dprof]       mg:count         0.30     inf%         43
+[dprof]       mg:prefix        0.22     inf%         43
+[dprof]       mg:scatter       0.37     inf%         43
+[dprof]       mg:tiles         0.32     inf%         43
+[dprof] TOTAL                  0.00
+[dprof] *** INVALID: moe children 9094.25 ms > MoE 0.00 ms — marks recorded outside the reported window
+[spec] decoding 24 tokens (block=5, draft passes=1, adaptK=1.50, prompt=1 s=1023)...
+[arena] first draft: draft footprint 211.44 MB, global hwm 806.91 MB / cap 2558.00 MB (31.5%), draft path = ARENA
+  [margins] 17.99 14.86 14.26 15.38 11.53  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (241.1 ms)  cpos=1027
+  [margins] 8.19 5.89 0.64 1.04 3.09  K=3
+  verify 2: accepted 2/2 (K=3) + correction -> +3 tokens (162.8 ms)  cpos=1030
+  [margins] 2.59 4.49 6.68 7.54 7.32  K=5
+  verify 3: accepted 4/4 (K=5) + correction -> +5 tokens (194.7 ms)  cpos=1035
+  [margins] 0.82 2.37 0.75 1.25 1.35  K=3
+  verify 4: accepted 0/2 (K=3) + correction -> +1 tokens (164.3 ms)  cpos=1036
+  [margins] 5.79 3.17 7.71 5.02 8.97  K=5
+  verify 5: accepted 4/4 (K=5) + correction -> +5 tokens (192.7 ms)  cpos=1041
+  [margins] 3.08 1.84 2.01 6.02 14.11  K=5
+  verify 6: accepted 4/4 (K=5) + correction -> +5 tokens (192.2 ms)  cpos=1046
+
+[spec] generated 24 tokens over 6 verifies: mean tokens/verify = 4.00 (block=5, max 5)
+[spec] tokens: 521 19525 484 425 17507 14 5662 14 81297 31 14979 4084 4611 15531 361 1351 6058 6666 14 1527 28 34536 5903 14772
+[spec] SPEC-DECODE: 47.7 ms/tok = 20.95 tok/s  (vs base M=1 73.9 ms/tok = 13.53 tok/s -> 1.55x)
+[decode] mem 112.1/122.8 GiB

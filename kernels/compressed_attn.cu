@@ -1,5 +1,6 @@
 // compressed_attn.cu — full compressed-layer MLA forward (prefill). See compressed_attn.h.
 #include "compressed_attn.h"
+#include "dprof.h"
 #include "dscratch.h"
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"
@@ -62,7 +63,10 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
     CU(zalloc((void**)&o,(size_t)bs*Kd*4)); CU(zalloc((void**)&og,(size_t)bs*OB*4));
     CU(zalloc((void**)&ogq,(size_t)bs*OB)); CU(zalloc((void**)&ogs,(size_t)bs*(OB/128)*4));
 
+    // B9 marks. compressed_attn_forward was 6.9 s = 32% of a 1022-token prefill and the single
+    // largest unattributed block in the engine, because it had no sub-marks at any level.
     // --- q ---
+    dprof_begin(DP_C_QPROJ,stream);
     act_quant_fp8(xq, xs, x, bs, DIM, 128, stream); dprobe(stream);
     fp8_block_gemm(qr, xq, xs, a.wq_a, a.wq_a_s, bs, Q_LORA, DIM, stream); dprobe(stream);
     rmsnorm(qr, qr, a.q_norm, bs, Q_LORA, eps, true, stream);
@@ -70,16 +74,20 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
     fp8_block_gemm(q, qrq, qrs, a.wq_b, a.wq_b_s, bs, Kd, Q_LORA, stream); dprobe(stream);
     rmsnorm(q, q, nullptr, bs * N_HEADS, HEAD_DIM, eps, false, stream);
     rope_interleaved(q + NOPE_DIM, a.cosT, a.sinT, bs * N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream); dprobe(stream);
+    dprof_end(DP_C_QPROJ,stream);
 
     // --- window kv ---
+    dprof_begin(DP_A_KV,stream);
     fp8_block_gemm(kv_win, xq, xs, a.wkv, a.wkv_s, bs, HEAD_DIM, DIM, stream); dprobe(stream);
     rmsnorm(kv_win, kv_win, a.kv_norm, bs, HEAD_DIM, eps, true, stream);
     rope_interleaved(kv_win + NOPE_DIM, a.cosT, a.sinT, bs, ROPE_DIM, false, HEAD_DIM, 1, stream);
     act_quant_fp8sim(kv_win, bs, NOPE_DIM, 64, HEAD_DIM, stream); dprobe(stream);
+    dprof_end(DP_A_KV,stream);
 
     // --- main compressor -> compressed kv, then combined kv = [window ⊕ compressed] ---
     // ratio==4: overlapping compressor + DSA indexer. ratio==128: non-overlap compressor + strided idxs.
     const bool overlap = (ratio == 4), has_indexer = (ratio == 4);
+    dprof_begin(DP_C_INDEXER,stream);
     compressor_forward(kv_comp, x, w.mc_wkv, w.mc_wgate, w.mc_ape, w.mc_norm, w.cc_cos, w.cc_sin,
                        s, DIM, HEAD_DIM, ratio, overlap, ROPE_DIM, eps, false, stream); dprobe(stream);
     CU(cudaMemcpyAsync(kv_all, kv_win, (size_t)bs*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
@@ -103,7 +111,10 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
         CU(cudaMemcpyAsync(compress_topk, hc.data(), (size_t)s*T*4, cudaMemcpyHostToDevice, stream));
     }
 
+    dprof_end(DP_C_INDEXER,stream);
+
     // --- window idxs (host) ⊕ compressed idxs -> combined ---
+    dprof_begin(DP_C_SPARSE,stream);
     int wwidth = s < win ? s : win;
     std::vector<int> hw((size_t)s * wwidth);
     for (int i = 0; i < s; ++i) { int base = i - win + 1; if (base < 0) base = 0;
@@ -115,11 +126,14 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
 
     // --- sparse attention over combined KV, then de-rotate + grouped o-LoRA + wo_b ---
     sparse_attn(o, q, kv_all, a.attn_sink, combined, 1, s, N_HEADS, HEAD_DIM, s + T, tot, scale, stream); dprobe(stream);
+    dprof_end(DP_C_SPARSE,stream);
+    dprof_begin(DP_C_OGROUP,stream);
     rope_interleaved(o + NOPE_DIM, a.cosT, a.sinT, bs * N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og, o, a.wo_a_fp8, a.wo_a_sc, bs, O_GROUPS, O_LORA, GKd, stream);
     else              ogroup_gemm    (og, o, a.wo_a,                bs, O_GROUPS, O_LORA, GKd, stream);
     act_quant_fp8(ogq, ogs, og, bs, OB, 128, stream);
     fp8_block_gemm(out, ogq, ogs, a.wo_b, a.wo_b_s, bs, DIM, OB, stream); dprobe(stream);
+    dprof_end(DP_C_OGROUP,stream);
 
     CU(cudaStreamSynchronize(stream));
     cudaFree(xq);cudaFree(xs);cudaFree(qr);cudaFree(qrq);cudaFree(qrs);cudaFree(q);cudaFree(kv_win);

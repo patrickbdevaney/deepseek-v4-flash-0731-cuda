@@ -51,6 +51,11 @@ struct MoEWeights {
 extern long long g_moe_union_sum;   // DSV4_MOEUNION=1: summed distinct experts per call
 extern int       g_moe_union_calls;
 extern long long g_moe_rows_sum;
+// B9. A grouped tile is 16 rows (tc_build_tiles: tile_row0 = r0 + 16*j) and EVERY tile re-reads its
+// expert's whole weight matrix, so weight traffic is ntiles x (w1+w3+w2), not n_experts x (...).
+// At bs=1 that distinction is invisible; at a 1022-token prefill it is the whole question of
+// whether the MoE is latency-bound or is simply moving several times the bytes it needs to.
+extern long long g_moe_tiles_sum;   // DSV4_MOEUNION=1: summed 16-row tiles per call
 extern int       g_moe_rows_max;
 extern long long g_moe_rows_hist[10];
 
