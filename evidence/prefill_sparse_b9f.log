@@ -1,0 +1,137 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=1060
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 109.4/122.8 GiB
+[dprof] enabled, 8192 marks
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 2529.4 ms = 2.0 tok/s (505.889 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (81.8 ms warmup)
+  step 1 pos 6 -> token 16  (82.2 ms)
+  step 2 pos 7 -> token 455  (89.4 ms)
+  step 3 pos 8 -> token 6102  (81.6 ms)
+  step 4 pos 9 -> token 294  (81.6 ms)
+  step 5 pos 10 -> token 16603  (81.9 ms)
+  step 6 pos 11 -> token 344  (89.8 ms)
+  step 7 pos 12 -> token 29168  (81.9 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 84.1 ms/tok = 11.90 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 154.4 ms (= 30.9 ms/tok if all accepted vs 84.1 M=1 -> 2.72x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5 5
+[spec] head built. mem 112.3/122.8 GiB
+[decode] PREFILL: 1022 positions in 17364.0 ms = 58.9 tok/s (16.990 ms/tok)
+
+[dprof] PREFILL PS=1022 — verify step by sub-op, summed over all layers (1106 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)       322.77     2.1%         43
+[dprof] rmsnorm (attn)         4.49     0.0%         43
+[dprof] ATTENTION           8110.06    53.6%         43
+[dprof] hc_post (attn)        59.52     0.4%         43
+[dprof] hc_pre  (ffn)        481.60     3.2%         43
+[dprof] rmsnorm (ffn)          4.37     0.0%         43
+[dprof] MoE                 6081.23    40.2%         43
+[dprof] hc_post (ffn)         52.67     0.3%         43
+[dprof] kv xin copy            3.23     0.0%         41
+[dprof]   attn:kv_write       47.60     0.3%         43
+[dprof]   cattn:q_proj       801.72     5.3%         41
+[dprof]   cattn:compress    2239.26    14.8%         41
+[dprof]   cattn:indexer     2078.71    13.7%         41
+[dprof]   cattn:sparse      2022.74    13.4%         41
+[dprof]   cattn:ogroup      2789.68    18.5%         41
+[dprof]   moe:router          82.13     0.5%         43
+[dprof]   moe:group          142.60     0.9%         43
+[dprof]   moe:w1w3          3894.45    25.8%         43
+[dprof]   moe:act            244.56     1.6%         43
+[dprof]   moe:w2            1628.74    10.8%         43
+[dprof]   moe:combine         77.82     0.5%         43
+[dprof]   moe:shared           7.66     0.1%         43
+[dprof]       mg:count         0.32     0.0%         43
+[dprof]       mg:prefix        0.24     0.0%         43
+[dprof]       mg:scatter       0.38     0.0%         43
+[dprof]       mg:tiles         0.31     0.0%         43
+[dprof] TOTAL              15119.93
+[dprof] *** INVALID: attn children 9979.71 ms > ATTENTION 8110.06 ms — marks recorded outside the reported window
+[spec] decoding 24 tokens (block=5, draft passes=1, adaptK=1.50, prompt=1 s=1023)...
+[arena] first draft: draft footprint 211.44 MB, global hwm 806.91 MB / cap 2558.00 MB (31.5%), draft path = ARENA
+  [margins] 18.04 15.54 13.94 14.38 11.69  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (425.8 ms)  cpos=1027
+  [margins] 7.80 6.16 0.84 0.84 5.05  K=3
+  verify 2: accepted 2/2 (K=3) + correction -> +3 tokens (176.0 ms)  cpos=1030
+  [margins] 2.81 6.87 6.17 8.01 10.88  K=5
+  verify 3: accepted 4/4 (K=5) + correction -> +5 tokens (216.2 ms)  cpos=1035
+  [margins] 0.81 1.70 0.52 1.02 1.24  K=3
+  verify 4: accepted 0/2 (K=3) + correction -> +1 tokens (180.9 ms)  cpos=1036
+  [margins] 5.70 2.97 6.58 5.29 8.57  K=5
+  verify 5: accepted 4/4 (K=5) + correction -> +5 tokens (210.1 ms)  cpos=1041
+  [margins] 2.59 1.43 2.22 6.16 14.46  K=2
+  verify 6: accepted 1/1 (K=2) + correction -> +2 tokens (153.3 ms)  cpos=1043
+  [margins] 3.45 6.37 14.45 2.05 3.87  K=5
+  verify 7: accepted 4/4 (K=5) + correction -> +5 tokens (216.4 ms)  cpos=1048
+
+[spec] generated 26 tokens over 7 verifies: mean tokens/verify = 3.71 (block=5, max 5)
+[spec] tokens: 521 19525 484 425 17507 14 5662 14 81297 31 14979 4084 4611 15531 361 1351 6058 6666 14 1527 28 34536 5903 14772 11 6248
+[spec] SPEC-DECODE: 54.9 ms/tok = 18.22 tok/s  (vs base M=1 84.1 ms/tok = 11.90 tok/s -> 1.53x)
+[decode] PREFILL: 1022 positions in 17367.6 ms = 58.8 tok/s (16.994 ms/tok)
+
+[dprof] PREFILL PS=1022 — verify step by sub-op, summed over all layers (1106 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)       322.07     2.1%         43
+[dprof] rmsnorm (attn)         4.44     0.0%         43
+[dprof] ATTENTION           8109.32    53.6%         43
+[dprof] hc_post (attn)        58.97     0.4%         43
+[dprof] hc_pre  (ffn)        485.07     3.2%         43
+[dprof] rmsnorm (ffn)          4.43     0.0%         43
+[dprof] MoE                 6083.92    40.2%         43
+[dprof] hc_post (ffn)         52.30     0.3%         43
+[dprof] kv xin copy            3.29     0.0%         41
+[dprof]   attn:kv_write       47.36     0.3%         43
+[dprof]   cattn:q_proj       801.78     5.3%         41
+[dprof]   cattn:compress    2239.23    14.8%         41
+[dprof]   cattn:indexer     2078.39    13.7%         41
+[dprof]   cattn:sparse      2016.90    13.3%         41
+[dprof]   cattn:ogroup      2786.11    18.4%         41
+[dprof]   moe:router          82.26     0.5%         43
+[dprof]   moe:group          142.52     0.9%         43
+[dprof]   moe:w1w3          3895.86    25.8%         43
+[dprof]   moe:act            244.75     1.6%         43
+[dprof]   moe:w2            1629.45    10.8%         43
+[dprof]   moe:combine         78.03     0.5%         43
+[dprof]   moe:shared           7.61     0.1%         43
+[dprof]       mg:count         0.31     0.0%         43
+[dprof]       mg:prefix        0.25     0.0%         43
+[dprof]       mg:scatter       0.38     0.0%         43
+[dprof]       mg:tiles         0.31     0.0%         43
+[dprof] TOTAL              15123.81
+[dprof] *** INVALID: attn children 9969.77 ms > ATTENTION 8109.32 ms — marks recorded outside the reported window
+[spec] decoding 24 tokens (block=5, draft passes=1, adaptK=1.50, prompt=1 s=1023)...
+  [margins] 17.99 15.96 13.57 14.54 11.49  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (262.3 ms)  cpos=1027
+  [margins] 8.19 6.44 2.06 0.47 5.91  K=4
+  verify 2: accepted 2/3 (K=4) + correction -> +3 tokens (191.2 ms)  cpos=1030
+  [margins] 2.81 7.30 4.53 7.29 11.83  K=5
+  verify 3: accepted 4/4 (K=5) + correction -> +5 tokens (215.3 ms)  cpos=1035
+  [margins] 0.97 1.90 1.04 0.50 1.69  K=3
+  verify 4: accepted 2/2 (K=3) + correction -> +3 tokens (180.5 ms)  cpos=1038
+  [margins] 14.62 1.03 8.36 3.55 5.99  K=2
+  verify 5: accepted 1/1 (K=2) + correction -> +2 tokens (159.5 ms)  cpos=1040
+  [margins] 14.23 5.23 7.77 9.43 1.05  K=5
+  verify 6: accepted 4/4 (K=5) + correction -> +5 tokens (208.6 ms)  cpos=1045
+  [margins] 1.89 0.15 3.38 2.18 0.79  K=2
+  verify 7: accepted 1/1 (K=2) + correction -> +2 tokens (150.4 ms)  cpos=1047
+
+[spec] generated 25 tokens over 7 verifies: mean tokens/verify = 3.57 (block=5, max 5)
+[spec] tokens: 521 19525 484 425 17507 14 5662 14 81297 31 14979 4084 4611 5203 528 44917 57597 8146 8548 24625 2161 120299 14 2716 31
+[spec] SPEC-DECODE: 55.3 ms/tok = 18.09 tok/s  (vs base M=1 84.1 ms/tok = 11.90 tok/s -> 1.52x)
+
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 11.90 tok/s
+[blksweep]    5      1   1.50   1.50      1 |            3.71 |   54.9 | 18.22 | 1.53x
+[blksweep]    5      1   1.50   1.50      1 |            3.57 |   55.3 | 18.09 | 1.52x
+[decode] mem 113.0/122.8 GiB

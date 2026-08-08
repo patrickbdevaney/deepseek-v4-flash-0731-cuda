@@ -1,5 +1,6 @@
 // mla_attn.cu — MLA attention primitives, correctness-first (Gate K oracle: ref/gen_units.py).
 // Optimization (mma, smem KV staging, bf16) comes AFTER these pass their gate (CONSTITUTION Art. I).
+#include <cstdlib>
 #include <cuda_fp16.h>
 #include "dscratch.h"
 #include "mla_attn.h"
@@ -54,11 +55,97 @@ __global__ void sparse_attn_kernel(float* __restrict__ o, const float* __restric
     for (int r = 0; r < 32; ++r) { int j = lane + r * 32; if (r < per && j < d) op[j] = acc[r] * inv; }
 }
 
+// ===================== B9: prefill-shaped sparse attention =====================
+// The kernel above is M=1-shaped and prefill inherited it unchanged: 2.927 s = 13.7% of a 1022-token
+// prefill at 0.72 TFLOPS (F84). Two bit-exact defects, both invisible at m=1:
+//
+//  (1) REGISTERS. qreg[32]/acc[32] are sized for d<=1024 but every caller in this engine passes
+//      d = HEAD_DIM = 512, so per = 16 and HALF of both arrays is dead -- 32 float registers per
+//      thread burned on a kernel whose problem is occupancy. PER as a template parameter sizes them
+//      to the real d.
+//  (2) KEY REUSE. num_key_value_heads == 1, so `kv` has NO head dimension and all h=64 heads of a
+//      query read the IDENTICAL key vectors. Those were 64 separate 32-thread blocks, free to land
+//      on 64 different SMs, each re-reading the same 2 KB. Putting HPB heads of one query in ONE
+//      block puts them on ONE SM, where the second through HPB-th reads hit L1.
+//
+// Both preserve the per-(query,head) accumulation order over t exactly -- the online-softmax state
+// and the lane reduction are untouched -- so this is BIT-EXACT, not merely close.
+//
+// HPB MUST FOLLOW THE BATCH, and this is the trap: at m=1 decode there are only b*m*h = 64 warps
+// total, so HPB=8 would launch 8 blocks onto 20 SMs and starve the machine. Size HPB so the grid
+// still covers the device (>= 4 blocks/SM), which gives HPB=1 at decode -- the original kernel,
+// byte for byte -- and HPB=8 at a 1022-token prefill.
+template<int PER, int HPB>
+__global__ void sparse_attn_kernel_t(float* __restrict__ o, const float* __restrict__ q,
+                                     const float* __restrict__ kv, const float* __restrict__ attn_sink,
+                                     const int* __restrict__ topk_idxs,
+                                     int b, int m, int h, int d, int n, int topk, float scale) {
+    int gid = blockIdx.x * HPB + (int)(threadIdx.x >> 5);
+    if (gid >= b * m * h) return;
+    int head = gid % h; int bm = gid / h; int mi = bm % m; int bi = bm / m;
+    int lane = threadIdx.x & 31;
+    const float* qp = q + (((size_t)(bi * m + mi) * h + head) * d);
+    const int*   ip = topk_idxs + ((size_t)(bi * m + mi) * topk);
+
+    float qreg[PER];
+    #pragma unroll
+    for (int r = 0; r < PER; ++r) { int j = lane + r * 32; qreg[r] = (j < d) ? qp[j] : 0.f; }
+
+    float acc[PER];
+    #pragma unroll
+    for (int r = 0; r < PER; ++r) acc[r] = 0.f;
+    float run_max = -1e30f, run_sum = 0.f;
+
+    for (int t = 0; t < topk; ++t) {
+        int idx = ip[t];
+        if (idx < 0) continue;
+        const float* kp = kv + (((size_t)bi * n + idx) * d);
+        float part = 0.f;
+        #pragma unroll
+        for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) part += qreg[r] * kp[j]; }
+        #pragma unroll
+        for (int o2 = 16; o2 > 0; o2 >>= 1) part += __shfl_down_sync(0xffffffff, part, o2);
+        float score = __shfl_sync(0xffffffff, part, 0) * scale;
+        float new_max = fmaxf(run_max, score);
+        float corr = expf(run_max - new_max);
+        float p = expf(score - new_max);
+        run_sum = run_sum * corr + p;
+        #pragma unroll
+        for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) acc[r] = acc[r] * corr + p * kp[j]; }
+        run_max = new_max;
+    }
+    run_sum += expf(attn_sink[head] - run_max);
+    float inv = (run_sum > 0.f) ? 1.f / run_sum : 0.f;
+    float* op = o + (((size_t)(bi * m + mi) * h + head) * d);
+    #pragma unroll
+    for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) op[j] = acc[r] * inv; }
+}
+
 void sparse_attn(float* o, const float* q, const float* kv, const float* attn_sink,
                  const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
                  float scale, cudaStream_t stream) {
-    int blocks = b * m * h;
-    sparse_attn_kernel<<<blocks, 32, 0, stream>>>(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale);
+    long total = (long)b * m * h;
+    // DSV4_SPARSE_HPB=1 restores the original launch exactly, for the A/B.
+    static const char* hpb_env = getenv("DSV4_SPARSE_HPB");
+    int HPB = hpb_env ? atoi(hpb_env)
+                      : (total >= 80L*8 ? 8 : total >= 80L*4 ? 4 : total >= 80L*2 ? 2 : 1);
+    if (HPB != 1 && HPB != 2 && HPB != 4 && HPB != 8) HPB = 1;
+    // PER is only specialised for the d this engine actually uses; anything else takes the
+    // original kernel rather than a guessed specialisation.
+    if (d != 512 || HPB == 1) {
+        int blocks = (int)((total + HPB - 1) / HPB);
+        if (d == 512) {
+            switch (HPB) { case 1: sparse_attn_kernel_t<16,1><<<blocks,32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return; }
+        }
+        sparse_attn_kernel<<<(int)total, 32, 0, stream>>>(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale);
+        return;
+    }
+    int blocks = (int)((total + HPB - 1) / HPB);
+    switch (HPB) {
+        case 2: sparse_attn_kernel_t<16,2><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); break;
+        case 4: sparse_attn_kernel_t<16,4><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); break;
+        default:sparse_attn_kernel_t<16,8><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); break;
+    }
 }
 
 // ---------------- rope_interleaved ----------------

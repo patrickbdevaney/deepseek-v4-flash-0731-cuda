@@ -5207,3 +5207,77 @@ GEMV redundancy; it does not describe mma.
 2. **Acceptance on the 1023-token prompt was 3.57-4.00 vs 2.89 on the canonical 6-token prompt.**
    Different prompt, highly predictable content (source code), so NOT like-for-like — but if long
    real prompts genuinely accept better it shifts the S5 expectation, and it is cheap to test.
+
+## Finding 86 — `sparse_attn` was carrying 42 dead registers and one warp per block: **-31 % on the mark, +5.4 % prefill, and decode got faster too**
+
+**B9, operator-run.** `evidence/prefill_sparse_b9f.log`, `MOE_MMA=1` held constant so the delta
+isolates the attention change; two PS=1022 points agreeing to 0.02 %.
+
+### Two defects, both bit-exact to fix, both invisible at m=1
+
+1. **42 dead registers.** `qreg[32]`/`acc[32]` were sized for the kernel's stated contract `d<=1024`.
+   All **ten** call sites in this engine pass `d = HEAD_DIM = 512`, so `per = 16` and half of both
+   arrays never held anything. `ptxas -v`: **128 -> 86 registers, 0 spills either way** — occupancy
+   ceiling 16 -> ~23 warps/SM. The generality was real but unused, and at m=1 decode occupancy is not
+   the binding constraint, so it cost nothing visible until prefill pushed 65,408 warps through it.
+2. **One warp per block.** `num_key_value_heads == 1`, so `kv` has NO head dimension and all h=64
+   heads of a query read the IDENTICAL key vectors — as 64 separate 32-thread blocks, free to land on
+   64 different SMs, each re-reading the same 2 KB from L2. HPB heads of one query in ONE block puts
+   them on ONE SM, where reads 2..HPB hit L1.
+
+Per-(query,head) accumulation order over `t` is untouched, so this is **bit-exact**:
+`gate_compressed_decode` prefills at s=256 (total 16384 -> the HPB=8 path) and returns
+`rms=0.00e+00`, and `gate_prefill_len` reports 0 prefix mismatches.
+
+### HPB must follow the batch — the same trap RB fell into twice
+
+At m=1 decode there are only `b*m*h = 64` warps in the whole launch, so a constant HPB=8 would put 8
+blocks on 20 SMs and starve the machine, converting a prefill win into a decode regression. HPB is
+sized to keep >=4 blocks/SM: **1 at decode** (original launch shape), 4 at a K=5 verify, **8 at a
+1022-token prefill**. `DSV4_SPARSE_HPB=1` restores the old launch for the A/B.
+
+### Measured
+
+| | before | after | |
+|---|---|---|---|
+| prefill | 18300 ms / 55.9 tok/s | **17364 ms / 58.9 tok/s** | **+5.4 %** |
+| `cattn:sparse` | 2926.9 ms | **2016.9 ms** | **-31.1 %** |
+| ATTENTION | 9063.6 ms | 8109.3 ms | -10.5 % |
+| base AR decode | 11.56 tok/s | **11.90 tok/s** | **+2.9 %** |
+
+Predicted 1800-2300 ms for the mark; landed 2016.9. **Decode improved as well** — at m=1 the
+launcher picks HPB=1, the original launch shape, but still gets the PER=16 register win. A
+prefill-motivated change that helps decode is rare enough to record.
+
+### Cumulative B9 so far
+
+| stage | prefill | tok/s |
+|---|---|---|
+| baseline (F84) | 21351.6 ms | 47.9 |
+| `MOE_MMA=1` (F85) | 18300 ms | 55.9 |
+| + sparse PER/HPB (F86) | **17364 ms** | **58.9** |
+
+**+23.0 % cumulative.** 20K-sample capture: 4.9 d -> **4.0 d**. Real, not yet decisive.
+
+### The pattern, now three for three
+
+| | tuned for | wrong for prefill because |
+|---|---|---|
+| MoE `RB=4` | 1-5 rows/expert at decode | 43 rows/expert -> 11 weight reads |
+| MoE GEMV vs mma | M=1: 350 vs 121 GB/s | M=1022 inverts it |
+| `sparse_attn` regs + 1 warp/block | generic d<=1024, 64 warps total | d=512, 65,408 warps |
+
+None are bugs. Each is a correct decision for the batch size it was made at, applied unchanged to a
+batch 1000x larger — exactly what seventeen cycles of decode tuning would leave behind in functions
+prefill shares.
+
+### What is left, and the honest ceiling
+
+Remaining attention marks: `cattn:ogroup` 2786, `cattn:compress` 2239, `cattn:indexer` 2078,
+`cattn:sparse` 2017. Four items of similar size; ~30 % each would take prefill to ~14.6 s.
+
+**But the structural number says that is not where this ends.** 1022 tokens x ~12.5 B active params
+= 25.6 TFLOP in 17.36 s = **1.47 TFLOPS**. `sparse_attn` computes fp32 dot products with warp
+shuffles and **no tensor cores at all** — 5 shuffles plus a broadcast to reduce 16 FMAs of useful
+work. The remaining order of magnitude is a flash-attention-style tensor-core kernel for the
+score path (`sparse` + `indexer` = 4.1 s together), not more tuning of this one.
