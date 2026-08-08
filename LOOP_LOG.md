@@ -5401,3 +5401,75 @@ was made at, applied unchanged to a batch 1000x larger: MoE `RB=4` (1-5 rows/exp
 GEMV-vs-mma (M=1 inverts at M=1022), `sparse_attn` registers + 1 warp/block (generic `d<=1024`, 64
 warps total), and now ogroup m-tile dequant (bs<=16 has 1 m-tile, bs=1022 has 64). **None is a bug.**
 Seventeen cycles optimised decode inside functions prefill shares, and prefill was never measured.
+
+## Finding 89 — the compressor is numerics-FRAGILE: changing its GEMM kernel at all costs **28 % of acceptance**, and a 54x smaller error buys nothing
+
+**B9, operator-run.** Five runs, `evidence/prefill_{ogmt_b9g,bf16tc_b9h,split2_b9i,compbf16_only_b9j}.log`.
+
+### What was built
+
+A bf16 tensor-core `gemm_bf16w` (64x64 block tile, 4 warps 2x2, BK=32, fragment layout copied from
+the already-gated `ogm_mma`). `gemm_bf16w` at M=1022 was warp-per-output-ELEMENT — 261,632 blocks
+running a dense `[1022x4096]x[4096x1024]` at **0.32 TFLOPS** against a measured 53.08 TFLOPS bf16
+peak. New gate `tests/gate_bf16w_tc.cu`, because **`gate_bf16w` only tests M=1 and NO gate in the
+project could reach M>=64.**
+
+### The measurements, in the order they were taken
+
+| config | acceptance | prefill |
+|---|---|---|
+| exact (b9g) | **4.00 / 4.00** | 62.4 tok/s |
+| `COMP_BF16=1` **only**, no TC (b9j) | **2.80 / 2.89** | 65.4 |
+| `COMP_BF16=1` + TC, NS=1 (b9h) | 2.18 / 2.78 | 69.5 |
+| `COMP_BF16=1` + TC, split NS=2 (b9i) | 2.89 / 2.40 | 69.0 |
+
+Four earlier runs on this prompt sat in a **3.57-4.00** band, so the drop is real, not drift.
+
+### Three results, and the third is the one that matters
+
+1. **The tensor-core kernel is exonerated.** `COMP_BF16=1` alone — the scalar bf16 kernel, no mma —
+   already costs the acceptance. The TC path adds speed on top without further damage.
+2. **Split-bf16 works and does not help.** `gate_bf16w_tc`: rms_rel **5.46e-4 at NS=1 -> 1.02e-5 at
+   NS=2**, a 54x improvement, for acceptance 2.78 -> 2.89. **Error magnitude is not the mechanism.**
+   NS=3 measured identical to NS=2, i.e. two terms already sit at the accumulation-order floor
+   between a tiled kernel and a scalar one.
+3. **`gemm_fp32` and `gemm_bf16w` receive NUMERICALLY IDENTICAL WEIGHTS.** `wkv`/`wgate` ship bf16
+   and `Loader::bf16` expands them to fp32 exactly. The two kernels differ only in accumulation
+   order. **So changing the compressor's GEMM kernel at all, with identical inputs, costs 28 % of
+   acceptance.**
+
+### The mechanism this implies
+
+Not top-k near-ties as I first argued — that predicts damage proportional to perturbation size, and
+a 54x reduction bought nothing. The likely amplifier is **`act_quant_fp8sim` / `act_quant_fp4sim`**,
+which compute a block scale from the **max over a 64- or 32-wide block**. A change in one element
+that moves the block max rescales **every** value in that block, turning a last-bit difference into
+a whole-block shift — which then feeds the indexer's top-512 selection. That is a threshold effect
+with no gradient, which is exactly the shape the data shows.
+
+### Consequence for S5 — the part that binds
+
+**Capture must use the same numerics as serving.** We store `mh_pre`, which depends on the entire
+forward including the indexer's key selection. Capturing under one GEMM kernel and serving under
+another trains the head on features it will never see — the precise train/inference mismatch the
+whole recipe exists to prevent, and we now have a 28 % measurement of how much this engine cares.
+
+**So the lever is retired and prefill stands at 62.4 tok/s with exact numerics.** The +11.4 % was
+real and is not worth a train/serve numerics split, when the entire point of S5 is to raise the
+acceptance this would spend.
+
+The one coherent alternative, recorded but NOT taken: standardise on `COMP_BF16=1`+TC for **both**
+capture and serving and let the fine-tune re-align the head to those numerics. It is principled —
+the head is being retrained anyway — but it bets the whole acceptance gain on recovering 28 % that
+we would have caused ourselves, to save 10 % of capture wall time.
+
+### Process note
+
+**I violated one-change-per-measurement and it cost two runs.** `COMP_BF16` and `TC_BF16W` went on
+together; when acceptance fell I blamed the tensor cores and built a 54x-more-accurate kernel to fix
+a problem they were not causing. The isolation run that should have been first was fourth.
+
+Also, the stale-binary trap fired **three times** in this sequence, and each time the tell was a
+number that was too *consistent*, never an error message: five gates reporting `rms=0.00e+00` on a
+bf16 change; three NS values reporting byte-identical accuracy after a failed compile. **Before
+believing a comparison, check that its arms differ where they must.**

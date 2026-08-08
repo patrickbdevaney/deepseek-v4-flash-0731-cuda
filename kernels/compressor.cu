@@ -226,6 +226,120 @@ __global__ void gemm_bf16w_mk_kernel(float* __restrict__ C, const float* __restr
         for (int o=16;o>0;o>>=1) a += __shfl_down_sync(0xffffffff,a,o);
         if (lane==0) C[(size_t)m*N + n] = a; }
 }
+// ===================== B9: bf16 TENSOR-CORE gemm_bf16w (prefill) =====================
+// gemm_bf16w_kernel below is warp-per-output-ELEMENT. At decode M=1 that is right. At prefill it is
+// handed [1022 x 4096] x [4096 x 1024] twice per layer by compressor_forward and launches
+// (N/4, M) = 261,632 blocks of 128 threads to run a dense GEMM at **0.32 TFLOPS** — against a
+// MEASURED fp32 peak of 5.45 and a MEASURED bf16 tensor-core peak of 53.08 (tools/flops_probe.cu).
+// This is `cattn:compress` (2231 ms) and part of `cattn:indexer` (2081 ms).
+//
+// B already ships bf16, so only A needs converting. THAT IS A NUMERICS CHANGE and the reason this
+// ships behind a flag: the fp32 activation is rounded to bf16 (8 mantissa bits) before the mma.
+// It is defensible here specifically because compressor_forward's very next step quantises this
+// output to fp8 (64-wide) or fp4 (32-wide) — 4 to 8 bits — so bf16 is far above the precision the
+// result is about to be squeezed into. It is NOT defensible by default anywhere else, which is why
+// the dispatch below only takes this path for the compressor's shapes.
+//
+// Fragment layout follows ogm_mma / tc_ogroup exactly (row = lane/4 and +8, k = 2*(lane%4) and +8),
+// which is already gated by gate_ogroup_gemv, rather than being re-derived from the PTX docs.
+__device__ __forceinline__ void bfw_mma(float* c, const unsigned* a, const unsigned* b){
+    asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\n"
+      :"+f"(c[0]),"+f"(c[1]),"+f"(c[2]),"+f"(c[3]):"r"(a[0]),"r"(a[1]),"r"(a[2]),"r"(a[3]),"r"(b[0]),"r"(b[1])); }
+
+#define BFW_BM 64
+#define BFW_BN 64
+#define BFW_BK 32
+// NS = number of bf16 terms the fp32 activation is split into (3xTF32-style).
+//
+// F89 measured what a SINGLE bf16 term costs: rms_rel 5.5e-4 in the GEMM, and acceptance 4.00 ->
+// 2.18 on the full model. The mechanism is not accumulated rounding — it is that the indexer's
+// output drives a **top-512 selection**, and a perturbation far below the fp4 quantisation step
+// still flips near-ties in the ranking, changing WHICH keys the sparse attention reads. A discrete
+// selection has no error budget.
+//
+// So split instead of round. bf16 carries 8 bits of precision; a = hi + mid + lo recovers ~24, i.e.
+// fp32, at 3x the mma instructions — which against a MEASURED 53.08 TFLOPS bf16 peak is still
+// ~17.7 TFLOPS effective, versus the 0.32 TFLOPS the scalar kernel achieves. Two terms (~16 bits)
+// are available via TC_BF16W_NS=2 for the accuracy/speed A/B.
+//
+// The split is exact by construction: each residual is what the previous term could not represent,
+// so hi+mid+lo reproduces the fp32 value to within the last term's rounding.
+
+template<int NS>
+__global__ __launch_bounds__(128,2) void gemm_bf16w_tc_kernel(
+        float* __restrict__ C, const float* __restrict__ A, const __nv_bfloat16* __restrict__ B,
+        int M, int N, int K){
+    __shared__ __nv_bfloat16 As[NS][BFW_BM*BFW_BK];
+    __shared__ __nv_bfloat16 Bs[BFW_BN*BFW_BK];
+    const int tid=threadIdx.x, lane=tid&31, warp=tid>>5;
+    const int wm=warp>>1, wn=warp&1;                 // 2x2 warp grid; each warp owns [32 x 32]
+    const int gid=lane>>2, t4=lane&3;
+    const int m0=blockIdx.y*BFW_BM, n0=blockIdx.x*BFW_BN;
+    float c[2][4][4];
+    #pragma unroll
+    for(int i=0;i<2;++i)
+        #pragma unroll
+        for(int j=0;j<4;++j){ c[i][j][0]=c[i][j][1]=c[i][j][2]=c[i][j][3]=0.f; }
+
+    for(int k0=0;k0<K;k0+=BFW_BK){
+        for(int t=tid;t<BFW_BM*BFW_BK;t+=128){
+            const int i=t/BFW_BK, j=t%BFW_BK, gm=m0+i, gk=k0+j;
+            float v = (gm<M && gk<K) ? A[(size_t)gm*K+gk] : 0.f;
+            #pragma unroll
+            for(int sp=0; sp<NS; ++sp){
+                __nv_bfloat16 h = __float2bfloat16(v);
+                As[sp][t] = h;
+                v -= __bfloat162float(h);            // residual for the next term
+            }
+        }
+        for(int t=tid;t<BFW_BN*BFW_BK;t+=128){
+            const int i=t/BFW_BK, j=t%BFW_BK, gn=n0+i, gk=k0+j;
+            Bs[t] = (gn<N && gk<K) ? B[(size_t)gn*K+gk] : (__nv_bfloat16)0.f;
+        }
+        __syncthreads();
+        #pragma unroll
+        for(int ks=0; ks<BFW_BK; ks+=16){
+            unsigned b[4][2];
+            #pragma unroll
+            for(int nt=0; nt<4; ++nt){
+                const int cn=wn*32+nt*8+gid, kk=ks+2*t4;
+                b[nt][0]=*(const unsigned*)&Bs[cn*BFW_BK+kk];
+                b[nt][1]=*(const unsigned*)&Bs[cn*BFW_BK+kk+8];
+            }
+            // Most-significant term first: the accumulator grows monotonically in magnitude, so the
+            // small corrections are added last and are not lost to a large running sum.
+            #pragma unroll
+            for(int sp=0; sp<NS; ++sp){
+                unsigned a[2][4];
+                #pragma unroll
+                for(int mt=0; mt<2; ++mt){
+                    const int r0=wm*32+mt*16+gid, r8=r0+8, kk=ks+2*t4;
+                    a[mt][0]=*(const unsigned*)&As[sp][r0*BFW_BK+kk];
+                    a[mt][1]=*(const unsigned*)&As[sp][r8*BFW_BK+kk];
+                    a[mt][2]=*(const unsigned*)&As[sp][r0*BFW_BK+kk+8];
+                    a[mt][3]=*(const unsigned*)&As[sp][r8*BFW_BK+kk+8];
+                }
+                #pragma unroll
+                for(int mt=0; mt<2; ++mt)
+                    #pragma unroll
+                    for(int nt=0; nt<4; ++nt) bfw_mma(c[mt][nt], a[mt], b[nt]);
+            }
+        }
+        __syncthreads();
+    }
+    #pragma unroll
+    for(int mt=0; mt<2; ++mt){
+        const int r0=m0+wm*32+mt*16+gid, r8=r0+8;
+        #pragma unroll
+        for(int nt=0; nt<4; ++nt){
+            const int cn=n0+wn*32+nt*8+2*t4;
+            if(r0<M && cn  <N) C[(size_t)r0*N+cn  ]=c[mt][nt][0];
+            if(r0<M && cn+1<N) C[(size_t)r0*N+cn+1]=c[mt][nt][1];
+            if(r8<M && cn  <N) C[(size_t)r8*N+cn  ]=c[mt][nt][2];
+            if(r8<M && cn+1<N) C[(size_t)r8*N+cn+1]=c[mt][nt][3];
+        }
+    }
+}
 void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K, cudaStream_t stream) {
     const int wpb = 4, threads = 32*wpb;
     // 2 = float4 (8 bf16) path, 1 = bf16x2 path, 0 = scalar. B rows are 16-byte aligned iff the
@@ -241,6 +355,28 @@ void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K
         switch(M){ BFMK(2)  BFMK(3)  BFMK(4)  BFMK(5)  BFMK(6)  BFMK(7)  BFMK(8) BFMK(9)
                    BFMK(10) BFMK(11) BFMK(12) BFMK(13) BFMK(14) BFMK(15) BFMK(16) default: break; }
         #undef BFMK
+    }
+    // Tensor-core path: prefill shapes only, and OPT-IN (TC_BF16W=1) because it rounds the fp32
+    // activation to bf16. M>=64 keeps decode (M=1) and the verify (M<=16) on the exact kernel.
+    static int tcdbg = -1; if(tcdbg<0) tcdbg = getenv("TC_BF16W_DEBUG")!=nullptr;
+    if(tcdbg) fprintf(stderr,"[bf16w] M=%d N=%d K=%d tc=%d\n", M,N,K,
+                      (getenv("TC_BF16W") && M>=64 && (K%16==0) && (N%8==0)) ? 1:0);
+    if(getenv("TC_BF16W") && M>=64 && (K%16==0) && (N%8==0)){
+        dim3 g((N+BFW_BN-1)/BFW_BN, (M+BFW_BM-1)/BFW_BM);
+        const char* nse = getenv("TC_BF16W_NS");
+        int NS = nse ? atoi(nse) : 2;
+        // NS=2 by default, MEASURED not assumed: gate_bf16w_tc gives rms_rel 5.46e-4 at NS=1,
+        // 1.02e-5 at NS=2, and 1.02e-5 at NS=3 -- the third term buys NOTHING, because at that
+        // point the residual is no longer activation precision but the accumulation-order
+        // difference between this tiled kernel and the scalar reference, which an exact fp32
+        // kernel would also have. So 2 terms sit at the floor of what the comparison can resolve
+        // and the third is 50% more mma for nothing.
+        if(NS<1||NS>3) NS=3;
+        switch(NS){
+          case 1: gemm_bf16w_tc_kernel<1><<<g,128,0,stream>>>(C,A,(const __nv_bfloat16*)Bbf16,M,N,K); break;
+          case 2: gemm_bf16w_tc_kernel<2><<<g,128,0,stream>>>(C,A,(const __nv_bfloat16*)Bbf16,M,N,K); break;
+          default:gemm_bf16w_tc_kernel<3><<<g,128,0,stream>>>(C,A,(const __nv_bfloat16*)Bbf16,M,N,K); break; }
+        return;
     }
     dim3 grid((N + wpb - 1)/wpb, M);
     gemm_bf16w_kernel<<<grid, threads, 0, stream>>>(C, A, (const __nv_bfloat16*)Bbf16, M, N, K, vec2);
