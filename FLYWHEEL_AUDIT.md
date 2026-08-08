@@ -8,3 +8,5 @@
 ## 2026-08-07T23:56:26-04:00 — HELD e66746ba4e5f8ed15e5d4e039258e31a08c86cae
 
   - claimed 19.0 tok/s not found in moescan.log
+## 2026-08-08T00:01:57-04:00 — PUSHED 13c3b74b3a00d448a354c84a07c832a1f9caeed1
+  the real ceiling from measured bytes, and three operator-supplied methods triaged
