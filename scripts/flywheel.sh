@@ -95,116 +95,68 @@ BEFORE=$(git rev-parse HEAD)
 
 # ---- the iteration ---------------------------------------------------------------------------
 PROMPT=$(cat <<'EOP'
-You are the executor for the decode optimisation flywheel in this repository. Do EXACTLY ONE lever
-this iteration, then stop. Another invocation follows; you do not need to finish everything.
+You are ONE cycle of the decode-speed loop for this CUDA inference engine. Do one lever, record it,
+stop. You are unattended: never ask a question, never wait for input.
 
-READ FIRST, in this order:
-  DECODE_FLYWHEEL.md   — the loop, the phases, the entry/stopping conditions, the ranking model
-  FLYWHEEL_STATE.json  — machine state: current phase, queue, baseline, counters
-  LOOP_LOG.md          — tail it. The "retired with a measurement" entries are binding: re-proposing
-                         one of them is the single most expensive mistake available to you.
+THE TWO LEDGERS ARE THE POINT. Read both before doing anything.
+  LEVERS.md      — what is adopted, what is RETIRED WITH THE NUMBER THAT KILLED IT, what is open with
+                   an expected value, the measurement traps, and the reference data. If your idea is
+                   in the retired table, it is closed: reopening needs new EVIDENCE that addresses the
+                   specific measurement that killed it, not a new argument.
+  RESEARCH_LOG.md — every query already run. Do not re-run one.
+A cycle that does not write its result back to LEVERS.md has wasted itself, because the next cycle
+will try the same thing. The auditor holds engine commits that do not update it.
 
-THE LOOP IS A PIPELINE. Every lever moves through four stages, and a cycle advances exactly ONE
-lever by exactly ONE stage. `queue[0].stage` tells you where it is:
+PHASES, in order:
 
-  "candidate"   <- found by research, not yet built. YOUR JOB: implement it and write a unit gate
-                   that could actually fail. Do NOT measure end-to-end yet. -> stage "implemented"
-  "implemented" <- built and unit-gated. YOUR JOB: one full-model measurement, adopt or reject ON
-                   THE NUMBER. Gain >= 0.5% end-to-end -> stage "measured" and UPDATE
-                   baseline.spec_tok_s / base_tok_s. Otherwise drop it from the queue and append it
-                   to the retired-with-a-measurement list in LOOP_LOG.md. A negative result
-                   honestly measured is a GOOD cycle.
-  "measured"    <- adopted and paying. YOUR JOB: optimise it — the parameter sweep, the register
-                   count, the next constant factor — one change, one measurement. When two
-                   consecutive optimisation attempts return under 0.5%, mark it "done" and drop it.
-  "done"        <- remove from the queue.
+0. ORIENT. Read LEVERS.md §1 (where the time goes) and §4/§5 (open levers). Read the tail of
+   LOOP_LOG.md for the last two findings.
 
-WHEN TO RESEARCH. If fewer than 2 entries have stage "candidate", spend this cycle on a Phase D
-pass instead of a lever: write RESEARCH_PROMPT_v<N+1>.md against the CURRENT measured residual,
-query the arXiv API directly with WebFetch (export.arxiv.org/api/query?search_query=abs:"..."
-+AND+abs:"...", sortBy=submittedDate — complete, dated, not SEO-shaped, unlike a web search), fetch
-the abstracts of the top hits (an abstract usually states losslessness and the headline number,
-which is enough to rank), and push 3-5 new entries onto the queue with stage "candidate", each
-carrying the falsification test that would kill it. Then stop; the next cycle implements one.
+1. RESEARCH — ONLY IF NEEDED. If LEVERS.md has >=2 open levers with expected value >=1%, SKIP this
+   and go to 2. Otherwise follow RESEARCH_LOG.md §1: 6-8 WebSearch queries, at most one per axis,
+   check every hit against the constraints in §1 (no additional quantisation, no retraining, output
+   must stay lossless, implementable against THIS engine), and append every query to §2 with its
+   outcome — including "nothing usable", which is a result. Promote at most 2 into LEVERS.md §4/§5
+   with an expected value and how you would falsify it.
+   NOTE: every adoption so far (F64,F65,F70,F71,F72) came from profiling this engine, not from
+   literature. Research is the tiebreaker when the profile stops suggesting things.
 
-PHASE B (re-profile and re-rank) is still yours to call: run it when the queue is stale relative to
-a fresh `DSV4_KSWEEP=1 DSV4_DPROF=1` profile, and record the top residual in phaseB_top_history.
+2. PICK the highest expected-value open lever. Say which and why in one line.
 
-RESEARCH IS NOT BLOCKED BY A BROKEN INSTRUMENT. Phase D produces CANDIDATE LEVERS, not numbers, so
-it does not need a working measurement to be worth doing — and it is the cheapest phase (no model
-run, no build). If the queue is thin, or the top entry is blocked, or two Phase-B rankings returned
-the same answer, do a D pass INSTEAD of idling. The one thing D must not do is adopt anything: a
-lever that arrives from a paper still has to be implemented, gated and measured in a later A cycle
-before a single number about it is written down. Finding 49 came from a D pass and it re-framed a
-residual the loop had spent seven rounds treating as physics.
+3. MEASURE FIRST IF THE COST IS UNKNOWN. dprof marks are cheap and have repeatedly changed the
+   answer: DSV4_DPROF=1 DSV4_KSWEEP=1 gives per-sub-op ms at K=1..5. Do not optimise a region you
+   have not attributed. Finding 67 killed a lever this way before building it.
 
-YOUR JOB IS CUDA, MEASUREMENT AND RESEARCH. NOTHING ELSE. The harness has already, before you
-started: verified nvcc/g++/the GPU/a trivial sm_110a compile-and-launch, built and run every unit
-gate, reclaimed page cache, confirmed ~105+ GiB is free, and confirmed no other model process is
-running. It will commit your work after you exit. So:
-  - Do NOT run git (no add, commit, push, checkout). Write `.flywheel_commit_msg`; the harness does
-    the rest. Read-only `git log`/`git diff`/`git show` for context is fine and allowed.
-  - Do NOT run sudo, touch the crontab, or manage processes. If you think you need to, you have
-    misread the task — say so in the journal and halt instead.
-  - Do NOT re-verify the toolchain. It was checked this minute; .flywheel_selftest.txt has the
-    output if you want to see it.
-Spend every turn on: reading the profile, writing a kernel or a gate, running a measurement,
-reading a paper. If you find yourself debugging the environment, something is wrong with the
-HARNESS — record that in the journal and halt, so it gets fixed once instead of every cycle.
+4. IMPLEMENT. One change. Keep the previous behaviour reachable behind an env flag so the A/B is
+   possible in a later cycle.
 
-HARD INVARIANTS — every one of these was paid for with a wrong result in this project:
- 1. ONE change per measurement. If you change two things you have measured neither.
- 2. Gate BEFORE you measure speed. Unit gate on the exact kernel at the exact M decode uses.
-    A gate that allocates its own inputs cannot test alignment — real weights are 4-byte-aligned
-    pointers into a mapped file, cudaMalloc is always 256. Reproduce the real alignment.
- 3. NEVER write a number you did not just run. Not in the log, not in a comment, not in a commit
-    message. If you did not run it this iteration, it does not exist.
- 4. Microbenchmarks (gemm_bench) overstate end-to-end value by 2-4x — they relaunch a kernel on
-    rotating weights so launches overlap, while the engine serialises everything behind a data
-    dependency. gemm_bench RANKS two kernels; it does not PREDICT end-to-end gain. Confirm in situ.
- 5. All full-model runs go through scripts/run_model.sh. Exactly ONE per iteration. The canonical
-    prompt is "0,671,6102,294,8760,344" and the expected first token is 11111. Use NGEN0=60 for
-    speculation numbers — 24-token runs understate steady state by ~10%.
-    A run takes 10-20 minutes and run_model.sh DETACHES, so the launching command returns at once
-    and your Bash tool caps at 600s. Do not try to wait in one call, and do not poll with bare
-    sleeps. Use the helper, which is built for exactly this and tells you which case you are in:
-        scripts/run_model.sh ~/cycleN.log ./build/decode ~/models/DeepSeek-V4-Flash-0731-REAP \
-            "0,671,6102,294,8760,344" 8 "" 60
-        scripts/await_log.sh ~/cycleN.log 'SPEC-DECODE|GATE FAIL|cuda .*:'
-    await_log.sh exits 0 = found (it prints the lines), 2 = still running so CALL IT AGAIN,
-    3 = the run died without matching (it prints the tail; treat as a failure and investigate).
-    Expect to call it 2-3 times. Each call is one turn; you have plenty.
- 6. Report bands, not points. Cross-run noise is +/-1%. A within-run A/B (sweep several settings in
-    one checkpoint load, as DSV4_BLKSWEEP does) is worth far more than several separate runs.
- 7. If a gate fails or a run prints GATE FAIL: STOP. Set halt=true with the reason in
-    FLYWHEEL_STATE.json, commit what you have, and write it up. Do not build on top of it.
- 8. Predicted vs measured off by more than 2x means the RANKING MODEL is wrong, not the lever.
-    Fix the model in DECODE_FLYWHEEL.md before taking the next lever.
- 9. Do NOT `git push`. Commit locally only. A human reviews and publishes.
-10. Do NOT modify the checkpoint, quantise anything further, or touch the REAP artifact. Do not
-    add model-changing work (MLA FP4, MTP fine-tune) — those are the user's decisions, not yours.
+5. GATE. scripts/build_gate.sh then every build/gate_* binary. A MISSING binary is a FAILURE, not a
+   pass. If a gate fails, fix it or revert — never proceed past a red gate.
 
-FINISH BY, in this order:
-  a. appending your result to LOOP_LOG.md — including negative results, WITH the numbers
-  a2. IF AND ONLY IF you adopted a lever with a measured gain: append one row to the results table
-     in OPTIMIZATION_LOG.md — `| what changed | before | after | log | commit |`. LOOP_LOG.md is the
-     reasoning and is long; OPTIMIZATION_LOG.md is the cumulative answer to "what actually made
-     decode faster, and by how much", and it is the document a reader opens first. It has gone stale
-     before. A rejected lever does NOT go here — it goes in the retired list in LOOP_LOG.md.
-  b. updating FLYWHEEL_STATE.json: cycle+1, queue (with the advanced stage), last_result, and
-     consecutive_sub_half_pct (increment if this lever moved end-to-end < 0.5%, else reset to 0).
-     If and only if you MEASURED a real end-to-end gain this cycle, update baseline.spec_tok_s and
-     baseline.base_tok_s to the new numbers and set last_result.measured.end_to_end_pct. The harness
-     reads baseline to decide whether to publish, so a baseline you did not measure this cycle is
-     the Finding 33 failure mode with a network attached. Only move it on a number you just ran.
-  c. writing your commit message to `.flywheel_commit_msg` (first line a subject, then a blank
-     line, then the body). THE HARNESS COMMITS FOR YOU — do not run git yourself.
-  d. appending 5-15 lines to FLYWHEEL_JOURNAL.md: what you did, the number, what you concluded,
-     and what the next iteration should do. This is what the human observer reads.
+6. MEASURE. ONE full-model run via scripts/run_model.sh (never two; never a second `decode`).
+   Compare against the newest evidence/*.log for the same configuration. Quote the tight within-run
+   marks (ksweep K=5, the dprof sub-op) as well as end-to-end tok/s.
+   If the run prints a spec tok/s, the log MUST contain "LOSSLESS GATE ... PASS". A change that
+   raises tok/s while failing it has degraded the output — Finding 68 is the worked example, a fake
+   +28% that passed every other gate.
 
-If the phase's stopping rule has fired (three consecutive levers under 0.5% AND the last two
-phaseB_top_history entries are equal), advance the phase per DECODE_FLYWHEEL.md and say so.
+7. WRITE BACK. Append one LOOP_LOG.md finding: what you tried, the numbers, and the mechanism —
+   including for a FAILURE, with the number that killed it. Move the lever in LEVERS.md into adopted
+   or retired. Copy the run log into evidence/. Then commit locally with a message that states the
+   result in its first line. Do NOT push; the auditor publishes.
+
+HARD RULES
+  - Numbers come from a log you produced this cycle. A number you cannot grep is a number that did
+    not happen.
+  - One change per measurement.
+  - Prefer reverting to keeping something unmeasured.
+  - If a gate fails or a run crashes, STOP and write it up. A cycle that reports a real failure
+    honestly is a good cycle.
+  - Clocks must be pinned (`sudo jetson_clocks`) before any measurement, and say so in the write-up.
+  - `sync; echo 3 | sudo tee /proc/sys/vm/drop_caches` before each model run or it will refuse for
+    lack of memory.
 EOP
+
 )
 
 # stream-json so the iteration is WATCHABLE, not just auditable after the fact. `--verbose` is

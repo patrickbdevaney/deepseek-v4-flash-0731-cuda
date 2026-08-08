@@ -19,5 +19,11 @@ if ! bash -n "$SNAP" 2>>"$HOME/flywheel_cron.log"; then
     rm -f "$SNAP"; exit 0
 fi
 trap 'rm -f "$SNAP"' EXIT
-exec /usr/bin/flock -n /tmp/dsv4-flywheel-cron.lock \
+# One tick = one executor cycle, then the deterministic auditor decides whether it ships.
+# The auditor is a separate process on purpose: the thing that makes changes must not be
+# the thing that publishes them, and it is now a script rather than a second agent.
+/usr/bin/flock -n /tmp/dsv4-flywheel-cron.lock \
      bash "$SNAP" >> "$HOME/flywheel_cron.log" 2>&1
+# The auditor runs even if the cycle failed or was skipped: a previous tick may have left an
+# unpublished commit, and holding it forever because a later tick was a no-op is its own failure.
+FLYWHEEL_ROOT="$REPO" bash "$REPO/scripts/flywheel_audit.sh" >> "$HOME/flywheel_cron.log" 2>&1
