@@ -4361,3 +4361,111 @@ lazily from shared memory — and this cycle sharpens its prior in *both* direct
 spills 44 bytes at `<5,4>`, so it is genuinely register-starved and freeing ~16 could cross a real
 step (unlike the 4 registers here, which crossed one by accident); but F78 is also the second cycle
 running to show that the *bench* overstates what a register buys in situ.
+
+---
+
+## Finding 79 — B8' dies at `ptxas -v`, `o:wo_a` runs out of ideas, and a clean-vs-clean control says the cross-run floor is 1.5 %
+
+**NEGATIVE, and it closes B8 entirely. Kept behind `OG_SMEM_LAZY=1`, default OFF.** The lever moved
+`ogroup_gemv_mk_smem_kernel<5,4>` from **396 → 368 bytes of spill at an unchanged 64 registers**
+(−7 %, where ~16 registers were predicted) and priced at **−1.1 %** against the `OG_SMEM` arm it
+modifies while remaining **+37.8 %** against the kernel that actually ships. 19/19 gates PASS,
+bit-identical at all 9 M in `gate_ogroup_gemv` (extended to sweep it). Clocks pinned
+(`sudo jetson_clocks`), caches dropped. Bench `evidence/oglazy_bench.log`, gate
+`evidence/oglazy_gate.log`, run `evidence/clean_post_f79.log`.
+
+### The lever and its stated falsification
+
+LEVERS.md B8' was the single untried idea left on `o:wo_a` (`ogroup_gemv_mk_kernel`, 11.4 ms at K=5,
+the block's worst mark). The argument: `float4 o4[M]` in the smem-staged variant is 4M = **20 live
+registers at M=5**, in a kernel `ptxas` shows 8 registers over its 64-register `__launch_bounds__`
+cap; in the *non*-staged kernel that array is load-bearing (global loads, and hoisting them is the
+MLP the phase needs), but under `OG_SMEM` they are smem reads at ~30 cycles with no MLP argument, so
+they can be re-read per (r, m) instead of held. F55 measured the staged variant −40 % at NR=4 *with*
+the 20 registers still in it, so the register argument had never been tested. The queue entry named
+the falsification: **`nvcc -Xptxas -v` BEFORE building — if the spill does not fall, stop.**
+
+### ptxas answered, and the answer was no
+
+| `<5,4>` instantiation | registers | spill |
+|---|---|---|
+| `ogroup_gemv_mk_kernel` (SHIPPED, untouched control) | 64 | 44 B |
+| `ogroup_gemv_mk_smem_kernel` LAZY=0 (F55) | 64 | 396 B |
+| `ogroup_gemv_mk_smem_kernel` LAZY=1 (this) | 64 | **368 B** |
+
+A 7 % move, not 16 registers. **The mechanism is that you cannot free a register by not writing it
+down**: `sh` is never written inside that loop, so hoisting the `ld.shared` back to exactly where
+`o4[M]` had been is both legal and the lower-latency schedule, and ptxas does it. That is trap 19
+from the other direction — there the source *forced* two registers live and ptxas could not undo it;
+here the source merely *suggests* fewer and ptxas ignores the suggestion. New trap 23.
+
+The control arm is clean: the shipped kernel is byte-for-byte 64 registers / 44 bytes across
+`<5,4>`, and the LAZY=0 instantiation is unchanged at 396 — no trap-22 contamination from adding the
+template parameter.
+
+### The bench confirmed it, on the arm it modifies
+
+`gemm_bench` "ogroup wo_a COLD", 12 rotating copies, **3 alternating replicates per arm** (trap 5),
+means in ms:
+
+| M | dispatch NR | shipped | `OG_SMEM` | `+LAZY` | LAZY vs shipped |
+|---|---|---|---|---|---|
+| 2 | 2 | 0.1717 | 0.1533 | 0.1532 | −10.8 % |
+| 3 | 2 | 0.1962 | 0.1729 | 0.1732 | −11.7 % |
+| **5** | **4** | **0.1958** | **0.2729** | **0.2697** | **+37.8 %** |
+| 8 | 2 | 0.3610 | 0.2810 | 0.2714 | −24.8 % |
+
+Across every (M, NR) cell the **lazy-vs-smem** delta is inside ±3.4 %. The 20 registers were not the
+binding cost of the staged kernel, so giving them back changes nothing — which retires B8', and with
+it the whole of B8: F67 killed both reroutes, F68 killed split-K on numerics, F74 took the win that
+was there, F78 closed double-buffering, and this closes `o:wo_a`.
+
+### The side result: F55's 40 % kill was M=5-only, and the sign flips below M=4
+
+Look at that table again along **M** rather than along NR. F55 swept NR at **M=5 only** and the
+`OG_SMEM` note has read "40 % regression" ever since — and it reproduces exactly here (+39.4 % at
+M=5/NR=4). But at M=2 and M=3 the staged kernel beats the shipped one by **10.8 % and 11.7 %**
+against the NR the dispatch actually picks, and at M=8 by 24.8 %. Nothing about F55 was wrong; it was
+one column of a two-axis table. New trap 24: **before re-deriving a retired lever's mechanism, check
+which axes its killing measurement actually varied.**
+
+Priced honestly it is still small, and it is logged as **B8'' at ~0.4 %, SUB-1 %, not counted toward
+the pivot queue**: `o:wo_a` is 10.74 ms of an 85.9 ms K=2 verify and 10.26 of 104.7 at K=3
+(`evidence/kchunk.log`), and only 4 of the 9 verifies in a canonical run are K≤3 → 4.68 ms of
+1194.7 = 0.4 %, before the trap-3 discount. M=4 sits on the crossover and the bench skips it.
+
+### The mandated clean re-baseline, which turned into the control this project lacked
+
+`baseline.dprof_runs_since_clean` was 2, so step 6 forced a CLEAN run: **spec 22.07 tok/s, base AR
+13.78 tok/s (72.6 ms/tok), acceptance 2.89, 1.60x, GATE PASS, LOSSLESS GATE PASS**, first token
+11111, generated sequence identical to `clean_post_f76.log`.
+
+**This is not a +1.4 % gain.** The lever shipped default OFF, `OG_SMEM` is default OFF, and ptxas
+confirms the shipped kernel unchanged — so this run and `clean_post_f76.log` measure the *same
+default arm*, and the nine verifies pair 1:1 at identical K and identical accept counts:
+
+| verify | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | Σ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| K, accepted | 2, 1/1 | 2, 1/1 | 4, 1/3 | 2, 1/1 | 4, 3/3 | 3, 2/2 | 5, 4/4 | 5, 1/4 | 4, 3/3 | |
+| f76 ms | 109.2 | 115.5 | 141.3 | 117.1 | 141.8 | 127.5 | 155.6 | 155.8 | 148.6 | 1212.4 |
+| f79 ms | 107.4 | 114.1 | 137.8 | 115.6 | 140.8 | 127.0 | 154.9 | 154.2 | 142.9 | 1194.7 |
+| delta | −1.6 % | −1.2 % | −2.5 % | −1.3 % | −0.7 % | −0.4 % | −0.4 % | −1.0 % | −3.8 % | **−1.5 %** |
+
+**Nine out of nine in the same direction, on an unchanged binary.** The "±0.8 % own spread" F76 and
+F78 quoted for this instrument is the spread *within* a matched pair; the floor for the **cross-run**
+comparison those findings actually performed is **~1.5 %, and it is not zero-mean**. F76 (+0.1 %) and
+F78 (+0.28 %) were called null and stay null — this only strengthens both. F74's +6.1 % clears it 4x.
+But no cross-run claim under ~1.5 % is supportable here, and that is the size of every remaining §4
+item, including the B8'' found above. New trap 25.
+
+### Disposition
+
+`OG_SMEM_LAZY=1` opts in and requires `OG_SMEM=1`; the default is unchanged. **B8 and B8' are
+retired**; B8'' is logged sub-1 %. `pivot_criterion.open_nontraining_levers` falls **2 → 1** (S6
+alone: `B8-cpasync` stays uncounted as a different kernel, B1 and B8'' are sub-1 %, S5/S7 need
+training, B5 needs the quantisation constraint relaxed, B9 is prefill). `consecutive_sub_half_pct`
+goes **2 → 3**, which **fires the pivot criterion** — three consecutive cycles (F76 +0.1 %, F78
++0.28 %, F79 negative) adopting nothing ≥1 %. That is the criterion working, not failing: the kernel
+queue is one item deep, its own measuring instrument cannot resolve what is left in it, and S5 — the
+draft-head fine-tune, +24 % at acceptance 3.6, lossless by construction — is the lever that is
+actually left.

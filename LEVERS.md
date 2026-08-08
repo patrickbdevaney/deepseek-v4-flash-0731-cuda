@@ -16,14 +16,25 @@ Rules of the road:
 
 ## 1. Where the time actually goes
 
-Current baseline (prompt 0, clocks pinned, **post-Finding-76, CLEAN**): **21.76 tok/s speculative**,
-**13.64 tok/s base AR** (73.3 ms/tok), acceptance **2.89**, speedup **1.60x**.
-`evidence/clean_post_f76.log` — no `DSV4_DPROF`, no `DSV4_KSWEEP`, matching `final6.log`'s config
-exactly, GATE PASS and LOSSLESS GATE PASS. Supersedes the 20.44/13.50 of `final6.log`: **+6.5 % spec,
-+1.0 % base**.
+Current baseline (prompt 0, clocks pinned, **post-Finding-79, CLEAN**): **22.07 tok/s speculative**,
+**13.78 tok/s base AR** (72.6 ms/tok), acceptance **2.89**, speedup **1.60x**.
+`evidence/clean_post_f79.log` — no `DSV4_DPROF`, no `DSV4_KSWEEP`, GATE PASS and LOSSLESS GATE PASS.
 
-The re-baseline that was three cycles overdue is done (Finding 77), and it settled two things the
-stale line could not. **Acceptance is unchanged at 2.89** against final6's 2.89 — F73 and F74 both
+**Read that as a variance measurement, not a gain.** F79's lever shipped default OFF and the engine's
+default arm is byte-for-byte the arm that produced `evidence/clean_post_f76.log` (21.76 / 13.64) —
+`ptxas -v` confirms `ogroup_gemv_mk_kernel<5,4,false>` unchanged at 64 registers / 44 bytes spill. So
+**+1.4 % spec and +1.0 % base is what two CLEAN runs of an identical binary differ by**, and the nine
+paired verifies say the same thing more sharply: 1212.4 → **1194.7 ms, −1.5 %, all nine in the same
+direction** at identical K and identical accept counts.
+
+That is the control this project never had, and it **re-prices its own instrument**. The
+nine-paired-verify spread quoted as ±0.8 % in F76/F78 is the spread *within* a matched pair; the
+floor for the **cross-run** comparison those findings actually made is **~1.5 %, and it can be
+systematic in one direction**. F76 (+0.1 %) and F78 (+0.28 %) were called null and stay null. F74's
++6.1 % clears it 4x. But **no future cross-run claim below ~1.5 % is supportable on this instrument** —
+which is exactly the size of every lever now left in §4.
+
+The previous re-baseline (Finding 77) settled two things the stale line could not. **Acceptance is unchanged at 2.89** against final6's 2.89 — F73 and F74 both
 claimed bit-identical, and a pure kernel win must leave drafting untouched, so this is the claim
 holding where it could have failed silently. And **dprof overhead is ~0.4 %** (21.76 clean vs 21.68
 with dprof), inside the run-to-run band — the profiler is not distorting the marks it reports, which
@@ -47,15 +58,17 @@ differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, cloc
 | `cattn:compress`, `cattn:sparse`, misc | ~3.5 | 3 % | already forked |
 
 **The fp8 GEMM block (`q_proj` + `ogroup` = 33.8 ms, 27 %) is still the largest region outside the
-MoE, and F74 proved it is not at the roofline — but as of F78 there is no untried move left on its
-tile half.** Its four marks are two different kernels: `q:wq_b`, `q:wq_a`, `o:wo_b` are the
+MoE, and F74 proved it is not at the roofline — but as of F79 it has NO untried named move at all:
+F78 closed the tile half, F79 closed `o:wo_a`.** Its four marks are two different kernels: `q:wq_b`, `q:wq_a`, `o:wo_b` are the
 smem-staged fp8 tile (F74 fixed their MLP; **F78 measured its double buffer at +0.28 %, the last
 named move, and the mark it targeted, `o:wo_b`, went +2.8 % the wrong way**), and `o:wo_a` is
 `ogroup_gemv_mk_kernel`. **F76 attributed `o:wo_a` and it is not the cheap one:** it is
 *latency*-bound (8.1 of 13.0 cycles between issues on an L1TEX scoreboard, Memory Throughput 41 %,
 Compute 49 %), it spills 44 bytes against a 64-register `__launch_bounds__` cap, and both of its
 knobs — NR and `OGMK_BLOCKS_PER_SM` — are at measured optima. Deleting instructions from it returns
-nothing; see §3.
+nothing, and **F79 closed the last idea for giving it registers back**: the lazy smem read moves its
+spill 396 → 368 bytes at an unchanged 64 registers, because ptxas re-hoists what the source declined
+to name. See §3.
 
 **Use the K=1 column as the achievability bar, not the roofline.** At M=1 the same weight bytes go
 through `fp8_gemv_m1_kernel`, so K=1 vs K=5 in one dprof report is a free, controlled measurement of
@@ -127,6 +140,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | smem staging of `o` in the ogroup M=K GEMV | bit-exact, 8x less activation traffic, and **a wash** at the NR the engine uses. The barrier destroys the warp skew that was hiding latency. Kept behind `OG_SMEM=1` (F55) |
 | **any instruction-count cure for `ogroup_gemv_mk_kernel`** (WS1 scale hoist, and by the same argument the fp8x2 cvt pairing and `exp2f`→`__int_as_float(e<<23)`) | **the kernel is LATENCY-bound, so deleted instructions return nothing.** ncu: 8.1 of its 13.0 cycles between issues are L1TEX scoreboard stalls; Memory Throughput 41 %, Compute 49 %. WS1 removes NR−1 redundant scale loads and `exp2f` per k-block, is **72/72 bit-identical** (`gate_og_ws1`), and gemm_bench scored it −7.6 % at M=2/NR=2 and −14.8 % at M=3/NR=4 — in situ it is worth **+0.1 %** on the nine paired spec verifies (1219.4 → 1220.8 ms), spec 21.68 → 21.67 tok/s, every ksweep K inside ±0.5 %. Kept behind `OG_WS1=1`, default OFF. A change here must move the kernel's **memory** behaviour or it is priced at zero (F76) |
 | **double-buffering the fp8 tile's staged K-chunk** (issue round n+1's global loads before round n's mma) | **bit-identical (`gate_tc_fp8_kc` 1134/1134) and +0.28 %** on the nine paired spec verifies (1219.4 → 1222.8 ms); spec 21.68 → 21.62, ksweep K=5 +0.1 %. The mark it targeted went the WRONG way at every K≥2: `o:wo_b` **+2.8 %** at K=5, matching the bench's +3.1 % in sign and size. Mechanism: the prefetch works, but one KC=2 round is 8 mma plus L1/L2-resident A loads — a few hundred cycles against a ~600-cycle miss — so it hides only part of the latency and pays a second live register array for the rest. **Unbounded it also costs 4 registers, 64 → 68, which at 256 threads is 4 → 3 blocks/SM and cost up to +38.5 % in the bench** (see the trap). Kept behind `TCB_DB=1`, default OFF (F78) |
+| **B8': the `OG_SMEM` variant reading `o4[m]` LAZILY per m from shared memory** | **`ptxas -v` killed it before the bench, which is what the falsification criterion asked for.** The premise was that `float4 o4[M]` is 4M = 20 live registers at M=5 in a kernel already 8 over its 64-register cap, and that giving them back would cross an occupancy step (trap 21). ptxas says the live set barely moves: `ogroup_gemv_mk_smem_kernel<5,4>` goes **396 → 368 bytes of spill at an unchanged 64 registers (−7%, not −16 registers)**, because ptxas *re-hoists* the smem loads back to where `o4[M]` was — that is the better schedule and the source cannot forbid it. The bench agrees: at the shipped M=5/NR=4 it is **−1.1 %** against the `OG_SMEM` arm it modifies and still **+37.8 %** against the kernel that ships (0.2697 vs 0.1958 ms), and across every (M, NR) the lazy-vs-smem delta is inside ±3.4 %. Bit-identical at all 9 M (`gate_ogroup_gemv`, extended to sweep it). Kept behind `OG_SMEM_LAZY=1`, default OFF. **This was B8's last named idea, so `o:wo_a` now has none** (F79) |
 | hoisting a loop-invariant **pointer** in a register-starved kernel | not a lever, a trap, but it belongs here with its number: hoisting `wsc + (gr0/128)*scw` out of the k-loop took `<5,4>` from **44 to 60 bytes of spill** and cost 4.4 %. Two permanently-live registers beat three short-lived ones only when there are registers to spare. A 32-bit offset restored it (F76) |
 
 **Whole hypothesis classes**
@@ -148,8 +162,9 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
 | ~~B0~~ | ~~audit every kernel for thread-per-output at decode shapes~~ | **NAMED LIST EXHAUSTED, F71 + F73** | `index_score` **+4.4 %** (F71). `k_moe_prefix` and `k_build_tiles`, both `<<<1,1>>>` over `nr=160`, fixed in F73: `moe:group` −20.3 %, and both now sit at the **launch-latency floor** (0.24–0.25 ms / 43 layers, vs 0.19 for a trivially parallel neighbour). The rest are measured under B0's own 0.5 ms bar: `k_topk_verify`/`k_topk_decode` → `i:topk` = **0.12 ms**; `k_dg`/`k_advance_T`/`k_incr` are genuinely one scalar's work. **The class paid twice and is now dry** — reopening needs a *new* kernel with a bad geometry, not another pass over these. |
-| B8 | **the fp8 GEMM block — TILE HALF NOW CLOSED (F78); only the `o:wo_a` occupancy idea is left** | **~1–2 % (was ~5 %)** | **F78 closed the one named move on the three tile marks.** Double-buffering the staged chunk is bit-identical and worth **+0.28 %** in situ, with `o:wo_b` **+2.8 %** — the wrong way, in agreement with the bench. With F67 (both reroutes), F68 (split-K, numerics) and F74 (the win that was there), **the tile has no untried idea left except `cp.async` staging global→shared**, which removes the register array entirely but must clear the same occupancy bar F78 failed. What remains of B8 is the single item below on `o:wo_a`. |
-| B8' | **`o:wo_a` (`ogroup_gemv_mk_kernel`, 11.4 ms): the `OG_SMEM=1` variant reading `o4[m]` LAZILY per m from shared memory** | **~1–2 %** | The only idea left that moves ~16 registers rather than 3, in a kernel that provably **is** register-starved: `<5,4>` spills 44 bytes against a 64-register `__launch_bounds__` cap. F55 measured this variant −40 % at NR=4 *with* the 20-register `o4[M]` still in it, so the register argument was never tested. F78 sharpens the prior both ways — it showed an occupancy step is worth up to 38 % when you cross it, and it showed the bench overstates what a register buys in situ. **Falsify with `nvcc -Xptxas -v` BEFORE building**: if the spill does not fall, stop. Instruction-count cures here are retired as a family (§3, F76). |
+| ~~B8~~ | ~~the fp8 GEMM block~~ | **FULLY CLOSED, F78 + F79** | **F78 closed the tile half; F79 closed `o:wo_a`.** What remains is `cp.async` staging (below), which is a different kernel, not a tuning of this one. Original note kept: **F78 closed the one named move on the three tile marks.** Double-buffering the staged chunk is bit-identical and worth **+0.28 %** in situ, with `o:wo_b` **+2.8 %** — the wrong way, in agreement with the bench. With F67 (both reroutes), F68 (split-K, numerics) and F74 (the win that was there), **the tile has no untried idea left except `cp.async` staging global→shared**, which removes the register array entirely but must clear the same occupancy bar F78 failed. What remains of B8 is the single item below on `o:wo_a`. |
+| ~~B8'~~ | ~~`o:wo_a`: the `OG_SMEM=1` variant reading `o4[m]` LAZILY per m from shared memory~~ | **RETIRED, F79** | `ptxas -v` answered before the bench, exactly as the criterion demanded: spill **396 → 368 bytes at an unchanged 64 registers**, a −7 % move where ~16 registers were predicted, because ptxas re-hoists the smem loads back to where `o4[M]` was. Bench: **−1.1 %** vs the `OG_SMEM` arm, **+37.8 %** vs the shipped kernel. See §3. **`o:wo_a` now has no untried named idea at all**, and with it B8 is fully closed. |
+| B8'' | **M-gate `OG_SMEM` on: F55's 40 % kill was measured at M=5 ONLY, and the sign flips below M=4** | **~0.4 % — SUB-1 %, does not count toward the pivot queue** | New evidence, not a new argument (F79). F55 swept NR at M=5 and retired the variant on that one column. Sweeping **M** as well, same COLD harness, 3 alternating replicates (`evidence/oglazy_bench.log`), against the NR the dispatch actually picks at each M: **M=2 0.1717 → 0.1533 (−10.7 %), M=3 0.1962 → 0.1729 (−11.9 %), M=5 0.1958 → 0.2729 (+39.4 %, F55's number reproduced), M=8 0.3610 → 0.2810 (−22.2 %)**. So `ogsmem` gated on `bs<=3` is a real candidate. **Priced honestly it is small**: `o:wo_a` is 10.74 ms of an 85.9 ms K=2 verify and 10.26 of 104.7 at K=3, and only 4 of the 9 verifies in a canonical run are K≤3 → **~0.4 % end-to-end**, before the trap-3 discount that F76 (bench −7.6 %→ in situ +0.1 %) and F78 (bench +3.1 % → in situ +2.8 %) both demand. M=4 is unmeasured — the bench skips it and it is on the crossover. |
 | ~~B8-tile~~ | ~~the three tile marks `q:wq_b` + `o:wo_b` + `q:wq_a` = 22.5 ms~~ | **CLOSED, F78** | Kept for the achievability bar it established: **the target was never 233 GB/s** but the M=1 GEMV's own measured rate on the same weight bytes — `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). **Bytes are counted (F74) and it is NOT at roofline.** The target is not 233 GB/s — it is the M=1 GEMV's own measured rate on the same weight bytes: `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). Against that the three tile marks hold ~6.5 ms. **The one remaining move on them is to double-buffer the staged tile so round n+1's loads issue before round n's mma** — F67 closed both reroutes, F68 closed split-K on numerics. **`o:wo_a` (3.3 ms of the old estimate) is NO LONGER a cheap 7 %: F76 attributed it.** `ogroup_gemv_mk_kernel<5,4>` is *latency*-bound (8.1 of 13.0 cycles between issues on an L1TEX scoreboard), spills 44 bytes against a 64-register cap, and sits at a **measured local optimum in both knobs** — NR (1/2/4/8) and `OGMK_BLOCKS_PER_SM` (2/3/4, re-swept in F76 with the spill reduced). Instruction-count cures are retired as a family (§3). The only untried idea that moves ~16 registers instead of 3: **the `OG_SMEM=1` variant reading `o4[m]` lazily per m from shared memory** instead of holding M float4s live — smem makes lazy reads affordable where global loads need the MLP. F55 measured that variant a 40 % regression at NR=4 *with* the 20-register `o4[M]` still in it, so the register argument was never tested; falsify with `ptxas -v` before building anything. |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
@@ -290,6 +305,30 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    function and give only the variant that needs the bound its own `__global__` entry, then re-read
    `ptxas -v` for BOTH (F78).
 
+23. **You cannot free a register by not writing it down.** B8' proposed deleting a `float4 o4[M]`
+   array and re-reading the same value from smem inside the loop that consumes it, to give ~16
+   registers back to a kernel 8 over its cap. ptxas moved **396 → 368 bytes of spill at an unchanged
+   64 registers**: `sh` is not written in that loop, so hoisting the loads back to exactly where the
+   array had been is legal *and* is the lower-latency schedule, and ptxas does it. **Source-level
+   register hints only bind when the transform changes what the compiler is ALLOWED to do** (an
+   aliasing fact, a barrier, a different address). Trap 19 is the same lesson from the other
+   direction: there, the source forced two registers to be live and ptxas could not undo it. Rewrites
+   that merely *suggest* fewer live values are free to be ignored, and are (F79).
+24. **A kernel retired on one shape's sweep is retired on one shape.** F55 killed `OG_SMEM` on a
+   NR sweep taken at **M=5 only**, and the note has read "40 % regression" for eight findings. Adding
+   the **M** axis to the same harness flips the sign: −10.7 % at M=2, −11.9 % at M=3, +39.4 % at M=5,
+   −22.2 % at M=8. Nothing about the old measurement was wrong; it was one column of a two-axis
+   table. **Before re-deriving a retired lever's mechanism, check which axes its killing measurement
+   actually varied** — that is cheaper than any new idea, and here it cost one bench run (F79).
+25. **Two CLEAN runs of the SAME binary differ by 1.5 % on the paired-verify instrument, in one
+   direction.** F79 shipped default OFF, so its clean run measured the identical default arm as
+   `clean_post_f76.log`, and the nine verifies pair 1:1 at identical K and accept counts for
+   **1212.4 → 1194.7 ms (−1.5 %), all nine negative**; spec 21.76 → 22.07. Nothing changed. The
+   "±0.8 % own spread" quoted in F76/F78 is the *within*-pair figure; the cross-run floor is ~1.5 %
+   and it is not zero-mean over nine points. **Any cross-run end-to-end claim under ~1.5 % is
+   unsupportable on this instrument**, which is the size of everything left in §4 — the reason the
+   pivot criterion exists (F79).
+
 ---
 
 ## 7. Instruments available (all off by default)
@@ -314,4 +353,5 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 | `tests/gate_og_ws1` | is `OG_WS1=1` still bit-identical to the default? memcmp over 72 (M, NR, shape) points |
 | `tools/dprof_diff.sh a.log b.log [mark...]` | pairs two `DSV4_DPROF=1 DSV4_KSWEEP=1` logs by (K, sub-op) and prints the delta, including the ksweep row. **Use it to find the control the change must not have moved** (trap 12) |
 | `nvcc -Xptxas -v` | registers and **spill bytes** per template instantiation. One recompile; it answers occupancy questions the bench can only rank (traps 18, 19) |
+| `OG_SMEM_LAZY=1` | with `OG_SMEM=1`, re-read the staged activation float4 from smem per (r,m) instead of hoisting M of them into 4M registers. **Bit-identical and worth −1.1 % on an arm that is itself +37.8 %** — default OFF, see §3 (F79) |
 | `TCB_DB=1` | prefetch the fp8 tile's next staged chunk before the current mma. **Bit-identical and worth +0.28 %** — default OFF, see §3 (F78). `TCB_DB_BPS` is the `__launch_bounds__` blocks/SM the DB entry is held to (4) |

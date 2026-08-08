@@ -104,21 +104,33 @@ int main(){
         // there to prevent; bitwise equality will not.
         float* Csm; CU(cudaMalloc(&Csm,(size_t)M*rows*4));
         setenv("OG_SMEM","1",1); ogroup_gemm_fp8(Csm,dob,dw,dsc,M,G,R,Kd,0);
+        // OG_SMEM_LAZY (Finding 79) re-reads the staged float4 from smem per (r,m) instead of
+        // hoisting M of them into registers. Same address, same value, same fma order — so it is
+        // bit-identical BY CONSTRUCTION and swept here for the same reason gate_tc_fp8_kc sweeps
+        // DB: a variant reachable by an env var that nothing gates is a variant that has stopped
+        // being tested. Compared against the OG_SMEM arm, which is itself compared against the
+        // shipped kernel above, so a break in either link shows up.
+        float* Clz; CU(cudaMalloc(&Clz,(size_t)M*rows*4));
+        setenv("OG_SMEM_LAZY","1",1); ogroup_gemm_fp8(Clz,dob,dw,dsc,M,G,R,Kd,0);
+        unsetenv("OG_SMEM_LAZY");
         unsetenv("OG_SMEM");
         for(int m=0;m<M;++m) ogroup_gemm(Coracle+(size_t)m*rows, dob+(size_t)m*G*Kd, dwf,1,G,R,Kd,0);
         CU(cudaDeviceSynchronize());
-        std::vector<float> vnr((size_t)M*rows), v1((size_t)M*rows), vo((size_t)M*rows), vsm((size_t)M*rows);
+        std::vector<float> vnr((size_t)M*rows), v1((size_t)M*rows), vo((size_t)M*rows), vsm((size_t)M*rows),
+                           vlz((size_t)M*rows);
         CU(cudaMemcpy(vnr.data(),Cnr,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
         CU(cudaMemcpy(v1.data(),C1,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
         CU(cudaMemcpy(vo.data(),Coracle,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
         CU(cudaMemcpy(vsm.data(),Csm,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
+        CU(cudaMemcpy(vlz.data(),Clz,(size_t)M*rows*4,cudaMemcpyDeviceToHost));
         size_t nbit=0; for(size_t i=0;i<vnr.size();++i) if(vnr[i]!=vsm[i]) ++nbit;
+        size_t nlz=0;  for(size_t i=0;i<vnr.size();++i) if(vnr[i]!=vlz[i]) ++nlz;
         Cmp p=compare(vnr,v1), q=compare(vnr,vo);
-        bool o2 = ok(p) && ok(q) && (nbit==0); mkok = mkok && o2;
-        printf("[oggemv M=%-2d NR vs NR=1] cos=%.9f rms=%.1e %-4s | vs f32 oracle cos=%.9f rms=%.1e %-4s | smem bit-exact %zu diffs %-4s\n",
+        bool o2 = ok(p) && ok(q) && (nbit==0) && (nlz==0); mkok = mkok && o2;
+        printf("[oggemv M=%-2d NR vs NR=1] cos=%.9f rms=%.1e %-4s | vs f32 oracle cos=%.9f rms=%.1e %-4s | smem bit-exact %zu diffs %-4s | smem+lazy %zu diffs %-4s\n",
                M, p.cos,p.rms_rel, ok(p)?"PASS":"FAIL", q.cos,q.rms_rel, ok(q)?"PASS":"FAIL",
-               nbit, nbit==0?"PASS":"FAIL");
-        cudaFree(dob); cudaFree(Cnr); cudaFree(C1); cudaFree(Coracle); cudaFree(Csm);
+               nbit, nbit==0?"PASS":"FAIL", nlz, nlz==0?"PASS":"FAIL");
+        cudaFree(dob); cudaFree(Cnr); cudaFree(C1); cudaFree(Coracle); cudaFree(Csm); cudaFree(Clz);
     }
     bool pass = ok(a) && ok(b) && ok(c) && mkok;
     printf("\nGate OGGEMV: %s\n", pass?"PASS":"FAIL");

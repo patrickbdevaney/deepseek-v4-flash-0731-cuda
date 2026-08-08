@@ -21,3 +21,5 @@
   - no passing LOSSLESS gate in prefill_long.log
 ## 2026-08-08T03:14:35-04:00 — PUSHED 43f87feb89be152fa96f44570e191d0cec58e219
   the clean re-baseline F73 and F74 both skipped: 21.76 tok/s spec, 13.64 base
+## 2026-08-08T04:52:25-04:00 — PUSHED 8b1abc721c6ce81478b6df34e8a7d59b4cb981c0
+  fp8 tile double-buffer: bit-identical, +0.28% in situ. NEGATIVE (F78), B8's tile half closed

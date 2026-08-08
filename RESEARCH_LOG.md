@@ -51,6 +51,7 @@ An unrecorded search will be run again.
 | 2026-08-08 | — | *(cycle 12: research SKIPPED per §1 — B8 and S6 were both open at ≥1 %, meeting the ≥2-open-levers bar. F76 came from `ncu` on this engine, like every adoption before it. The research branch has still never executed.)* | n/a | — |
 | 2026-08-08 | A-F | **operator deep-research dossier** (web-chat, ~24 sources: FastMTP, HyperDFlash, SuffixDecoding, Sequoia, EVICT/EcoSpec/AcceptMoE, REAP, Thor MLPerf) | **4 promoted, 6 already done here, 3 inapplicable** — full triage in §3a | S5 S6 S7 S4 |
 | 2026-08-08 | — | *(cycle 13: research SKIPPED per §1 — B8 (~5 %, the tile double-buffer) and S6 were both open at ≥1 %, meeting the ≥2-open-levers bar. F78 came from `ptxas -v` and `gemm_bench` on this engine. The research branch has STILL never executed, and after F78 the kernel queue is down to B8' + S6 — the next cycle is the likeliest one to take it.)* | n/a | — |
+| 2026-08-08 | — | *(cycle 14: research SKIPPED per §1 — B8' (~1–2 %) and S6 were both open at ≥1 % at ORIENT time, meeting the ≥2-open-levers bar. F79 came from `ptxas -v` and `gemm_bench` on this engine, like every adoption and every kill before it. **B8' died this cycle, so only S6 is left at ≥1 % and the research branch is DUE next cycle** — it has still never executed.)* | n/a | — |
 
 ## 3. Ideas seen and rejected before implementation
 
@@ -214,3 +215,4 @@ The loop stops finding levers when: `LEVERS.md` §4/§5 have no open item with e
 two consecutive research phases produce nothing that survives §1's constraints. At that point the
 engine is at its structural limit for this checkpoint and the honest move is to say so in
 `FLYWHEEL_STATE.json` and stop, not to keep cycling.
+

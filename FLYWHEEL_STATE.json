@@ -1,43 +1,43 @@
 {
-  "cycle": 13,
+  "cycle": 14,
   "phase": "A",
-  "consecutive_sub_half_pct": 2,
+  "consecutive_sub_half_pct": 3,
   "phaseB_top_history": [
     "moe-latency",
     "moe-latency",
     "moe-latency"
   ],
   "baseline": {
-    "spec_tok_s": 21.76,
-    "base_tok_s": 13.64,
+    "spec_tok_s": 22.07,
+    "base_tok_s": 13.78,
     "acceptance": 2.89,
     "speedup": 1.6,
-    "source_log": "evidence/clean_post_f76.log",
+    "source_log": "evidence/clean_post_f79.log",
     "measured": "2026-08-08",
-    "dprof_runs_since_clean": 2,
-    "note": "CLEAN run -- no DSV4_DPROF, no DSV4_KSWEEP -- at the post-F76 build, matching final6.log's config exactly (NDEC=8, 24 spec tokens, block=5, passes=1, adaptK=1.50, prompt 0, clocks pinned). GATE PASS and LOSSLESS GATE PASS. Supersedes the stale 20.44/13.50 of final6.log, which predated F73/F74. Acceptance is UNCHANGED at 2.89 vs final6's 2.89, so F73+F74 are pure kernel wins with no drafting change -- exactly what a bit-identical claim predicts. Also settles the dprof-overhead question the state note flagged: 21.76 clean vs 21.68 with dprof is 0.4%, inside the run-to-run band, confirming F73's observation from the other side. CYCLE 13 spent its run on DSV4_DPROF=1 DSV4_KSWEEP=1 (evidence/dbuf.log) to adjudicate F78, so dprof_runs_since_clean is 1. The clean 21.76/13.64 line STANDS and was not re-measured: F78 shipped default OFF, so the engine's default arm is unchanged from the build that produced it. Do not compare 21.62/13.69 from dbuf.log against 21.76 -- that log carries dprof overhead and its control is evidence/kchunk.log at 21.68/13.78."
+    "dprof_runs_since_clean": 0,
+    "note": "MANDATED CLEAN re-baseline (dprof_runs_since_clean was 2). No DSV4_DPROF, no DSV4_KSWEEP; NDEC=8, 24 spec tokens, block=5, passes=1, adaptK=1.50, prompt 0; clocks pinned, caches dropped. GATE PASS, LOSSLESS GATE PASS, first token 11111, acceptance 2.89 unchanged. CRITICAL READING: this is NOT a gain over clean_post_f76.log's 21.76/13.64. F79's lever shipped default OFF and ptxas confirms ogroup_gemv_mk_kernel<5,4,false> unchanged at 64 registers / 44 bytes spill, so the two clean runs measure the IDENTICAL default arm. The nine verifies pair 1:1 at identical K and identical accept counts for 1212.4 -> 1194.7 ms = -1.5%, ALL NINE in the same direction. That makes this run the cross-run VARIANCE control the project never had: the '+-0.8% own spread' quoted for the paired-verify instrument in F76/F78 is the WITHIN-pair figure, and the cross-run floor is ~1.5% and is not zero-mean. F76 (+0.1%) and F78 (+0.28%) stay null; F74's +6.1% clears it 4x; nothing below ~1.5% can be claimed cross-run again."
   },
   "queue": [
-    {
-      "id": "B8'",
-      "stage": "open",
-      "what": "o:wo_a (ogroup_gemv_mk_kernel, 11.4 ms) ONLY. B8's tile half is CLOSED by F78: double-buffering the staged K-chunk is bit-identical (1134/1134) and worth +0.28% on the nine paired verifies, with o:wo_b itself +2.8% -- the wrong way, agreeing with the bench's +3.1%. What is left is the OG_SMEM=1 variant reading o4[m] lazily per m from shared memory.",
-      "expected": "~1-2% of the K=5 verify (was ~5% when the tile was still open)",
-      "falsify": "`nvcc -Xptxas -v` BEFORE building: <5,4> spills 44 bytes against a 64-register cap, and this is the only idea that moves ~16 registers rather than 3. If the spill does not fall, stop. F55 measured this variant -40% at NR=4 with the 20-register o4[M] still live, so the register argument was never tested. Note F78 is the second cycle running to show the bench overstates what a register buys in situ, and trap 21: what matters is which side of regfile/(threads*regs) the count lands on."
-    },
     {
       "id": "S6",
       "stage": "open",
       "what": "suffix-automaton / prompt-lookup drafting ahead of the MTP, falling THROUGH to the MTP on a short match. No training, no second model resident, lossless by construction (the verify corrects every draft).",
       "expected": ">=1%; SuffixDecoding reports 1.7x over plain Prompt-Lookup on agentic workloads",
-      "falsify": "the draft is only ~13 ms of a 151 ms cycle, so the win is NOT the skipped head -- it is any acceptance gained at the same K. Price it as acceptance, not as draft time saved."
+      "falsify": "the draft is only ~13 ms of a 151 ms cycle, so the win is NOT the skipped head -- it is any acceptance gained at the same K. Price it as acceptance, not as draft time saved. NOTE F79: it must clear the ~1.5% cross-run floor, so measure it as ACCEPTANCE (a counted integer, no variance problem) and not as tok/s."
+    },
+    {
+      "id": "B8''",
+      "stage": "open-sub-1pct",
+      "what": "M-gate OG_SMEM on: F55's 40% kill was measured at M=5 ONLY and the sign flips below M=4. Bench, 3 alternating replicates, against the NR the dispatch picks: M=2 0.1717->0.1533 (-10.7%), M=3 0.1962->0.1729 (-11.9%), M=5 0.1958->0.2729 (+39.4%, F55 reproduced), M=8 0.3610->0.2810 (-22.2%).",
+      "expected": "~0.4% -- SUB-1%, does NOT count toward the pivot queue, and BELOW the 1.5% cross-run floor F79 measured, so it is not resolvable end-to-end with the current instrument",
+      "falsify": "o:wo_a is 10.74 ms of an 85.9 ms K=2 verify and 10.26 of 104.7 at K=3, and only 4 of 9 verifies are K<=3 -> 4.68 ms of 1194.7. M=4 is unmeasured and sits on the crossover; bench it first."
     },
     {
       "id": "B8-cpasync",
       "stage": "idea-not-open",
       "what": "cp.async (global->shared) staging for the fp8 tile, which removes the NH-uint4 register array entirely instead of doubling it. NOT counted as an open lever: it is a different kernel, not a tuning of this one, and it must clear the same occupancy bar F78 failed.",
       "expected": "unpriced",
-      "falsify": "ptxas -v first; then the same nine-paired-verify instrument."
+      "falsify": "ptxas -v first; then the same nine-paired-verify instrument -- which F79 now shows resolves nothing under ~1.5% cross-run."
     },
     {
       "id": "B1",
@@ -55,40 +55,36 @@
     {
       "id": "RESEARCH",
       "stage": "not_due",
-      "what": "SKIPPED in cycle 12 per RESEARCH_LOG.md section 1: B8 (>=1%) and S6 (>=1%, no training) were both open, meeting the >=2-open-levers bar. Recorded as a row in RESEARCH_LOG.md section 2 so the skip is auditable.",
-      "falsify": "the research branch has still never executed (see loop.untested); the first cycle that takes it is unverified code path"
+      "what": "SKIPPED in cycle 14: B8' (>=1%) and S6 (>=1%, no training) were both open at ORIENT time, meeting the >=2-open-levers bar in RESEARCH_LOG.md section 1. B8' died during the cycle, so the NEXT cycle has only S6 open at >=1% and the research branch is DUE.",
+      "falsify": "the research branch has still never executed (see loop.untested); the first cycle that takes it is an unverified code path"
     }
   ],
   "halt": false,
   "halt_reason": "",
-  "halt_considered": "Not halted. 19/19 gate binaries build and pass, gate_tc_fp8_kc extended to sweep DB and now 1134/1134 bit-exact, and the run's spec and base-AR sequences are byte-identical to the control at identical acceptance with LOSSLESS GATE PASS. The cycle's lever measured null and was defaulted OFF rather than shipped unmeasured.",
+  "halt_considered": "Not halted. 19/19 gate binaries build and pass (the two apparent failures were trap 16 harness artefacts: gate_api's 'a0 failed' matched a naive grep, gate_encoding takes a different path argument and passes 6/6 on its default). gate_ogroup_gemv extended to sweep OG_SMEM_LAZY and bit-exact 0 diffs at all 9 M. The run is CLEAN, GATE PASS + LOSSLESS GATE PASS, and the cycle's lever measured negative and was defaulted OFF rather than shipped.",
   "last_result": {
-    "cycle": 13,
-    "lever": "B8's last named move on the fp8 tile -- double-buffer the staged K-chunk (TCB_DB) -- NEGATIVE, Finding 78. The tile half of B8 is RETIRED; B8' (o:wo_a) is what remains.",
+    "cycle": 14,
+    "lever": "B8' -- the OG_SMEM variant reading o4[m] lazily per m from shared memory. NEGATIVE at its own stated ptxas falsification, Finding 79. B8' is RETIRED and B8 is now FULLY CLOSED.",
     "measured": {
-      "end_to_end": "spec 21.68 -> 21.62 tok/s (-0.3%), base AR 13.78 -> 13.69 (-0.7%); both runs DSV4_DPROF=1 DSV4_KSWEEP=1, clocks pinned, caches dropped",
-      "paired_verifies": "ALL NINE pair 1:1 at identical K and identical accept counts: 1219.4 -> 1222.8 ms = +0.28%, range -1.1% to +1.1%. This instrument moved -5.9% for F74.",
-      "ksweep": "K=1 64.74->64.57 (-0.3%), K=2 80.93->81.53 (+0.7%), K=3 98.05->98.11 (+0.1%), K=4 108.67->109.50 (+0.8%), K=5 121.11->121.19 (+0.1%)",
-      "dprof_target_mark": "o:wo_b K=1 -1.1%, K=2 +4.6%, K=3 +5.0%, K=4 +3.7%, K=5 +2.8% -- the ONE mark this change had to speed up, moving the wrong way at every K>=2 and matching the bench's +3.1% in sign and size",
-      "dprof_other_tile_marks": "q:wq_b K=5 7.98->7.85 (-1.6%), q:wq_a K=5 5.80->5.70 (-1.7%), dprof TOTAL K=5 127.18->127.58 (+0.3%)",
-      "gemm_bench": "COLD, m16+smem B+4, M=5, 3 alternating replicates. UNBOUNDED DB: wo_b +38.5%, sw2 +20.7%, wq_b +13.5%, wq_a +1.2%, sw1/3 -8.4%, wkv -3.7% (evidence/db_bench.log). WITH __launch_bounds__ restoring 4 blocks/SM: wo_b +3.1%, sw2 -1.0%, wq_b +2.4%, wq_a -0.8%, sw1/3 -7.2%, wkv -3.2% (evidence/db_bench2.log).",
-      "ptxas": "DB unbounded takes <8,2> 64 -> 68 registers = 4 -> 3 blocks/SM at 256 threads. Bounded: 64 registers, 8 bytes spill. Control arm re-verified unchanged at 64/64/64/128 registers, 0 spill, for <8,2>/<4,2>/<2,2>/<1,8>.",
-      "losslessness": "26-token spec sequence AND 8-token base-AR sequence both byte-identical to control, acceptance 2.89 = 2.89, LOSSLESS GATE PASS, first token 11111, MATCH 5/5, 19/19 gates PASS"
+      "ptxas": "ogroup_gemv_mk_smem_kernel<5,4>: LAZY=0 64 regs / 396 B spill -> LAZY=1 64 regs / 368 B spill. A -7% move where ~16 registers were predicted. Shipped control ogroup_gemv_mk_kernel<5,4,false> re-verified UNCHANGED at 64 regs / 44 B spill; the LAZY=0 instantiation unchanged at 396, so no trap-22 contamination from the new template parameter.",
+      "gemm_bench": "COLD, 12 rotating copies, 3 alternating replicates per arm (evidence/oglazy_bench.log), means in ms. At the shipped M=5/NR=4: shipped 0.1958, OG_SMEM 0.2729, +LAZY 0.2697 -- LAZY is -1.1% vs the arm it modifies and +37.8% vs the kernel that ships. Across EVERY (M,NR) cell the lazy-vs-smem delta is inside +-3.4%.",
+      "side_result": "F55's 40% kill of OG_SMEM was measured at M=5 ONLY. Adding the M axis: vs the NR the dispatch picks, M=2 0.1717->0.1533 (-10.7%), M=3 0.1962->0.1729 (-11.9%), M=5 0.1958->0.2729 (+39.4%, F55 reproduced exactly), M=8 0.3610->0.2810 (-22.2%). Logged as B8'' at ~0.4% end-to-end, SUB-1%.",
+      "end_to_end": "CLEAN run: spec 22.07 tok/s, base AR 13.78 tok/s, acceptance 2.89, 1.60x, GATE PASS, LOSSLESS GATE PASS. NOT a gain -- the default arm is unchanged, so this is a variance control.",
+      "cross_run_control": "Nine paired verifies against clean_post_f76.log at IDENTICAL K and IDENTICAL accept counts, on an UNCHANGED default arm: 1212.4 -> 1194.7 ms = -1.5%, all nine negative (-1.6/-1.2/-2.5/-1.3/-0.7/-0.4/-0.4/-1.0/-3.8%). The cross-run floor of this instrument is ~1.5% and is not zero-mean.",
+      "gates": "19/19 PASS. gate_ogroup_gemv extended to sweep OG_SMEM_LAZY: bit-exact 0 diffs at M=2,3,5,8,12,16,17,24,33."
     },
     "negative_results": [
-      "THE LEVER ITSELF. The prefetch does issue round n+1's loads before round n's mma, and it is bit-identical -- but one KC=2 round is 8 mma plus L1/L2-resident A loads, a few hundred cycles against a ~600-cycle miss, so it hides only part of the latency and pays a second live register array for the rest.",
-      "A FOUR-register increase (64 -> 68) cost up to 38.5% in the bench because at 256 threads it is the 4 -> 3 blocks/SM step. Restoring the occupancy with __launch_bounds__ recovered 35 of those points. Trap 21.",
-      "__launch_bounds__(T,1) on the SHARED template took the DB=false instantiation from 64 to 84 registers -- minBlocks=1 stops ptxas economising -- which would have silently changed the control arm of this A/B. Split into a __device__ body plus two __global__ entries. Trap 22.",
-      "The only shapes DB helps are W=4 (sw1/3, -7.2%) and W=1 (wkv, -3.2%), which are the shared expert and wkv -- both already forked to a side stream and hidden by F55, which is why nothing reaches the end-to-end number.",
-      "tools/gemm_bench.cu's own build line in its header is stale: it now needs kernels/dprof.cu or it fails at LINK with undefined dprof_begin/dprof_end from moe.cu."
+      "THE LEVER ITSELF. You cannot free a register by not writing it down: `sh` is never written in that loop, so ptxas re-hoists the ld.shared back to exactly where the o4[M] array had been -- legal, and the lower-latency schedule. Trap 19 is the same lesson from the other direction. New trap 23.",
+      "The 20-register o4[M] array was never the binding cost of the staged kernel, so F55's -40% at NR=4 has a different cause and the register argument, now tested, is dead.",
+      "THE INSTRUMENT. Two clean runs of the same binary differ by 1.5% on the nine paired verifies with all nine in one direction. Everything left in LEVERS.md section 4 is smaller than that. New trap 25."
     ],
     "controls": [
-      "moe:w1w3 (-0.5% at K=5) and i:score (-2.6% at K=5) cannot have been touched by this change and sit in the same band as the tile marks that 'improved'.",
-      "o:wo_b at K=1 is -1.1% and near-flat, as it must be: at M=1 the same bytes go through fp8_gemv_m1_kernel, which this change does not touch. The regression appears only at K>=2 where the tile actually runs.",
-      "The nine paired spec verifies are the tight instrument (own spread +-0.8%) and they say +0.28%."
+      "The shipped kernel's ptxas line is unchanged (64 regs / 44 B), the generated token sequence is identical to clean_post_f76.log, and acceptance is 2.89 = 2.89 -- so the -1.5% cannot be the change and must be run-to-run.",
+      "The bench reproduced F55's M=5/NR=4 number (+39.4% vs F55's ~+40%) three years of findings later, on a rebuilt binary, which validates the harness before its new M columns are believed.",
+      "M=1 is flat across all three arms (0.1596-0.1624 ms), as it must be: at M=1 ogroup_gemm_fp8 dispatches ogroup_gemv_fp8_kernel and never reaches any of this code."
     ]
   },
-  "counter_note": "consecutive_sub_half_pct 1 -> 2: F78 adopted nothing. ONE MORE cycle adopting nothing >=1% fires the PIVOT. F78 is bit-identical and correct but measured +0.28% on the tightest instrument, so it ships DEFAULT OFF behind TCB_DB=1.",
+  "counter_note": "consecutive_sub_half_pct 2 -> 3. THE PIVOT CRITERION HAS FIRED on its second arm: three consecutive cycles adopting nothing >=1% (F76 +0.1%, F78 +0.28%, F79 negative). open_nontraining_levers is 1, not 0, so the first arm has not fired -- but the second is sufficient on its own per pivot_criterion.trigger. F79 also supplies the reason the kernel loop cannot continue productively: the cross-run floor of its own end-to-end instrument is ~1.5% and every remaining section-4 item is priced below it.",
   "note_for_executor": "YOU CANNOT RUN GIT \u2014 write .flywheel_commit_msg and stop; the harness commits and the auditor publishes. Cycles 9 and 10 both did correct work and were left uncommitted because the prompt told them to commit. Read LEVERS.md and RESEARCH_LOG.md first. ATTRIBUTE BEFORE OPTIMISING, and read the STALL REASON, not just the achieved GB/s: F76 is the worked example of a kernel that is 29% below its own demonstrated rate and cannot be helped by touching its instructions. `nvcc -Xptxas -v` and `ncu --set full` on build/ncu_target both cost one recompile and answer questions gemm_bench can only rank. Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log.",
   "loop": {
     "executor": "scripts/flywheel.sh (one lever per tick, commits locally, cannot push)",
@@ -105,8 +101,8 @@
   "pivot_criterion": {
     "why": "S5 (draft-head re-alignment) is a TRAINING job the autonomous loop cannot do. Kernel work and training compete for the same operator attention, so the loop must say plainly when kernel work has stopped paying rather than grinding sub-1% levers forever.",
     "trigger": "PIVOT when open_nontraining_levers == 0 on TWO consecutive audits, OR when three consecutive cycles adopt nothing >=1%. Either fires -> the auditor writes a PIVOT banner to FLYWHEEL_AUDIT.md and creates FLYWHEEL_PIVOT.",
-    "open_nontraining_levers": 2,
-    "note": "Counted honestly and the count is now FRAGILE. B8' (o:wo_a via the OG_SMEM lazy o4[m] read, ~1-2%) and S6 (suffix-automaton drafting, no training) = 2. B8's expected value fell again this cycle, ~5% -> ~1-2%, because F78 closed the tile half: with F67 (both reroutes), F68 (split-K, numerics), F74 (the win that was there) and now F78 (double-buffering), the tile has no untried idea left except cp.async staging, which is a different kernel and is NOT counted. B1 is explicitly sub-1% and does NOT count. B9 (prefill) is not a decode lever. S5 and S7 need training. If B8' also fails, the kernel queue is 1 and the next failure after that empties it.",
+    "open_nontraining_levers": 1,
+    "note": "Counted honestly and it FELL 2 -> 1. B8' is retired (F79) and B8 is fully closed, leaving S6 (suffix-automaton drafting, no training, >=1%) as the only qualifying item. B8'' (~0.4%) and B1 (0.3-0.5%) are explicitly sub-1% and do NOT count. B8-cpasync is a different kernel and stays uncounted. S5 and S7 need training. B5 needs the no-additional-quantisation constraint relaxed. B9 is prefill, not decode. One more failure empties the kernel queue -- but the three-cycles-without-a-1%-adoption arm of the trigger has ALREADY fired this cycle, so the pivot is due now on that arm regardless.",
     "position_at_definition": {
       "spec_tok_s": 20.44,
       "spec_ceiling_at_acceptance_2.90": 30.8,

@@ -1,0 +1,243 @@
+# ptxas -v, ogroup instantiations, cycle 14 / Finding 79 (nvcc -Xptxas -v -c kernels/mla_attn.cu)
+# 'plain' = ogroup_gemv_mk_kernel<M,NR,WS1>  'smem' = ogroup_gemv_mk_smem_kernel<M,NR,LAZY>
+# flag=0/1 is the last template bool. The SHIPPED instantiation is plain M=5 NR=4 flag=0.
+plain M=16 NR=1 flag=0 regs= 64 spill=0
+plain M=16 NR=1 flag=1 regs= 64 spill=0
+smem  M=16 NR=1 flag=0 regs= 64 spill=32
+smem  M=16 NR=1 flag=1 regs= 64 spill=52
+plain M=16 NR=2 flag=0 regs= 64 spill=16
+plain M=16 NR=2 flag=1 regs= 64 spill=8
+smem  M=16 NR=2 flag=0 regs= 64 spill=180
+smem  M=16 NR=2 flag=1 regs= 64 spill=152
+plain M=16 NR=4 flag=0 regs= 64 spill=588
+plain M=16 NR=4 flag=1 regs= 64 spill=436
+smem  M=16 NR=4 flag=0 regs= 64 spill=2696
+smem  M=16 NR=4 flag=1 regs= 64 spill=2692
+plain M=16 NR=8 flag=0 regs= 64 spill=2536
+plain M=16 NR=8 flag=1 regs= 64 spill=2544
+smem  M=16 NR=8 flag=0 regs= 64 spill=6708
+smem  M=16 NR=8 flag=1 regs= 64 spill=6708
+plain M=15 NR=1 flag=0 regs= 64 spill=0
+plain M=15 NR=1 flag=1 regs= 64 spill=0
+smem  M=15 NR=1 flag=0 regs= 64 spill=44
+smem  M=15 NR=1 flag=1 regs= 64 spill=28
+plain M=15 NR=2 flag=0 regs= 64 spill=8
+plain M=15 NR=2 flag=1 regs= 64 spill=0
+smem  M=15 NR=2 flag=0 regs= 64 spill=64
+smem  M=15 NR=2 flag=1 regs= 64 spill=72
+plain M=15 NR=4 flag=0 regs= 64 spill=424
+plain M=15 NR=4 flag=1 regs= 64 spill=384
+smem  M=15 NR=4 flag=0 regs= 64 spill=976
+smem  M=15 NR=4 flag=1 regs= 64 spill=944
+plain M=15 NR=8 flag=0 regs= 64 spill=2320
+plain M=15 NR=8 flag=1 regs= 64 spill=2328
+smem  M=15 NR=8 flag=0 regs= 64 spill=3392
+smem  M=15 NR=8 flag=1 regs= 64 spill=3392
+plain M=14 NR=1 flag=0 regs= 64 spill=40
+plain M=14 NR=1 flag=1 regs= 64 spill=40
+smem  M=14 NR=1 flag=0 regs= 64 spill=12
+smem  M=14 NR=1 flag=1 regs= 64 spill=40
+plain M=14 NR=2 flag=0 regs= 64 spill=228
+plain M=14 NR=2 flag=1 regs= 64 spill=200
+smem  M=14 NR=2 flag=0 regs= 64 spill=56
+smem  M=14 NR=2 flag=1 regs= 64 spill=56
+plain M=14 NR=4 flag=0 regs= 64 spill=368
+plain M=14 NR=4 flag=1 regs= 64 spill=304
+smem  M=14 NR=4 flag=0 regs= 64 spill=2100
+smem  M=14 NR=4 flag=1 regs= 64 spill=2108
+plain M=14 NR=8 flag=0 regs= 64 spill=2148
+plain M=14 NR=8 flag=1 regs= 64 spill=2164
+smem  M=14 NR=8 flag=0 regs= 64 spill=5476
+smem  M=14 NR=8 flag=1 regs= 64 spill=5476
+plain M=13 NR=1 flag=0 regs= 64 spill=24
+plain M=13 NR=1 flag=1 regs= 64 spill=24
+smem  M=13 NR=1 flag=0 regs= 64 spill=12
+smem  M=13 NR=1 flag=1 regs= 64 spill=32
+plain M=13 NR=2 flag=0 regs= 64 spill=192
+plain M=13 NR=2 flag=1 regs= 64 spill=168
+smem  M=13 NR=2 flag=0 regs= 64 spill=40
+smem  M=13 NR=2 flag=1 regs= 64 spill=40
+plain M=13 NR=4 flag=0 regs= 64 spill=356
+plain M=13 NR=4 flag=1 regs= 64 spill=280
+smem  M=13 NR=4 flag=0 regs= 64 spill=1796
+smem  M=13 NR=4 flag=1 regs= 64 spill=1792
+plain M=13 NR=8 flag=0 regs= 64 spill=1664
+plain M=13 NR=8 flag=1 regs= 64 spill=1676
+smem  M=13 NR=8 flag=0 regs= 64 spill=4620
+smem  M=13 NR=8 flag=1 regs= 64 spill=4608
+plain M=12 NR=1 flag=0 regs= 64 spill=32
+plain M=12 NR=1 flag=1 regs= 64 spill=32
+smem  M=12 NR=1 flag=0 regs= 64 spill=20
+smem  M=12 NR=1 flag=1 regs= 64 spill=20
+plain M=12 NR=2 flag=0 regs= 64 spill=156
+plain M=12 NR=2 flag=1 regs= 64 spill=128
+smem  M=12 NR=2 flag=0 regs= 64 spill=24
+smem  M=12 NR=2 flag=1 regs= 64 spill=32
+plain M=12 NR=4 flag=0 regs= 64 spill=292
+plain M=12 NR=4 flag=1 regs= 64 spill=236
+smem  M=12 NR=4 flag=0 regs= 64 spill=1484
+smem  M=12 NR=4 flag=1 regs= 64 spill=1472
+plain M=12 NR=8 flag=0 regs= 64 spill=1540
+plain M=12 NR=8 flag=1 regs= 64 spill=1548
+smem  M=12 NR=8 flag=0 regs= 64 spill=3808
+smem  M=12 NR=8 flag=1 regs= 64 spill=3804
+plain M=11 NR=1 flag=0 regs= 64 spill=16
+plain M=11 NR=1 flag=1 regs= 64 spill=16
+smem  M=11 NR=1 flag=0 regs= 64 spill=12
+smem  M=11 NR=1 flag=1 regs= 64 spill=24
+plain M=11 NR=2 flag=0 regs= 64 spill=124
+plain M=11 NR=2 flag=1 regs= 64 spill=0
+smem  M=11 NR=2 flag=0 regs= 64 spill=16
+smem  M=11 NR=2 flag=1 regs= 64 spill=32
+plain M=11 NR=4 flag=0 regs= 64 spill=260
+plain M=11 NR=4 flag=1 regs= 64 spill=200
+smem  M=11 NR=4 flag=0 regs= 64 spill=1208
+smem  M=11 NR=4 flag=1 regs= 64 spill=1208
+plain M=11 NR=8 flag=0 regs= 64 spill=1508
+plain M=11 NR=8 flag=1 regs= 64 spill=1516
+smem  M=11 NR=8 flag=0 regs= 64 spill=3160
+smem  M=11 NR=8 flag=1 regs= 64 spill=3152
+plain M=10 NR=1 flag=0 regs= 64 spill=16
+plain M=10 NR=1 flag=1 regs= 64 spill=16
+smem  M=10 NR=1 flag=0 regs= 64 spill=0
+smem  M=10 NR=1 flag=1 regs= 64 spill=12
+plain M=10 NR=2 flag=0 regs= 64 spill=0
+plain M=10 NR=2 flag=1 regs= 64 spill=8
+smem  M=10 NR=2 flag=0 regs= 64 spill=32
+smem  M=10 NR=2 flag=1 regs= 64 spill=32
+plain M=10 NR=4 flag=0 regs= 64 spill=228
+plain M=10 NR=4 flag=1 regs= 64 spill=160
+smem  M=10 NR=4 flag=0 regs= 64 spill=1044
+smem  M=10 NR=4 flag=1 regs= 64 spill=1044
+plain M=10 NR=8 flag=0 regs= 64 spill=1348
+plain M=10 NR=8 flag=1 regs= 64 spill=1356
+smem  M=10 NR=8 flag=0 regs= 64 spill=2624
+smem  M=10 NR=8 flag=1 regs= 64 spill=2636
+plain M= 9 NR=1 flag=0 regs= 64 spill=8
+plain M= 9 NR=1 flag=1 regs= 64 spill=8
+smem  M= 9 NR=1 flag=0 regs= 64 spill=12
+smem  M= 9 NR=1 flag=1 regs= 64 spill=4
+plain M= 9 NR=2 flag=0 regs= 64 spill=16
+plain M= 9 NR=2 flag=1 regs= 64 spill=8
+smem  M= 9 NR=2 flag=0 regs= 64 spill=32
+smem  M= 9 NR=2 flag=1 regs= 64 spill=32
+plain M= 9 NR=4 flag=0 regs= 64 spill=188
+plain M= 9 NR=4 flag=1 regs= 64 spill=128
+smem  M= 9 NR=4 flag=0 regs= 64 spill=940
+smem  M= 9 NR=4 flag=1 regs= 64 spill=940
+plain M= 9 NR=8 flag=0 regs= 64 spill=1000
+plain M= 9 NR=8 flag=1 regs= 64 spill=1008
+smem  M= 9 NR=8 flag=0 regs= 64 spill=2220
+smem  M= 9 NR=8 flag=1 regs= 64 spill=2228
+plain M= 8 NR=1 flag=0 regs= 64 spill=12
+plain M= 8 NR=1 flag=1 regs= 64 spill=12
+smem  M= 8 NR=1 flag=0 regs= 64 spill=16
+smem  M= 8 NR=1 flag=1 regs= 64 spill=8
+plain M= 8 NR=2 flag=0 regs= 64 spill=16
+plain M= 8 NR=2 flag=1 regs= 64 spill=8
+smem  M= 8 NR=2 flag=0 regs= 64 spill=24
+smem  M= 8 NR=2 flag=1 regs= 64 spill=24
+plain M= 8 NR=4 flag=0 regs= 64 spill=152
+plain M= 8 NR=4 flag=1 regs= 64 spill=104
+smem  M= 8 NR=4 flag=0 regs= 64 spill=1088
+smem  M= 8 NR=4 flag=1 regs= 64 spill=1076
+plain M= 8 NR=8 flag=0 regs= 64 spill=612
+plain M= 8 NR=8 flag=1 regs= 64 spill=620
+smem  M= 8 NR=8 flag=0 regs= 64 spill=3284
+smem  M= 8 NR=8 flag=1 regs= 64 spill=3116
+plain M= 7 NR=1 flag=0 regs= 64 spill=0
+plain M= 7 NR=1 flag=1 regs= 64 spill=0
+smem  M= 7 NR=1 flag=0 regs= 64 spill=8
+smem  M= 7 NR=1 flag=1 regs= 64 spill=8
+plain M= 7 NR=2 flag=0 regs= 64 spill=0
+plain M= 7 NR=2 flag=1 regs= 64 spill=8
+smem  M= 7 NR=2 flag=0 regs= 64 spill=0
+smem  M= 7 NR=2 flag=1 regs= 64 spill=16
+plain M= 7 NR=4 flag=0 regs= 64 spill=120
+plain M= 7 NR=4 flag=1 regs= 64 spill=176
+smem  M= 7 NR=4 flag=0 regs= 64 spill=800
+smem  M= 7 NR=4 flag=1 regs= 64 spill=884
+plain M= 7 NR=8 flag=0 regs= 64 spill=612
+plain M= 7 NR=8 flag=1 regs= 64 spill=616
+smem  M= 7 NR=8 flag=0 regs= 64 spill=2744
+smem  M= 7 NR=8 flag=1 regs= 64 spill=2756
+plain M= 6 NR=1 flag=0 regs= 60 spill=0
+plain M= 6 NR=1 flag=1 regs= 60 spill=0
+smem  M= 6 NR=1 flag=0 regs= 64 spill=4
+smem  M= 6 NR=1 flag=1 regs= 64 spill=4
+plain M= 6 NR=2 flag=0 regs= 64 spill=0
+plain M= 6 NR=2 flag=1 regs= 64 spill=0
+smem  M= 6 NR=2 flag=0 regs= 64 spill=12
+smem  M= 6 NR=2 flag=1 regs= 64 spill=8
+plain M= 6 NR=4 flag=0 regs= 64 spill=120
+plain M= 6 NR=4 flag=1 regs= 64 spill=100
+smem  M= 6 NR=4 flag=0 regs= 64 spill=648
+smem  M= 6 NR=4 flag=1 regs= 64 spill=648
+plain M= 6 NR=8 flag=0 regs= 64 spill=448
+plain M= 6 NR=8 flag=1 regs= 64 spill=456
+smem  M= 6 NR=8 flag=0 regs= 64 spill=2004
+smem  M= 6 NR=8 flag=1 regs= 64 spill=2032
+plain M= 5 NR=1 flag=0 regs= 54 spill=0
+plain M= 5 NR=1 flag=1 regs= 54 spill=0
+smem  M= 5 NR=1 flag=0 regs= 64 spill=0
+smem  M= 5 NR=1 flag=1 regs= 64 spill=0
+plain M= 5 NR=2 flag=0 regs= 64 spill=0
+plain M= 5 NR=2 flag=1 regs= 64 spill=0
+smem  M= 5 NR=2 flag=0 regs= 64 spill=4
+smem  M= 5 NR=2 flag=1 regs= 64 spill=4
+plain M= 5 NR=4 flag=0 regs= 64 spill=44
+plain M= 5 NR=4 flag=1 regs= 64 spill=44
+smem  M= 5 NR=4 flag=0 regs= 64 spill=396
+smem  M= 5 NR=4 flag=1 regs= 64 spill=368
+plain M= 5 NR=8 flag=0 regs= 64 spill=292
+plain M= 5 NR=8 flag=1 regs= 64 spill=300
+smem  M= 5 NR=8 flag=0 regs= 64 spill=1504
+smem  M= 5 NR=8 flag=1 regs= 64 spill=1500
+plain M= 4 NR=1 flag=0 regs= 48 spill=0
+plain M= 4 NR=1 flag=1 regs= 48 spill=0
+smem  M= 4 NR=1 flag=0 regs= 64 spill=0
+smem  M= 4 NR=1 flag=1 regs= 64 spill=0
+plain M= 4 NR=2 flag=0 regs= 56 spill=0
+plain M= 4 NR=2 flag=1 regs= 56 spill=0
+smem  M= 4 NR=2 flag=0 regs= 64 spill=0
+smem  M= 4 NR=2 flag=1 regs= 64 spill=0
+plain M= 4 NR=4 flag=0 regs= 64 spill=0
+plain M= 4 NR=4 flag=1 regs= 64 spill=0
+smem  M= 4 NR=4 flag=0 regs= 64 spill=316
+smem  M= 4 NR=4 flag=1 regs= 64 spill=320
+plain M= 4 NR=8 flag=0 regs= 64 spill=144
+plain M= 4 NR=8 flag=1 regs= 64 spill=132
+smem  M= 4 NR=8 flag=0 regs= 64 spill=1452
+smem  M= 4 NR=8 flag=1 regs= 64 spill=1436
+plain M= 3 NR=1 flag=0 regs= 63 spill=0
+plain M= 3 NR=1 flag=1 regs= 61 spill=0
+smem  M= 3 NR=1 flag=0 regs= 64 spill=0
+smem  M= 3 NR=1 flag=1 regs= 64 spill=0
+plain M= 3 NR=2 flag=0 regs= 48 spill=0
+plain M= 3 NR=2 flag=1 regs= 48 spill=0
+smem  M= 3 NR=2 flag=0 regs= 64 spill=0
+smem  M= 3 NR=2 flag=1 regs= 64 spill=0
+plain M= 3 NR=4 flag=0 regs= 64 spill=0
+plain M= 3 NR=4 flag=1 regs= 56 spill=0
+smem  M= 3 NR=4 flag=0 regs= 64 spill=0
+smem  M= 3 NR=4 flag=1 regs= 64 spill=0
+plain M= 3 NR=8 flag=0 regs= 64 spill=0
+plain M= 3 NR=8 flag=1 regs= 64 spill=0
+smem  M= 3 NR=8 flag=0 regs= 64 spill=760
+smem  M= 3 NR=8 flag=1 regs= 64 spill=744
+plain M= 2 NR=1 flag=0 regs= 52 spill=0
+plain M= 2 NR=1 flag=1 regs= 48 spill=0
+smem  M= 2 NR=1 flag=0 regs= 62 spill=0
+smem  M= 2 NR=1 flag=1 regs= 64 spill=0
+plain M= 2 NR=2 flag=0 regs= 40 spill=0
+plain M= 2 NR=2 flag=1 regs= 40 spill=0
+smem  M= 2 NR=2 flag=0 regs= 64 spill=0
+smem  M= 2 NR=2 flag=1 regs= 64 spill=0
+plain M= 2 NR=4 flag=0 regs= 56 spill=0
+plain M= 2 NR=4 flag=1 regs= 48 spill=0
+smem  M= 2 NR=4 flag=0 regs= 64 spill=0
+smem  M= 2 NR=4 flag=1 regs= 64 spill=0
+plain M= 2 NR=8 flag=0 regs= 64 spill=0
+plain M= 2 NR=8 flag=1 regs= 64 spill=0
+smem  M= 2 NR=8 flag=0 regs= 64 spill=560
+smem  M= 2 NR=8 flag=1 regs= 64 spill=560

@@ -1,0 +1,14 @@
+[oggemv M=1 vec4 vs scalar] cos=1.000000000 rms_rel=2.31e-07 rel_max=2.77e-07 -> PASS
+[oggemv M=1 vec4 vs f32   ] cos=1.000000000 rms_rel=2.29e-07 rel_max=2.88e-07 -> PASS
+[oggemv M=1 scal vs f32   ] cos=1.000000000 rms_rel=1.02e-07 rel_max=1.15e-07 -> PASS
+[oggemv M=2  NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=1.000000000 rms=2.8e-07 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=3  NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=1.000000000 rms=2.8e-07 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=5  NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=1.000000000 rms=2.8e-07 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=8  NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=1.000000000 rms=2.8e-07 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=12 NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=1.000000000 rms=2.8e-07 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=16 NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=1.000000000 rms=2.8e-07 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=17 NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=0.999999983 rms=1.8e-04 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=24 NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=0.999999983 rms=1.8e-04 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+[oggemv M=33 NR vs NR=1] cos=1.000000000 rms=0.0e+00 PASS | vs f32 oracle cos=0.999999983 rms=1.8e-04 PASS | smem bit-exact 0 diffs PASS | smem+lazy 0 diffs PASS
+
+Gate OGGEMV: PASS

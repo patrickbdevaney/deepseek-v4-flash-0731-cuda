@@ -437,7 +437,17 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel
 //   KC | (Kd/128)   — so no chunk runs off the end of the row. Kd/128 = 32.
 // A 128-bit smem load is serviced in 4 phases of 8 lanes = 32 banks exactly, so the float4 reads
 // below are conflict-free.
-template<int M, int NR>
+//
+// LAZY (Finding 79, this cycle). LEVERS.md B8' — the one remaining idea on `o:wo_a` and the only one
+// that moves ~16 registers rather than 3. `float4 o4[M]` below is M float4s = 4M registers held live
+// across the whole r loop (20 at the shipped M=5), in a kernel whose `<5,4>` instantiation is
+// ALREADY 8 registers over its 64-register `__launch_bounds__` cap. In the NON-staged kernel that
+// array is load-bearing: those are global loads and hoisting them out of the r loop is the
+// memory-level parallelism the phase needs. Here they are SMEM reads — ~30 cycles, no MLP argument —
+// so they can be re-read per (r,m) instead of held. Same address, same value, same fma order, so
+// this is bit-identical and gates with memcmp (`gate_ogroup_gemv`, which sweeps it).
+// LAZY=false is the F55 kernel unchanged; the ptxas numbers for BOTH are in the dispatch note.
+template<int M, int NR, bool LAZY>
 __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_smem_kernel(
         float* __restrict__ out, const float* __restrict__ o,
         const uint8_t* __restrict__ wo, const uint8_t* __restrict__ wsc,
@@ -475,17 +485,25 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_smem_k
                 w[r]  = *(const uint32_t*)(wo+(size_t)rr*Kd+base);
                 ws[r] = exp2f((float)wsc[(size_t)(rr/128)*scw + kb]-127.f);
             }
-            float4 o4[M];
-            #pragma unroll
-            for(int m=0;m<M;++m) o4[m]=*(const float4*)&sh[m*KC*128 + kbl*128 + lane*4];
+            const float* shk = &sh[kbl*128 + lane*4];
+            float4 o4[LAZY ? 1 : M];
+            if constexpr(!LAZY){
+                #pragma unroll
+                for(int m=0;m<M;++m) o4[m]=*(const float4*)&shk[m*KC*128];
+            }
             #pragma unroll
             for(int r=0;r<NR;++r){
                 const float d0=ogm_e4m3((uint8_t)(w[r]    ))*ws[r], d1=ogm_e4m3((uint8_t)(w[r]>> 8))*ws[r],
                             d2=ogm_e4m3((uint8_t)(w[r]>>16))*ws[r], d3=ogm_e4m3((uint8_t)(w[r]>>24))*ws[r];
                 #pragma unroll
                 for(int m=0;m<M;++m){
-                    acc[r][m]=fmaf(o4[m].x,d0,acc[r][m]); acc[r][m]=fmaf(o4[m].y,d1,acc[r][m]);
-                    acc[r][m]=fmaf(o4[m].z,d2,acc[r][m]); acc[r][m]=fmaf(o4[m].w,d3,acc[r][m]);
+                    // Identical bytes either way: LAZY re-reads the same 16 smem bytes per r instead
+                    // of keeping them in 4M registers. Same operand values, same fma order.
+                    float4 om;
+                    if constexpr(LAZY) om = *(const float4*)&shk[m*KC*128];
+                    else               om = o4[m];
+                    acc[r][m]=fmaf(om.x,d0,acc[r][m]); acc[r][m]=fmaf(om.y,d1,acc[r][m]);
+                    acc[r][m]=fmaf(om.z,d2,acc[r][m]); acc[r][m]=fmaf(om.w,d3,acc[r][m]);
                 }
             }
         }
@@ -503,7 +521,8 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_smem_k
 // NR falls as M rises to keep NR*M accumulators in registers. NO_OGNR=1 pins NR=1, which is
 // exactly Finding 40's kernel, for A/B.
 #define OG_MK_LAUNCH(MM,NRV) do{ \
-    if(ogsmem)      ogroup_gemv_mk_smem_kernel<MM,NRV      ><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    if(ogsmem&&oglazy) ogroup_gemv_mk_smem_kernel<MM,NRV,true ><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    else if(ogsmem) ogroup_gemv_mk_smem_kernel<MM,NRV,false><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
     else if(ogws1)  ogroup_gemv_mk_kernel     <MM,NRV,true ><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
     else            ogroup_gemv_mk_kernel     <MM,NRV,false><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
   }while(0)
@@ -563,12 +582,40 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         // costs. Traffic was not the binding resource; overlap was.
         // Kept reachable because it is the only variant that removes the intra-block redundancy,
         // and a future double-buffered version would start here.
+        //
+        // BUT THE 40% KILL WAS M=5-SPECIFIC (Finding 79). F55 swept NR at M=5 ONLY. Sweeping M as
+        // well (evidence/oglazy_bench.log, same COLD harness, 3 alternating replicates) shows the
+        // sign flips below M=4 — against the NR the dispatch actually picks at each M:
+        //     M=2  dispatch NR=2:  base 0.1717 -> smem 0.1533  (-10.7%)
+        //     M=3  dispatch NR=2:  base 0.1962 -> smem 0.1729  (-11.9%)
+        //     M=5  dispatch NR=4:  base 0.1958 -> smem 0.2729  (+39.4%)   <- F55's number
+        //     M=8  dispatch NR=2:  base 0.3610 -> smem 0.2810  (-22.2%)
+        // So an M-gated `ogsmem` (on at M<=3, off at M>=4) is a real candidate — but priced against
+        // the dprof K columns it is worth only ~0.4% end-to-end (o:wo_a is 10.74 ms of an 85.9 ms
+        // K=2 verify and 10.26 of 104.7 at K=3, and only 4 of 9 verifies run at K<=3), i.e.
+        // SUB-1%, and trap 3 plus F76/F78 both say the bench overstates. LEVERS.md B8''.
         // The two structural preconditions are CHECKED, not assumed: every warp in a block must
         // land in the same o-group, and the staged chunk must divide the row. Both hold for this
         // model's shape, but a shape that broke either would read `o` for the wrong group and
         // still return a plausible number.
         const bool ogsmem = (getenv("OG_SMEM")!=nullptr)
                          && ((R % ((threads/32)*ognr)) == 0) && (((Kd/128) % 8) == 0);
+        // OG_SMEM_LAZY: read the staged activation float4 from smem per (r,m) instead of hoisting
+        // M of them into 4M registers (LEVERS.md B8', Finding 79). Only meaningful with OG_SMEM=1.
+        //
+        // MEASURED, NOT ADOPTED, and it CLOSES B8'. The premise was that `float4 o4[M]` is 4M = 20
+        // registers at M=5 in a kernel whose <5,4> instantiation is already over its 64-register
+        // cap, and that giving them back would cross a real occupancy step (trap 21). The
+        // falsification was specified as `ptxas -v` first, and ptxas answered NO:
+        //     ogroup_gemv_mk_smem_kernel<5,4>   LAZY=0: 64 regs, 396 B spill
+        //                                       LAZY=1: 64 regs, 368 B spill   (-7%, not -16 regs)
+        // ptxas simply re-hoists the smem loads back to where `o4[M]` was — it is the better
+        // schedule and the source cannot forbid it — so the live set barely moves. The bench agrees
+        // (evidence/oglazy_bench.log, COLD, 12 rotating copies, 3 alternating replicates): at the
+        // shipped M=5/NR=4 it is -1.1% against the OG_SMEM arm it modifies and still **+37.8%
+        // against the kernel that actually ships** (0.2697 vs 0.1958 ms). Across every (M,NR) the
+        // lazy-vs-smem delta is inside +-3.4%. Bit-identical at all 9 M (gate_ogroup_gemv).
+        const bool oglazy = (getenv("OG_SMEM_LAZY")!=nullptr);
         // WS1: one scale load + one exp2f per k-block instead of NR identical ones (see the kernel
         // note). DEFAULT OFF — opt in with OG_WS1=1.
         //
