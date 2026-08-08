@@ -826,6 +826,54 @@ int main(int argc, char** argv){
                 fprintf(stderr,"[spec] GATE FAIL: point %zu prompt %d PSp=%d ratio=%d -> KV[%d].T=%d, expected %d "
                                "(the prefill ran at the wrong length)\n", bsi, promptSweep[bsi], PSp, r, L, KV[L].T, PSp/r);
                 return 3; } }
+        // ---------------- S5 CAPTURE (DSV4_CAPTURE=<dir>) ----------------
+        // Writes exactly what training needs and nothing else: the THREE raw layer taps per
+        // position (`mh_pre`, layout mh[t*(3*d) + slot*d + j] per k_tap_pool) plus the token ids.
+        //
+        // WHY mh_pre AND NOT main_x, which is 3x smaller: `main_proj` is the "feature projection",
+        // which NVIDIA's reference DSpark trainer lists as TRAINABLE. Capturing after it would bake
+        // in weights the fine-tune is about to change. So capture upstream of the first trainable
+        // parameter, which is the tap pool.
+        //
+        // The target distribution for the TV loss is NOT stored -- 129280 floats/token is 258 KB/tok
+        // and impossible. It is recomputed during training from these taps through the frozen
+        // lm_head (1.06 GB bf16, cheap to keep resident). The taps are the minimal sufficient
+        // statistic.
+        //
+        // One file per sweep point, so DSV4_PROMPTS + DSV4_BLKSWEEP capture N samples per checkpoint
+        // load -- the load is ~10 minutes and must be amortised, not paid per sample.
+        if(const char* capdir = getenv("DSV4_CAPTURE")){
+            const size_t ntap=3, nvals=(size_t)PSp*ntap*d;
+            std::vector<float> hf(nvals);
+            CU(cudaMemcpy(hf.data(), mh_pre, nvals*4, cudaMemcpyDeviceToHost));
+            std::vector<uint16_t> hb(nvals);
+            for(size_t i2=0;i2<nvals;++i2){ uint32_t u; memcpy(&u,&hf[i2],4); hb[i2]=(uint16_t)(u>>16); } // bf16 = fp32 top half (truncate)
+            char path[1024]; snprintf(path,sizeof path,"%s/shard_p%02d_s%06d.dspc", capdir, promptSweep[bsi], PSp);
+            FILE* f=fopen(path,"wb");
+            if(!f){ fprintf(stderr,"[capture] FAIL: cannot open %s\n", path); return 4; }
+            const std::vector<int>& pids = prompts[promptSweep[bsi]];
+            uint32_t hdr[8] = {0x43505344u, 1u, (uint32_t)PSp, (uint32_t)ntap, (uint32_t)d, 1u,
+                               (uint32_t)pids.size(), 0u};
+            size_t w = 0;
+            w += fwrite(hdr,4,8,f);
+            w += fwrite(pids.data(),4,pids.size(),f);
+            w += fwrite(hb.data(),2,nvals,f);
+            long bytes = ftell(f);
+            fclose(f);
+            if(w != 8+pids.size()+nvals){ fprintf(stderr,"[capture] FAIL: short write to %s\n", path); return 4; }
+            // Manifest is append-only and one line per sample, so a killed run resumes from the last
+            // COMPLETE line rather than re-deriving progress from directory listings.
+            char mpath[1024]; snprintf(mpath,sizeof mpath,"%s/manifest.jsonl", capdir);
+            if(FILE* mf=fopen(mpath,"a")){
+                fprintf(mf,"{\"file\":\"%s\",\"prompt\":%d,\"n_tok\":%d,\"n_taps\":%zu,\"d\":%d,"
+                           "\"dtype\":\"bf16\",\"n_ids\":%zu,\"bytes\":%ld}\n",
+                        strrchr(path,'/')?strrchr(path,'/')+1:path, promptSweep[bsi], PSp, ntap, d,
+                        pids.size(), bytes);
+                fclose(mf);
+            }
+            printf("[capture] wrote %s  %d tok x %zu taps x %d  = %.1f MB\n",
+                   path, PSp, ntap, d, bytes/1048576.0); fflush(stdout);
+        }
         dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PSp, d, EPS); CU(cudaDeviceSynchronize());
         // N1 BISECTION (DSV4_HASH=1). Finding 60 says the FIRST verify of every sweep point produces
         // a different margin vector on byte-identical input. Unit gates have since cleared the two

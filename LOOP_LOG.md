@@ -5473,3 +5473,76 @@ Also, the stale-binary trap fired **three times** in this sequence, and each tim
 number that was too *consistent*, never an error message: five gates reporting `rms=0.00e+00` on a
 bf16 change; three NS values reporting byte-identical accuracy after a failed compile. **Before
 believing a comparison, check that its arms differ where they must.**
+
+## Finding 90 — S5 Stage 0: capture and the weight-override path both work, and the reference PyTorch model validates the capture design
+
+**Operator-run.** `evidence/stage0_capture.log`, exact numerics (no `MOE_MMA`), external head via `argv[4]`.
+
+### The override path already existed
+
+`src/decode.cu` opens a SEPARATE `WeightStore` filtered to the `mtp.` prefix when `argv[4]` names a
+directory other than the checkpoint — written "for backward compatibility with an external head" and
+unused since. That is exactly what S5 needs: load a fine-tuned head without writing into the
+read-only checkpoint. It needed only a directory whose index mentions `mtp.*` alone
+(`tools/make_head_dir.py`; symlinks the sha-verified backup shards rather than copying 6.6 GB, and
+rewrites `total_size` to describe the new directory).
+
+**Identity control PASSES:**
+```
+[spec] loading EXTERNAL DSpark head .../dspark-head-identity ...
+[spec] head loaded 6.53 GiB, 2977 mtp tensors (SEPARATE store)
+[decode] first decoded token argmax = 11111 -> GATE PASS
+[spec] mean tokens/verify = 2.89
+```
+2.89 is the recorded baseline exactly, so later comparisons measure training, not the loader.
+**Cost: the separate store adds 6.53 GiB** (109.2 -> ~115.7 of 122.8). Fine for evaluation, not
+headroom we have twice.
+
+### Capture
+
+`DSV4_CAPTURE=<dir>` dumps `mh_pre` (3 taps x 4096 per position, bf16) + token ids, one file per
+sweep point so `DSV4_PROMPTS` + `DSV4_BLKSWEEP` amortise the ~10-minute checkpoint load across N
+samples. Append-only `manifest.jsonl` so a killed run resumes from the last complete line.
+
+```
+shard_p00_s000005.dspc: n_tok=5    ids=6     slot_std=[2408.6, 2391.6, 2254.2]  OK
+shard_p01_s001022.dspc: n_tok=1022 ids=1023  slot_std=[189.0, 192.5, 201.3]     OK
+total: 1027 tokens, 24.1 MB (24.0 KB/token)   VALIDATE: PASS
+```
+
+The **per-slot standard deviations** are the check that matters: they differ across the three taps,
+proving the `slot` index varied and we captured layers 40/41/42 rather than one layer three times.
+A byte-count check would have passed on that failure.
+
+### The reference PyTorch model validates the capture design
+
+`inference/model.py` ships `DSparkBlock`/`DSparkAttention`/`DSparkMarkovHead`/`DSparkConfidenceHead`,
+and its `main_hidden` is built as `torch.cat([h.mean(dim=2) for target layers], dim=-1)`. Our
+`k_tap_pool` computes the same mean into `mh[t*(3*d)+slot*d+j]`. **The captured `mh_pre` IS the
+reference's `main_hidden`.** And `forward_embed` applies `main_norm(main_proj(main_hidden))`
+afterwards, confirming that capturing UPSTREAM of `main_proj` — the trainable feature projection —
+was correct.
+
+### The Stage-0 gate that remains, and the decision it forces
+
+The reference model imports `kernel.py`, which requires **`tilelang==0.1.8`** and
+`fast_hadamard_transform`. Measured in `ghcr.io/nvidia-ai-iot/vllm:latest-jetson-thor`:
+
+```
+torch 2.10.0 cuda True
+tilelang MISSING
+fast_hadamard_transform MISSING
+```
+
+So using the reference as-is means installing a TileLang compiler stack on `sm_110a` — uncertain,
+and capable of consuming the entire Stage-0 budget on its own.
+
+**Decision: do not take the dependency.** Use the reference's STRUCTURE (which is readable and now
+verified against our capture) with plain PyTorch ops, and **dequantise the frozen MXFP4 experts to
+bf16 once** (~24-26 GB, comfortable with no engine resident). This removes `fp4_gemm`/`fp8_gemm`
+entirely, makes everything differentiable by default, and does not violate no-additional-quantisation
+— we read MXFP4 and never write it; only the 476 M non-expert parameters are ever saved.
+
+The cost is writing plain-PyTorch `sparse_attn` and `hc_split_sinkhorn`. At 476 M trainable
+parameters over ~1 K-token sequences that is fast enough, and it is bounded work with no external
+compiler risk.
