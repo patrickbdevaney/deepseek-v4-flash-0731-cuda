@@ -17,25 +17,32 @@ Rules of the road:
 ## 1. Where the time actually goes
 
 Current baseline (prompt 0, clocks pinned, post-Finding-72): **20.44 tok/s speculative**,
-**13.50 tok/s base AR** (74.1 ms/tok). `evidence/final6.log`.
+**13.50 tok/s base AR** (74.1 ms/tok). `evidence/final6.log`. **Not re-measured since**: F73 and F74
+both spent their one run with `DSV4_DPROF=1`, so the newest end-to-end numbers (21.68 spec / 13.78
+base AR, `evidence/kchunk.log`) carry dprof overhead and are only comparable to each other.
 
-The K=5 verify dprof TOTAL is **134.8 ms** and splits into two populations that behave completely
-differently (`evidence/moescan.log`, post-F73, `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned):
+The K=5 verify dprof TOTAL is **127.2 ms** and splits into two populations that behave completely
+differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned):
 
 | group | ms | % | headroom |
 |---|---|---|---|
-| routed MoE — `moe:w1w3` 40.4 + `moe:w2` 20.2 | **60.6** | 45 % | **F64/F65/F70/F72 took 21 % off `w1w3` and 10 % off `w2`; still only ~76 % of roofline** |
-| `cattn:ogroup` (`o:wo_a` 11.5 + `o:wo_b` 9.8 + rope) | 21.7 | 16 % | some |
-| `cattn:q_proj` (`q:wq_b` 11.2 + `q:wq_a` 6.7 + glue) | 20.0 | 15 % | some |
-| `lm_head` | 7.0 | 5 % | little |
-| `cattn:indexer` (21 layers) | 3.9 | 3 % | **F71 took 57 % off this; `i:score` is now 0.76** |
-| `hc_pre` attn+ffn, `rmsnorm`, `moe:router/group/act/combine` | ~10.2 | 8 % | latency-bound, not bytes |
-| `cattn:compress`, `cattn:sparse`, misc | ~3.6 | 3 % | already forked |
+| routed MoE — `moe:w1w3` 39.5 + `moe:w2` 19.2 | **58.7** | 46 % | **F64/F65/F70/F72 took 21 % off `w1w3` and 10 % off `w2`; still only ~76 % of roofline** |
+| `cattn:ogroup` (`o:wo_a` 11.4 + `o:wo_b` 8.7 + rope) | 20.5 | 16 % | **`o:wo_a` is now the block's worst mark — see B8** |
+| `cattn:q_proj` (`q:wq_b` 8.0 + `q:wq_a` 5.8 + glue) | 16.3 | 13 % | **F74 took 29 %/14 % off these two** |
+| `lm_head` | 6.6 | 5 % | little |
+| `cattn:indexer` (21 layers) | 3.6 | 3 % | **F71 took 57 % off this; `i:score` is now 0.77** |
+| `hc_pre` attn+ffn, `rmsnorm`, `moe:router/group/act/combine` | ~10.7 | 8 % | latency-bound, not bytes |
+| `cattn:compress`, `cattn:sparse`, misc | ~3.5 | 3 % | already forked |
 
-**Ranking is now stable; the two fp8 GEMM blocks (`q_proj` + `ogroup` = 41.7 ms, 31 %) are the
-largest untouched region.** Their four marks — `q:wq_b` 11.2, `o:wo_a` 11.5, `o:wo_b` 9.8, `q:wq_a`
-6.7 — are all the same smem-staged fp8 tile at different N, and F67 already refuted the two obvious
-reroutes. Nothing here is a geometry bug (F73 audited that); it is kernel efficiency.
+**The fp8 GEMM block (`q_proj` + `ogroup` = 33.8 ms, 27 %) is still the largest region outside the
+MoE, and F74 proved it is not at the roofline.** Its four marks are two different kernels: `q:wq_b`,
+`q:wq_a`, `o:wo_b` are the smem-staged fp8 tile (F74 fixed their MLP), and `o:wo_a` is
+`ogroup_gemv_mk_kernel`, which has had no equivalent treatment and is now the worst of the four.
+
+**Use the K=1 column as the achievability bar, not the roofline.** At M=1 the same weight bytes go
+through `fp8_gemv_m1_kernel`, so K=1 vs K=5 in one dprof report is a free, controlled measurement of
+what these exact rows can do: 115 / 195 / 185 / 168 GB/s. That comparison is what found F74, and it
+cost nothing but reading a column that had been printed for months.
 
 **This table was WRONG for the whole project and Finding 64 fixed it.** The MoE was believed to be at
 the roofline on the strength of a *modelled* expert union of 29.9 at K=5; the measured union is
@@ -68,6 +75,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **`index_score` warp-per-output** | **+4.4 % spec, +7.1 % base AR** (`i:score` −87 %) | **71** |
 | **MoE GEMV `uint2` weight loads (no funnel)** | **verify −2.8 %, `moe:w1w3` −7.0 %** | **72** |
 | **MoE grouping scans parallelised (`k_moe_prefix`, `k_build_tiles` were `<<<1,1>>>`)** | **`moe:group` −20.3 %** (2.66 → 2.12 ms) = ~0.4 % of the verify. Bit-identical. End-to-end **not** claimed — see F73 | **73** |
+| **fp8 tile stages KC K-blocks per barrier pair (was 1)** | **`q:wq_b` −28.6 %, `q:wq_a` −13.6 %, `o:wo_b` −11.2 %; K=5 verify −5.6 %; spec 20.43 → 21.68 tok/s (+6.1 %, 9/9 paired verifies)**. Bit-identical | **74** |
 
 ---
 
@@ -119,7 +127,7 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
 | ~~B0~~ | ~~audit every kernel for thread-per-output at decode shapes~~ | **NAMED LIST EXHAUSTED, F71 + F73** | `index_score` **+4.4 %** (F71). `k_moe_prefix` and `k_build_tiles`, both `<<<1,1>>>` over `nr=160`, fixed in F73: `moe:group` −20.3 %, and both now sit at the **launch-latency floor** (0.24–0.25 ms / 43 layers, vs 0.19 for a trivially parallel neighbour). The rest are measured under B0's own 0.5 ms bar: `k_topk_verify`/`k_topk_decode` → `i:topk` = **0.12 ms**; `k_dg`/`k_advance_T`/`k_incr` are genuinely one scalar's work. **The class paid twice and is now dry** — reopening needs a *new* kernel with a bad geometry, not another pass over these. |
-| B8 | **the fp8 GEMM block: `q:wq_b` 11.2 + `o:wo_a` 11.5 + `o:wo_b` 9.8 + `q:wq_a` 6.7 = 39.2 ms (29 %)** | unknown; largest untouched region | Same smem-staged tile at four N. Not a geometry bug (F73 audited). F67 closed both reroutes (M=K GEMV at all N, and small-N only) and F68 closed split-K **on numerics, not speed**. What is *not* closed: nobody has counted this kernel's actual bytes from the source the way F64 did for the MoE, and §1's old "~80 GB/s" for `q_proj` was a region number over a region containing five kernels. **Falsify by counting bytes per mark first** — if `q:wq_b` is already at roofline this is dead and should be retired in one cycle without a build. |
+| B8 | **the fp8 GEMM block, post-F74: `o:wo_a` 11.4 + `q:wq_b` 8.0 + `o:wo_b` 8.7 + `q:wq_a` 5.8 = 33.8 ms (27 %)** | **~10 ms = 7 % of the verify still in it** | **Bytes are counted (F74) and it is NOT at roofline.** The block was at 110 GB/s = 47 % of achievable; F74 took 5.2 ms out of the three tile marks by raising memory-level parallelism. **The target is not 233 GB/s — it is the M=1 GEMV's own measured rate on the same weight bytes**, which is the only number proven reachable on these rows: `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). Against that the three tile marks hold ~6.5 ms and **`o:wo_a` — a different kernel, `ogroup_gemv_mk_kernel`, 11.37 ms at 120 GB/s vs 168 at M=1 — is entirely untouched and is now the single largest sub-roofline mark in the block.** Next KC-style move: double-buffer the staged tile so the next round's loads issue before the current mma, or apply the same MLP fix to `ogroup_gemv_mk_kernel`. F67 closed both reroutes; F68 closed split-K on numerics. |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |
@@ -213,7 +221,17 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    dependent loads ≈ 35 µs/layer and measured ≈ 12. Only the *additions* chain; the `counts[e]` loads
    are independent, so the compiler pipelines them. Serial-scan geometry is worth ~2x here, not 6x —
    size the lever off the dependency graph, not the trip count.
-15. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
+15. **A profile you already have may contain its own control.** B8 sat open for cycles as "unknown;
+   count the bytes". The bytes never needed counting — `q:wq_b` at K=1 (195 GB/s) and at K=5
+   (123 GB/s) move the *same* weight bytes through *different kernels*, and that ratio was printed in
+   every dprof report since the K-sweep existed. Before building an instrument, check whether an
+   existing report already varies the one thing you want varied (F74).
+16. **A gate harness that passes the wrong argv reports a failure that is about the harness.** Running
+   `build/gate_*` in a loop with a shared `ref/goldens` argument makes `gate_prefill_len` read it as a
+   sweep length, sweep s=0 and print **GATE FAIL** with eight "invalid argument" launches. Only
+   `gate_units` and `gate_encoding` take a path. Also: `build_gate.sh` builds 10 of the 17 binaries —
+   the other 7 go stale silently and must be rebuilt from the build line in their own headers (F74).
+17. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
    `dsync` is a no-op under the arena, so the first real sync in a layer absorbs ~20 launches' worth of
    asynchronous faults. Use `DSV4_SYNCPROBE=1`.
 
@@ -235,3 +253,5 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 | `compute-sanitizer --tool initcheck` | uninitialised global reads — found F62 in one run |
 | `tests/gate_scratch_init` | poisons prefill scratch and diffs; localises to one allocation |
 | `tests/gate_forkjoin_graph` | a fork/join that breaks graph capture, caught in 2 s not 15 min |
+| `TCB_KC=<n>` | K-blocks staged per barrier pair in the fp8 tile. **`TCB_KC=1` is the pre-F74 kernel** — the A/B is one env var |
+| `tests/gate_tc_fp8_kc` | is the fp8 tile still BIT-identical to KC=1? (equality, unlike the cosine gate next door) |

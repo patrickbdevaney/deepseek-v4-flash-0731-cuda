@@ -3900,3 +3900,152 @@ express the regime confirms itself; the `nr=257` and `nr=400` cases exist for ex
 The one sanctioned full-model run was spent with `DSV4_DPROF=1`, so this build has **no clean
 non-dprof end-to-end number**. The 20.44 / 13.50 baseline in `FLYWHEEL_STATE.json` stands and was not
 re-measured; do not compare it against 20.43 / 13.75 from this log, which carries dprof overhead.
+
+---
+
+## Finding 74 — the fp8 tile staged one 128-K-block per barrier pair; staging KC of them took the four-mark GEMM block down 13.5 %, bit-identical, and spec to 21.68 tok/s
+
+**ADOPTED. `q:wq_b` 11.18 → 7.98 ms (−28.6 %), `q:wq_a` 6.71 → 5.80 (−13.6 %), `o:wo_b` 9.76 → 8.67
+(−11.2 %); K=5 verify TOTAL 134.77 → 127.18 ms (−5.6 %); spec 20.43 → 21.68 tok/s (+6.1 %).** The
+26-token spec sequence is byte-identical to the control, acceptance 2.89 = 2.89, LOSSLESS GATE PASS,
+MATCH 5/5, first-token argmax 11111. All 17 gate binaries pass plus a new one. Clocks pinned
+(`sudo jetson_clocks`); caches dropped before the run. Log: `evidence/kchunk.log`, control
+`evidence/moescan.log` (same binary config: `DSV4_DPROF=1 DSV4_KSWEEP=1`, NDEC=8, prompt 0).
+
+### The lever, and how the profile named it without a new instrument
+
+Lever B8 — the four fp8 GEMM marks, 39.1 ms of the 134.8 ms verify (29 %), the largest untouched
+region. LEVERS.md set the falsification as "count this kernel's bytes the way F64 did for the MoE; if
+it is already at roofline, retire it in one cycle without a build." The bytes are structural, and the
+count needs no new code: 41 compressed layers × the weight matrix, read once per step by both paths.
+
+The answer was already sitting in the K=1 column of `evidence/moescan.log`. At K=1 every dense fp8
+GEMM dispatches to `fp8_gemv_m1_kernel`; at K≥2 the *same bytes* go through the smem-staged m16 tile:
+
+| mark | weight bytes/step | K=1 (M=1 GEMV) | K=5 (m16 tile) |
+|---|---|---|---|
+| `q:wq_a` [1024,4096] | 0.172 GB | 1.49 ms = **115 GB/s** | 6.71 ms = **26 GB/s** |
+| `q:wq_b` [32768,1024] | 1.376 GB | 7.04 ms = **195 GB/s** | 11.18 ms = **123 GB/s** |
+| `o:wo_b` [4096,8192] | 1.376 GB | 7.43 ms = **185 GB/s** | 9.76 ms = **141 GB/s** |
+| `o:wo_a` [8×1024,4096] | 1.376 GB | 8.21 ms = **168 GB/s** | 11.46 ms = **120 GB/s** |
+
+**Identical bytes, 1.3–4.5× the time, and the M=1 kernel proves 185–195 GB/s is reachable on these
+exact rows.** So B8 was never a roofline; it was memory-level parallelism, and the M=1 column is the
+control that says so. The block sat at 110 GB/s = 47 % of the 233 GB/s achievable.
+
+### The mechanism
+
+`tc_fp8_smemB_kernel` staged **one** 128-byte K-block per row per barrier pair: `__syncthreads`, two
+`uint4` per thread, `__syncthreads`, four `mma`, repeat. Two things make that fatal at these shapes.
+The kernel's total warp count is structurally **N/8** — wq_a at N=1024 is 128 warps for the whole
+device, 6.4 per SM — and each of those warps has only 32 bytes outstanding at a time. Little's Law
+needs ~280 KB in flight device-wide to hold 233 GB/s; wq_a had ~131 KB, halved again by the barrier,
+so it ran one DRAM round trip per K-block with nothing to overlap it with.
+
+Fix: stage **KC** consecutive K-blocks per barrier pair. Per-thread staging is `32*KC` bytes and is
+independent of WARPS (8W rows × KC·128 B over 32W threads), so KC alone sets bytes-in-flight while
+the barrier count falls by KC. The loads go into a register array **first** and to smem after — a
+load→store→load loop reverts to one outstanding miss no matter how big KC is, which is the whole
+point. Row stride becomes `KC*128+16` = `32KC+4` words, so row g still starts at bank 4g and the
+eight fragment groups are still a permutation of all 32 banks, for every KC.
+
+`acc` still takes each 128-block's `cb` in kblk order 0,1,2,…, so this is **bit-identical**, not
+close. `TCB_KC=1` restores the old kernel exactly.
+
+### Picking KC, and why it is a lookup
+
+`gemm_bench` COLD, real shapes, M=5, the `m16+smem B+4` column (4-byte-aligned weights = what decode
+actually passes), ms(GB/s) — `evidence/kchunk_bench.log`:
+
+| shape | W | KC=1 | KC=2 | KC=4 | KC=8 |
+|---|---|---|---|---|---|
+| wq_a [1024,4096] | 2 | .0501(84) | **.0402(104)** | .0521(81) | .0438(96) |
+| wq_b [4096,1024] | 8 | .0339(124) | **.0309(136)** | .0332(126) | .0328(128) |
+| wkv [512,4096] | 1 | .0434(48) | .0329(64) | .0361(58) | **.0266(79)** |
+| wo_b [4096,4096] | 8 | .1131(148) | **.1054(159)** | .1072(156) | .1074(156) |
+| sw1/3 [2048,4096] | 8 | .0676(124) | **.0588(143)** | .0671(125) | .0606(139) |
+| sw2 [4096,2048] | 8 | .0616(136) | **.0571(147)** | .0584(144) | .0597(140) |
+
+KC=4 is worse than **both** 2 and 8 on five of six shapes. Non-monotone, so the rule is a lookup —
+KC=2, except KC=8 at W=1 — not a formula, and it is fitted to one bench (trap 3: `gemm_bench` ranks,
+it does not predict). W=8 is hard-capped at KC≤4 because 64 rows × 8 K-blocks is a 66 KB static
+`__shared__`, which does not compile; that instantiation must not exist even on a forced path.
+
+### The in-situ result, and the two controls that make it believable
+
+| | control `moescan` | this `kchunk` | delta |
+|---|---|---|---|
+| `q:wq_b` K=5 | 11.18 | 7.98 | **−28.6 %** |
+| `q:wq_a` K=5 | 6.71 | 5.80 | −13.6 % |
+| `o:wo_b` K=5 | 9.76 | 8.67 | −11.2 % |
+| `o:wo_a` K=5 | 11.46 | 11.37 | **−0.8 % — untouched kernel** |
+| dprof TOTAL K=5 | 134.77 | 127.18 | −5.6 % |
+| ksweep K=5 | 128.26 | 121.11 | −5.6 % |
+| ksweep K=1 | 64.84 | 64.74 | **−0.15 %** |
+| base AR tok/s | 13.75 | 13.78 | **+0.2 %** |
+| spec tok/s | 20.43 | 21.68 | **+6.1 %** |
+
+Per trap 12, before believing a cross-run delta, find a mark inside the same run the change must
+**not** have moved. There are two, and they are structural rather than lucky:
+
+1. **`o:wo_a` is a different kernel.** It is `ogroup_gemv_mk_kernel` in `mla_attn.cu`, not the fp8
+   tile. It moved −0.8 % while its two neighbours in the same region moved −11 % and −29 %.
+2. **K=1 and base AR never enter this kernel at all.** At M=1 `fp8_block_gemm` dispatches to
+   `fp8_gemv_m1_kernel`, so a change confined to the M≥2 tile must leave them flat. ksweep K=1 moved
+   −0.15 % and base AR +0.2 %. That also bounds this run pair's noise floor at ~±2 % (the K=1 dprof
+   marks scatter 1.49→1.50, 7.04→6.96, 7.43→7.50, 13.57→13.83).
+
+This is the mirror image of Finding 73, where the end-to-end delta was *larger* than the mechanism
+could explain and was therefore not claimed. Here the mechanism predicts a K-dependent saving that is
+zero at K=1, and that is exactly the shape measured.
+
+**The spec number is a paired comparison, not two run means.** All nine verifies ran at the same K
+with the same accept counts and the same drafted tokens, so they pair one-to-one:
+
+| verify | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | Σ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| control ms | 121.4 | 128.0 | 149.8 | 127.0 | 154.8 | 137.0 | 163.3 | 163.6 | 151.4 | 1296.3 |
+| this ms | 112.5 | 117.8 | 141.8 | 119.5 | 144.3 | 131.4 | 154.7 | 154.9 | 142.5 | 1219.4 |
+| delta | −7.3 % | −8.0 % | −5.3 % | −5.9 % | −6.8 % | −4.1 % | −5.3 % | −5.3 % | −5.9 % | **−5.9 %** |
+
+Nine of nine negative. Both runs carry dprof overhead; the 20.44/13.50 numbers in
+`FLYWHEEL_STATE.json` are non-dprof and were not re-measured, so **21.68 is not comparable to 20.44**
+— the claim is +6.1 % against the like-for-like control.
+
+### What is NOT claimed
+
+`moe:w1w3` 40.35 → 39.46 (−2.2 %) and `moe:w2` 20.20 → 19.21 (−4.9 %) also moved, in kernels
+(`tc_moe_gemm.cu`) this change does not touch. There is a plausible mechanism — the shared expert
+runs on a side stream concurrent with the routed GEMM and *does* go through this tile (sw1/3 and sw2
+improved 13 % and 7 % in the bench), so the F56/F57 pricing model run backwards predicts the partner
+gets some of it back. But −2.2 % is inside the ±2 % noise this run pair demonstrates, and one run
+cannot separate the two. Recorded, not claimed. The attributable saving is the 5.20 ms across
+`q:wq_a`+`q:wq_b`+`o:wo_b`; the verify moved 7.59 ms.
+
+### A gate for the bit-exactness claim, not an assertion
+
+`tests/gate_tc_fp8_kc.cu` (new, in `build_gate.sh`) diffs KC ∈ {2,4,8,auto} against KC=1 with
+`memcmp` — equality of float bit patterns, because `gate_tc_fp8_smem` next door is a **cosine** gate
+and would have passed a reduction-order change. Finding 68 is why that distinction gets its own
+binary. 504/504 exact over 7 shapes × M ∈ {1,2,3,5,8,13,16,17,20} × B offset {0,4} × 4 KC values,
+outputs poisoned to 0xEE first so a kernel that writes nothing cannot inherit a pass. The shape list
+spans every W the dispatcher picks (32768→W=8, 1024→W=2, 512→W=1, 520→N%64 tail) and KB from 8 to 64,
+per trap 9.
+
+### Where B8 stands now
+
+The three tile marks are 27.65 → 22.45 ms. Against the M=1 path's own demonstrated rates on the same
+bytes (115/195/185 GB/s → 16.0 ms) there is still ~6.5 ms in them, and `o:wo_a` — a *different*
+kernel, 11.37 ms at 120 GB/s against 168 at M=1 — has not been touched at all. **B8 stays open with
+~10 ms (7 % of the verify) left and a sharpened falsification: the M=1 GEMV's achieved GB/s on the
+same weight bytes is the target, not the 233 GB/s roofline.**
+
+### Two process notes
+
+- `scripts/build_gate.sh` builds 10 of the 17 gate binaries; `gate_compressed_decode` and
+  `gate_indexer_decode` were stale from 2026-08-07 and had to be rebuilt by hand from the build line
+  in their own headers before they could say anything about this change. Both PASS rebuilt.
+- Running the gate binaries in a `for` loop with a shared `ref/goldens` argument makes
+  `gate_prefill_len` parse it as a sweep length, sweep s=0, and report **GATE FAIL** with eight
+  "invalid argument" launches. It passes with no argument. Only `gate_units` and `gate_encoding` take
+  a path. A gate harness that passes the wrong argv reports a failure that is about the harness.

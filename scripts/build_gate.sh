@@ -46,3 +46,10 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   tests/gate_moe_scan.cu kernels/moe.cu kernels/tc_moe_gemm.cu kernels/dscratch.cu kernels/dprof.cu \
   kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/mla_attn.cu -o build/gate_moe_scan
 echo "built build/gate_moe_scan"
+# Gate TC_FP8_KC — the K-chunked staging (Finding 74) must be BIT-IDENTICAL to KC=1. gate_tc_fp8_smem
+# next door is a cosine gate and would pass a reduction-order change; Finding 68 is the reason that
+# distinction gets its own binary.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_tc_fp8_kc.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu \
+  -o build/gate_tc_fp8_kc
+echo "built build/gate_tc_fp8_kc"
