@@ -3538,3 +3538,78 @@ K-split multiplies the warp count directly rather than trading warps between blo
 only one of the four that attacks `N/8` itself. It is not bit-exact (the reduction order changes), so
 it needs a tolerance gate rather than an equality gate. Expected: `q:wq_a` 6.58 → ~1.7 ms if it reaches
 even 100 GB/s, i.e. ~3 % of the verify.
+
+---
+
+## Finding 68 — split-K retired, and it produced a FAKE 28 % speedup that every gate passed
+
+**Not adopted.** But the way it failed is the finding, and it left a gate behind.
+
+### The lever
+
+Finding 67 established that `tc_fp8_gemm`'s total warp count is `N/8` regardless of its adaptive-`W`
+heuristic, so `wq_a` (N=1024, 128 warps) runs at 26 GB/s. Split-K is the only fix that *creates* warps
+rather than moving them: `blockIdx.z` takes a contiguous slice of the K-blocks, each writes its own
+partial, and a **fixed-order** second pass sums them (an `atomicAdd` epilogue would have been one
+kernel instead of two and would have reintroduced exactly the nondeterminism Finding 62 removed).
+
+It works, in the narrow sense: `q:wq_a` **6.58 → 5.69 ms** across three variants.
+
+| variant | `q:wq_a` | `cattn:ogroup` | ksweep K=5 | spec |
+|---|---|---|---|---|
+| baseline | 6.58 | 20.79 | 137.92 | **19.13** |
+| auto SK (warps<1024) | 5.89 | 22.18 | 139.70 | 18.26 |
+| SK only where starved (warps<256) | 5.73 | 22.07 | 138.62 | 17.25 |
+| + persistent workspace | 5.69 | 21.83 | 138.72 | **24.44** ?! |
+
+Two things went wrong, and the second is the important one.
+
+**Arena churn.** The partial buffer came from `dmalloc`, which bumps the arena offset for every
+allocation after it in the same layer — so buffers the split never touched moved. `cattn:ogroup` rose
+20.79 → 22.07 while `wo_b` was not even being split. Moving the workspace to one grow-only
+`cudaMalloc` fixed that specific effect. **A scratch allocator with a shared bump pointer makes every
+allocation a global variable.**
+
+### The fake speedup
+
+The last row reports **24.44 tok/s, +28 %** — with `ksweep` unchanged at 138.7. A verify that did not
+get faster cannot make the cycle 28 % faster. The tokens say what happened:
+
+```
+baseline:  11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 ...
+split-K:   11111 16 455 6102 294  8760 344 11111 16 455 6102 294  8760 ...   <- a cycle
+```
+
+Split-K's reduction-order change perturbed the logits enough to drop the model into a **degenerate
+repeating loop** from token 6. A repetitive sequence is trivially predictable, so acceptance rose
+**2.90 → 3.86** and tok/s rose with it. The speedup is entirely a quality collapse.
+
+**Every gate passed.** `first decoded token argmax = 11111 -> GATE PASS` (position 0 only).
+`MATCH 5/5 -> PASS` (the M=K verify against K sequential decodes, at one position, before the drift
+compounds). `gate_tc_fp8_smem` PASS (cosine against the oracle on synthetic weights, where a tolerance
+that is fine for one GEMM says nothing about 43 layers of compounding).
+
+**This is the worst failure mode this engine has: a change that degrades output and is rewarded by the
+headline metric for doing so.** Any acceptance-based number is corrupted by a quality regression,
+because acceptance measures agreement between the draft and the verify — and both moved.
+
+### The gate it left behind
+
+Speculative decoding is supposed to be **lossless**: the verify corrects every draft, so the emitted
+sequence must equal what base AR emits from the same prompt. The engine already generates both in the
+same process and never compared them. It does now:
+
+```
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+```
+
+One comparison, no extra work, and it fails at token 6 on the split-K build. **Cosine-against-an-oracle
+on one GEMM is not a substitute for end-to-end sequence equality**, and this is the second time this
+project has found a defect that unit gates waved through (Finding 62 was the first).
+
+### Disposition
+
+Split-K is **retired**. Not for being slow — `q:wq_a` genuinely improved 14 % — but because the
+reduction-order change is not numerically safe at this depth, and the only way to get the warps is to
+change that order. `wq_a`'s 26 GB/s stands as understood-and-unfixed. Do not re-queue split-K, or any
+other non-bit-exact kernel change, without the lossless gate in the run.

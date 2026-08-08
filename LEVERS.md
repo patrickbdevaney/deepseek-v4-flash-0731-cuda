@@ -84,6 +84,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | software-pipelining the MoE tile loop | reverted, no gain (tc_moe_gemm.cu:407) |
 | B6: skip the funnel when the weight pointer is 16B-aligned | **it never is.** Across all 48 shard headers, 43,470 of 44,436 expert tensors sit at `data_offset%16 == 8` and 966 at 12 — **none at 0**. The fast path could not fire (F66) |
 | B6': supply the funnel partner by warp shuffle instead of a second load | lane L's `wa+16` IS lane L+1's `wa`, so it looked free. Measured **423.8 -> 650.6 us** at RB=2, stalls 3.90 -> 9.81, registers 62 -> 67: lane 31 still needs a real load and it is *predicated*, not branched away, so the warp pays for both paths plus 8 shuffles per kb (F66) |
+| split-K on the small-N fp8 GEMMs | `q:wq_a` genuinely improved 6.58 -> 5.69 ms, but the reduction-order change dropped the model into a **degenerate repeating loop** from token 6, which RAISED acceptance 2.90 -> 3.86 and produced a **fake +28 % tok/s** that every existing gate passed. Retired: not for speed, for numerics (F68) |
 | align the weights so the fp8 `uint4` fast path fires | a per-shard pad makes 99.06 % of tensors 16B-aligned and bought **nothing** (`q:wq_a` 6.58 -> 6.52, spec 19.13 -> 18.59). `gemm_bench`'s own `m16+smem B+4` column already said alignment is worth 7 %, not 3.3x (F67) |
 | route all fp8 GEMMs through the M=K GEMV | `q:wq_a` 6.58 -> 5.85 but `q:wq_b` 11.67 -> **21.26**, `o:wo_b` 9.24 -> **20.56**, TOTAL 144.94 -> 176.15. A crossover in N, not a better kernel (F67) |
 | route only small-N through the M=K GEMV | net negative at BOTH thresholds. N<=2048 caught the shared expert on the side stream and cost `moe:w1w3` +4.80 ms; N<=1024 fixed that and was still worse (TOTAL 147.23 vs 144.94) (F67) |
@@ -109,7 +110,7 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
-| B2 | **split-K on the small-N GEMMs** — now the top open kernel lever | **~3 %** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
+| ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |
 | B4 | ~~fuse the elementwise glue~~ | **≤0.4 %, killed (F67)** | Moves almost no bytes; pure launch/latency floor. The verify-graph result (1.05x) caps what graphing can return here. Sinkhorn is *already* one fused kernel — do not "fuse" it again. |
 | B7 | **occupancy of the MoE GEMV** | smaller than it looks | The RB sweep found the shipped RB=2 optimal, and the `OGMK_BLOCKS_PER_SM` register-cap knob is also already at its optimum (BPS=4/NR=4 = 0.2044 ms beats 2, 3 and 6 at every NR). Both knobs are exhausted. |
@@ -158,9 +159,17 @@ naive byte model predicts ~80 % and is wrong by 3–4x. Do not use it.
    with `jetson_clocks` and *say so* in the write-up.
 5. **Sweep position matters.** Replicate 1 of a 36-point sweep ran ~14 % slower than replicates 2–3.
    Put the two arms of an A/B at **adjacent** sweep positions, or use ≥3 replicates and compare means.
-6. **A count of distinct values over 8 samples is not evidence about a mechanism.** That reasoning
+6. **A non-bit-exact change can BUY acceptance by degrading output.** Split-K sent the model into a
+   repeating loop, which is trivially predictable, so acceptance rose 2.90 → 3.86 and tok/s "improved"
+   28 % — past a first-token argmax gate, a MATCH 5/5 gate and a cosine gate (F68). Any
+   acceptance-based number is meaningless unless the emitted sequence is checked. The engine now runs
+   a **lossless gate** (spec output == base-AR output) on every canonical-prompt sweep point; keep it
+   in any run that carries a tok/s number.
+7. **A shared bump allocator makes every allocation a global variable.** A `dmalloc` added in one
+   kernel moved buffers in unrelated marks (`cattn:ogroup` +1.28 ms) purely by shifting arena offsets.
+8. **A count of distinct values over 8 samples is not evidence about a mechanism.** That reasoning
    produced a wrong adoption in F60 which F61 had to retract.
-7. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
+9. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
    `dsync` is a no-op under the arena, so the first real sync in a layer absorbs ~20 launches' worth of
    asynchronous faults. Use `DSV4_SYNCPROBE=1`.
 

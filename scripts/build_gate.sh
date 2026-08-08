@@ -25,7 +25,7 @@ echo "built build/gate_ogroup_gemv"
 # tc_fp8_gemm at ONE (M,N,K); this sweeps every shape and every M the verify path issues, plus the
 # N%64 and M%16 tails that the tile mapping gets wrong independently of each other.
 nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
-  tests/gate_tc_fp8_smem.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu -o build/gate_tc_fp8_smem
+  tests/gate_tc_fp8_smem.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu -o build/gate_tc_fp8_smem
 echo "built build/gate_tc_fp8_smem"
 # Gate PREFILL_LEN — prefix-invariance of the prefill attention chain across prompt LENGTHS, plus a
 # drain of the CUDA last-error slot after every stage (Finding 53). Nothing else in the suite varies

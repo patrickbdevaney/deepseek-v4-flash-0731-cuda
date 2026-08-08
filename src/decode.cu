@@ -898,6 +898,28 @@ int main(int argc, char** argv){
         }
         printf("\n[spec] generated %d tokens over %d verifies: mean tokens/verify = %.2f (block=%d, max %d)\n", (int)sgen.size(), nverify, avg_acc, BLK, BLK);
         printf("[spec] tokens:"); for(int i=0;i<(int)sgen.size() && i<40;++i) printf(" %d",sgen[i]); printf("\n");
+        // SPEC-vs-BASE EQUIVALENCE GATE (LOOP_LOG Finding 68). Speculative decoding is supposed to be
+        // LOSSLESS: the verify corrects every draft, so the emitted sequence must equal what base AR
+        // emits from the same prompt. Nothing checked that. The existing gates check the FIRST token
+        // (argmax 11111) and MATCH 5/5 at one position, and split-K passed both while sending the
+        // model into a degenerate repeating loop from token 6 onward — which RAISED acceptance 2.90
+        // -> 3.86 and "improved" tok/s by 28%, because a repetitive sequence is trivially predictable.
+        //
+        // A quality regression that inflates the headline number is the worst failure mode this
+        // engine has, and it costs one comparison to catch: base AR already generated `gen` from the
+        // same prompt in the same process. Only the canonical prompt's points can be checked (other
+        // sweep prompts have no base-AR run), which is enough — the failure was visible at token 6.
+        if(promptSweep[bsi]==0 && !gen.empty()){
+            size_t n = gen.size() < sgen.size() ? gen.size() : sgen.size();
+            size_t bad = (size_t)-1;
+            for(size_t i=0;i<n;++i) if(gen[i]!=sgen[i]) { bad=i; break; }
+            if(bad==(size_t)-1)
+                printf("[spec] LOSSLESS GATE: first %zu tokens match base AR -> PASS\n", n);
+            else
+                printf("[spec] LOSSLESS GATE: diverges from base AR at token %zu (%d vs %d) -> GATE FAIL\n",
+                       bad, gen[bad], sgen[bad]);
+            fflush(stdout);
+        }
         printf("[spec] SPEC-DECODE: %.1f ms/tok = %.2f tok/s  (vs base M=1 %.1f ms/tok = %.2f tok/s -> %.2fx)\n",
                ms_per_tok, ms_per_tok>0?1000.0/ms_per_tok:0, warm_ms, 1000.0/warm_ms, ms_per_tok>0?warm_ms/ms_per_tok:0);
         sweep_mstok[bsi]=ms_per_tok; sweep_acc[bsi]=avg_acc; sweep_akeff[bsi]=adaptK;
