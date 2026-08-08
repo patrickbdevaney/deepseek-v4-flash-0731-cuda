@@ -10,7 +10,9 @@
 //   build: nvcc -O3 -std=c++17 -arch=sm_110a -I include tools/gemm_bench.cu \
 //            kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/mla_attn.cu kernels/moe.cu \
 //            kernels/tc_moe_gemm.cu kernels/dscratch.cu kernels/hc.cu kernels/hc_sinkhorn.cu \
-//            kernels/compressor.cu kernels/indexer.cu -o build/gemm_bench
+//            kernels/compressor.cu kernels/indexer.cu kernels/dprof.cu -o build/gemm_bench
+//   (kernels/dprof.cu is REQUIRED since moe.cu took dprof marks; without it the link fails on
+//    undefined dprof_begin/dprof_end and the line above looks like a bench that stopped building.)
 //   run:   ./build/gemm_bench [reps]
 #include "deepseek_v4.h"
 #include "fp8_block_gemm.h"

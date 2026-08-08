@@ -115,9 +115,41 @@ __global__ void tc_fp8_kernel(float* __restrict__ C, const uint8_t* __restrict__
 // staged tile is 8W*(KC*128+16) bytes, so W=8 -> KC=2 and W=2 -> KC=8. The starved shapes also have
 // the registers to spare — wq_a runs 128 warps on the whole device, so 8*KC registers of staging
 // costs nothing there.
+//
+// DOUBLE BUFFERING (LOOP_LOG Finding 78). KC raised the bytes in flight per round but left the round
+// structure serial: sync -> issue NH loads -> WAIT for all of them -> store -> sync -> mma. The mma
+// phase of round n has nothing in flight, and the load phase of round n+1 cannot start until every
+// warp has finished round n's mma. So DRAM latency is exposed once per round no matter how large KC
+// is; KC only amortises it over more bytes. `DB=true` issues round n+1's global loads into a SECOND
+// register array immediately after the store barrier, i.e. BEFORE round n's mma, so the loads have
+// the whole mma phase to land:
+//
+//     DB=0:  [sync] load..wait  store [sync] mma        [sync] load..wait  store [sync] mma
+//     DB=1:  ...store [sync] issue(n+1) mma(n)  [sync] store(n+1) [sync] issue(n+2) mma(n+1) ...
+//
+// Cost is NH more live uint4 (8*KC registers) across the mma, which is why `ptxas -v` is the first
+// instrument here and not the bench (trap 19): at <8,2> the shipped instantiation sits at 64
+// registers, and 16 more crosses a 256-thread occupancy step. Arithmetic is untouched — the same
+// bytes reach smem in the same order and `acc` still takes `cb` in kblk order — so this is BIT-EXACT
+// and `gate_tc_fp8_kc` checks it as equality, not cosine.
+//
+// THE OCCUPANCY STEP IS THE WHOLE STORY, and it is worth only FOUR registers. Unbounded, DB takes
+// <8,2> from 64 to 68 registers; at 256 threads that is 65536/(256*72) = 3 blocks/SM where 64 gives
+// 4 — a 25 % occupancy loss for +4 registers. `evidence/db_bench.log` (COLD, m16+smem B+4, M=5):
+// wo_b **+38.5 %**, sw2 +20.7 %, wq_b +13.5 %. With `__launch_bounds__` restoring 4 blocks/SM
+// (64 registers, 8 bytes of spill) the same arms are `evidence/db_bench2.log`: wo_b +3.1 %, sw2
+// −1.0 %, wq_b +2.4 %, wq_a −0.8 %, and the two shapes that were never at the occupancy cliff gain —
+// sw1/3 (W=4) **−7.2 %** and wkv (W=1) −3.2 %.
 #define TCB_PAD 16                                   // row-stride pad, in bytes
-template<int WARPS, int KC, bool AL16>
-__global__ void tc_fp8_smemB_kernel(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
+#ifndef TCB_DB_BPS                                   // blocks/SM the DB variant must still fit (see above)
+#define TCB_DB_BPS 4
+#endif
+// The body is a __device__ function so the DB=false ENTRY can stay attribute-free. An
+// `__launch_bounds__(256,1)` on the shared template silently took the DB=false <8,2> instantiation
+// from 64 to 84 registers — minBlocks=1 tells ptxas one resident block is enough — which would have
+// changed the control arm of this very A/B. Only the DB entry carries the bound.
+template<int WARPS, int KC, bool AL16, bool DB>
+__device__ __forceinline__ void tc_fp8_smemB_body(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
                                     const uint8_t* __restrict__ B, const float* __restrict__ bs, int M, int N, int K){
     constexpr int LD = KC*128 + TCB_PAD;             // padded row stride in bytes
     constexpr int CPR = KC*8;                        // 16-byte chunks per staged row
@@ -128,30 +160,38 @@ __global__ void tc_fp8_smemB_kernel(float* __restrict__ C, const uint8_t* __rest
     const int n0=n0blk+warp*8;
     const int r0=m0+gid, r1=m0+gid+8, KB=K/128;
     float acc[4]={0.f,0.f,0.f,0.f};
-    for(int kb0=0; kb0<KB; kb0+=KC){
-        // stage B[n0blk .. n0blk+8W)[kb0*128 .. +KC*128) — NH x uint4 per thread.
-        // chunk c: row=c/CPR, byte offset=(c%CPR)*16 -> lanes 0..CPR-1 walk one row contiguously.
-        // At LD=(32*KC+4) words, row g starts at bank 4g, so the eight fragment groups are a
-        // permutation of all 32 banks for every KC — the same conflict-free property as LD=144.
-        __syncthreads();
-        uint4 v[NH];
+    // stage B[n0blk .. n0blk+8W)[kb*128 .. +KC*128) into NH x uint4 per thread.
+    // chunk c: row=c/CPR, byte offset=(c%CPR)*16 -> lanes 0..CPR-1 walk one row contiguously.
+    auto issue = [&](uint4* dst, int kb){
         #pragma unroll
         for(int h=0; h<NH; ++h){
             const int c=t+h*(WARPS*32), row=c/CPR, off=(c%CPR)*16, gn=n0blk+row;
-            v[h]=make_uint4(0,0,0,0);
+            dst[h]=make_uint4(0,0,0,0);
             if(gn<N){
-                const uint8_t* src=B+(size_t)gn*K+(size_t)kb0*128+off;
-                if(AL16) v[h]=*(const uint4*)src;
-                else { v[h].x=*(const unsigned*)(src);    v[h].y=*(const unsigned*)(src+4);
-                       v[h].z=*(const unsigned*)(src+8);  v[h].w=*(const unsigned*)(src+12); }
+                const uint8_t* src=B+(size_t)gn*K+(size_t)kb*128+off;
+                if(AL16) dst[h]=*(const uint4*)src;
+                else { dst[h].x=*(const unsigned*)(src);    dst[h].y=*(const unsigned*)(src+4);
+                       dst[h].z=*(const unsigned*)(src+8);  dst[h].w=*(const unsigned*)(src+12); }
             }
         }
+    };
+    uint4 v[NH];
+    if constexpr(DB) issue(v, 0);
+    for(int kb0=0; kb0<KB; kb0+=KC){
+        // At LD=(32*KC+4) words, row g starts at bank 4g, so the eight fragment groups are a
+        // permutation of all 32 banks for every KC — the same conflict-free property as LD=144.
+        __syncthreads();
+        if constexpr(!DB) issue(v, kb0);
         #pragma unroll
         for(int h=0; h<NH; ++h){
             const int c=t+h*(WARPS*32), row=c/CPR, off=(c%CPR)*16;
             *(uint4*)&sB[row*LD+off]=v[h];
         }
         __syncthreads();
+        // Round n+1's loads are issued HERE, before the mma below, so they overlap it. The guard is
+        // block-uniform; on the last round nothing is issued and `v` is simply not read again.
+        uint4 vn[DB ? NH : 1];
+        if constexpr(DB) { if(kb0+KC<KB) issue(vn, kb0+KC); }
         #pragma unroll 1
         for(int kc=0; kc<KC; ++kc){
             const int kblk=kb0+kc;
@@ -173,12 +213,32 @@ __global__ void tc_fp8_smemB_kernel(float* __restrict__ C, const uint8_t* __rest
             const float as1 = (r1<M)? as[(size_t)r1*KB + kblk] : 0.f;
             acc[0]+=cb[0]*as0*bsc; acc[1]+=cb[1]*as0*bsc; acc[2]+=cb[2]*as1*bsc; acc[3]+=cb[3]*as1*bsc;
         }
+        if constexpr(DB){
+            #pragma unroll
+            for(int h=0; h<NH; ++h) v[h]=vn[h];
+        }
     }
     const int cn=tid4*2;
     if(r0<M && n0+cn  <N) C[(size_t)r0*N + n0+cn  ]=acc[0];
     if(r0<M && n0+cn+1<N) C[(size_t)r0*N + n0+cn+1]=acc[1];
     if(r1<M && n0+cn  <N) C[(size_t)r1*N + n0+cn  ]=acc[2];
     if(r1<M && n0+cn+1<N) C[(size_t)r1*N + n0+cn+1]=acc[3];
+}
+// DB=false entry: no attribute, so this is codegen-identical to the pre-Finding-78 kernel.
+template<int WARPS, int KC, bool AL16>
+__global__ void tc_fp8_smemB_kernel(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
+                                    const uint8_t* __restrict__ B, const float* __restrict__ bs, int M, int N, int K){
+    tc_fp8_smemB_body<WARPS,KC,AL16,false>(C,A,as,B,bs,M,N,K);
+}
+// DB=true entry. The bound reproduces the occupancy the DB=false kernel already achieves at each W
+// (measured with `ptxas -v`: W=8 -> 64 regs = 4 blocks of 256 threads, W=2 -> 64 regs = 16 blocks of
+// 64, W=1 -> 128 regs = 16 blocks of 32). Without it the extra live uint4 take <8,2> to 68 registers,
+// which is 4 blocks/SM -> 3.
+template<int WARPS, int KC, bool AL16>
+__global__ void __launch_bounds__(32*WARPS, WARPS>=8 ? TCB_DB_BPS : (WARPS>=2 ? 32/WARPS : 16))
+                tc_fp8_smemB_db_kernel(float* __restrict__ C, const uint8_t* __restrict__ A, const float* __restrict__ as,
+                                    const uint8_t* __restrict__ B, const float* __restrict__ bs, int M, int N, int K){
+    tc_fp8_smemB_body<WARPS,KC,AL16,true>(C,A,as,B,bs,M,N,K);
 }
 
 // -1 = read NO_TCSMEM from the environment on first use; the setter exists so gates and benches can
@@ -214,6 +274,22 @@ static int tcb_kc_env(){
 //
 // HARD cap at KC<=4 for W=8: 64 rows x 8 K-blocks would be a 66 KB static __shared__, which does not
 // compile, so that instantiation must not exist even on a forced path.
+// Double buffering of the staged chunk (Finding 78). 1 = prefetch round n+1's loads before round n's
+// mma, 0 = the pre-Finding-78 kernel. -1 = read the environment on first use.
+//
+// DEFAULT OFF: MEASURED NULL IN SITU. `evidence/dbuf.log` vs `evidence/kchunk.log`, both
+// `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned — nine spec verifies pairing 1:1 at identical K and
+// accept counts came to 1219.4 -> 1222.8 ms = **+0.28 %** (that instrument moved −5.9 % for F74),
+// spec 21.68 -> 21.62 tok/s, ksweep K=5 121.11 -> 121.19 (+0.1 %), and the mark the lever was aimed
+// at, `o:wo_b`, went the WRONG way at every K>=2 (+2.8 % at K=5) — the same sign and roughly the
+// same size the bench predicted (+3.1 %). Kept behind `TCB_DB=1` because it is bit-identical
+// (`gate_tc_fp8_kc`, 1134/1134) and because the occupancy result above is the reusable part.
+static int g_tc_db = -1;
+void tc_fp8_set_db(int on){ g_tc_db = on; }
+static int tcb_db(){
+    if(g_tc_db<0){ const char* e=getenv("TCB_DB"); g_tc_db = e ? (atoi(e)!=0) : 0; }
+    return g_tc_db;
+}
 static int tcb_kc_max(int W){ return W>=8 ? 4 : 8; }
 static int tcb_pick_kc(int W, int KB){
     const int hi = tcb_kc_max(W);
@@ -235,9 +311,12 @@ void tc_fp8_gemm(float* C, const uint8_t* A_fp8, const float* a_s, const uint8_t
         // Row stride K is a multiple of 128 and the staging offset a multiple of 16, so the base
         // pointer alone decides whether every staged address is 16-byte aligned.
         const bool al16 = (((uintptr_t)B_fp8) & 15) == 0;
+        const bool db = tcb_db()!=0;
+        #define TCB_DBCASE(WW,KK,A) (db ? tc_fp8_smemB_db_kernel<WW,KK,A><<<g, 32*(WW), 0, s>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K) \
+                                        : tc_fp8_smemB_kernel   <WW,KK,A><<<g, 32*(WW), 0, s>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K))
         #define TCB_KCASE(WW,KK) case KK: { dim3 g((N+8*(WW)-1)/(8*(WW)), mt); \
-            if(al16) tc_fp8_smemB_kernel<WW,KK,true ><<<g, 32*(WW), 0, s>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K); \
-            else     tc_fp8_smemB_kernel<WW,KK,false><<<g, 32*(WW), 0, s>>>(C, A_fp8, a_s, B_fp8, b_s, M, N, K); } break;
+            if(al16) TCB_DBCASE(WW,KK,true); \
+            else     TCB_DBCASE(WW,KK,false); } break;
         #define TCB_LAUNCH(WW) switch(KC){ TCB_KCASE(WW,2) TCB_KCASE(WW,4) TCB_KCASE(WW,8) \
                                            default: TCB_KCASE(WW,1) }
         #define TCB_LAUNCH8     switch(KC){ TCB_KCASE(8,2)  TCB_KCASE(8,4) \
@@ -246,6 +325,7 @@ void tc_fp8_gemm(float* C, const uint8_t* A_fp8, const float* a_s, const uint8_t
                    case 2: TCB_LAUNCH(2) break; default: TCB_LAUNCH(1) break; }
         #undef TCB_LAUNCH8
         #undef TCB_LAUNCH
+        #undef TCB_DBCASE
         #undef TCB_KCASE
         return;
     }

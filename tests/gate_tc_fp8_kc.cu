@@ -30,6 +30,7 @@ void tc_fp8_gemm(float*, const uint8_t*, const float*, const uint8_t*, const flo
 extern bool g_tc_fp8;
 void tc_fp8_set_smem(int on);
 void tc_fp8_set_kc(int kc);
+void tc_fp8_set_db(int on);
 
 int main(){
     struct Shape { int N, K; const char* name; };
@@ -43,12 +44,13 @@ int main(){
         {  520, 1024, "N-tail [520,1024]  W=2"},    // 520 = 8*65: partial last n-block
     };
     const int Ms[]  = {1,2,3,5,8,13,16,17,20};
-    const int KCs[] = {2,4,8,-1};                   // -1 = the shipped auto rule
+    const int KCs[]  = {2,4,8,-1};                  // -1 = the shipped auto rule
+    const int KC1s[] = {1,2,4,8,-1};                // db=1 must also match at KC=1
     const int OFFS[] = {0,4};
     srand(11);
     bool pass = true; int cases = 0, bad = 0;
     g_tc_fp8 = true; tc_fp8_set_smem(1);
-    printf("KC in {2,4,8,auto} vs KC=1, bit-equality; M={1,2,3,5,8,13,16,17,20} x B offset {0,4}\n");
+    printf("KC in {2,4,8,auto} x DB in {0,1} vs KC=1/DB=0, bit-equality; M={1,2,3,5,8,13,16,17,20} x B offset {0,4}\n");
     for (const Shape& sh : shapes){
         const int N=sh.N, K=sh.K, KB=K/128;
         std::vector<uint8_t> B((size_t)N*K);
@@ -74,22 +76,28 @@ int main(){
                 CU(cudaMemcpy(das,asv.data(),asv.size()*4,cudaMemcpyHostToDevice));
 
                 CU(cudaMemset(C1,0xEE,(size_t)M*N*4));
-                tc_fp8_set_kc(1); tc_fp8_gemm(C1,dA,das,dB,dbs,M,N,K,0);
+                tc_fp8_set_kc(1); tc_fp8_set_db(0); tc_fp8_gemm(C1,dA,das,dB,dbs,M,N,K,0);
                 CU(cudaDeviceSynchronize());
                 std::vector<float> c1((size_t)M*N), ck((size_t)M*N);
                 CU(cudaMemcpy(c1.data(),C1,(size_t)M*N*4,cudaMemcpyDeviceToHost));
 
-                for (int kc : KCs){
+                // db=1 (Finding 78) only changes WHEN the staged chunk's global loads are issued —
+                // same bytes, same smem, same kblk order — so it must be bit-identical too, at every
+                // KC including 1. Reference is KC=1/db=0, the pre-F74 AND pre-F78 kernel.
+                for (int db : {0,1})
+                for (int ki=0, nk = db ? (int)(sizeof(KC1s)/sizeof(int)) : (int)(sizeof(KCs)/sizeof(int));
+                     ki<nk; ++ki){
+                    const int kc = (db ? KC1s : KCs)[ki];
                     CU(cudaMemset(Ck,0xEE,(size_t)M*N*4));
-                    tc_fp8_set_kc(kc); tc_fp8_gemm(Ck,dA,das,dB,dbs,M,N,K,0);
+                    tc_fp8_set_kc(kc); tc_fp8_set_db(db); tc_fp8_gemm(Ck,dA,das,dB,dbs,M,N,K,0);
                     CU(cudaDeviceSynchronize());
                     CU(cudaMemcpy(ck.data(),Ck,(size_t)M*N*4,cudaMemcpyDeviceToHost));
                     ++cases;
                     // memcmp, not ==: this is a bit-pattern claim about floats.
                     if (memcmp(c1.data(), ck.data(), (size_t)M*N*4) != 0){
                         size_t i=0; while(i<c1.size() && c1[i]==ck[i]) ++i;
-                        printf("  MISMATCH %-22s M=%-3d B+%d KC=%-2d  first at [%zu]: %.9g vs %.9g\n",
-                               sh.name, M, boff, kc, i, (double)c1[i], (double)ck[i]);
+                        printf("  MISMATCH %-22s M=%-3d B+%d KC=%-2d DB=%d  first at [%zu]: %.9g vs %.9g\n",
+                               sh.name, M, boff, kc, db, i, (double)c1[i], (double)ck[i]);
                         shape_ok=false; pass=false; ++bad;
                     }
                 }
@@ -99,7 +107,7 @@ int main(){
         printf("%-24s all M x offset x KC -> %s\n", sh.name, shape_ok?"EXACT":"MISMATCH");
         CU(cudaFree(dBbase)); CU(cudaFree(dbs));
     }
-    tc_fp8_set_kc(-1);
+    tc_fp8_set_kc(-1); tc_fp8_set_db(-1);
     printf("\nGate TC_FP8_KC: %d/%d exact -> %s\n", cases-bad, cases, pass?"PASS":"FAIL");
     return pass?0:1;
 }

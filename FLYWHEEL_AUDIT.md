@@ -19,3 +19,5 @@
 ## 2026-08-08T01:15:46-04:00 — HELD 898a979bb4a4ab0d72eae42c2ad52d4d48776b20
 
   - no passing LOSSLESS gate in prefill_long.log
+## 2026-08-08T03:14:35-04:00 — PUSHED 43f87feb89be152fa96f44570e191d0cec58e219
+  the clean re-baseline F73 and F74 both skipped: 21.76 tok/s spec, 13.64 base

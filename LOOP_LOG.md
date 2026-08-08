@@ -4250,3 +4250,114 @@ run and maintains `baseline.dprof_runs_since_clean`, and at >= 2 step 6 makes th
 clean re-baseline. The executor had already *noticed* this and written an honest note refusing to
 overwrite a clean baseline with a contaminated one -- but noticing is not a mechanism, and it went two
 cycles anyway.
+
+---
+
+## Finding 78 — double-buffering the fp8 tile's staged chunk: bit-identical, +0.28 % in situ. B8's last named move is dead, and the reason is a FOUR-register occupancy step
+
+**NEGATIVE. Kept behind `TCB_DB=1`, default OFF.** Nine paired spec verifies **1219.4 → 1222.8 ms
+(+0.28 %)**, spec **21.68 → 21.62 tok/s (−0.3 %)**, base AR 13.78 → 13.69 (−0.7 %), ksweep K=5
+121.11 → 121.19 (+0.1 %). The mark the lever was aimed at, `o:wo_b`, moved **the wrong way at every
+K≥2** (+4.6/+5.0/+3.7/**+2.8 %**). 19/19 gates PASS, `gate_tc_fp8_kc` now **1134/1134 bit-exact**
+(it sweeps DB as well as KC), the 26-token spec sequence and 8-token base-AR sequence are
+byte-identical to the control, acceptance 2.89 = 2.89, **LOSSLESS GATE PASS**, first token 11111.
+Clocks pinned (`sudo jetson_clocks`), caches dropped. Log `evidence/dbuf.log`, control
+`evidence/kchunk.log` (same config: `DSV4_DPROF=1 DSV4_KSWEEP=1`, NDEC=8, 24 spec tokens, block=5,
+passes=1, adaptK=1.50, prompt 0).
+
+### The lever
+
+LEVERS.md B8 named exactly one remaining move on the three fp8 tile marks (`q:wq_b` 8.0 + `o:wo_b`
+8.7 + `q:wq_a` 5.8 = 22.5 ms): **double-buffer the staged K-chunk so round n+1's global loads issue
+before round n's mma** — the F74 mechanism taken one step further. F74 raised the bytes in flight per
+round (KC K-blocks per barrier pair instead of 1) but left the round itself serial:
+
+```
+DB=0:  [sync] issue NH loads .. WAIT .. store [sync] mma        [sync] issue .. WAIT .. store [sync] mma
+DB=1:  .. store [sync] issue(n+1) mma(n)  [sync] store(n+1) [sync] issue(n+2) mma(n+1) ..
+```
+
+so DRAM latency is exposed once per round no matter how large KC is. `DB=true` issues the next
+round's loads into a second register array immediately after the store barrier, giving them the whole
+mma phase to land. Arithmetic is untouched — same bytes, same smem, same `kblk` order into `acc` —
+so the claim is bit-equality, and `gate_tc_fp8_kc` was extended to sweep `DB ∈ {0,1}` against the
+KC=1/DB=0 reference (504 → 1134 cases, all exact).
+
+### What actually happened: a 25 % occupancy loss bought with FOUR registers
+
+`ptxas -v` first, per trap 19. Unbounded, DB takes the shipped `<8,2>` instantiation from **64 to 68
+registers** — which looks like nothing, and is not: at 256 threads/block, 65536/(256·64) = **4
+blocks/SM** and 65536/(256·72, the 8-register allocation granularity) = **3**. The first bench
+(`evidence/db_bench.log`, COLD, `m16+smem B+4`, M=5, 3 alternating replicates each arm) priced that
+step:
+
+| shape (W) | wo_b (8) | sw2 (8) | wq_b (8) | wq_a (2) | sw1/3 (4) | wkv (1) |
+|---|---|---|---|---|---|---|
+| DB unbounded | **+38.5 %** | +20.7 % | +13.5 % | +1.2 % | −8.4 % | −3.7 % |
+| DB, `__launch_bounds__` back to 4 blocks/SM | +3.1 % | −1.0 % | +2.4 % | −0.8 % | −7.2 % | −3.2 % |
+
+(`evidence/db_bench2.log` for the second row.) **Restoring the occupancy recovered 35 points on
+`wo_b`.** Every shape that regressed is a W=8 shape sitting exactly on the 4→3 step; the two that
+gain — sw1/3 at W=4 and wkv at W=1 — were never near it. This is the cleanest measurement in the
+project of how expensive a register is *near a step* and how nearly free it is away from one.
+
+Getting the bound on was itself a trap worth recording: putting `__launch_bounds__(32*WARPS, 1)` on
+the shared template took the **DB=false** `<8,2>` instantiation from 64 to **84** registers —
+`minBlocks=1` tells ptxas one resident block is enough, so it stops economising — which would have
+silently changed the *control arm of this very A/B*. The fix is that the body is now a `__device__`
+function and the DB=false entry carries no attribute at all, verified back to 64/64/64/128 registers
+with zero spill across `<8,2>/<4,2>/<2,2>/<1,8>`.
+
+### The measurement that closed it
+
+With occupancy restored the bench said "wash, slightly negative on the W=8 shapes", and in situ
+agrees to within its own noise:
+
+| | control | this | delta |
+|---|---|---|---|
+| spec tok/s | 21.68 | 21.62 | −0.3 % |
+| base AR tok/s | 13.78 | 13.69 | −0.7 % |
+| ksweep K=5 | 121.11 | 121.19 | +0.1 % |
+| dprof TOTAL K=5 | 127.18 | 127.58 | +0.3 % |
+| `o:wo_b` K=5 | 8.67 | 8.91 | **+2.8 %** |
+| `q:wq_b` K=5 | 7.98 | 7.85 | −1.6 % |
+| `q:wq_a` K=5 | 5.80 | 5.70 | −1.7 % |
+
+The nine spec verifies pair 1:1 at identical K and identical accept counts, so they compare directly:
+
+| verify | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | Σ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| K, accepted | 2, 1/1 | 2, 1/1 | 4, 1/3 | 2, 1/1 | 4, 3/3 | 3, 2/2 | 5, 4/4 | 5, 1/4 | 4, 3/3 | |
+| control ms | 112.5 | 117.8 | 141.8 | 119.5 | 144.3 | 131.4 | 154.7 | 154.9 | 142.5 | 1219.4 |
+| this ms | 112.7 | 117.8 | 141.4 | 120.2 | 145.9 | 130.0 | 155.4 | 155.4 | 144.0 | 1222.8 |
+| delta | +0.2 % | 0.0 % | −0.3 % | +0.6 % | +1.1 % | −1.1 % | +0.5 % | +0.3 % | +1.1 % | **+0.28 %** |
+
+**`o:wo_b` is the control that decides it.** It is the one mark whose kernel this change was supposed
+to speed up, the bench predicted +3.1 % for it after the occupancy fix, and it measured **+2.8 %** —
+sign and magnitude agreeing across two independent instruments is not noise. `q:wq_b` and `q:wq_a`
+move −1.6 %/−1.7 % against a same-run scatter that F76 bounded at ±2.4 % on this class of mark, and
+`moe:w1w3` (−0.5 %) and `i:score` (−2.6 %), which this change cannot touch, sit in the same band.
+
+### The mechanism, and what it says about the tile
+
+The prefetch works — the loads do get the mma phase — but **the mma phase is too short to hide a DRAM
+round trip at these shapes.** One round at KC=2 is 8 `mma.m16n8k32` plus 32 A-fragment loads that hit
+L1/L2; that is a few hundred cycles against a ~600-cycle miss. So the change converts "wait the full
+latency at the barrier" into "wait most of the latency at the barrier", and pays for the remainder
+with a second live register array. At W=8 that array is on the wrong side of an occupancy step and
+the trade is negative; at W=4/W=1 it is positive in the bench but those shapes are the shared expert
+and `wkv`, both already **forked to a side stream and hidden** (F55), which is why nothing shows up
+in situ. The deeper pipeline this kernel actually wants is `cp.async` staging global→shared with no
+register array at all — a different change, not a tuning of this one, and one that must clear the
+same occupancy bar it just failed.
+
+### Disposition and what is left of B8
+
+`TCB_DB=1` opts in; the default is the pre-change kernel, which is the arm every baseline in
+`FLYWHEEL_STATE.json` was measured under. **B8's tile half is now closed**: F67 killed both reroutes,
+F68 killed split-K on numerics, F74 took the win that was there, and this closes double-buffering.
+What remains of B8 is the single untried idea on `o:wo_a` — the `OG_SMEM=1` variant reading `o4[m]`
+lazily from shared memory — and this cycle sharpens its prior in *both* directions: `ogroup_gemv_mk`
+spills 44 bytes at `<5,4>`, so it is genuinely register-starved and freeing ~16 could cross a real
+step (unlike the 4 registers here, which crossed one by accident); but F78 is also the second cycle
+running to show that the *bench* overstates what a register buys in situ.
