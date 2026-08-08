@@ -784,7 +784,7 @@ int main(int argc, char** argv){
         // alongside the 43 prefill calls. Those run one row per expert -- redundancy exactly 1.0 --
         // so they DILUTE the average toward 1 and the printed 2.27x was a lower bound, not the
         // measurement. Reset here so the [moebytes] line describes the prefill and nothing else.
-        g_moe_tiles_sum = 0; g_moe_union_sum = 0; g_moe_rows_sum = 0; g_moe_union_calls = 0;
+        g_moe_tiles_sum = 0; g_moe_chunks_sum = 0; g_moe_union_sum = 0; g_moe_rows_sum = 0; g_moe_union_calls = 0;
         auto pfs_t0 = std::chrono::steady_clock::now();
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PSp); std::swap(h,h2);
             if(hashlvl>=2){ CU(cudaDeviceSynchronize());
@@ -809,8 +809,12 @@ int main(int argc, char** argv){
             printf("[moebytes] PS=%d  calls %d  union/call %.1f  rows/call %.1f  tiles/call %.1f\n",
                    PSp, g_moe_union_calls, ideal/g_moe_union_calls,
                    (double)g_moe_rows_sum/g_moe_union_calls, tiles/g_moe_union_calls);
-            printf("[moebytes] expert weight traffic: ACTUAL %.1f GB (tiles) vs IDEAL %.1f GB (union)"
-                   "  -> redundancy %.2fx\n", tiles*per_tile/1e9, ideal*per_tile/1e9, tiles/ideal);
+            double chunks = (double)g_moe_chunks_sum;
+            printf("[moebytes] tiles %.0f  RB-chunks %.0f (= actual weight reads; a tile costs "
+                   "ceil(me/RB) reads, NOT one)\n", tiles, chunks);
+            printf("[moebytes] expert weight traffic: ACTUAL %.1f GB vs IDEAL %.1f GB"
+                   "  -> redundancy %.2fx   (tiles-only would say %.2fx and be wrong)\n",
+                   chunks*per_tile/1e9, ideal*per_tile/1e9, chunks/ideal, tiles/ideal);
             fflush(stdout);
         }
         // GATE (in-run, every point). A compressed layer emits exactly floor(PSp/ratio) rows during

@@ -5140,3 +5140,70 @@ its rows, (b) prefill-shaped attention kernels instead of the M=1-shaped ones in
 Conservatively 21.35 s -> ~5 s is **4x**, which turns the S5 capture arithmetic from 4.9 days at 20K
 samples into roughly one. **Prefill was never a decode lever and still is not; it is a multiplier on
 the fine-tune's cost, which is why it goes first.**
+
+## Finding 85 — the prefill MoE moves **11.26x** the bytes it needs, the tile count said 3.26x and was wrong, and `MOE_MMA=1` buys **+16.7 % prefill** for **-16 % decode**
+
+**B9, operator-run.** `evidence/prefill_moemma_b9e.log`, two identical PS=1022 sweep points so the
+in-place repack lands outside the measurement; the points agree to **0.02 %**.
+
+### The correction: tiles are not the traffic
+
+F84 reported 3.26x redundancy from a tile count and called the MoE latency-bound at 12.5 % of
+roofline. **Both were wrong, and for the same reason.** In `k_grouped_fp4_gemv_e8m0` the weight load
+sits INSIDE the `rb` loop, so one 16-row tile costs `ceil(me/RB)` full weight reads, not one.
+Traffic is a function of **RB**, and the tile row cap does not enter it — splitting 43 rows into
+16-row or 64-row tiles gives identical bytes at fixed RB. **The fix F84 recommended ("larger tiles")
+would have moved nothing.**
+
+Counter rewritten to count RB-chunks, measured on the same run:
+
+```
+tiles 19779   RB-chunks 68332   -> redundancy 11.26x   (tiles-only would say 3.26x and be wrong)
+ACTUAL 913.6 GB vs IDEAL 81.2 GB
+```
+
+Hand-computed 892.9 GB against measured 913.6 GB — 2.3 %. At `RB=4` (what any batch >2 rows gets,
+`rows_hint<=2 ? 2 : 4`) an expert serving ~43 rows costs **11 weight reads**. So the prefill MoE is
+**bandwidth-bound at ~42 % of roofline moving 11x the necessary bytes** — not latency-bound.
+
+### Why RB is not the lever either
+
+`acc[RB][BN]` is live regardless of real row count (the F28 occupancy trap). F64/F70 measured the
+wall: RB=8 costs 85 registers / 39.4 % occupancy and LOSES in situ. Amortising 43 rows needs RB~43,
+which this kernel cannot hold. **The structural answer is the mma path**, which tiles through shared
+memory instead of holding accumulators per row.
+
+### Measured A/B
+
+| | GEMV (default) | `MOE_MMA=1` | |
+|---|---|---|---|
+| prefill | 21351.6 ms / 47.9 tok/s | **18300 ms / 55.9 tok/s** | **+16.7 %** |
+| MoE | 9100.0 ms | **6078.8 ms** | **-33.2 %** |
+| ATTENTION | 9086.0 ms | 9063.6 ms | unchanged (other path) |
+| base AR decode | 13.78 tok/s | 11.56 tok/s | **-16.1 %** |
+| spec decode | 22.15 tok/s | 17.94 tok/s | **-19 %** |
+
+**The prediction was too optimistic and the miss is informative.** I predicted MoE 9.10 -> 1-3 s; it
+landed at 6.08 s. At 31 TFLOP of expert work that is **5.1 TFLOPS**, and against the 81.2 GB ideal
+traffic only 13.4 GB/s — so under mma the MoE has stopped being a byte problem and become a
+compute/occupancy one. Real headroom remains; it is a different lever.
+
+### Deployment: two workloads, two flags, no code
+
+`tc_ensure_repacked` mutates weights **in place** and the GEMV requires the ORIGINAL layout, so the
+two paths cannot coexist in one process — this is a process-wide choice, not a per-call one. That
+maps exactly onto what we need: **capture is teacher-forced prefill, so `MOE_MMA=1` is nearly free
+there** (the decode regression does not apply), while the serving engine keeps GEMV. The deeper fix
+— a GEMV variant reading the repacked layout so one process can do both — is real work and belongs
+behind the attention half.
+
+**Caveat on the printed bytes:** the counter mirrors the GEMV RB rule, so under `MOE_MMA=1` the
+913.6 GB figure is the GEMV *counterfactual*, not this run's traffic. It is the clean measurement of
+GEMV redundancy; it does not describe mma.
+
+### Two observations for later
+
+1. **ATTENTION is now 56.4 % of prefill at 9.06 s** and is untouched by any of this. Next target.
+2. **Acceptance on the 1023-token prompt was 3.57-4.00 vs 2.89 on the canonical 6-token prompt.**
+   Different prompt, highly predictable content (source code), so NOT like-for-like — but if long
+   real prompts genuinely accept better it shifts the S5 expectation, and it is cheap to test.

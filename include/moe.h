@@ -56,6 +56,10 @@ extern long long g_moe_rows_sum;
 // At bs=1 that distinction is invisible; at a 1022-token prefill it is the whole question of
 // whether the MoE is latency-bound or is simply moving several times the bytes it needs to.
 extern long long g_moe_tiles_sum;   // DSV4_MOEUNION=1: summed 16-row tiles per call
+// TILES ARE NOT THE TRAFFIC. The weight load in k_grouped_fp4_gemv_e8m0 sits INSIDE the `rb` loop,
+// so one tile costs ceil(me/RB) full weight reads, not one. Counting tiles undercounted the prefill
+// by 3.4x and made a bandwidth-bound kernel look latency-bound. Count the chunks.
+extern long long g_moe_chunks_sum;  // DSV4_MOEUNION=1: summed RB-chunks = actual weight reads
 extern int       g_moe_rows_max;
 extern long long g_moe_rows_hist[10];
 

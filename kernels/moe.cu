@@ -104,6 +104,7 @@ long long g_moe_union_sum = 0;
 int       g_moe_union_calls = 0;
 long long g_moe_rows_sum = 0;
 long long g_moe_tiles_sum = 0;
+long long g_moe_chunks_sum = 0;
 int       g_moe_rows_max = 0;
 long long g_moe_rows_hist[10] = {0,0,0,0,0,0,0,0,0,0};
 
@@ -360,8 +361,15 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
             g_moe_rows_sum += rows; if(mx>g_moe_rows_max) g_moe_rows_max = mx;
             // Exact tile count: ceil(rows_e/16) per touched expert. This is the redundancy factor
             // against the ideal "read each expert once" — measured, not modelled.
-            { long long tiles=0; for(int e2=0;e2<nr;++e2){ int m2=ho[e2+1]-ho[e2]; if(m2>0) tiles += (m2+15)/16; }
-              g_moe_tiles_sum += tiles; }
+            { long long tiles=0, chunks=0;
+              // Mirror tc_fp4_grouped_gemv_e8m0's own RB rule exactly (rows_hint == bs).
+              const char* rbe=getenv("MOE_RB");
+              int RB = rbe ? atoi(rbe) : (bs<=1 ? 1 : bs<=2 ? 2 : 4);
+              if(RB!=1&&RB!=2&&RB!=4&&RB!=8) RB=8;
+              for(int e2=0;e2<nr;++e2){ int m2=ho[e2+1]-ho[e2]; if(m2<=0) continue;
+                  int nt2=(m2+15)/16; tiles += nt2;
+                  for(int t2=0;t2<nt2;++t2){ int me2=m2-16*t2; if(me2>16) me2=16; chunks += (me2+RB-1)/RB; } }
+              g_moe_tiles_sum += tiles; g_moe_chunks_sum += chunks; }
             // Which RB the row-amortised GEMV should use is decided by rows-per-EXPERT, not by bs:
             // acc[RB][BN] is live regardless of the real row count (the Finding 28 occupancy trap).
             for(int e=0;e<nr;++e){ int me_=ho[e+1]-ho[e]; if(me_>0 && me_<=8) g_moe_rows_hist[me_]++; else if(me_>8) g_moe_rows_hist[9]++; }
