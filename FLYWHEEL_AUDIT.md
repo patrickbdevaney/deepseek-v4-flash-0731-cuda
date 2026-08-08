@@ -14,3 +14,5 @@
   triage the deep-research dossier: 4 promoted, 6 already done here, 3 inapplicable
 ## 2026-08-08T00:18:53-04:00 — PUSHED 8af1eb51103b939929ebde69edcf1905fb2eea7d
   untrack FLYWHEEL_STOP: origin/main was shipping a committed stop flag
+## 2026-08-08T00:58:29-04:00 — PUSHED 4ae77c62efb844d335f131b9f8abda966715ff97
+  audit: lift the pivot check out of the nothing-unpushed branch

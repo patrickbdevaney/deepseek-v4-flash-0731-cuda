@@ -47,6 +47,7 @@ An unrecorded search will be run again.
 | 2026-08-07 | C | n-gram / prompt-lookup speculation (operator-supplied) | viable, free, additive to MTP | LEVERS.md **S6** |
 | 2026-08-07 | B | "get the GEMM right for the MoE" (operator-supplied) | **already exists and is 1.9x SLOWER** — closed with a measurement | §3 |
 | 2026-08-07 | A | K160 not a fused expert count -> Torch router fallback | **does not apply to this engine** — vLLM artifact | §3 |
+| 2026-08-08 | C | **FastMTP full text** (WebFetch arXiv 2509.18362v1) — recipe + is there a data-scaling study? | recipe extracted in full; **NO data-scaling study exists**, but the on-policy ablation is decisive — see §6 | S5 plan |
 | 2026-08-08 | A-F | **operator deep-research dossier** (web-chat, ~24 sources: FastMTP, HyperDFlash, SuffixDecoding, Sequoia, EVICT/EcoSpec/AcceptMoE, REAP, Thor MLPerf) | **4 promoted, 6 already done here, 3 inapplicable** — full triage in §3a | S5 S6 S7 S4 |
 
 ## 3. Ideas seen and rejected before implementation
@@ -108,6 +109,89 @@ bytes are measured:
 
 So the headroom splits cleanly: ~30 % left in kernel/latency work on a cycle that is already
 well-tuned, and a **1.4x sitting in acceptance alone**. That is why S5 outranks everything else open.
+
+## 6. S5 feasibility ON THIS BOX — measured, not estimated
+
+The question "can we fine-tune the draft head on Thor" splits into four, and three now have numbers.
+
+**The structural fact that makes it possible at all: you do not backprop through the frozen backbone.**
+The draft head consumes the backbone's hidden state, and `dspark_tap_pool` already emits exactly that
+at layers 40/41/42 in the prefill path. So training = (a) capture states with the engine we have,
+(b) train a small head on them.
+
+### (a) RAM — not the constraint
+
+FastMTP's head is **210.8M params, <3 % of a 7,833.4M backbone**. AdamW working set: 0.42 GB bf16
+weights + 0.84 GB fp32 master + 1.68 GB moments ≈ **3 GB**, plus activations. Against 122 GiB unified
+this is nothing; the 12.26 GB backbone can stay resident beside it. **RAM was never the problem.**
+
+### (b) Capture rate — MEASURED, and slower than hoped
+
+`evidence/prefill_sweep.log`, `evidence/prefill_long.log`, one checkpoint load each:
+
+| prefill positions | time | tok/s |
+|---|---|---|
+| 5 | 178.5 ms | 28.0 |
+| 255 | 4848.3 ms | **52.6** |
+| 511 | 10150.2 ms | 50.3 |
+| 1023 | 21452.9 ms | **47.7** |
+| 2047 | 46747.1 ms | 43.8 |
+
+**Prefill is ~48 tok/s at realistic sample lengths and declines gently.** That is only **3.4x the base
+AR decode rate** (14.20 tok/s in the same run) — far below the order of magnitude a batched forward
+ought to give. At PS=255 the 12.26 GB of weights amortise over 255 positions, so this path *should* be
+compute-bound and much faster. It is not, because every kernel in it was tuned for M=1 decode. See
+`LEVERS.md` **B9**.
+
+Consequence: teacher-forced capture is only **2.2x cheaper than on-policy generation** (47.7 vs 21.68
+tok/s), not the 10-50x that would have made the choice obvious.
+
+### (c) On-policy or not — the ablation settles it, and it inverts the obvious answer
+
+FastMTP has **no data-scaling study**: no minimum-sample experiment, no saturation curve. But it does
+ablate the thing that matters more, at K=3:
+
+| variant | speedup |
+|---|---|
+| vanilla MTP (the head as shipped) | 1.21x |
+| **fixed-data FT** (original dataset responses, teacher-forced) | **2.54x** |
+| self-data FT (on-policy self-distilled) | 2.73x |
+
+**On-policy is worth ~7 %. The win is fine-tuning at all.** So the expensive 3.7-day generation run
+buys the last 7 %, and ordinary corpus text run teacher-forced keeps ~93 % of it. Generation is
+optional polish, not the price of entry. (Our spec decode is gated LOSSLESS, so if we ever do generate,
+its output is bit-identical to base AR and is legitimate on-policy data at 21.68 tok/s.)
+
+### (d) Sizing, at the measured 47.7 tok/s and 8 KB/token (hidden 4096, bf16)
+
+| corpus | tokens | teacher-forced capture | cached states (bf16 / fp8) |
+|---|---|---|---|
+| 10K samples x ~700 tok | 7M | **1.7 days** | 56 GB / 28 GB |
+| **20K samples** | 14M | **3.4 days** | 112 GB / 56 GB |
+| 50K samples | 35M | 8.5 days | 280 GB / 140 GB |
+| FastMTP full (389.4K) | 273M | 66 days | 2.2 TB / 1.1 TB |
+
+**20K in ~3.4 days is the target**, cached so the head can be trained for multiple epochs and swept for
+hyperparameters without re-capture. Storage stops being a constraint the moment the corpus is this
+size — the 4.7 TB figure that looked disqualifying was for the full 389.4K corpus.
+
+### The recipe, extracted in full (arXiv 2509.18362v1)
+
+Position-shared single head, 210.8M params. **3 epochs**, AdamW (β=0.9, 0.95), peak LR **5e-5** cosine
+with 0.05 warmup, batch 64, **<1 day on a single H20**. Loss: weighted CE with exponential decay
+`α_k = β^(k-1)/Σβ^(j-1)`, **β=0.6**, K=3. Corpus mix 42 % general / 18 % math / 13 % code / 27 %
+Chinese; generation at T=0.6, top-k 20, top-p 0.95, max 4096. Per-position acceptance **70/11/2 % →
+80/56/36 %** at k=1/2/3.
+
+### The two open questions, in priority order
+
+1. **Is there an autograd stack on aarch64 `sm_110a` for a 210M head?** This engine is pure CUDA
+   inference with no backward pass anywhere. Either PyTorch on JetPack works, or the MTP block needs
+   hand-written backward kernels. **This is upstream of every recipe detail and is the largest
+   unknown in S5** — larger than the data question.
+2. **Where does acceptance saturate with corpus size?** FastMTP does not say. Medusa- and EAGLE-class
+   heads are commonly trained on ShareGPT-scale data (order 60K), which would put 20K within a factor
+   of three of the norm — *this needs verifying, it is recollection, not a checked source.*
 
 ## 5. What "done" looks like
 

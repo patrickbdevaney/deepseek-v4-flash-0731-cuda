@@ -17,6 +17,7 @@
 //   args:  <dir> <ids> <NDEC> [headdir] [NGEN0]
 //          headdir defaults to <dir> when the checkpoint has embedded mtp.* (0731 does).
 #include <unordered_map>
+#include <chrono>
 #include "weight_store.h"
 #include "deepseek_v4.h"
 #include "block.h"
@@ -307,11 +308,29 @@ int main(int argc, char** argv){
                    (tb-fb)/1073741824.0, tb/1073741824.0, fb/1073741824.0);
             if(be!=cudaSuccess) cudaGetLastError(); }
     }
-    arena_init((size_t)512<<20);                            // 512 MB decode scratch arena (bump, reset per layer)
+    // Decode scratch arena (bump, reset per layer). 512 MB was sized for the 6-token gate prompt and
+    // silently became a prompt-length ceiling: a PS=1023 prefill asks for 538451712 bytes and the
+    // allocator reports `arena overflow 538451712>536870912`, killing the run. The arena holds
+    // per-position intermediates, so its high-water mark scales with the longest prompt, not with a
+    // constant. Sized from SMAX; the box has 114 GiB free, so the headroom costs nothing and a
+    // too-small ceiling costs the whole run.
+    size_t arena_bytes = (size_t)512<<20;
+    if(SMAX > 512) arena_bytes = (size_t)(512 + (size_t)SMAX*2) << 20;
+    arena_init(arena_bytes);
     printf("[decode] prefill %d positions...\n", PS);
+    // Timed because prefill throughput -- not the M=1 decode rate -- is what sizes a teacher-forced
+    // hidden-state capture for a draft-head fine-tune (LEVERS.md S5). One batched forward over PS
+    // positions, so tok/s here is the corpus-ingest rate. Synchronise on both sides: the loop is
+    // async and an untimed launch queue would report the enqueue cost, which is trap 3.
+    CU(cudaDeviceSynchronize());
+    auto pf_t0 = std::chrono::steady_clock::now();
     for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset();
         run_layer(Lyr,true,0,h,h2,d_ids,PS); std::swap(h,h2);     // structs prebuilt -> no per-token Loader work
     }
+    CU(cudaDeviceSynchronize());
+    double pf_ms = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-pf_t0).count();
+    printf("[decode] PREFILL: %d positions in %.1f ms = %.1f tok/s (%.3f ms/tok)\n",
+           PS, pf_ms, PS*1000.0/pf_ms, pf_ms/PS);
     printf("[decode] prefill done. caches populated. starting decode.\n");
 
     // ---------------- DECODE: autoregressive M=1 ----------------
@@ -743,11 +762,17 @@ int main(int argc, char** argv){
             for(size_t i=0;i<n;++i){ unsigned u; memcpy(&u,&hv2v[i],4);
                 for(int b=0;b<4;++b){ v^=(u>>(b*8))&0xff; v*=1099511628211ULL; } }
             return v; };
+        CU(cudaDeviceSynchronize());
+        auto pfs_t0 = std::chrono::steady_clock::now();
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PSp); std::swap(h,h2);
             if(hashlvl>=2){ CU(cudaDeviceSynchronize());
                 printf("[lhash] point %zu layer %2d ratio %3d : %016llx\n",
                        bsi, Lyr, compress_ratio(Lyr), hlayer(h,(size_t)PSp*hc*d)); fflush(stdout); }
             if(Lyr==40) dspark_tap_pool(mh_pre,h,PSp,hc,d,0,3); else if(Lyr==41) dspark_tap_pool(mh_pre,h,PSp,hc,d,1,3); else if(Lyr==42) dspark_tap_pool(mh_pre,h,PSp,hc,d,2,3); }
+        CU(cudaDeviceSynchronize());
+        { double ms = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-pfs_t0).count();
+          printf("[decode] PREFILL: %d positions in %.1f ms = %.1f tok/s (%.3f ms/tok)\n",
+                 PSp, ms, PSp*1000.0/ms, ms/PSp); fflush(stdout); }
         // GATE (in-run, every point). A compressed layer emits exactly floor(PSp/ratio) rows during
         // prefill, so KV[L].T is a direct readout of the length the prefill ACTUALLY ran at. This is
         // the assertion whose absence cost cycle 2 its whole run: with the Finding-52 bug and

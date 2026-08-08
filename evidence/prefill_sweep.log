@@ -1,0 +1,39 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=2 seqmax=2065
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 109.9/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 178.5 ms = 28.0 tok/s (35.694 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (71.1 ms warmup)
+  step 1 pos 6 -> token 16  (70.4 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16
+[decode] WARM decode: 70.4 ms/tok = 14.20 tok/s  (M=1 steady state, 1-step avg)
+
+[spec-verify] M=2 verify in ONE forward: 85.4 ms (= 42.7 ms/tok if all accepted vs 70.4 M=1 -> 1.65x)
+[spec-verify] verify argmax: 11111 16
+[spec-verify] decode tokens: 11111 16
+[spec-verify] MATCH 2/2 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5 5 5 5
+[spec] head built. mem 110.9/122.8 GiB
+[decode] PREFILL: 255 positions in 4848.3 ms = 52.6 tok/s (19.013 ms/tok)
+[spec] decoding 4 tokens (block=5, draft passes=1, adaptK=1.50, prompt=1 s=256)...
+  [margins] 14.42 11.95 9.05 15.16 13.67  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (222.6 ms)  cpos=260
+
+[spec] generated 5 tokens over 1 verifies: mean tokens/verify = 5.00 (block=5, max 5)
+[spec] tokens: 2395 25309 362 1660 17840
+[spec] SPEC-DECODE: 0.0 ms/tok = 0.00 tok/s  (vs base M=1 70.4 ms/tok = 14.20 tok/s -> 0.00x)
+[decode] PREFILL: 511 positions in 10150.2 ms = 50.3 tok/s (19.863 ms/tok)
+[spec] decoding 4 tokens (block=5, draft passes=1, adaptK=1.50, prompt=2 s=512)...
+  [margins] 11.72 14.82 12.96 16.48 8.42  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (232.2 ms)  cpos=516
+
+[spec] generated 5 tokens over 1 verifies: mean tokens/verify = 5.00 (block=5, max 5)
+[spec] tokens: 270 27091 5865 90527 5603
+[spec] SPEC-DECODE: 0.0 ms/tok = 0.00 tok/s  (vs base M=1 70.4 ms/tok = 14.20 tok/s -> 0.00x)
+[dscratch] arena overflow 538451712>536870912

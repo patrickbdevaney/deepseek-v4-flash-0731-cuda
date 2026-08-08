@@ -1,0 +1,43 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=2 seqmax=2065
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 111.5/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 178.5 ms = 28.0 tok/s (35.710 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (69.5 ms warmup)
+  step 1 pos 6 -> token 16  (70.6 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16
+[decode] WARM decode: 70.6 ms/tok = 14.17 tok/s  (M=1 steady state, 1-step avg)
+
+[spec-verify] M=2 verify in ONE forward: 85.5 ms (= 42.8 ms/tok if all accepted vs 70.6 M=1 -> 1.65x)
+[spec-verify] verify argmax: 11111 16
+[spec-verify] decode tokens: 11111 16
+[spec-verify] MATCH 2/2 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5 5
+[spec] head built. mem 115.1/122.8 GiB
+[decode] PREFILL: 1023 positions in 21452.9 ms = 47.7 tok/s (20.971 ms/tok)
+[spec] decoding 4 tokens (block=5, draft passes=1, adaptK=1.50, prompt=3 s=1024)...
+  [margins] 21.96 14.60 16.57 12.14 15.51  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (247.5 ms)  cpos=1028
+
+[spec] generated 5 tokens over 1 verifies: mean tokens/verify = 5.00 (block=5, max 5)
+[spec] tokens: 1656 270 11137 294 1750
+[spec] SPEC-DECODE: 0.0 ms/tok = 0.00 tok/s  (vs base M=1 70.6 ms/tok = 14.17 tok/s -> 0.00x)
+[decode] PREFILL: 2047 positions in 46747.1 ms = 43.8 tok/s (22.837 ms/tok)
+[spec] decoding 4 tokens (block=5, draft passes=1, adaptK=1.50, prompt=4 s=2048)...
+  [margins] 21.34 14.03 14.70 14.48 14.69  K=5
+  verify 1: accepted 4/4 (K=5) + correction -> +5 tokens (301.0 ms)  cpos=2052
+
+[spec] generated 5 tokens over 1 verifies: mean tokens/verify = 5.00 (block=5, max 5)
+[spec] tokens: 1353 57395 66237 16 21857
+[spec] SPEC-DECODE: 0.0 ms/tok = 0.00 tok/s  (vs base M=1 70.6 ms/tok = 14.17 tok/s -> 0.00x)
+
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 14.17 tok/s
+[blksweep]    5      1   1.50   1.50      3 |            5.00 |    0.0 |   inf | infx
+[blksweep]    5      1   1.50   1.50      4 |            5.00 |    0.0 |   inf | infx
+[decode] mem 115.2/122.8 GiB

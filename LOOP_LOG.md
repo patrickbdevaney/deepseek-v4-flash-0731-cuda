@@ -4049,3 +4049,29 @@ same weight bytes is the target, not the 233 GB/s roofline.**
   `gate_prefill_len` parse it as a sweep length, sweep s=0, and report **GATE FAIL** with eight
   "invalid argument" launches. It passes with no argument. Only `gate_units` and `gate_encoding` take
   a path. A gate harness that passes the wrong argv reports a failure that is about the harness.
+
+## Finding 75 — prefill is 48 tok/s, only 3.4x decode, and the arena was a prompt-length ceiling
+
+Measured to size a draft-head fine-tune (S5), and it answered a different question on the way.
+
+`evidence/prefill_sweep.log` + `evidence/prefill_long.log`, real ids from the checkpoint's own
+tokenizer (`tools/encode_prompt.py`'s gate reproduced 671,6102,294,8760,344 before anything ran):
+
+| PS | 5 | 255 | 511 | 1023 | 2047 |
+|---|---|---|---|---|---|
+| tok/s | 28.0 | 52.6 | 50.3 | 47.7 | 43.8 |
+
+**Prefill is ~48 tok/s against 14.20 tok/s for M=1 decode in the same run — a factor of 3.4.** A
+batched forward over 255 positions amortises the 12.26 GB weight read 255 ways and should be
+compute-bound; that it is not means the whole path is running on kernels fitted to M=1. Nobody has
+ever profiled it. New lever B9, explicitly NOT counted toward the decode-lever queue.
+
+**The arena was a silent prompt-length ceiling.** PS=1023 asked for 538451712 bytes against a
+hardcoded 512 MiB and died with `arena overflow 538451712>536870912`, taking the run with it. The
+arena holds per-position intermediates, so its high-water mark scales with the longest prompt; 512 MB
+was sized for the 6-token gate prompt. Now sized from SMAX. This is the same shape as Finding 62 — a
+constant fitted to the canonical short prompt, wrong for every longer one, invisible because the gate
+prompt never reaches it.
+
+Two instrumentation points added, both prefill sites (the initial one and the sweep's re-prefill), so
+one checkpoint load yields a whole length curve instead of one point per 15-minute load.
