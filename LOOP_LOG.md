@@ -3652,3 +3652,46 @@ silently wrong results the first time anyone changed `BN` — which is exactly w
 **The rule: a parameter that array sizes depend on must be honoured by every loop that touches those
 arrays, or it is not a parameter, it is a comment.** And more generally — a speedup with no cost in
 any resource is a measurement error until proven otherwise. That heuristic caught this in one look.
+
+---
+
+## Finding 70 — the RB choice was decided by the probe's grouping, twice, and the real histogram says RB=4
+
+**Adopted, small.** `moe:w1w3` 42.68 → 42.14 ms (−1.3 %), ksweep K=5 138.21 → 137.93, spec 19.11 →
+19.20. All gates PASS including the new lossless gate.
+
+Finding 65 picked RB=2 from an `ncu_target` grouping whose `take` was clamped at 2 — so **no tile ever
+needed chunking**, which is the one thing RB exists to control. Profiling a distribution the engine
+does not have is the same error F65 itself was written to fix, one level down.
+
+The clean verify-only histogram (`DSV4_MOEUNION=1`, 754 experts at K=5):
+
+| rows/expert | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| share | 61.7 % | 20.7 % | 7.8 % | 4.5 % | 5.3 % |
+
+Weight reads per expert, by RB: **RB=2 → 1.229**, **RB=4 → 1.053**, RB=8 → 1.000. And the ranking
+inverts once the probe models it:
+
+| | RB=1 | RB=2 | RB=4 | RB=8 |
+|---|---|---|---|---|
+| probe clamped at me≤2 (F65) | 441.9 | **423.8** | 434.4 | 497.3 |
+| probe on the real histogram | 559.1 | 534.7 | **499.8** | 530.6 |
+
+RB=8 loses in both because 16 live accumulators cost more occupancy than the last few re-reads are
+worth; RB=4 is the point where chunking is nearly eliminated (1.053 reads) before the register cliff.
+
+### Honest scale
+
+The probe predicted −6.5 % and in situ delivered **−1.3 %** on `moe:w1w3`, with ksweep and spec both
+inside their band. The gap is the kernel not being purely bandwidth-bound — it sits at ~76 % of
+roofline, so a 14 % cut in bytes does not buy 14 % of time. **Adopted on the tightest mark plus a
+mechanism, not on the end-to-end number**, and recorded as ~1 % rather than the 6.5 % the probe
+implied. A probe predicts ranking; it does not predict magnitude.
+
+### The standing lesson, now three times over
+
+F65 (probe modelled 1 row per expert), F69 (store hardcoded to 2 columns so a BN sweep measured dead
+code), and F70 (probe clamped rows at 2) are the same failure: **the measurement apparatus quietly
+encoded an assumption, and the sweep then confirmed it.** Before sweeping a parameter, check that the
+harness can actually express the regime the parameter governs.

@@ -59,11 +59,17 @@ int main(int argc, char** argv){
             const int ROWS = 6*M;                                 // bs*na rows to place
             const int U    = (M==1) ? 6 : 18;                     // measured distinct experts
             std::vector<int> hoff(nr+1,0);
-            { int placed=0;
+            // The MEASURED histogram, not a flat spread (LOOP_LOG Finding 70). DSV4_MOEUNION=1 reports
+            // rows/expert at K=5 as ~70% me=1, 18% me=2, 7% me=3, 2.4% me=4, 2.6% me=5 — max 5. The
+            // previous version clamped `take` at 2, so no tile ever had me>2 and the RB sweep could
+            // not see the chunking cost that RB is FOR: at RB=2 an expert with me=5 needs three
+            // weight reads. Profiling a distribution the engine does not have is how F65 happened.
+            // 18 experts / 30 rows: 12x1 + 3x2 + 1x3 + 1x4 + 1x5 = 30.
+            { const int shape[18] = {1,1,1,1,1,1,1,1,1,1,1,1, 2,2,2, 3,4,5};
+              int placed=0;
               for(int ex=0; ex<=nr; ++ex){
                   hoff[ex] = placed;
-                  if(ex<U){ int take = (ROWS-placed) - (U-1-ex);  // spread ROWS over U experts, >=1 each
-                            if(take>2) take=2; if(take<1) take=1; placed+=take; } }
+                  if(ex<U) placed += (M==1) ? 1 : shape[ex<18?ex:17]; }
               hoff[nr] = placed; }
             int *off_d,*tile_e,*tile_row0,*ntiles_d;
             CU(cudaMalloc(&off_d,(nr+1)*4)); CU(cudaMemcpy(off_d,hoff.data(),(nr+1)*4,cudaMemcpyHostToDevice));

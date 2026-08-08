@@ -410,7 +410,16 @@ void tc_fp4_grouped_gemv_e8m0(float* out, const uint8_t* Xq, const float* Xs, co
     //     RB=2  423.8 us  62 reg  63.1% occ      RB=8  497.3 us  85 reg  39.4% occ   <- what F64 shipped
     // and in situ the K=5 verify goes 141.53 -> 139.72 ms moving RB 8 -> 2 (moe:w2 23.88 -> 21.33).
     // At bs=1 every expert has exactly one row, so RB=1 is both optimal and the original kernel.
-    const char* e_=getenv("MOE_RB"); int RB = e_ ? atoi(e_) : (rows_hint<=1 ? 1 : 2);
+    // F65 picked RB=2 from a probe whose grouping clamped rows-per-expert at 2, so no tile ever
+    // needed chunking and the sweep could not see what RB is FOR. On the MEASURED histogram
+    // (12x1 + 3x2 + 1x3 + 1x4 + 1x5 over 18 experts, DSV4_MOEUNION=1) an expert with me=5 costs
+    // THREE weight reads at RB=2 and one at RB=4, and the ranking inverts:
+    //     capped-at-2 probe:  RB=1 441.9  RB=2 423.8  RB=4 434.4  RB=8 497.3   -> RB=2
+    //     measured histogram: RB=1 559.1  RB=2 534.7  RB=4 499.8  RB=8 530.6   -> RB=4
+    // RB=8 loses at both because its 16 live accumulators cost more occupancy than the last few
+    // re-reads are worth. At bs=1 every expert has exactly one row, so RB=1 is optimal and is also
+    // the original kernel byte-for-byte.
+    const char* e_=getenv("MOE_RB"); int RB = e_ ? atoi(e_) : (rows_hint<=1 ? 1 : rows_hint<=2 ? 2 : 4);
     if(RB!=1&&RB!=2&&RB!=4&&RB!=8) RB=8;
     switch(RB){
         case 1: k_grouped_fp4_gemv_e8m0<1><<<grid,threads,0,s>>>(out,wptr_d,sptr_d,tile_e,tile_row0,ntiles_d,off_d,Xq,Xs,N,K); break;

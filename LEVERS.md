@@ -59,7 +59,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **intra-layer concurrency, 3 fork sites** | **+3.1 %** (36 matched points) | 55, 56, 57 |
 | **clock pinning (`jetson_clocks`)** | **+3.0 % steady, +20.7 % cold** | 60 |
 | **ogroup row-tile fix** | correctness, not speed — see §6 | **62** |
-| **MoE row amortisation, RB fitted to the rows histogram** | **+7.4 % spec, +2.3 % base AR; verify −9.3 %** | **64, 65** |
+| **MoE row amortisation, RB=4 fitted to the measured histogram** | **+7.4 % spec, +2.3 % base AR; verify −9.3 %** | **64, 65, 70** |
 
 ---
 
@@ -146,6 +146,12 @@ naive byte model predicts ~80 % and is wrong by 3–4x. Do not use it.
 
 ---
 
+### Reference: measured MoE shape at K=5 (`DSV4_MOEUNION=1`)
+
+union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 → 61.7 %, 2 → 20.7 %,
+3 → 7.8 %, 4 → 4.5 %, 5 → 5.3 %**, max 5. Weight reads per expert by RB: 2 → 1.229, 4 → 1.053,
+8 → 1.000. Any future MoE blocking decision should start from this table, not from `bs`.
+
 ## 6. Measurement traps — every one of these has cost this project a cycle
 
 1. **The canonical prompt is 6 tokens.** `PSp=5`. It cannot reach any `bs>16` code path — which is
@@ -170,7 +176,13 @@ naive byte model predicts ~80 % and is wrong by 3–4x. Do not use it.
    kernel moved buffers in unrelated marks (`cattn:ogroup` +1.28 ms) purely by shifting arena offsets.
 8. **A count of distinct values over 8 samples is not evidence about a mechanism.** That reasoning
    produced a wrong adoption in F60 which F61 had to retract.
-9. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
+9. **Check the harness can express the regime before sweeping the parameter.** Three findings are the
+   same error: F65's probe modelled 1 row per expert, F69's store was hardcoded to 2 columns so a BN
+   sweep measured dead-code elimination, F70's probe clamped rows at 2 so an RB sweep never chunked.
+   Each time the apparatus encoded an assumption and the sweep confirmed it.
+10. **A probe predicts ranking, not magnitude.** F70's probe said −6.5 %, in situ gave −1.3 %, because
+   the kernel is at 76 % of roofline and a byte cut does not convert 1:1.
+11. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
    `dsync` is a no-op under the arena, so the first real sync in a layer absorbs ~20 launches' worth of
    asynchronous faults. Use `DSV4_SYNCPROBE=1`.
 
