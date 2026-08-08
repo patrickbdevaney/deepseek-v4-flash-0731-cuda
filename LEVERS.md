@@ -19,7 +19,10 @@ Rules of the road:
 Current baseline (prompt 0, clocks pinned, post-Finding-72): **20.44 tok/s speculative**,
 **13.50 tok/s base AR** (74.1 ms/tok). `evidence/final6.log`. **Not re-measured since**: F73 and F74
 both spent their one run with `DSV4_DPROF=1`, so the newest end-to-end numbers (21.68 spec / 13.78
-base AR, `evidence/kchunk.log`) carry dprof overhead and are only comparable to each other.
+base AR, `evidence/kchunk.log`) carry dprof overhead and are only comparable to each other. F76
+spent its run reproducing that pair like-for-like (21.67 / 13.72, `evidence/ogws1.log`), so a clean
+non-dprof number is now **THREE cycles overdue** — the next cycle that has no kernel change worth a
+dprof profile should spend its run without `DSV4_DPROF` and re-establish the headline.
 
 The K=5 verify dprof TOTAL is **127.2 ms** and splits into two populations that behave completely
 differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned):
@@ -27,7 +30,7 @@ differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, cloc
 | group | ms | % | headroom |
 |---|---|---|---|
 | routed MoE — `moe:w1w3` 39.5 + `moe:w2` 19.2 | **58.7** | 46 % | **F64/F65/F70/F72 took 21 % off `w1w3` and 10 % off `w2`; still only ~76 % of roofline** |
-| `cattn:ogroup` (`o:wo_a` 11.4 + `o:wo_b` 8.7 + rope) | 20.5 | 16 % | **`o:wo_a` is now the block's worst mark — see B8** |
+| `cattn:ogroup` (`o:wo_a` 11.4 + `o:wo_b` 8.7 + rope) | 20.5 | 16 % | `o:wo_a` is the block's worst mark but **F76 priced it: latency-bound, both knobs at optima** — see B8 |
 | `cattn:q_proj` (`q:wq_b` 8.0 + `q:wq_a` 5.8 + glue) | 16.3 | 13 % | **F74 took 29 %/14 % off these two** |
 | `lm_head` | 6.6 | 5 % | little |
 | `cattn:indexer` (21 layers) | 3.6 | 3 % | **F71 took 57 % off this; `i:score` is now 0.77** |
@@ -37,7 +40,11 @@ differently (`evidence/kchunk.log`, post-F74, `DSV4_DPROF=1 DSV4_KSWEEP=1`, cloc
 **The fp8 GEMM block (`q_proj` + `ogroup` = 33.8 ms, 27 %) is still the largest region outside the
 MoE, and F74 proved it is not at the roofline.** Its four marks are two different kernels: `q:wq_b`,
 `q:wq_a`, `o:wo_b` are the smem-staged fp8 tile (F74 fixed their MLP), and `o:wo_a` is
-`ogroup_gemv_mk_kernel`, which has had no equivalent treatment and is now the worst of the four.
+`ogroup_gemv_mk_kernel`. **F76 attributed `o:wo_a` and it is not the cheap one:** it is
+*latency*-bound (8.1 of 13.0 cycles between issues on an L1TEX scoreboard, Memory Throughput 41 %,
+Compute 49 %), it spills 44 bytes against a 64-register `__launch_bounds__` cap, and both of its
+knobs — NR and `OGMK_BLOCKS_PER_SM` — are at measured optima. Deleting instructions from it returns
+nothing; see §3.
 
 **Use the K=1 column as the achievability bar, not the roofline.** At M=1 the same weight bytes go
 through `fp8_gemv_m1_kernel`, so K=1 vs K=5 in one dprof report is a free, controlled measurement of
@@ -107,6 +114,8 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | route only small-N through the M=K GEMV | net negative at BOTH thresholds. N<=2048 caught the shared expert on the side stream and cost `moe:w1w3` +4.80 ms; N<=1024 fixed that and was still worse (TOTAL 147.23 vs 144.94) (F67) |
 | `__ldcs` evict-first on the ogroup weight stream | stall ratio 7.33 → 3.46 **and slower**: 0.197 → 0.257 ms. L2 hit rate *fell*; the weight line was not the evictor (F55) |
 | smem staging of `o` in the ogroup M=K GEMV | bit-exact, 8x less activation traffic, and **a wash** at the NR the engine uses. The barrier destroys the warp skew that was hiding latency. Kept behind `OG_SMEM=1` (F55) |
+| **any instruction-count cure for `ogroup_gemv_mk_kernel`** (WS1 scale hoist, and by the same argument the fp8x2 cvt pairing and `exp2f`→`__int_as_float(e<<23)`) | **the kernel is LATENCY-bound, so deleted instructions return nothing.** ncu: 8.1 of its 13.0 cycles between issues are L1TEX scoreboard stalls; Memory Throughput 41 %, Compute 49 %. WS1 removes NR−1 redundant scale loads and `exp2f` per k-block, is **72/72 bit-identical** (`gate_og_ws1`), and gemm_bench scored it −7.6 % at M=2/NR=2 and −14.8 % at M=3/NR=4 — in situ it is worth **+0.1 %** on the nine paired spec verifies (1219.4 → 1220.8 ms), spec 21.68 → 21.67 tok/s, every ksweep K inside ±0.5 %. Kept behind `OG_WS1=1`, default OFF. A change here must move the kernel's **memory** behaviour or it is priced at zero (F76) |
+| hoisting a loop-invariant **pointer** in a register-starved kernel | not a lever, a trap, but it belongs here with its number: hoisting `wsc + (gr0/128)*scw` out of the k-loop took `<5,4>` from **44 to 60 bytes of spill** and cost 4.4 %. Two permanently-live registers beat three short-lived ones only when there are registers to spare. A 32-bit offset restored it (F76) |
 
 **Whole hypothesis classes**
 
@@ -127,7 +136,7 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
 | ~~B0~~ | ~~audit every kernel for thread-per-output at decode shapes~~ | **NAMED LIST EXHAUSTED, F71 + F73** | `index_score` **+4.4 %** (F71). `k_moe_prefix` and `k_build_tiles`, both `<<<1,1>>>` over `nr=160`, fixed in F73: `moe:group` −20.3 %, and both now sit at the **launch-latency floor** (0.24–0.25 ms / 43 layers, vs 0.19 for a trivially parallel neighbour). The rest are measured under B0's own 0.5 ms bar: `k_topk_verify`/`k_topk_decode` → `i:topk` = **0.12 ms**; `k_dg`/`k_advance_T`/`k_incr` are genuinely one scalar's work. **The class paid twice and is now dry** — reopening needs a *new* kernel with a bad geometry, not another pass over these. |
-| B8 | **the fp8 GEMM block, post-F74: `o:wo_a` 11.4 + `q:wq_b` 8.0 + `o:wo_b` 8.7 + `q:wq_a` 5.8 = 33.8 ms (27 %)** | **~10 ms = 7 % of the verify still in it** | **Bytes are counted (F74) and it is NOT at roofline.** The block was at 110 GB/s = 47 % of achievable; F74 took 5.2 ms out of the three tile marks by raising memory-level parallelism. **The target is not 233 GB/s — it is the M=1 GEMV's own measured rate on the same weight bytes**, which is the only number proven reachable on these rows: `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). Against that the three tile marks hold ~6.5 ms and **`o:wo_a` — a different kernel, `ogroup_gemv_mk_kernel`, 11.37 ms at 120 GB/s vs 168 at M=1 — is entirely untouched and is now the single largest sub-roofline mark in the block.** Next KC-style move: double-buffer the staged tile so the next round's loads issue before the current mma, or apply the same MLP fix to `ogroup_gemv_mk_kernel`. F67 closed both reroutes; F68 closed split-K on numerics. |
+| B8 | **the fp8 GEMM block, post-F74: `o:wo_a` 11.4 + `q:wq_b` 8.0 + `o:wo_b` 8.7 + `q:wq_a` 5.8 = 33.8 ms (27 %)** | **~6.5 ms = 5 % of the verify, and now only in the TILE marks** | **Bytes are counted (F74) and it is NOT at roofline.** The target is not 233 GB/s — it is the M=1 GEMV's own measured rate on the same weight bytes: `q:wq_a` 115, `q:wq_b` 195, `o:wo_b` 185, `o:wo_a` 168 GB/s (K=1 column, `evidence/kchunk.log`). Against that the three tile marks hold ~6.5 ms. **The one remaining move on them is to double-buffer the staged tile so round n+1's loads issue before round n's mma** — F67 closed both reroutes, F68 closed split-K on numerics. **`o:wo_a` (3.3 ms of the old estimate) is NO LONGER a cheap 7 %: F76 attributed it.** `ogroup_gemv_mk_kernel<5,4>` is *latency*-bound (8.1 of 13.0 cycles between issues on an L1TEX scoreboard), spills 44 bytes against a 64-register cap, and sits at a **measured local optimum in both knobs** — NR (1/2/4/8) and `OGMK_BLOCKS_PER_SM` (2/3/4, re-swept in F76 with the spill reduced). Instruction-count cures are retired as a family (§3). The only untried idea that moves ~16 registers instead of 3: **the `OG_SMEM=1` variant reading `o4[m]` lazily per m from shared memory** instead of holding M float4s live — smem makes lazy reads affordable where global loads need the MLP. F55 measured that variant a 40 % regression at NR=4 *with* the 20-register `o4[M]` still in it, so the register argument was never tested; falsify with `ptxas -v` before building anything. |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |
@@ -235,6 +244,24 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 17. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
    `dsync` is a no-op under the arena, so the first real sync in a layer absorbs ~20 launches' worth of
    asynchronous faults. Use `DSV4_SYNCPROBE=1`.
+18. **A kernel can be sub-roofline because it is LATENCY-bound, and then instruction count is free
+   to cut and worth nothing.** `ogroup_gemv_mk_kernel` runs at 120 GB/s against the M=1 path's 168 on
+   the same bytes, which reads as headroom. ncu says 8.1 of its 13.0 cycles between issues are L1TEX
+   scoreboard stalls at 41 % Memory Throughput and 49 % Compute — it is parked on memory. F76's cut
+   (NR−1 redundant scale loads and `exp2f` per k-block, bit-identical, −7.6 % to −14.8 % in
+   `gemm_bench`) measured **+0.1 %** on the nine paired verifies. **Before optimising a sub-roofline
+   kernel, read the stall reason, not just the achieved GB/s** — and note gemm_bench sees these wins
+   precisely *because* a standalone launch with nothing to contend with is issue-limited and the
+   in-situ launch is not. This is trap 3 with a mechanism attached.
+19. **In a register-starved kernel, hoisting a loop-invariant *pointer* is a pessimisation.** A
+   64-bit pointer live across the loop costs two permanently-allocated registers; the three
+   short-lived loads it replaced cost less. `<5,4>` went 44 → 60 bytes of spill and lost 4.4 %. A
+   32-bit offset fixed it. `ptxas -v` answers this in one recompile and should be read before the
+   bench (F76).
+20. **A gate whose `extern` declaration drifts from the engine fails at LINK time, which looks like a
+   build problem rather than a gate that stopped testing anything.** `gate_fp4_gemv` had been two
+   parameters behind `tc_fp4_grouped_gemv_e8m0` since F65/F72 while a stale binary sat in `build/`
+   looking like a pass. `build_gate.sh` now builds all 19 binaries so a gate cannot go quiet (F76).
 
 ---
 
@@ -256,3 +283,7 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 | `tests/gate_forkjoin_graph` | a fork/join that breaks graph capture, caught in 2 s not 15 min |
 | `TCB_KC=<n>` | K-blocks staged per barrier pair in the fp8 tile. **`TCB_KC=1` is the pre-F74 kernel** — the A/B is one env var |
 | `tests/gate_tc_fp8_kc` | is the fp8 tile still BIT-identical to KC=1? (equality, unlike the cosine gate next door) |
+| `OG_WS1=1` | one scale load + one `exp2f` per k-block in the ogroup GEMV instead of NR identical ones. **Bit-identical and worth +0.1 %** — default OFF, see §3 (F76) |
+| `tests/gate_og_ws1` | is `OG_WS1=1` still bit-identical to the default? memcmp over 72 (M, NR, shape) points |
+| `tools/dprof_diff.sh a.log b.log [mark...]` | pairs two `DSV4_DPROF=1 DSV4_KSWEEP=1` logs by (K, sub-op) and prints the delta, including the ksweep row. **Use it to find the control the change must not have moved** (trap 12) |
+| `nvcc -Xptxas -v` | registers and **spill bytes** per template instantiation. One recompile; it answers occupancy questions the bench can only rank (traps 18, 19) |

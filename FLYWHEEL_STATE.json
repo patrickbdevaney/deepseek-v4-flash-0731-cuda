@@ -1,7 +1,7 @@
 {
-  "cycle": 11,
+  "cycle": 12,
   "phase": "A",
-  "consecutive_sub_half_pct": 0,
+  "consecutive_sub_half_pct": 1,
   "phaseB_top_history": [
     "moe-latency",
     "moe-latency"
@@ -12,22 +12,29 @@
     "verify_k5_ms": 132.53,
     "source_log": "evidence/final6.log",
     "measured": "2026-08-07",
-    "note": "prompt 0, clocks PINNED (jetson_clocks). 20.44/13.50 is evidence/final6.log, a CLEAN non-dprof run at the F72 build. Cycles 10 (F73) and 11 (F74) BOTH spent their one sanctioned run on DSV4_DPROF=1, so the post-F74 build still has NO clean non-dprof end-to-end number: evidence/kchunk.log reads 21.68/13.78 WITH dprof overhead. F74's gain is measured like-for-like against evidence/moescan.log (same dprof config): spec +6.1%, K=5 verify -5.6%, and the nine spec verifies pair 1:1 at identical K and accept counts, all nine negative. A clean non-dprof run to re-establish this line is now TWO cycles overdue."
+    "note": "prompt 0, clocks PINNED (jetson_clocks). 20.44/13.50 is evidence/final6.log, a CLEAN non-dprof run at the F72 build. Cycles 10 (F73), 11 (F74) and 12 (F76) ALL spent their one sanctioned run on DSV4_DPROF=1, so there is still NO clean non-dprof end-to-end number after F74: evidence/kchunk.log reads 21.68/13.78 and evidence/ogws1.log reads 21.67/13.72, both WITH dprof overhead and comparable only to each other. F76 adopted nothing, so the shipped engine is behaviourally the F74 build and 21.68/13.78 remains the like-for-like line. A clean non-dprof run is now THREE cycles overdue and should be the next cycle's run if that cycle has no kernel change needing sub-op attribution."
   },
   "queue": [
     {
       "id": "B8",
       "stage": "open",
-      "what": "the fp8 GEMM block, post-F74: o:wo_a 11.4 + o:wo_b 8.7 + q:wq_b 8.0 + q:wq_a 5.8 = 33.8 ms, 27% of the K=5 verify. F74 fixed the memory-level parallelism of the smem tile (three of the four marks). o:wo_a is a DIFFERENT kernel (ogroup_gemv_mk_kernel in mla_attn.cu), has had no equivalent treatment, and is now the worst mark in the block.",
-      "expected": "~10 ms = 7% of the verify still in it, measured against the M=1 GEMV's own achieved rate on the same bytes",
-      "falsify": "BYTES ARE COUNTED (F74) AND IT IS NOT AT ROOFLINE. The bar is NOT 233 GB/s -- it is the K=1 column of the same dprof report, where the identical weight bytes go through fp8_gemv_m1_kernel: q:wq_a 115, q:wq_b 195, o:wo_b 185, o:wo_a 168 GB/s (evidence/kchunk.log). Next moves, in order: (1) the same MLP fix on ogroup_gemv_mk_kernel, which is 11.37 ms at 120 GB/s vs 168 at M=1; (2) double-buffer the staged tile so round n+1's loads issue before round n's mma. Any candidate must be bit-exact (gate_tc_fp8_kc is the pattern) -- F68 closed split-K on numerics, not speed."
+      "what": "the fp8 GEMM block, now ONLY the smem-staged tile marks: q:wq_b 8.0 + o:wo_b 8.7 + q:wq_a 5.8 = 22.5 ms. F76 attributed the fourth mark, o:wo_a (ogroup_gemv_mk_kernel, 11.4 ms), and took it OFF the cheap list: it is latency-bound (ncu: 8.1 of 13.0 cycles between issues on an L1TEX scoreboard, Memory Throughput 41%, Compute 49%), it spills 44 bytes against a 64-register __launch_bounds__ cap, and both of its knobs -- NR and OGMK_BLOCKS_PER_SM -- are at re-measured optima.",
+      "expected": "~6.5 ms = 5% of the K=5 verify, in the three TILE marks only (was ~10 ms including o:wo_a)",
+      "falsify": "the bar is the K=1 column of the same dprof report, where the identical weight bytes go through fp8_gemv_m1_kernel: q:wq_a 115, q:wq_b 195, o:wo_b 185 GB/s. ONE named move remains on the tile: double-buffer the staged K-chunk so round n+1's loads issue before round n's mma (the F74 mechanism, taken one step further). On o:wo_a the only untried idea is the OG_SMEM=1 variant reading o4[m] LAZILY per m from shared memory instead of holding M float4s live -- that moves ~16 registers where F76's WS1 moved 3, and smem is what makes a lazy read affordable. F55 measured that variant -40% at NR=4 with the 20-register o4[M] still in it, so the register argument was never actually tested; check with `nvcc -Xptxas -v` BEFORE building. Anything that does not change the kernel's MEMORY behaviour is priced at zero (F76, trap 18)."
+    },
+    {
+      "id": "S6",
+      "stage": "open",
+      "what": "suffix-automaton / prompt-lookup drafting ahead of the MTP, falling THROUGH to the MTP on a short match. No training, no second model resident, lossless by construction (the verify corrects every draft).",
+      "expected": ">=1%; SuffixDecoding reports 1.7x over plain Prompt-Lookup on agentic workloads",
+      "falsify": "the draft is only ~13 ms of a 151 ms cycle, so the win is NOT the skipped head -- it is any acceptance gained at the same K. Price it as acceptance, not as draft time saved."
     },
     {
       "id": "B1",
-      "stage": "open",
-      "what": "more fork sites. The three obvious independent chains are taken. Remaining candidate: the indexer q-path (idx_wq_b + rope + hadamard + fp4sim, i:qidx = 2.25 ms) depends only on iqrq/iqrs and could run under wq_b -- needs a THIRD stream/event pair, g_side and g_side2 are both outstanding there.",
-      "expected": "~0.5% (20-32% of 2.25 ms against a 134.8 ms verify)",
-      "falsify": "price with the F56 table BEFORE building: expect 20-32% of the hidden op's standalone cost, priced against the MAIN stream (F67). At i:qidx = 2.25 ms that is 0.45-0.72 ms = 0.3-0.5%. This is now a SUB-1% lever; say so."
+      "stage": "open-sub-1pct",
+      "what": "more fork sites. Remaining candidate: the indexer q-path (i:qidx = 2.25 ms) under wq_b, needing a THIRD stream/event pair.",
+      "expected": "0.3-0.5% -- SUB-1%, does not count toward the pivot queue",
+      "falsify": "price with the F56 table BEFORE building: 20-32% of the hidden op's standalone cost, against the MAIN stream (F67)."
     },
     {
       "id": "B5",
@@ -38,40 +45,43 @@
     {
       "id": "RESEARCH",
       "stage": "not_due",
-      "what": "SKIPPED in cycle 11 per RESEARCH_LOG.md section 1: B8 (>=1%) and S6 (>=1%, no training) were both open, meeting the >=2-open-levers bar. B8 is still open at ~7% after F74, so research remains not due.",
+      "what": "SKIPPED in cycle 12 per RESEARCH_LOG.md section 1: B8 (>=1%) and S6 (>=1%, no training) were both open, meeting the >=2-open-levers bar. Recorded as a row in RESEARCH_LOG.md section 2 so the skip is auditable.",
       "falsify": "the research branch has still never executed (see loop.untested); the first cycle that takes it is unverified code path"
     }
   ],
   "halt": false,
   "halt_reason": "",
-  "halt_considered": "Not halted. 17/17 gate binaries pass plus a new gate_tc_fp8_kc (504/504 bit-exact), the lossless gate passes, and the emitted 26-token sequence is byte-identical to the control at identical acceptance.",
+  "halt_considered": "Not halted. 19/19 gate binaries build and pass, including a new gate_og_ws1 (72/72 bit-identical), and the run's emitted spec and base-AR sequences are byte-identical to the control at identical acceptance with LOSSLESS GATE PASS. The cycle's lever measured null and was defaulted OFF rather than shipped unmeasured.",
   "last_result": {
-    "cycle": 11,
-    "lever": "B8 (the fp8 GEMM block) -- ADOPTED, Finding 74. B8 stays OPEN with ~7% of the verify left and a sharpened falsification.",
+    "cycle": 12,
+    "lever": "B8's named next move on o:wo_a (ogroup_gemv_mk_kernel) -- NEGATIVE, Finding 76. Retired as a FAMILY, not just an instance. B8 stays OPEN at ~5%, now only on the three tile marks.",
     "measured": {
-      "q:wq_b": "11.18 -> 7.98 ms (-28.6%)",
-      "q:wq_a": "6.71 -> 5.80 ms (-13.6%)",
-      "o:wo_b": "9.76 -> 8.67 ms (-11.2%)",
-      "verify_k5": "dprof TOTAL 134.77 -> 127.18 ms (-5.6%); ksweep K=5 128.26 -> 121.11 (-5.6%)",
-      "end_to_end": "spec 20.43 -> 21.68 tok/s (+6.1%), both runs with dprof ON; base AR 13.75 -> 13.78 (flat, as predicted)",
-      "paired_verifies": "all 9 spec verifies faster at identical K and identical accept counts: 1296.3 -> 1219.4 ms total (-5.9%), range -4.1% to -8.0%",
-      "losslessness": "26-token spec sequence byte-identical to control, acceptance 2.89 = 2.89, LOSSLESS GATE PASS, MATCH 5/5, first token 11111; new gate_tc_fp8_kc proves 504/504 bit-exact vs KC=1"
+      "end_to_end": "spec 21.68 -> 21.67 tok/s (-0.05%), base AR 13.78 -> 13.72 (-0.4%); both runs DSV4_DPROF=1 DSV4_KSWEEP=1, clocks pinned",
+      "paired_verifies": "ALL NINE pair 1:1 at identical K and identical accept counts: 1219.4 -> 1220.8 ms = +0.1%, range -0.3% to +0.8%. This instrument moved -5.9% for F74.",
+      "ksweep": "K=1 64.74->65.09 (+0.5%), K=2 80.93->80.71 (-0.3%), K=3 98.05->98.20 (+0.2%), K=4 108.67->108.39 (-0.3%), K=5 121.11->120.52 (-0.5%)",
+      "dprof_o_wo_a": "K=1 8.02->8.16 (+1.7%), K=2 10.74->10.47 (-2.5%), K=3 10.26->10.01 (-2.4%), K=4 10.84->10.39 (-4.2%), K=5 11.37->11.54 (+1.5%) -- see controls, this is the noise floor",
+      "gemm_bench": "WS1 -7.6% at M=2/NR=2, -2.7% at M=3/NR=2, -14.8% at M=3/NR=4, -14.9% at M=8/NR=4, and +0.1% at the shipped M=5/NR=4. Never slower at any dispatched (M,NR).",
+      "ptxas": "<5,4> spills 44 bytes with and without WS1 -- the one instantiation the freed registers do not help. <3,4> 64 -> 56 registers. A first version that hoisted a 64-bit POINTER instead of a 32-bit offset went 44 -> 60 bytes of spill and lost 4.4%.",
+      "ncu": "ogroup_gemv_mk_kernel<5,4>: 64 registers, 806,912 local spilling requests, 12.98 warp cycles per issued instruction of which 8.1 (62.3%) are L1TEX scoreboard, Memory Throughput 41.3%, Compute 49.5%, achieved occupancy 56.1%",
+      "losslessness": "26-token spec sequence AND 8-token base-AR sequence both byte-identical to control, acceptance 2.89 = 2.89, LOSSLESS GATE PASS, first token 11111, 19/19 gates PASS"
     },
     "negative_results": [
-      "KC=4 is WORSE than both KC=2 and KC=8 on five of six shapes -- non-monotone, so the rule is a fitted lookup (KC=2, except KC=8 at W=1), not a formula",
-      "moe:w1w3 -2.2% and moe:w2 -4.9% also moved in kernels this change does not touch. Plausible mechanism (the shared expert DOES use this tile and runs concurrent with the routed GEMM) but inside the +-2% noise this run pair demonstrates. RECORDED, NOT CLAIMED.",
-      "the attributable saving is 5.20 ms across the three tile marks; the verify moved 7.59 ms. The 2.4 ms difference is not claimed.",
-      "gemm_bench predicted -19% on wq_a and in situ gave -13.6%; it predicted ~0% on wo_b and in situ gave -11.2%. Trap 3 again: it ranks, it does not predict magnitude, in either direction.",
-      "scripts/build_gate.sh builds 10 of the 17 gate binaries; gate_compressed_decode and gate_indexer_decode were stale from 2026-08-07 and had to be rebuilt by hand. Both PASS rebuilt.",
-      "running the gate binaries in a loop with a shared ref/goldens argument makes gate_prefill_len parse it as a sweep length and report GATE FAIL -- a harness failure, not an engine failure"
+      "THE LEVER ITSELF. WS1 is bit-identical, free, never slower in the bench, and worth +0.1% in situ. The mechanism is that the kernel is LATENCY-bound, not issue-bound: deleting instructions from a warp parked on an L1TEX scoreboard returns the memory latency, which is zero.",
+      "This closes a FAMILY, not an instance: the fp8x2 cvt pairing (saves 8 of 226 instructions per warp-k-block) and exp2f -> __int_as_float(e<<23) have the same shape and need not be built. The latter is also NOT bit-identical at e==0 (2^-127 is subnormal, not zero).",
+      "OGMK_BLOCKS_PER_SM re-swept with the spill reduced: BPS=4 0.1978, BPS=3 0.2010, BPS=2 0.1997 at M=5/NR=4. B7' confirmed a second time.",
+      "gate_fp4_gemv had NOT LINKED, and therefore had not tested anything, since F65/F72 added rows_hint/align8 to tc_fp4_grouped_gemv_e8m0 -- its local extern declaration was two parameters behind. A binary from 2026-08-06 sat in build/ looking like a pass. Declaration repaired.",
+      "gate_grouped_moe's own header build line lists only tc_moe_gemm.cu and has not linked since its fp4_gemm oracle moved to moe.cu.",
+      "`nvcc ... && echo built` does NOT fail the script under set -e (non-final command of an && list is exempt), so a build failure prints nothing and exits 0 with a binary missing. That is how gate_grouped_moe went missing on the first pass of the new block. build_gate.sh now uses a helper that records failures and exits non-zero.",
+      "Trap 16 recurred inside the harness written to respect trap 16: gate_encoding takes its OWN optional directory, so passing the shared ref/goldens made it exit 2 and look red. It passes with no argument."
     ],
     "controls": [
-      "o:wo_a is a DIFFERENT kernel and moved -0.8% while its two neighbours in the same region moved -11% and -29%",
-      "K=1 and base AR never enter the changed kernel (M=1 dispatches to fp8_gemv_m1_kernel): ksweep K=1 moved -0.15% and base AR +0.2%. This is trap 12 satisfied by construction, and it bounds the run-pair noise floor at ~+-2%."
+      "o:wo_a at K=1 moved +1.7% and CANNOT have moved -- at M=1 ogroup_gemm_fp8 dispatches to ogroup_gemv_fp8_kernel, a different kernel. That is trap 12 and it bounds this mark's noise at ~+-2%.",
+      "An independent control run pair (kchunk vs moescan, whose change touched neither kernel) scatters o:wo_a from -1.8% to +2.4% across the same five K. Against that floor, K=2 (-2.5%) and K=3 (-2.4%) ARE the floor and one mark of five outside the band is not a signal.",
+      "The nine paired spec verifies are the tight instrument (spread +-0.8%) and they say +0.1%."
     ]
   },
-  "counter_note": "consecutive_sub_half_pct reset to 0: F74 is a clear >=1% lever (K=5 verify -5.6%, spec +6.1% like-for-like, 9/9 paired verifies negative), with the mechanism confirmed by two independent internal controls.",
-  "note_for_executor": "YOU CANNOT RUN GIT \u2014 write .flywheel_commit_msg and stop; the harness commits and the auditor publishes. Cycles 9 and 10 both did correct work and were left uncommitted because the prompt told them to commit. Read LEVERS.md and RESEARCH_LOG.md first. Attribute before optimising: dprof marks are cheap and have twice changed the answer (F67 killed a lever before it was built; F73 used its own new marks to disprove its own end-to-end number). Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log.",
+  "counter_note": "consecutive_sub_half_pct 0 -> 1: F76 adopted nothing. The change is bit-identical and free but measured +0.1% on the tightest available instrument, so it ships DEFAULT OFF behind OG_WS1=1 rather than entering the baseline unmeasured. Two more cycles adopting nothing >=1% fires the pivot.",
+  "note_for_executor": "YOU CANNOT RUN GIT — write .flywheel_commit_msg and stop; the harness commits and the auditor publishes. Cycles 9 and 10 both did correct work and were left uncommitted because the prompt told them to commit. Read LEVERS.md and RESEARCH_LOG.md first. ATTRIBUTE BEFORE OPTIMISING, and read the STALL REASON, not just the achieved GB/s: F76 is the worked example of a kernel that is 29% below its own demonstrated rate and cannot be helped by touching its instructions. `nvcc -Xptxas -v` and `ncu --set full` on build/ncu_target both cost one recompile and answer questions gemm_bench can only rank. Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log.",
   "loop": {
     "executor": "scripts/flywheel.sh (one lever per tick, commits locally, cannot push)",
     "auditor": "scripts/flywheel_audit.sh (deterministic, ~70 lines, the ONLY thing that pushes)",
@@ -81,13 +91,14 @@
       "RESEARCH_LOG.md (search dedup)"
     ],
     "stop": "touch FLYWHEEL_STOP",
-    "untested": "the RESEARCH phase has never actually run: this session's web-search budget was exhausted (200/200) before it could be exercised. Headless cycles get their own budget, but the first cycle that takes the research branch is unverified. Everything else ran end to end, including a deliberate bad commit that the auditor correctly HELD."
+    "untested": "the RESEARCH phase has never actually run: cycles 11 and 12 both met the >=2-open-levers bar and skipped it. The first cycle that takes the research branch is an unverified code path.",
+    "gate_binaries": 19
   },
   "pivot_criterion": {
     "why": "S5 (draft-head re-alignment) is a TRAINING job the autonomous loop cannot do. Kernel work and training compete for the same operator attention, so the loop must say plainly when kernel work has stopped paying rather than grinding sub-1% levers forever.",
     "trigger": "PIVOT when open_nontraining_levers == 0 on TWO consecutive audits, OR when three consecutive cycles adopt nothing >=1%. Either fires -> the auditor writes a PIVOT banner to FLYWHEEL_AUDIT.md and creates FLYWHEEL_PIVOT.",
     "open_nontraining_levers": 2,
-    "note": "The executor MUST update open_nontraining_levers every cycle: the count of LEVERS.md items that are open, expected >=1%, and implementable without training or relaxing a standing constraint. S5/S6/S7 are speculation-side; S5 and S7 need training and do NOT count. S6 (suffix-automaton drafting) needs no training and DOES count. Cycle 11: B8 (still open, ~7% of the verify, no training) and S6 (suffix-automaton drafting, no training) = 2.",
+    "note": "Counted honestly. B8 (open, ~5% of the verify, no training) and S6 (suffix-automaton drafting, no training) = 2. B8's expected value FELL this cycle, 7% -> 5%, because F76 attributed o:wo_a and closed the cheap moves on it; what remains is one named move on the tile (double-buffer the staged K-chunk) plus one untested register argument on the smem variant. B1 is explicitly sub-1% and does NOT count. B9 (prefill) is not a decode lever and does NOT count. S5 and S7 need training and do NOT count. If the tile double-buffer also fails, B8 goes to 0 and the queue is 1.",
     "position_at_definition": {
       "spec_tok_s": 20.44,
       "spec_ceiling_at_acceptance_2.90": 30.8,

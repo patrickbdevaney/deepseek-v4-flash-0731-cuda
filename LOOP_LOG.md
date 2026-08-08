@@ -4075,3 +4075,143 @@ prompt never reaches it.
 
 Two instrumentation points added, both prefill sites (the initial one and the sweep's re-prefill), so
 one checkpoint load yields a whole length curve instead of one point per 15-minute load.
+
+## Finding 76 — the ogroup GEMV spills 44 bytes and it is LATENCY-bound: a free, bit-identical, gemm_bench-verified −7..−15 % on that kernel is worth **+0.1 %** in situ. NEGATIVE.
+
+The lever was B8's own named next move: `o:wo_a` is `ogroup_gemv_mk_kernel`, 11.37 ms = 8.9 % of the
+K=5 verify, running at 120 GB/s where the same weight bytes go through the M=1 GEMV at 168. F74 fixed
+the memory-level parallelism of the *other* three marks in the block; this kernel had had no
+equivalent treatment.
+
+### What ncu said, which is not what the lever assumed
+
+`build/ncu_target 4`, one launch of `ogroup_gemv_mk_kernel<5,4>` on the real shape [8×1024, 4096]:
+
+| | |
+|---|---|
+| Registers / thread | **64** (`__launch_bounds__(256,4)` → 65536/(256·4)) |
+| **Local memory spilling requests** | **806,912**, spill overhead 100 % |
+| Warp cycles per issued instruction | 12.98, of which **8.1 (62.3 %) = L1TEX scoreboard** |
+| Memory Throughput / Compute (SM) | 41.3 % / 49.5 % |
+| Theoretical / achieved occupancy | 66.7 % (register-limited) / 56.1 % |
+| Executed instructions | 14,800,896 = **226 warp-instructions per warp per k-block**, of which ~100 are FP32 |
+
+So the kernel is neither bandwidth-bound nor at the roofline: it is **spilling**, and 126 of the 226
+instructions per warp-k-block are not arithmetic. That reads as an issue-rate problem with an obvious
+cure, and the cheapest register to give back is free.
+
+### The transform, and why it is bit-identical rather than merely close
+
+`ws[r]` is indexed `(rr/128, kb)` with `rr = gr0+r`, `gr0` a multiple of NR, and NR ∈ {1,2,4,8} so
+NR | 128. Every row a warp owns therefore lands in the **same** 128-row scale block: `ws[0..NR-1]`
+are the same float, always. The compiler cannot see it because `rr` goes through the tail ternary, so
+it emitted **NR scale loads and NR `exp2f` per k-block** where one would do. WS1 computes it once —
+value equality, not a reassociation, so `memcmp` is the right instrument and not a cosine (trap 6).
+`tests/gate_og_ws1.cu`, new: **72/72 configurations bit-identical** over M ∈ {2,3,4,5,6,7,8,13,16} ×
+NR ∈ {1,2,4,8} × two shapes, outputs poisoned to 0xEE first.
+
+**A hoisted pointer cost more than the loads it saved.** The first version hoisted
+`const uint8_t* scrow = wsc + (gr0/128)*scw` out of the k-loop. `ptxas -v` went **44 → 60 bytes of
+spill** at `<5,4>` and gemm_bench lost **4.4 %**: a 64-bit pointer live across the whole loop
+occupies two permanently-allocated registers in a kernel that is already 8 registers over its cap,
+which is worse than three short-lived ones. Re-expressed as a 32-bit `int scoff`, spill went back to
+44 bytes — identical to the incumbent. *In a register-starved kernel, "hoist the loop-invariant" can
+be a pessimisation, and `ptxas -v` costs one recompile to find out.*
+
+### gemm_bench said this was a real win. It was not.
+
+Real shape, 12 rotating copies, 3 replicates per arm, ms (lower better):
+
+| M (=K) | NR the dispatch picks | WS1 on | WS1 off | bench delta | **in-situ `o:wo_a` delta** |
+|---|---|---|---|---|---|
+| 2 | 2 | 0.1658 | 0.1794 | **−7.6 %** | −2.5 % |
+| 3 | 2 | 0.1902 | 0.1954 | −2.7 % | −2.4 % |
+| 4 | 2 | — | — | — | −4.2 % |
+| 5 | 4 | 0.1978 | 0.1976 | **+0.1 %** | +1.5 % |
+| 1 | *(kernel not used)* | 0.1620 | 0.1631 | ±0 | +1.7 % |
+
+Off-dispatch points were larger still — M=3/NR=4 **−14.8 %**, M=8/NR=4 **−14.9 %**, M=5/NR=2
+**−12.7 %** — and WS1 was never slower at any (M,NR). The exception is exactly the shipped
+`<5,4>`, and `ptxas -v` says why: it is the one instantiation whose spill is **unchanged** at 44
+bytes, so the freed registers never became occupancy.
+
+### The measurement that closed it
+
+`evidence/ogws1.log` vs `evidence/kchunk.log`, both `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned
+(`jetson_clocks`), caches dropped.
+
+| | control | this | delta |
+|---|---|---|---|
+| spec tok/s | 21.68 | 21.67 | **−0.05 %** |
+| base AR tok/s | 13.78 | 13.72 | −0.4 % |
+| ksweep K=5 | 121.11 | 120.52 | −0.5 % |
+| ksweep K=1 / K=2 / K=3 / K=4 | 64.74 / 80.93 / 98.05 / 108.67 | 65.09 / 80.71 / 98.20 / 108.39 | +0.5 / −0.3 / +0.2 / −0.3 % |
+| dprof TOTAL K=5 | 127.18 | 127.21 | +0.0 % |
+
+**The tightest instrument available says +0.1 %.** All nine spec verifies pair 1:1 at identical K
+and identical accept counts, so they compare directly rather than as two run means:
+
+| verify | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | Σ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| K, accepted | 2, 1/1 | 2, 1/1 | 4, 1/3 | 2, 1/1 | 4, 3/3 | 3, 2/2 | 5, 4/4 | 5, 1/4 | 4, 3/3 | |
+| control ms | 112.5 | 117.8 | 141.8 | 119.5 | 144.3 | 131.4 | 154.7 | 154.9 | 142.5 | 1219.4 |
+| this ms | 113.4 | 117.5 | 141.4 | 119.2 | 144.2 | 131.7 | 154.8 | 155.4 | 143.2 | 1220.8 |
+| delta | +0.8 % | −0.3 % | −0.3 % | −0.3 % | −0.1 % | +0.2 % | +0.1 % | +0.3 % | +0.5 % | **+0.1 %** |
+
+That instrument's own spread is ±0.8 %; F74 moved it −5.9 % on the same nine points. The emitted
+26-token spec sequence and the 8-token base-AR sequence are both byte-identical to the control,
+acceptance 2.89 = 2.89, **LOSSLESS GATE PASS**, first token 11111.
+
+**Why the four negative `o:wo_a` marks are not the result.** `o:wo_a` at **K=1 moved +1.7 %, and it
+cannot have moved** — at M=1 `ogroup_gemm_fp8` dispatches to `ogroup_gemv_fp8_kernel`, which this
+change does not touch. That is trap 12's within-run control, and it bounds this mark's noise at
+~±2 %. An independent control pair (`kchunk` vs `moescan`, two runs of *different* builds whose change
+did not touch this kernel either) scatters `o:wo_a` from **−1.8 % to +2.4 %** across the same five K.
+Against a ±2.4 % floor, K=2 (−2.5 %) and K=3 (−2.4 %) are the floor, K=5 is +1.5 %, and one mark of
+five outside the band is not a signal. The verify totals, which average 41 launches, all sit inside
+±0.5 %.
+
+### The mechanism, and the family it closes
+
+ncu already said it and the lever ignored it: **8.1 of the 13.0 cycles between issues are L1TEX
+scoreboard stalls.** The kernel is *latency*-bound, not issue-bound. Deleting instructions from a
+warp that is parked waiting on memory returns the memory latency, which is zero — and the freed
+registers only pay if they cross a spill or occupancy threshold, which at `<5,4>` they provably do
+not. gemm_bench sees a win because a standalone launch with nothing to contend with is issue-limited;
+in situ, 41 launches per verify overlap other work and are not.
+
+**This closes the family, not just the instance.** The other instruction-count cures for this kernel
+have exactly the same shape and need not be built: pairing the four e4m3 decodes into two
+`__nv_cvt_fp8x2_to_halfraw2` (saves 8 of 226), and replacing `exp2f` with `__int_as_float(e<<23)`
+(saves a MUFU, and is *not* bit-identical at `e==0`, which is 2^-127 subnormal, not zero). Anything
+that does not change this kernel's **memory** behaviour is priced at zero here.
+
+The register cap is also confirmed exhausted a second time, now with WS1 on: at M=5/NR=4,
+`OGMK_BLOCKS_PER_SM` = 4 → **0.1978**, 3 → 0.2010, 2 → 0.1997. B7' said BPS=4 with the spilling code;
+it is still BPS=4 without three of the spilled registers.
+
+### Disposition: kept, defaulted OFF
+
+`OG_WS1=1` opts in; the default is the pre-change kernel, which is the arm every baseline in
+`FLYWHEEL_STATE.json` was measured under. Nothing unmeasured ships. The code and the gate stay
+because the value-equality argument and its memcmp harness are the expensive part, and a future
+variant that changes the kernel's *memory* behaviour — the smem-staged variant reading `o4[m]`
+lazily per m from shared memory instead of holding M float4s live, which is the only idea left that
+removes ~16 registers rather than 3 — would want both.
+
+### Three process results
+
+- **`gate_fp4_gemv` had not linked, and therefore had not tested anything, since F65/F72.** Its local
+  `extern` declaration of `tc_fp4_grouped_gemv_e8m0` was two parameters behind the engine
+  (`rows_hint`, `align8`), so it failed at *link* time — which looks like a build problem, not like a
+  gate that stopped existing — while a binary from 2026-08-06 sat in `build/` looking like a pass.
+  Declaration repaired to the engine signature and the call now passes the values `moe_forward` uses.
+- **`build_gate.sh` now builds all 19 gate binaries, not 10.** F74 flagged that the other 7 go stale
+  silently; that is how the item above survived. Sources are listed in the script, so there is one
+  place that can drift instead of nineteen.
+- **Trap 16 again, this time in the harness I wrote to check trap 16.** Running the suite with a
+  shared `ref/goldens` argument makes `gate_encoding` — which takes its *own* optional directory —
+  exit 2 and look red. It passes with no argument. 19/19 PASS.
+- `tools/dprof_diff.sh` added: pairs two dprof+ksweep logs by (K, sub-op). Every cycle since F70 has
+  read these tables by eye, and F73's lesson was that the decisive number is the control the change
+  must *not* have moved. It is the tool that produced the K=1 row above.

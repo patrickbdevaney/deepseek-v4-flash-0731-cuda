@@ -48,6 +48,7 @@ An unrecorded search will be run again.
 | 2026-08-07 | B | "get the GEMM right for the MoE" (operator-supplied) | **already exists and is 1.9x SLOWER** — closed with a measurement | §3 |
 | 2026-08-07 | A | K160 not a fused expert count -> Torch router fallback | **does not apply to this engine** — vLLM artifact | §3 |
 | 2026-08-08 | C | **FastMTP full text** (WebFetch arXiv 2509.18362v1) — recipe + is there a data-scaling study? | recipe extracted in full; **NO data-scaling study exists**, but the on-policy ablation is decisive — see §6 | S5 plan |
+| 2026-08-08 | — | *(cycle 12: research SKIPPED per §1 — B8 and S6 were both open at ≥1 %, meeting the ≥2-open-levers bar. F76 came from `ncu` on this engine, like every adoption before it. The research branch has still never executed.)* | n/a | — |
 | 2026-08-08 | A-F | **operator deep-research dossier** (web-chat, ~24 sources: FastMTP, HyperDFlash, SuffixDecoding, Sequoia, EVICT/EcoSpec/AcceptMoE, REAP, Thor MLPerf) | **4 promoted, 6 already done here, 3 inapplicable** — full triage in §3a | S5 S6 S7 S4 |
 
 ## 3. Ideas seen and rejected before implementation

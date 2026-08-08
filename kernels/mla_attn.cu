@@ -322,7 +322,23 @@ __global__ void ogroup_gemv_fp8_kernel(float* __restrict__ out, const float* __r
 #ifndef OGMK_BLOCKS_PER_SM
 #define OGMK_BLOCKS_PER_SM 4      // A/B: -DOGMK_BLOCKS_PER_SM=n caps registers at 65536/(256*n)
 #endif
-template<int M, int NR>
+// WS1 (this cycle). ncu on the shipped `<5,4>` instantiation said **806,912 local-memory spilling
+// requests, 100% spill overhead, 64 registers** — the `__launch_bounds__(256,4)` cap is
+// 65536/(256*256/32... ) = 64 regs/thread and the live set does not fit: acc[4][5]=20, o4[5]=20,
+// NR weight pointers, M activation pointers, w[4] and ws[4]. The kernel is not bandwidth-bound
+// (Memory Throughput 41%, Compute 49%); 62.3% of its 13.0 cycles between issues are L1TEX
+// scoreboard stalls, and a spilling kernel puts its own local traffic in that queue.
+//
+// `ws[r]` is the cheapest 4 of those registers to give back, and giving them back is FREE:
+// ws[r] is indexed (rr/128, kb) with rr = gr0+r, gr0 a multiple of NR, and NR | 128 — so every
+// row a warp owns lands in the SAME 128-row scale block and **ws[0..NR-1] are the same value,
+// always**. The compiler cannot prove it because `rr` goes through the tail ternary, so it emitted
+// NR scale loads and NR `exp2f` per k-block instead of one. WS1=true computes it once. This is
+// value equality, not a reassociation — every fma sees the identical float it saw before, which is
+// why it can be gated with memcmp rather than a cosine (Finding 68).
+// The transform is CORRECT and it is FREE and it is worth nothing: see the dispatch note below for
+// the in-situ numbers that retired it. OG_WS1=1 selects it; the default is WS1=false.
+template<int M, int NR, bool WS1>
 __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel(float* __restrict__ out, const float* __restrict__ o,
                                       const uint8_t* __restrict__ wo, const uint8_t* __restrict__ wsc,
                                       int G, int R, int Kd){
@@ -331,6 +347,12 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel
     int g=gr0/R; int lane=threadIdx.x&31, scw=Kd/128;
     // NR rows share a group only if the run does not straddle a g boundary; R%NR==0 guarantees it.
     const float* og=o+(size_t)g*Kd;
+    // gr0 < total is established above, so this row of the scale plane is always in range.
+    // A 32-bit OFFSET, not a hoisted `const uint8_t*`. The pointer form measured WORSE at the
+    // shipped <5,4>: ptxas -v went 44 -> 60 bytes of spill and the bench lost 4.4%, because a
+    // 64-bit pointer live across the whole kb loop costs two permanently-allocated registers and
+    // this kernel is already 8 registers over its 64-register cap. One int costs one.
+    const int scoff = (gr0/128)*scw;
     float acc[NR][M];
     #pragma unroll
     for(int r=0;r<NR;++r){
@@ -365,8 +387,11 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel
             // line their reuse across the warp. Do not re-queue a cache-hint change here without a
             // hit-rate measurement that says L2 is actually the binding resource.
             w[r]  = *(const uint32_t*)(wo+(size_t)rr*Kd+base);
-            ws[r] = exp2f((float)wsc[(size_t)(rr/128)*scw + kb]-127.f);   // power of two: exact to fold
+            if(!WS1) ws[r] = exp2f((float)wsc[(size_t)(rr/128)*scw + kb]-127.f);  // power of two: exact to fold
         }
+        if(WS1){ const float s = exp2f((float)wsc[scoff + kb]-127.f);
+            #pragma unroll
+            for(int r=0;r<NR;++r) ws[r]=s; }                     // same value NR ways, one load + one ex2
         float4 o4[M];
         #pragma unroll
         for(int m=0;m<M;++m) o4[m]=*(const float4*)(og+(size_t)m*G*Kd+base);
@@ -478,8 +503,9 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_smem_k
 // NR falls as M rises to keep NR*M accumulators in registers. NO_OGNR=1 pins NR=1, which is
 // exactly Finding 40's kernel, for A/B.
 #define OG_MK_LAUNCH(MM,NRV) do{ \
-    if(ogsmem) ogroup_gemv_mk_smem_kernel<MM,NRV><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
-    else       ogroup_gemv_mk_kernel     <MM,NRV><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    if(ogsmem)      ogroup_gemv_mk_smem_kernel<MM,NRV      ><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    else if(ogws1)  ogroup_gemv_mk_kernel     <MM,NRV,true ><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
+    else            ogroup_gemv_mk_kernel     <MM,NRV,false><<<(nb+NRV-1)/NRV,threads,0,stream>>>(out,o,wo_fp8,wo_sc,G,R,Kd); \
   }while(0)
 #define OG_MK_CASE(M) case M: \
     if(ognr==8)      OG_MK_LAUNCH(M,8); \
@@ -543,6 +569,23 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         // still return a plausible number.
         const bool ogsmem = (getenv("OG_SMEM")!=nullptr)
                          && ((R % ((threads/32)*ognr)) == 0) && (((Kd/128) % 8) == 0);
+        // WS1: one scale load + one exp2f per k-block instead of NR identical ones (see the kernel
+        // note). DEFAULT OFF — opt in with OG_WS1=1.
+        //
+        // MEASURED, NOT ADOPTED (Finding 76). It is bit-identical (gate_og_ws1, 72/72), it is never
+        // slower than the incumbent at any (M,NR) the dispatch picks, and in `gemm_bench` it is
+        // worth −7.6% at M=2/NR=2 and −14.8% at M=3/NR=4. In situ it is worth NOTHING: the nine
+        // spec verifies pair 1:1 at identical K and accept counts for a total of **+0.1%**
+        // (evidence/ogws1.log vs evidence/kchunk.log), spec 21.67 vs 21.68 tok/s, and every ksweep
+        // K moved less than 0.5%. The mechanism is in the ncu report that motivated it: this kernel
+        // spends 62.3% of its 13.0 cycles between issues stalled on an L1TEX scoreboard, i.e. it is
+        // LATENCY-bound, not issue-bound. Deleting instructions from a kernel that is waiting on
+        // memory returns the memory latency, which is zero. That closes the whole family — the
+        // fp8x2 cvt pairing and the exp2f→`__int_as_float(e<<23)` rewrite have the same shape and
+        // need not be built.
+        // Kept reachable, not deleted, because the value-equality argument and its gate are the
+        // expensive part and a future variant that changes the MEMORY behaviour may want them.
+        const bool ogws1 = (getenv("OG_WS1")!=nullptr) && ((128 % ognr) == 0);
         switch(bs){ OG_MK_CASE(2)  OG_MK_CASE(3)  OG_MK_CASE(4)  OG_MK_CASE(5)
                     OG_MK_CASE(6)  OG_MK_CASE(7)  OG_MK_CASE(8)  OG_MK_CASE(9)
                     OG_MK_CASE(10) OG_MK_CASE(11) OG_MK_CASE(12) OG_MK_CASE(13)

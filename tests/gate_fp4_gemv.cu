@@ -9,8 +9,14 @@
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 void fp4_gemm(float*, const uint8_t*, const float*, const uint8_t*, const float*, int,int,int, cudaStream_t);
 void tc_build_tiles(int*, int*, int*, const int*, int, cudaStream_t);
+// SIGNATURE DRIFT, repaired 2026-08-08 (Finding 76). This declaration was two parameters behind the
+// engine (`rows_hint`, `align8` were added by F65/F72), so the gate had not linked — and therefore
+// had not run — since those landed; its binary in build/ was a stale artefact from 2026-08-06 that
+// no longer corresponded to any source in the tree. A local `extern` declaration of an engine symbol
+// is a copy of an interface with no compiler keeping it honest: it fails at LINK time, which looks
+// like a build-system problem rather than a gate that stopped testing anything.
 void tc_fp4_grouped_gemv_e8m0(float*, const uint8_t*, const float*, const uint8_t* const*, const uint8_t* const*,
-        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
+        const int*, const int*, const int*, const int*, int, int, int, cudaStream_t, int rows_hint, int align8);
 int main(){
     const int N=64, K=256, M=3;  srand(9);            // 1 expert, M rows in one tile
     std::vector<uint8_t> W((size_t)N*(K/2)), Ssc((size_t)N*(K/32)), A((size_t)M*K); std::vector<float> As((size_t)M*(K/128));
@@ -28,7 +34,9 @@ int main(){
     CU(cudaMemcpy(wd,&dW,sizeof(void*),cudaMemcpyHostToDevice));CU(cudaMemcpy(sd,&dSsc,sizeof(void*),cudaMemcpyHostToDevice));
     int off[2]={0,M}; int*off_d,*te,*tr,*nt; CU(cudaMalloc(&off_d,8));CU(cudaMalloc(&te,M*4));CU(cudaMalloc(&tr,M*4));CU(cudaMalloc(&nt,4));
     CU(cudaMemcpy(off_d,off,8,cudaMemcpyHostToDevice)); tc_build_tiles(te,tr,nt,off_d,1,0);
-    tc_fp4_grouped_gemv_e8m0(Cg,dA,dAs,(const uint8_t* const*)wd,(const uint8_t* const*)sd,off_d,te,tr,nt,M,N,K,0); CU(cudaDeviceSynchronize());
+    // rows_hint=M and align8=1 are the values moe_forward passes at decode; anything else would gate
+    // a path the engine does not take.
+    tc_fp4_grouped_gemv_e8m0(Cg,dA,dAs,(const uint8_t* const*)wd,(const uint8_t* const*)sd,off_d,te,tr,nt,M,N,K,0,M,1); CU(cudaDeviceSynchronize());
     std::vector<float> cr((size_t)M*N),cg((size_t)M*N); CU(cudaMemcpy(cr.data(),Cr,cr.size()*4,cudaMemcpyDeviceToHost));CU(cudaMemcpy(cg.data(),Cg,cg.size()*4,cudaMemcpyDeviceToHost));
     // TOLERANCE GATE for the half2-accumulate GEMV (LOOP_LOG Finding 31).
     // The f32 path held cosine-1.0/max_abs<1e-3. half2 accumulation CANNOT hold an absolute

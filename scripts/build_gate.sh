@@ -53,3 +53,47 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   tests/gate_tc_fp8_kc.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu \
   -o build/gate_tc_fp8_kc
 echo "built build/gate_tc_fp8_kc"
+# Gate OG_WS1 — the ogroup GEMV scale-hoist (Finding 76) must be BIT-IDENTICAL to the shipped default. Same
+# reasoning as gate_tc_fp8_kc: the claim is value equality, so the instrument is memcmp, and
+# gate_ogroup_gemv next door is a cosine gate on a DIFFERENT (M=1) kernel.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_og_ws1.cu kernels/mla_attn.cu kernels/dscratch.cu \
+  -o build/gate_og_ws1
+echo "built build/gate_og_ws1"
+
+# ---------------------------------------------------------------------------------------------
+# THE OTHER EIGHT (Finding 76). Before this block, build_gate.sh built 10 of the 18 gate binaries
+# and the rest went stale SILENTLY: F74 found gate_compressed_decode and gate_indexer_decode a day
+# out of date, and gate_fp4_gemv turned out to be two engine parameters behind — it had not linked,
+# and therefore had not tested anything, since F65/F72 added `rows_hint`/`align8`, while a binary
+# from 2026-08-06 sat in build/ looking like a passing gate. A gate that is not in the build script
+# is a gate that measures the past. Sources are listed here rather than in each file's header
+# comment so there is exactly one place that can drift.
+#
+# `nvcc ... && echo built` DOES NOT FAIL THE SCRIPT even under `set -e`: the failure is a non-final
+# command of an && list, so bash exempts it, the "built" line simply never prints, and the run ends
+# 0 with one binary silently missing. That is how gate_grouped_moe went missing on the first pass of
+# this very block. `bg` below builds, reports, and records — and the script exits non-zero at the end
+# if anything failed, because "a MISSING binary is a FAILURE, not a pass".
+GA="-O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include"
+GATE_FAILED=""
+bg(){ local t="$1"; shift
+      if nvcc $GA "tests/$t.cu" "$@" -o "build/$t"; then echo "built build/$t"
+      else echo "FAILED TO BUILD build/$t" >&2; GATE_FAILED="$GATE_FAILED $t"; fi; }
+trap '[ -n "$GATE_FAILED" ] && { echo "GATE BUILD FAILURES:$GATE_FAILED" >&2; exit 1; }; exit 0' EXIT
+CDEC="kernels/compressed_decode.cu kernels/compressed_attn.cu kernels/compressor.cu kernels/indexer.cu \
+  kernels/mla_attn.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu"
+FULL="$CDEC kernels/mla_forward.cu kernels/mla_decode.cu kernels/hc.cu kernels/hc_sinkhorn.cu \
+  kernels/moe.cu kernels/tc_moe_gemm.cu"
+for t in gate_compressed_decode gate_indexer_decode; do bg $t $CDEC; done
+for t in gate_scratch_init gate_compressed_graph gate_indexer_graph; do bg $t $FULL; done
+bg gate_compressor_emit kernels/compressor.cu kernels/mla_attn.cu kernels/indexer.cu \
+  kernels/dscratch.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu
+# moe.cu, for `fp4_gemm` — the oracle this gate diffs the grouped GEMV against. Its own header build
+# line lists only tc_moe_gemm.cu and has not linked since the oracle moved.
+bg gate_grouped_moe kernels/tc_moe_gemm.cu kernels/moe.cu kernels/mla_attn.cu kernels/fp8_block_gemm.cu \
+  kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu
+# -lcublasLt: fp4_gemm.cu carries a cublasLt reference path next to the hand-written kernel.
+bg gate_fp4_gemv kernels/fp4_gemm.cu kernels/moe.cu kernels/tc_moe_gemm.cu \
+  kernels/dscratch.cu kernels/dprof.cu kernels/mla_attn.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu \
+  -lcublasLt -lcublas
