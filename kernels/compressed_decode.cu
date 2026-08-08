@@ -393,17 +393,29 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     // qidx = fp4sim(hadamard(rope(idx_wq_b(qr)))). `iqrq/iqrs` came out of build_qKV above.
     float *qidx,*qtmp,*iw,*iscore;
     qidx=(float*)dmalloc((size_t)K*QD*4); qtmp=(float*)dmalloc((size_t)K*QD*4); iw=(float*)dmalloc((size_t)K*nH*4);
+    dprof_begin(DP_I_QIDX,stream);
     fp8_block_gemm(qidx,iqrq,iqrs,w.idx_wq_b,w.idx_wq_b_s,K,QD,Q_LORA,stream);
     rope_interleaved(qidx+(ihd-rd),cosP,sinP,K*nH,rd,false,ihd,nH,stream);
     hadamard(qtmp,qidx,K*nH,ihd,stream); act_quant_fp4sim(qtmp,K*nH,ihd,32,ihd,stream);
+    dprof_end(DP_I_QIDX,stream);
+    dprof_begin(DP_I_IW,stream);
     gemm_fp32(iw,x_full+(size_t)pos*DIM,w.idx_weights_proj,K,nH,DIM,stream);
     k_iw_scale<<<((size_t)K*nH+63)/64,64,0,stream>>>(iw,wscale,K*nH);
+    dprof_end(DP_I_IW,stream);
     iscore=(float*)dmalloc((size_t)K*Tf*4);
+    // index_score is one THREAD per (query, compressed-row) and there are only K*Tf ~ 95 of them, so
+    // it launches a single block. If this mark is large that is 3 warps on one SM doing 1024 MACs
+    // each, and the fix is warp-per-output — which changes the reduction order, so it needs the
+    // lossless gate (Finding 68) rather than a cosine.
+    dprof_begin(DP_I_SCORE,stream);
     index_score(iscore,qtmp,idx_ckv,iw,K,Tf,nH,ihd,stream);
+    dprof_end(DP_I_SCORE,stream);
     // per-query top-k with GLOBAL causal threshold (t < (pos+i+1)/ratio), offset nwin
     int topkc = (w.index_topk<Tf)?w.index_topk:Tf;
     int* dtop; dtop=(int*)dmalloc((size_t)K*topkc*4);
+    dprof_begin(DP_I_TOPK,stream);
     k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, nwin);   // device top-k (no D2H sync)
+    dprof_end(DP_I_TOPK,stream);
     dprof_end(DP_C_INDEXER,stream);
     int ntot=nwin+Tf; float* kv_all; kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
     CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));

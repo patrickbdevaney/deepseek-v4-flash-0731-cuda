@@ -3695,3 +3695,54 @@ F65 (probe modelled 1 row per expert), F69 (store hardcoded to 2 columns so a BN
 code), and F70 (probe clamped rows at 2) are the same failure: **the measurement apparatus quietly
 encoded an assumption, and the sweep then confirmed it.** Before sweeping a parameter, check that the
 harness can actually express the regime the parameter governs.
+
+---
+
+## Finding 71 — `index_score` was one thread per output on a single block: 6.05 ms for 97k MACs
+
+**ADOPTED. `i:score` 6.05 → 0.75 ms (−87 %); `cattn:indexer` 9.14 → 3.96 (−57 %); spec 19.31 → 20.16
+tok/s (+4.4 %); base AR 12.58 → 13.47 (+7.1 %).** Full 40-token spec sequence **identical** to the
+previous build; first-token, MATCH 5/5 and the lossless gate all PASS.
+
+### What it was
+
+Third-level marks inside the indexer (new: `i:qidx`, `i:iw`, `i:score`, `i:topk`) put **6.05 of the
+indexer's 9.14 ms in one kernel** — 4.2 % of the entire K=5 verify:
+
+| mark | ms (21 layers) |
+|---|---|
+| `i:qidx` (`idx_wq_b` + rope + hadamard + fp4sim) | 2.24 |
+| `i:iw` | 0.62 |
+| **`i:score`** | **6.05** |
+| `i:topk` | 0.12 |
+
+`index_score_kernel` assigns **one thread per (query, compressed-row)** and at decode there are only
+`S*T ≈ 95` of them. That is a **single block, three warps, one SM**, each thread walking `H*d = 1024`
+MACs serially with a stride-1 read no other lane shares — 288 µs per layer for 97k MACs.
+
+The whole engine had been tuned around bandwidth; this one was three warps of a 20-SM device.
+
+### The fix
+
+One **warp** per (query, row): 32× the threads, the `d` loop lane-strided so consecutive lanes read
+consecutive floats of *both* operands, and the per-head dot closing in a shuffle tree. Same head
+order, same relu, same weights.
+
+`ksweep` K=5 moves only 137.01 → 136.33, but **spec gains 4.4 % and base AR 7.1 %** — because
+`index_score` is on the M=1 decode path and the prefill as well, and `ksweep` measures only the K=5
+verify. A lever whose mark is inside the verify can still pay most of its rent outside it.
+
+### On shipping a non-bit-exact change one finding after F68 retired one
+
+The dot over `d` changes from serial to tree order, so this is exactly the class F68 caught producing
+a *fake* 28 % speedup. The difference is what was checked:
+
+- the **lossless gate** F68 left behind: `first 8 tokens match base AR -> PASS`;
+- the **full 40-token spec sequence is byte-identical** to the pre-change build;
+- `MATCH 5/5`, first-token argmax, and every unit gate pass.
+
+A tree reduction over 128 elements is also *more* accurate than the serial one it replaces, which is
+the opposite of split-K's situation — there the split changed the summation grouping across a 4096-long
+K and the perturbation compounded through 43 layers into a repeating loop. **"Not bit-exact" is not
+one category.** The question is whether the perturbation is smaller than the one already present and
+whether the emitted sequence survives, and both are now cheap to answer.

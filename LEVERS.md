@@ -16,8 +16,8 @@ Rules of the road:
 
 ## 1. Where the time actually goes
 
-Current baseline (prompt 0, clocks pinned, post-Finding-65): **19.31 tok/s speculative**,
-**12.58 tok/s base AR** (79.5 ms/tok). `evidence/final4.log`.
+Current baseline (prompt 0, clocks pinned, post-Finding-71): **20.16 tok/s speculative**,
+**13.47 tok/s base AR** (74.2 ms/tok). `evidence/final5.log`.
 
 The K=5 verify is **157.0 ms** and splits into two populations that behave completely differently
 (`evidence/pinned.log`, `DSV4_DPROF=1 DSV4_KSWEEP=1`):
@@ -60,6 +60,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **clock pinning (`jetson_clocks`)** | **+3.0 % steady, +20.7 % cold** | 60 |
 | **ogroup row-tile fix** | correctness, not speed — see §6 | **62** |
 | **MoE row amortisation, RB=4 fitted to the measured histogram** | **+7.4 % spec, +2.3 % base AR; verify −9.3 %** | **64, 65, 70** |
+| **`index_score` warp-per-output** | **+4.4 % spec, +7.1 % base AR** (`i:score` −87 %) | **71** |
 
 ---
 
@@ -110,6 +111,7 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
+| B0 | **audit every kernel for thread-per-output at decode shapes** | **unknown, but F71 was +4.4 %** | `index_score` was one thread per (query,row) — 95 threads, one block — and cost 4.2 % of the verify. Nothing had ever checked launch geometry against decode-sized inputs. Candidates with the same shape: `k_topk_verify` (`<<<K,32>>>` with `if(threadIdx.x) return` — **5 working threads**), `k_topk_decode` (`<<<1,32>>>`, one thread), `k_moe_prefix` (`<<<1,1>>>`). Each is small today but the same mistake. |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |

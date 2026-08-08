@@ -37,6 +37,7 @@ enum DProfId {
     // slow. 22.6 ms of the 144.6 ms verify sits behind these marks.
     DP_Q_AQX, DP_Q_WQA, DP_Q_RMSAQ, DP_Q_WQB, DP_Q_TAIL, DP_Q_KVJOIN,
     DP_O_ROPE, DP_O_WOA, DP_O_WOB,
+    DP_I_QIDX, DP_I_IW, DP_I_SCORE, DP_I_TOPK,
     DP_N
 };
 

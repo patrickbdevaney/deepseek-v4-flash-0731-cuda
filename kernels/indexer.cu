@@ -31,8 +31,45 @@ __global__ void index_score_kernel(float* __restrict__ score, const float* __res
     }
     score[(size_t)s * T + t] = acc;
 }
+// WARP PER OUTPUT (LOOP_LOG Finding 71). The kernel above puts one THREAD on each (query, row) pair,
+// and at decode there are only S*T ~ 95 of them — a single block, three warps, one SM, each thread
+// walking H*d = 1024 MACs serially with a stride-1 read that no other lane shares. Measured in situ
+// it is 6.05 ms of the indexer's 9.14, i.e. 4.2% of the whole K=5 verify, for 97k MACs.
+//
+// One warp per pair instead: 32x the threads, the d-loop is lane-strided so consecutive lanes read
+// consecutive floats of both operands, and the per-head dot finishes in a shuffle tree.
+//
+// NOT bit-exact: the dot over `d` changes from serial to tree order. That is why it ships behind the
+// LOSSLESS gate (Finding 68) rather than a cosine — a tolerance that is fine for one dot product says
+// nothing about what a different top-k selection does 43 layers later. NO_IXWARP=1 restores the
+// scalar kernel for A/B.
+__global__ void index_score_warp_kernel(float* __restrict__ score, const float* __restrict__ q,
+                                        const float* __restrict__ kv, const float* __restrict__ weights,
+                                        int S, int T, int H, int d) {
+    const int gid = blockIdx.x * (blockDim.x >> 5) + (threadIdx.x >> 5);
+    if (gid >= S * T) return;
+    const int s = gid / T, t = gid % T, lane = threadIdx.x & 31;
+    const float* kvt = kv + (size_t)t * d;
+    float acc = 0.f;
+    for (int h = 0; h < H; ++h) {
+        const float* qh = q + (((size_t)s * H + h) * d);
+        float dot = 0.f;
+        for (int e = lane; e < d; e += 32) dot += qh[e] * kvt[e];
+        #pragma unroll
+        for (int o = 16; o > 0; o >>= 1) dot += __shfl_down_sync(0xffffffff, dot, o);
+        dot = __shfl_sync(0xffffffff, dot, 0);
+        acc += fmaxf(dot, 0.f) * weights[(size_t)s * H + h];   // same relu, same head order
+    }
+    if (lane == 0) score[(size_t)s * T + t] = acc;
+}
 void index_score(float* score, const float* q, const float* kv, const float* weights,
                  int S, int T, int H, int d, cudaStream_t stream) {
+    static const bool warpk = getenv("NO_IXWARP") == nullptr;
+    if (warpk && (d % 32) == 0) {
+        const int threads = 256, wpb = threads >> 5;
+        index_score_warp_kernel<<<((size_t)S * T + wpb - 1) / wpb, threads, 0, stream>>>(score, q, kv, weights, S, T, H, d);
+        return;
+    }
     index_score_kernel<<<(S * T + 255) / 256, 256, 0, stream>>>(score, q, kv, weights, S, T, H, d);
 }
 
