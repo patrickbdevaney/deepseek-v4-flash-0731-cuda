@@ -263,3 +263,58 @@ two consecutive research phases produce nothing that survives §1's constraints.
 engine is at its structural limit for this checkpoint and the honest move is to say so in
 `FLYWHEEL_STATE.json` and stop, not to keep cycling.
 
+
+## §7 — CORRECTION: fine-tuning a shipped MTP head is worth **+51 %**, not +5.6 %
+
+I told the operator that Nebius's DeepSeek-MTP result was **+5.6 %** and used it to argue S5 was
+probably not worth six days. **That was a misreading and it was wrong by an order of magnitude.**
+
++5.6 % is LK loss's gain **over a KL-trained baseline**. The gain of fine-tuning over the **shipped**
+module is on the model card for `nebius/MTP-DeepSeek-V3-0324`:
+
+| | acceptance |
+|---|---|
+| shipped DeepSeek-V3 MTP | **3.20** (T=0) / 3.09 (T=1) |
+| **fine-tuned, hybrid LK** | **4.83** / 4.68 |
+| KL-fine-tuned | 4.79 / 4.43 |
+
+**+51 %.** Recipe, all published: Infinity-Instruct-0625 with **DeepSeek-V3-generated responses**,
+hybrid LK loss with adaptive lambda, **eta = 3** (which I had recorded as unpublished), **1 epoch
+from pretrained MTP weights**, draft length 6.
+
+### The mechanism — and why it may NOT transfer to us
+
+The literature is explicit about *why* that head had 51 % to recover: DeepSeek-V3's MTP module was
+**trained for first-token prediction and reused autoregressively** for later positions, so acceptance
+degraded with draft depth. Fine-tuning repairs a pathology.
+
+**Ours is not that head.** DSpark is semi-autoregressive and *block*-trained: a parallel backbone
+emits every position of the block at once, a Markov head injects intra-block dependency, a confidence
+head predicts per-position acceptance — and the DSpark paper trained it for **10 epochs** on
+Open-PerfectBlend. So the pathology Nebius repaired is one our architecture was explicitly designed
+to avoid, and +51 % is an **upper** bound for us, not an expectation.
+
+### What our own numbers say about the gap
+
+- tau = **2.89** on the canonical 6-token trivia prompt
+- tau = **3.57-4.00** on a 1023-token real-code prompt (measured across four runs)
+- the DSpark paper reports **6.11** accepted length on math
+
+So a large part of our apparent gap is **prompt and domain**, not head quality — the canonical gate
+prompt is 6 tokens of trivia and is the worst case for a drafter. **Any S5 decision must be made
+against a realistic multi-prompt evaluation set, not against 2.89.** Building that set is a
+prerequisite, and it is cheap.
+
+## §8 — DFlash: KV injection is the architectural lever we do not have
+
+LMSYS, 2026-06. EAGLE-class drafters pass target features **only at the draft model's input**, so the
+signal **fades in deeper drafters**. DFlash instead **injects target features into the KV cache of
+every draft layer**, which is what lets acceptance scale with draft depth. Block size 8-16 (vs our
+5); 4.86x on Qwen3-8B greedy; a 5-layer DFlash at 16-token blocks beats EAGLE-3 at 8-token blocks
+**with lower latency**.
+
+Ablations separate the two mechanisms: diffusion-only gives lower acceptance (3.5-3.8) but still
+2.9x on GSM8K through faster drafting; **injection-only gives higher acceptance (4.8) and 2.4x**.
+
+**Open question for the workflow: can KV injection be retrofitted to an already-trained MTP head, or
+does it require training from scratch?** If it retrofits, it is a bigger lever than the fine-tune.
