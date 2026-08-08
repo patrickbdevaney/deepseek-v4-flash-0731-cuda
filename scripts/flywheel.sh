@@ -231,11 +231,21 @@ done
 # but noticing is not a mechanism, and it went two cycles regardless. So the harness counts it now:
 # a run whose log contains [dprof] marks is a profiling run; one that reports a rate with no [dprof]
 # is a clean re-baseline. At >=2 the prompt (step 6) makes the next run non-negotiable.
+#
+# TRAP 32 (cycle 17). This block matched ONLY "^[dprof]" while the engine prints four other
+# instrument markers, so cycle 17's DSV4_SPECPROF=1 run -- which cost +1.01% on paired verifies,
+# measured -- was scored CLEAN and reset the counter to 0. Worse, it ran AFTER the executor had
+# read its own contaminated number correctly and hand-set the counter to 1, so the harness
+# silently clobbered a human-correct value with a machine-wrong one. A guard that recognises one
+# of five instruments is not a guard; enumerate them from the source of truth:
+#   grep -rhoE '"\[[a-z]+\]' include/dprof.h src/*.cu | sort -u
+# and extend INSTRUMENTS below whenever a new DSV4_* profiling flag is added.
+INSTRUMENTS='^\[(dprof|specprof|ksweep|blksweep|memtrace)\]'
 CLEAN_RUN=0; DPROF_RUN=0
 for L in "$ROOT"/evidence/$(printf 'cycle%03d' "$CYCLE")-*.log; do
     [ -f "$L" ] || continue
     grep -q "SPEC-DECODE\|WARM decode" "$L" 2>/dev/null || continue
-    if grep -q "^\[dprof\]" "$L" 2>/dev/null; then DPROF_RUN=1; else CLEAN_RUN=1; fi
+    if grep -qE "$INSTRUMENTS" "$L" 2>/dev/null; then DPROF_RUN=1; else CLEAN_RUN=1; fi
 done
 if [ "$CLEAN_RUN" = 1 ] || [ "$DPROF_RUN" = 1 ]; then
     python3 - "$STATE" "$CLEAN_RUN" <<'PYEOF' 2>/dev/null || true

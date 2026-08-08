@@ -431,6 +431,17 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    one direction** (1196.7 → 1208.8 ms), spec 22.06 → 21.84, base 13.83 → 13.72 — a known cause with a
    consistent sign, which is exactly what an instrument's cost should look like. Set
    `dprof_runs_since_clean` by hand after one, and never re-baseline from one (F82).
+   **FIXED 2026-08-08 in the harness, and the fix is wider than the bug.** `flywheel.sh` now matches
+   `^\[(dprof|specprof|ksweep|blksweep|memtrace)\]` — five instruments, enumerated from the source of
+   truth (`grep -rhoE '"\[[a-z]+\]' include/dprof.h src/*.cu`), not the one that happened to bite.
+   A/B'd on real logs: `specprof_f82.log` flips CLEAN→DIRTY, `clean_post_f81.log` and
+   `clean_post_f76.log` stay CLEAN. **The hand-set was never going to hold anyway** — the counter
+   block runs *after* the executor writes `FLYWHEEL_STATE.json`, so cycle 17's correct hand-set 1 was
+   clobbered back to 0 by the harness thirty seconds later, and the state note that documented the
+   workaround described a value that no longer existed in the file it described. That is the general
+   lesson: **a documented manual workaround for a harness bug is not a mitigation if the harness runs
+   last.** The executor cannot patch this itself (`scripts/flywheel*.sh` is in its deny list), so
+   harness bugs it *finds* must be escalated to the operator rather than worked around in state.
 
 33. **A region's SHARE of the cycle goes stale even when nobody touches it.** The draft half was 14 %
    at F47 and is **17.4 %** now, unchanged in absolute terms while six adoptions cut the verify around
