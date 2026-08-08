@@ -1,0 +1,111 @@
+[flywheel 2026-08-07T02:17:02-04:00] cycle 0 starting; 114 GiB free; HEAD 53b372f
+[flywheel 2026-08-07T02:27:08-04:00] agent exited rc=0
+[flywheel 2026-08-07T02:27:08-04:00] committed: 20ebe6a flywheel: stream-json capture per cycle + a renderer for watching the agent 
+/home/patrickd/deepseek-v4-flash-0731-cuda/scripts/flywheel.sh: line 213: unexpected EOF while looking for matching `''
+[flywheel 2026-08-07T03:17:01-04:00] HALT: no FLYWHEEL_STATE.json
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: '//FLYWHEEL_STATE.json'
+[flywheel 2026-08-07T03:30:23-04:00] selftest PASS
+[flywheel 2026-08-07T03:30:23-04:00] cycle 2 starting; 114 GiB free; HEAD 6615316
+[flywheel 2026-08-07T03:50:30-04:00] agent exited rc=0
+[flywheel 2026-08-07T03:50:30-04:00] committed cycle 2: flywheel: the sweep prefilled every prompt to the wrong length, and a lambda capture is why
+[flywheel 2026-08-07T03:50:30-04:00] committed: c302a12 flywheel: the sweep prefilled every prompt to the wrong length, and a lambda capture is why 469d9c2 flywheel: research is not blocked by a broken instrument 
+[flywheel 2026-08-07T03:50:30-04:00] OK: 5 commit(s) held locally for review
+[flywheel 2026-08-07T03:51:05-04:00] cycle 2 done
+[flywheel 2026-08-07T04:07:10-04:00] selftest PASS
+[flywheel 2026-08-07T04:07:10-04:00] cycle 3 starting; 114 GiB free; HEAD a84fa08
+[flywheel 2026-08-07T04:43:10-04:00] agent exited rc=0
+[flywheel 2026-08-07T04:43:10-04:00] committed cycle 3: flywheel: the fault on indexer.cu:91 is real, and a gate that varies s found it
+[flywheel 2026-08-07T04:43:10-04:00] committed: 124480d flywheel: the fault on indexer.cu:91 is real, and a gate that varies s found it 
+[flywheel 2026-08-07T04:43:10-04:00] OK: 2 commit(s) held locally for review
+[flywheel 2026-08-07T04:43:44-04:00] not publishing: gain=0.00% fresh_gate_pass=1 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-07T04:43:44-04:00] cycle 3 done
+[flywheel 2026-08-07T05:19:28-04:00] selftest PASS
+[flywheel 2026-08-07T05:19:28-04:00] cycle 4 starting; 114 GiB free; HEAD 124480d
+[flywheel 2026-08-07T05:30:42-04:00] agent exited rc=0
+[flywheel 2026-08-07T05:30:42-04:00] archived evidence: cycle004-flywheel_cron.log (26 lines)
+[flywheel 2026-08-07T05:30:42-04:00] archived evidence: cycle004-cycle5.log (644 lines)
+[flywheel 2026-08-07T05:30:42-04:00] committed cycle 4: flywheel: the top-k fix bought reproducibility, not the crash — and the crash is not about length
+[flywheel 2026-08-07T05:30:42-04:00] committed: 11188d2 flywheel: the top-k fix bought reproducibility, not the crash — and the crash is not about length 
+[flywheel 2026-08-07T05:30:42-04:00] OK: 3 commit(s) held locally for review
+[flywheel 2026-08-07T05:31:16-04:00] not publishing: gain=0.00% fresh_gate_pass=1 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-07T05:31:16-04:00] cycle 4 done
+[flywheel 2026-08-07T06:17:01-04:00] state is halted: Invariant 7. The cycle-5 full-model run printed 'cuda kernels/indexer.cu:96 an illegal memory access was encountered' entering sweep point 12 (prompt 4's prefill, s=28), after 12 clean points. Nothing is built on top of this. The reproducibility half of the run is complete and reported (Finding 54); the crash is re-queued as I3 with a NEW frame -- accumulation across points, not prompt length -- and a falsification test that needs no model run. Note this is the SECOND consecutive run to die at this site, and the first one to do so with the loop's own last-error drain live and reporting nothing, which is itself information: it is a genuine async fault, not a failed launch.
+[flywheel 2026-08-07T07:17:01-04:00] state is halted: Invariant 7. The cycle-5 full-model run printed 'cuda kernels/indexer.cu:96 an illegal memory access was encountered' entering sweep point 12 (prompt 4's prefill, s=28), after 12 clean points. Nothing is built on top of this. The reproducibility half of the run is complete and reported (Finding 54); the crash is re-queued as I3 with a NEW frame -- accumulation across points, not prompt length -- and a falsification test that needs no model run. Note this is the SECOND consecutive run to die at this site, and the first one to do so with the loop's own last-error drain live and reporting nothing, which is itself information: it is a genuine async fault, not a failed launch.
+[flywheel 2026-08-07T08:17:01-04:00] state is halted: Invariant 7. The cycle-5 full-model run printed 'cuda kernels/indexer.cu:96 an illegal memory access was encountered' entering sweep point 12 (prompt 4's prefill, s=28), after 12 clean points. Nothing is built on top of this. The reproducibility half of the run is complete and reported (Finding 54); the crash is re-queued as I3 with a NEW frame -- accumulation across points, not prompt length -- and a falsification test that needs no model run. Note this is the SECOND consecutive run to die at this site, and the first one to do so with the loop's own last-error drain live and reporting nothing, which is itself information: it is a genuine async fault, not a failed launch.
+[flywheel 2026-08-07T09:17:01-04:00] state is halted: Invariant 7. The cycle-5 full-model run printed 'cuda kernels/indexer.cu:96 an illegal memory access was encountered' entering sweep point 12 (prompt 4's prefill, s=28), after 12 clean points. Nothing is built on top of this. The reproducibility half of the run is complete and reported (Finding 54); the crash is re-queued as I3 with a NEW frame -- accumulation across points, not prompt length -- and a falsification test that needs no model run. Note this is the SECOND consecutive run to die at this site, and the first one to do so with the loop's own last-error drain live and reporting nothing, which is itself information: it is a genuine async fault, not a failed launch.
+[flywheel 2026-08-07T10:17:01-04:00] state is halted: Invariant 7. The cycle-5 full-model run printed 'cuda kernels/indexer.cu:96 an illegal memory access was encountered' entering sweep point 12 (prompt 4's prefill, s=28), after 12 clean points. Nothing is built on top of this. The reproducibility half of the run is complete and reported (Finding 54); the crash is re-queued as I3 with a NEW frame -- accumulation across points, not prompt length -- and a falsification test that needs no model run. Note this is the SECOND consecutive run to die at this site, and the first one to do so with the loop's own last-error drain live and reporting nothing, which is itself information: it is a genuine async fault, not a failed launch.
+[flywheel 2026-08-07T11:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T12:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T13:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T14:17:02-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T15:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T16:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T17:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T18:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T19:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T20:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T21:17:01-04:00] FLYWHEEL_STOP present; exiting
+[flywheel 2026-08-07T22:20:41-04:00] selftest PASS
+[flywheel 2026-08-07T22:20:41-04:00] cycle 9 starting; 115 GiB free; HEAD c155e18
+[flywheel 2026-08-07T22:41:02-04:00] agent exited rc=0
+[flywheel 2026-08-07T22:41:02-04:00] archived evidence: cycle009-flywheel_cron.log (52 lines)
+[flywheel 2026-08-07T22:41:02-04:00] WARNING: working tree dirty but no .flywheel_commit_msg — leaving uncommitted for review
+[flywheel 2026-08-07T22:41:02-04:00] no commit made this iteration
+[flywheel 2026-08-07T22:41:34-04:00] not publishing: gain=0.00% fresh_gate_pass=1 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-07T22:41:34-04:00] cycle 9 done
+[audit 2026-08-07T22:41:34-04:00] no new commit
+[flywheel 2026-08-07T23:17:01-04:00] state is halted: CYCLE 10 IS COMPLETE AND UNCOMMITTED. git add / git commit were DENIED by the harness permission layer, not by any repo rule; the executor did not retry or work around it. All engine work, gates and the write-back are on disk and correct -- the tree is dirty, HEAD is still c155e18. NEXT ACTION IS A COMMIT, NOT A REBUILD: commit these paths with the Finding 73 message, then the auditor may publish. Do NOT re-run the lever; evidence/moescan.log is the run. Paths: kernels/moe.cu kernels/tc_moe_gemm.cu kernels/dprof.cu include/dprof.h tests/gate_moe_scan.cu scripts/build_gate.sh LOOP_LOG.md LEVERS.md FLYWHEEL_STATE.json evidence/moescan.log
+[audit 2026-08-07T23:17:01-04:00] no new commit
+[flywheel 2026-08-08T00:21:26-04:00] selftest PASS
+[flywheel 2026-08-08T00:21:26-04:00] cycle 10 starting; 114 GiB free; HEAD 4e25426
+[flywheel 2026-08-08T00:53:01-04:00] agent exited rc=0
+[flywheel 2026-08-08T00:53:01-04:00] archived evidence: cycle010-kchunk.log (307 lines)
+[flywheel 2026-08-08T00:53:01-04:00] archived evidence: cycle010-flywheel_cron.log (64 lines)
+[flywheel 2026-08-08T00:53:02-04:00] committed cycle 10: fp8 tile: q:wq_b 11.18 -> 7.98 ms (-29%), K=5 verify -5.6%, spec +6.1%, bit-identical
+[flywheel 2026-08-08T00:53:02-04:00] committed: 4ae77c6 fp8 tile: q:wq_b 11.18 -> 7.98 ms (-29%), K=5 verify -5.6%, spec +6.1%, bit-identical 
+[flywheel 2026-08-08T00:53:02-04:00] OK: 2 commit(s) held locally for review
+[flywheel 2026-08-08T00:53:34-04:00] not publishing: gain=0.00% fresh_gate_pass=1 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-08T00:53:34-04:00] cycle 10 done
+[audit 2026-08-08T00:58:27-04:00] PASS — publishing 4ae77c62efb844d335f131b9f8abda966715ff97
+[flywheel 2026-08-08T01:21:39-04:00] selftest PASS
+[flywheel 2026-08-08T01:21:39-04:00] cycle 11 starting; 117 GiB free; HEAD f73ba51
+[audit 2026-08-08T02:17:01-04:00] cycle in flight
+[flywheel 2026-08-08T03:00:21-04:00] agent exited rc=0
+[flywheel 2026-08-08T03:00:21-04:00] archived evidence: cycle011-flywheel_cron.log (75 lines)
+[flywheel 2026-08-08T03:00:21-04:00] archived evidence: cycle011-ogws1.log (309 lines)
+[flywheel 2026-08-08T03:00:21-04:00] committed cycle 11: ogroup GEMV is LATENCY-bound: a bit-identical, free, -15% bench win is +0.1% in situ. NEGATIVE (F76)
+[flywheel 2026-08-08T03:00:21-04:00] committed: 43f87fe ogroup GEMV is LATENCY-bound: a bit-identical, free, -15% bench win is +0.1% in situ. NEGATIVE (F76) 
+[flywheel 2026-08-08T03:00:21-04:00] OK: 3 commit(s) held locally for review
+[flywheel 2026-08-08T03:00:53-04:00] not publishing: gain=0.00% fresh_gate_pass=1 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-08T03:00:53-04:00] cycle 11 done
+[audit 2026-08-08T03:14:34-04:00] PASS — publishing 43f87feb89be152fa96f44570e191d0cec58e219
+[flywheel 2026-08-08T03:30:19-04:00] selftest PASS
+[flywheel 2026-08-08T03:30:19-04:00] cycle 12 starting; 115 GiB free; HEAD 3f9cdea
+[audit 2026-08-08T04:17:01-04:00] cycle in flight
+[flywheel 2026-08-08T04:37:40-04:00] agent exited rc=0
+[flywheel 2026-08-08T04:37:40-04:00] archived evidence: cycle012-dbuf.log (309 lines)
+[flywheel 2026-08-08T04:37:40-04:00] archived evidence: cycle012-flywheel_cron.log (88 lines)
+baseline.dprof_runs_since_clean -> 2
+[flywheel 2026-08-08T04:37:40-04:00] re-baseline counter: dprof_runs_since_clean=2
+[flywheel 2026-08-08T04:37:40-04:00] committed cycle 12: fp8 tile double-buffer: bit-identical, +0.28% in situ. NEGATIVE (F78), B8's tile half closed
+[flywheel 2026-08-08T04:37:40-04:00] committed: 8b1abc7 fp8 tile double-buffer: bit-identical, +0.28% in situ. NEGATIVE (F78), B8's tile half closed 
+[flywheel 2026-08-08T04:37:40-04:00] OK: 1 commit(s) held locally for review
+[flywheel 2026-08-08T04:38:12-04:00] not publishing: gain=0.00% fresh_gate_pass=1 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-08T04:38:12-04:00] cycle 12 done
+[audit 2026-08-08T04:52:24-04:00] PASS — publishing 8b1abc721c6ce81478b6df34e8a7d59b4cb981c0
+[flywheel 2026-08-08T05:30:58-04:00] selftest PASS
+[flywheel 2026-08-08T05:30:58-04:00] cycle 13 starting; 115 GiB free; HEAD 8b1abc7
+[flywheel 2026-08-08T06:15:05-04:00] agent exited rc=0
+[flywheel 2026-08-08T06:15:05-04:00] archived evidence: cycle013-flywheel_cron.log (100 lines)
+[flywheel 2026-08-08T06:15:05-04:00] committed cycle 13: B8' dead at ptxas: smem spill 396->368 B, not -16 regs. NEGATIVE (F79), B8 fully closed
+[flywheel 2026-08-08T06:15:05-04:00] committed: 1a120f1 B8' dead at ptxas: smem spill 396->368 B, not -16 regs. NEGATIVE (F79), B8 fully closed 
+[flywheel 2026-08-08T06:15:05-04:00] OK: 1 commit(s) held locally for review
+[flywheel 2026-08-08T06:15:37-04:00] not publishing: gain=1.42% fresh_gate_pass=0 fresh_gate_fail=0 unit_gates_failed=0
+[flywheel 2026-08-08T06:15:37-04:00] cycle 13 done
+[audit 2026-08-08T06:35:50-04:00] PASS — publishing 1a120f1abbc2a198f4eae3758cec44e06a5be578
+[flywheel 2026-08-08T06:36:59-04:00] selftest PASS
+[flywheel 2026-08-08T06:36:59-04:00] cycle 14 starting; 114 GiB free; HEAD 1a120f1
+[flywheel 2026-08-08T07:15:16-04:00] agent exited rc=0
+[flywheel 2026-08-08T07:15:16-04:00] archived evidence: cycle014-f80_suffixprobe.log (112 lines)

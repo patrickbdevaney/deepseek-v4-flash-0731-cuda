@@ -1,0 +1,112 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=79
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 109.7/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 205.6 ms = 24.3 tok/s (41.112 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (69.9 ms warmup)
+  step 1 pos 6 -> token 16  (69.9 ms)
+  step 2 pos 7 -> token 455  (77.1 ms)
+  step 3 pos 8 -> token 6102  (70.6 ms)
+  step 4 pos 9 -> token 294  (69.7 ms)
+  step 5 pos 10 -> token 16603  (70.7 ms)
+  step 6 pos 11 -> token 344  (81.6 ms)
+  step 7 pos 12 -> token 29168  (70.2 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.8 ms/tok = 13.73 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 126.1 ms (= 25.2 ms/tok if all accepted vs 72.8 M=1 -> 2.89x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5
+[spec] head built. mem 110.6/122.8 GiB
+[decode] PREFILL: 5 positions in 138.1 ms = 36.2 tok/s (27.623 ms/tok)
+[spec] decoding 60 tokens (block=5, draft passes=1, adaptK=1.50, prompt=0 s=6)...
+  [margins] 3.21 0.31 0.16 1.12 0.23  K=2
+  [sfx] mlen=0 sdraft: -1  target: 11111  acc_sfx=0(lb 0) acc_mtp=1
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (108.0 ms)  cpos=7
+  [margins] 0.95 0.18 2.81 0.63 0.38  K=2
+  [sfx] mlen=0 sdraft: -1  target: 455  acc_sfx=0(lb 0) acc_mtp=1
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (113.9 ms)  cpos=9
+  [margins] 5.15 5.09 7.23 0.74 2.69  K=4
+  [sfx] mlen=1 sdraft: 294 8760 344  target: 294 16603 344  acc_sfx=1(lb 1) acc_mtp=1
+  verify 3: accepted 1/3 (K=4) + correction -> +2 tokens (140.0 ms)  cpos=11
+  [margins] 7.67 0.93 2.88 3.25 4.63  K=2
+  [sfx] mlen=0 sdraft: -1  target: 344  acc_sfx=0(lb 0) acc_mtp=1
+  verify 4: accepted 1/1 (K=2) + correction -> +2 tokens (114.2 ms)  cpos=13
+  [margins] 2.30 3.32 4.74 0.32 1.23  K=4
+  [sfx] mlen=0 sdraft: -1 -1 -1  target: 16 455 6102  acc_sfx=0(lb 0) acc_mtp=3
+  verify 5: accepted 3/3 (K=4) + correction -> +4 tokens (140.7 ms)  cpos=17
+  [margins] 0.11 4.40 0.21 3.03 4.09  K=3
+  [sfx] mlen=4 sdraft: 16603 344  target: 14251 344  acc_sfx=0(lb 0) acc_mtp=2
+  verify 6: accepted 2/2 (K=3) + correction -> +3 tokens (126.8 ms)  cpos=20
+  [margins] 1.99 3.24 4.79 1.90 0.12  K=5
+  [sfx] mlen=0 sdraft: -1 -1 -1 -1  target: 16 455 6102 294  acc_sfx=0(lb 0) acc_mtp=4
+  verify 7: accepted 4/4 (K=5) + correction -> +5 tokens (153.4 ms)  cpos=25
+  [margins] 9.23 1.67 2.78 4.44 6.68  K=5
+  [sfx] mlen=0 sdraft: -1 -1 -1 -1  target: 344 76405 16 455  acc_sfx=0(lb 0) acc_mtp=1
+  verify 8: accepted 1/4 (K=5) + correction -> +2 tokens (155.1 ms)  cpos=27
+  [margins] 2.63 3.99 6.28 1.48 2.07  K=4
+  [sfx] mlen=0 sdraft: -1 -1 -1  target: 16 455 6102  acc_sfx=0(lb 0) acc_mtp=3
+  verify 9: accepted 3/3 (K=4) + correction -> +4 tokens (146.2 ms)  cpos=31
+  [margins] 0.97 8.10 0.35 3.79 4.00  K=3
+  [sfx] mlen=4 sdraft: 29585 344  target: 25062 344  acc_sfx=0(lb 0) acc_mtp=0
+  verify 10: accepted 0/2 (K=3) + correction -> +1 tokens (128.2 ms)  cpos=32
+  [margins] 10.87 2.19 3.01 3.52 6.35  K=5
+  [sfx] mlen=0 sdraft: -1 -1 -1 -1  target: 344 40977 16 455  acc_sfx=0(lb 0) acc_mtp=4
+  verify 11: accepted 4/4 (K=5) + correction -> +5 tokens (155.4 ms)  cpos=37
+  [margins] 7.45 0.27 7.88 1.23 6.64  K=2
+  [sfx] mlen=3 sdraft: 294  target: 294  acc_sfx=1(lb 1) acc_mtp=1
+  verify 12: accepted 1/1 (K=2) + correction -> +2 tokens (110.2 ms)  cpos=39
+  [margins] 10.24 1.04 3.48 6.03 7.01  K=2
+  [sfx] mlen=0 sdraft: -1  target: 344  acc_sfx=0(lb 0) acc_mtp=1
+  verify 13: accepted 1/1 (K=2) + correction -> +2 tokens (116.6 ms)  cpos=41
+  [margins] 2.71 4.75 7.24 0.92 0.28  K=4
+  [sfx] mlen=0 sdraft: -1 -1 -1  target: 16 455 6102  acc_sfx=0(lb 0) acc_mtp=3
+  verify 14: accepted 3/3 (K=4) + correction -> +4 tokens (143.2 ms)  cpos=45
+  [margins] 1.73 0.67 6.60 2.18 6.35  K=2
+  [sfx] mlen=4 sdraft: 10322  target: 270  acc_sfx=0(lb 0) acc_mtp=1
+  verify 15: accepted 1/1 (K=2) + correction -> +2 tokens (115.2 ms)  cpos=47
+  [margins] 1.56 10.12 0.51 1.54 4.27  K=3
+  [sfx] mlen=0 sdraft: -1 -1  target: 14460 344  acc_sfx=0(lb 0) acc_mtp=2
+  verify 16: accepted 2/2 (K=3) + correction -> +3 tokens (129.1 ms)  cpos=50
+  [margins] 3.61 5.83 8.31 2.13 2.18  K=5
+  [sfx] mlen=0 sdraft: -1 -1 -1 -1  target: 16 455 6102 294  acc_sfx=0(lb 0) acc_mtp=4
+  verify 17: accepted 4/4 (K=5) + correction -> +5 tokens (159.4 ms)  cpos=55
+  [margins] 0.54 3.55 1.62 2.29 5.42  K=5
+  [sfx] mlen=5 sdraft: 3702 14460 344 6693  target: 17705 4106 344 8703  acc_sfx=0(lb 0) acc_mtp=0
+  verify 18: accepted 0/4 (K=5) + correction -> +1 tokens (166.9 ms)  cpos=56
+  [margins] 9.94 0.12 4.46 8.17 6.90  K=2
+  [sfx] mlen=0 sdraft: -1  target: 344  acc_sfx=0(lb 0) acc_mtp=1
+  verify 19: accepted 1/1 (K=2) + correction -> +2 tokens (112.3 ms)  cpos=58
+  [margins] 7.53 4.87 5.81 8.48 0.89  K=5
+  [sfx] mlen=1 sdraft: 6102 294 270 17705  target: 87966 16 455 6102  acc_sfx=0(lb 0) acc_mtp=4
+  verify 20: accepted 4/4 (K=5) + correction -> +5 tokens (162.1 ms)  cpos=63
+  [margins] 0.37 9.36 0.37 5.35 6.83  K=3
+  [sfx] mlen=4 sdraft: 270 17705  target: 37736 344  acc_sfx=0(lb 0) acc_mtp=2
+  verify 21: accepted 2/2 (K=3) + correction -> +3 tokens (131.5 ms)  cpos=66
+
+[sfx] S6 counterfactual over 21 verifies, max n-gram 32 (probe is READ-ONLY;
+[sfx] the emitted sequence, GATE and LOSSLESS GATE are unaffected)
+[sfx]   MTP draft (SHIPPED)        :   61 tokens  2.905 tok/verify
+[sfx]   suffix only, SOUND lower bd:   23 tokens  1.095 tok/verify  (-62.3%)
+[sfx]   suffix only, optimistic    :   23 tokens  1.095 tok/verify  (-62.3%)
+[sfx]   ORACLE max(MTP,suffix)     :   61 tokens  2.905 tok/verify  (+0.0%)  <- S6 CEILING
+[sfx]   cascade: suffix if mlen>=1  :   52 tokens  2.476 tok/verify  (-14.8%)
+[sfx]   cascade: suffix if mlen>=2  :   56 tokens  2.667 tok/verify  (-8.2%)
+[sfx]   cascade: suffix if mlen>=3  :   56 tokens  2.667 tok/verify  (-8.2%)
+[sfx]   cascade: suffix if mlen>=4  :   56 tokens  2.667 tok/verify  (-8.2%)
+[sfx]   cascade: suffix if mlen>=6  :   61 tokens  2.905 tok/verify  (+0.0%)
+[sfx]   a suffix match existed in 8/21 verifies; suffix beat MTP in 0, lost in 17
+
+[spec] generated 61 tokens over 21 verifies: mean tokens/verify = 2.90 (block=5, max 5)
+[spec] tokens: 11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 344 16235 16 455 6102 294 29585 344 76405 16 455 6102 294 25062 344 40977 16 455 6102 294 10322 344 17575 16 455 6102 294
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 46.1 ms/tok = 21.69 tok/s  (vs base M=1 72.8 ms/tok = 13.73 tok/s -> 1.58x)
+[decode] mem 110.5/122.8 GiB

@@ -21,6 +21,7 @@
 #include "weight_store.h"
 #include "deepseek_v4.h"
 #include "block.h"
+#include "suffix_draft.h"   // S6 counterfactual probe (DSV4_SUFFIXPROBE=1); gated by gate_suffix_draft
 #include "compressed_block.h"
 #include "block_decode.h"
 #include "hc.h"
@@ -815,6 +816,31 @@ int main(int argc, char** argv){
         const bool specprof = getenv("DSV4_SPECPROF")!=nullptr;
         cudaEvent_t p0,p1,p2,p3,p4; for(auto e:{&p0,&p1,&p2,&p3,&p4}) cudaEventCreate(e);
         double acc_kv=0, acc_blk=0, acc_head=0, acc_ver=0; int nprof=0;
+        // ---- S6 COUNTERFACTUAL SUFFIX-DRAFT PROBE (DSV4_SUFFIXPROBE=1, default OFF) ----
+        // LEVERS.md S6 proposes a suffix-automaton / prompt-lookup drafter ahead of the MTP, and its
+        // own falsification says the win is NOT the skipped draft head (13 ms of a 151 ms cycle) but
+        // any ACCEPTANCE gained at the same K. Acceptance is a counted integer, so it is immune to
+        // the ~1.5 % cross-run timing floor Finding 79 measured — which is the only reason S6 is
+        // resolvable on this box at all. This probe prices it WITHOUT building the cascade: at every
+        // verify it computes what a suffix drafter would have proposed from the committed sequence
+        // and how much of that the target would have accepted, alongside what the MTP actually got.
+        //
+        // It is READ-ONLY. It touches no device buffer and no engine state, so the emitted sequence,
+        // the GATE and the LOSSLESS GATE are bit-identical to a run without it. Finding 67 killed a
+        // lever this way before it was built; this is the same move.
+        //
+        // EXACTNESS, stated precisely, because the counterfactual is only partly observable.
+        // tam[i] is the target's argmax at position cpos+1+i GIVEN the verify input
+        // vtok[0..i] = [cur, draft[0..i-1]] — i.e. given the MTP's draft. It is therefore a valid
+        // ground truth for a different draft only while that draft agrees with the MTP's, which
+        // holds for i <= acc (both equal tam there). So a counterfactual acceptance <= acc is EXACT,
+        // and a value of acc+1 is EXACT as "at least acc+1"; anything beyond that is an
+        // extrapolation. Both are reported: `lb` is the sound number, `raw` the optimistic one.
+        const bool sfxprobe = getenv("DSV4_SUFFIXPROBE")!=nullptr;
+        const int SFX_MAXNG = getenv("DSV4_SUFFIX_MAXNG") ? atoi(getenv("DSV4_SUFFIX_MAXNG")) : 32;
+        static const int SFX_NTHR = 5; const int sfx_thr[SFX_NTHR] = {1,2,3,4,6};
+        long sfx_mtp=0, sfx_lb=0, sfx_raw=0, sfx_orc=0, sfx_casc[SFX_NTHR]={0,0,0,0,0};
+        int sfx_n=0, sfx_hit=0, sfx_win=0, sfx_lose=0;
         printf("[spec] decoding %d tokens (block=%d, draft passes=%d, adaptK=%.2f, prompt=%d s=%d)...\n",
                NGEN, BLK, NPASS, adaptK, promptSweep[bsi], ps);
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
@@ -895,6 +921,26 @@ int main(int argc, char** argv){
             // ACCEPT longest matching prefix: draft[i]==tam[i] (target's token for pos cpos+1+i)
             int acc=0; while(acc<VB-1 && draft[acc]==tam[acc]) ++acc;
             int correction=tam[acc];                        // target's token for pos cpos+acc+1
+            if(sfxprobe){
+                // S = the committed sequence, positions 0..cpos. pids covers 0..PSp and sgen covers
+                // PSp+1..cpos, so S.back() == cur by construction. Built BEFORE sgen is extended.
+                std::vector<int> S(pids.begin(), pids.end());
+                S.insert(S.end(), sgen.begin(), sgen.end());
+                const int n=(int)S.size();                  // == cpos+1
+                std::vector<int> sdraft(BLK,-1);            // -1 never matches a real token id
+                const int mlen = suffix_draft(S.data(), n, BLK, SFX_MAXNG, sdraft.data());
+                int accs=0; while(accs<VB-1 && sdraft[accs]==tam[accs]) ++accs;
+                const int accs_lb = accs < acc+1 ? accs : acc+1;   // sound; see the note above
+                const int orc = acc > accs_lb ? acc : accs_lb;
+                sfx_mtp += acc+1; sfx_lb += accs_lb+1; sfx_raw += accs+1; sfx_orc += orc+1;
+                for(int t=0;t<SFX_NTHR;++t) sfx_casc[t] += (mlen>=sfx_thr[t] ? accs_lb : acc) + 1;
+                ++sfx_n; if(mlen>0) ++sfx_hit;
+                if(accs_lb>acc) ++sfx_win; else if(accs_lb<acc) ++sfx_lose;
+                printf("  [sfx] mlen=%d sdraft:", mlen);
+                for(int j=0;j<VB-1;++j) printf(" %d",sdraft[j]);
+                printf("  target:"); for(int j=0;j<VB-1;++j) printf(" %d",tam[j]);
+                printf("  acc_sfx=%d(lb %d) acc_mtp=%d\n", accs, accs_lb, acc);
+            }
             for(int i=0;i<acc;++i) sgen.push_back(draft[i]); sgen.push_back(correction);
             // update main_x for the accepted range [cpos..cpos+acc] from verify taps; rollback compressor T
             dspark_main_x(main_x+(size_t)cpos*d, mh_v, main_proj, main_proj_s, main_norm, acc+1, d, EPS); CU(cudaDeviceSynchronize());
@@ -920,6 +966,23 @@ int main(int argc, char** argv){
                    acc_head/nprof, 100*acc_head/nprof/tot, BLK);
             printf("[specprof]   verify 43 layer %7.2f  (%4.1f%%)\n", acc_ver/nprof, 100*acc_ver/nprof/tot);
             printf("[specprof]   TOTAL           %7.2f\n", tot);
+        }
+        if(sfxprobe && sfx_n){
+            const double N=(double)sfx_n, base=(double)sfx_mtp;
+            printf("\n[sfx] S6 counterfactual over %d verifies, max n-gram %d (probe is READ-ONLY;\n"
+                   "[sfx] the emitted sequence, GATE and LOSSLESS GATE are unaffected)\n", sfx_n, SFX_MAXNG);
+            printf("[sfx]   MTP draft (SHIPPED)        : %4ld tokens  %.3f tok/verify\n", sfx_mtp, sfx_mtp/N);
+            printf("[sfx]   suffix only, SOUND lower bd: %4ld tokens  %.3f tok/verify  (%+.1f%%)\n",
+                   sfx_lb, sfx_lb/N, 100.0*(sfx_lb-base)/base);
+            printf("[sfx]   suffix only, optimistic    : %4ld tokens  %.3f tok/verify  (%+.1f%%)\n",
+                   sfx_raw, sfx_raw/N, 100.0*(sfx_raw-base)/base);
+            printf("[sfx]   ORACLE max(MTP,suffix)     : %4ld tokens  %.3f tok/verify  (%+.1f%%)  <- S6 CEILING\n",
+                   sfx_orc, sfx_orc/N, 100.0*(sfx_orc-base)/base);
+            for(int t=0;t<SFX_NTHR;++t)
+                printf("[sfx]   cascade: suffix if mlen>=%d  : %4ld tokens  %.3f tok/verify  (%+.1f%%)\n",
+                       sfx_thr[t], sfx_casc[t], sfx_casc[t]/N, 100.0*(sfx_casc[t]-base)/base);
+            printf("[sfx]   a suffix match existed in %d/%d verifies; suffix beat MTP in %d, lost in %d\n",
+                   sfx_hit, sfx_n, sfx_win, sfx_lose);
         }
         printf("\n[spec] generated %d tokens over %d verifies: mean tokens/verify = %.2f (block=%d, max %d)\n", (int)sgen.size(), nverify, avg_acc, BLK, BLK);
         printf("[spec] tokens:"); for(int i=0;i<(int)sgen.size() && i<40;++i) printf(" %d",sgen[i]); printf("\n");

@@ -23,3 +23,5 @@
   the clean re-baseline F73 and F74 both skipped: 21.76 tok/s spec, 13.64 base
 ## 2026-08-08T04:52:25-04:00 — PUSHED 8b1abc721c6ce81478b6df34e8a7d59b4cb981c0
   fp8 tile double-buffer: bit-identical, +0.28% in situ. NEGATIVE (F78), B8's tile half closed
+## 2026-08-08T06:35:51-04:00 — PUSHED 1a120f1abbc2a198f4eae3758cec44e06a5be578
+  B8' dead at ptxas: smem spill 396->368 B, not -16 regs. NEGATIVE (F79), B8 fully closed

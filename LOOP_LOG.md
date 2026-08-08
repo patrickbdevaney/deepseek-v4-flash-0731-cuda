@@ -4469,3 +4469,133 @@ goes **2 → 3**, which **fires the pivot criterion** — three consecutive cycl
 queue is one item deep, its own measuring instrument cannot resolve what is left in it, and S5 — the
 draft-head fine-tune, +24 % at acceptance 3.6, lossless by construction — is the lever that is
 actually left.
+
+---
+
+## Finding 80 — S6 dies at its own falsification: the suffix drafter's ORACLE ceiling is exactly +0.0 %, because speculation hands a retrieval drafter its worst possible query
+
+**NEGATIVE, and it retires the last non-training lever in the project.** The first RESEARCH phase this
+loop has ever run (6 queries, axes A–F) promoted one lever and folded one refinement; the cycle's
+measurement then priced **S6** — suffix-automaton / prompt-lookup drafting ahead of the MTP — from one
+checkpoint load, **without building the cascade**, and killed it: over 21 verifies the suffix drafter
+proposed **23 accepted-token-equivalents against the MTP's 61 (−62.3 %)**, beat the MTP in **0 of 21**
+verifies, and the **oracle `max(MTP, suffix)` is 61 tokens = +0.0 %**. There is no gating rule that
+recovers anything, because there is nothing to gate. 20/20 gates PASS, GATE PASS, MATCH 5/5, LOSSLESS
+GATE PASS, clocks pinned (`sudo jetson_clocks`), caches dropped. Run `evidence/suffixprobe_f80.log`.
+
+### Why this was measurable at all
+
+F79 left the loop with an instrument whose cross-run floor is ~1.5 % (trap 25) and a queue in which
+every remaining item was priced below it. S6's own LEVERS.md entry named the way out: *"the draft is
+only ~13 ms of a 151 ms cycle, so the win is NOT the skipped head — it is any acceptance gained at the
+same K. Price it as acceptance, not as draft time saved."* **Acceptance is a counted integer**, so it
+has no variance floor. `DSV4_SUFFIXPROBE=1` computes, at every verify, what a suffix drafter would have
+proposed from the committed sequence and how much of it the target would have accepted — beside what
+the MTP actually got. Finding 67 killed a lever this way before it was built; this is the same move.
+
+The probe is **read-only**: it touches no device buffer and no engine state. The control is exact —
+the emitted sequence's **first 26 tokens are byte-identical to `clean_post_f79.log`**, and base AR is
+**13.73 vs 13.78 tok/s (−0.36 %, inside the floor)**.
+
+**Exactness, stated rather than assumed.** `tam[i]` is the target's argmax *given the MTP's* draft
+prefix, so it is valid ground truth for a different draft only while that draft agrees — i.e. for
+`i <= acc`. The probe therefore reports a **sound lower bound** and an optimistic estimate. Here they
+**coincide at 23 tokens**, because the suffix drafter never once reached `acc`, so the ambiguity never
+arises and no number below is an extrapolation.
+
+### The result
+
+| arm | tokens / 21 verifies | tok/verify | vs MTP |
+|---|---|---|---|
+| **MTP draft (shipped)** | **61** | **2.905** | — |
+| suffix only (sound lower bound) | 23 | 1.095 | **−62.3 %** |
+| suffix only (optimistic) | 23 | 1.095 | −62.3 % |
+| **ORACLE `max(MTP, suffix)`** | **61** | **2.905** | **+0.0 %  ← S6 CEILING** |
+| cascade, suffix if mlen≥1 | 52 | 2.476 | −14.8 % |
+| cascade, suffix if mlen≥2 / ≥3 / ≥4 | 56 | 2.667 | −8.2 % |
+| cascade, suffix if mlen≥6 | 61 | 2.905 | +0.0 % ← *never fires* |
+
+**The best cascade is the one that never uses the suffix draft.** A match existed in only 8 of 21
+verifies; the match-length histogram is `mlen = 0 ×13, 1 ×2, 3 ×1, 4 ×4, 5 ×1` and never reached the
+block size, so the mlen≥6 row is "use the MTP always" wearing a threshold.
+
+### The mechanism, and it is structural, not prompt-specific
+
+**Speculative decoding hands a retrieval drafter its worst possible query.** The anchor at every
+drafting point is `cur` — and `cur` is always the **correction** token, the one token the MTP just
+mispredicted. Whenever the sequence is locally predictable the MTP accepts straight through it, so the
+next draft never starts *inside* a predictable span; it starts on the surprise. The anchor is therefore
+**selected to be the least repetitive token in the sequence**, and that is exactly the query a suffix
+automaton is worst at. It shows up directly: in **13 of 21 verifies `mlen = 0`** — not even the current
+token had ever occurred before, so there was no proposal to make at all.
+
+The eight verifies where a match *did* exist show the other half of it. This model's generation on the
+gate prompt is a period-8 degenerate loop, `16 455 6102 294 X 344 Y`, in which `X` and `Y` take a
+**fresh value every cycle** (`16603/14251/29585/25062/10322` and `29168/16235/76405/40977/17575`). The
+deterministic part of the repeat — `16 455 6102 294` — is precisely what the MTP already accepts (four
+of the `acc_mtp=4` verifies are exactly that run). So a long match only ever puts the suffix drafter at
+the varying slot, proposing the *previous* cycle's value:
+
+| mlen | suffix proposed | target emitted | acc_sfx | acc_mtp |
+|---|---|---|---|---|
+| 4 | 16603 344 | **14251** 344 | 0 | 2 |
+| 4 | 29585 344 | **25062** 344 | 0 | 0 |
+| 4 | 10322 | **270** | 0 | 1 |
+| 5 | 3702 14460 344 6693 | **17705** 4106 344 8703 | 0 | 0 |
+| 1 | 6102 294 270 17705 | **87966** 16 455 6102 | 0 | 4 |
+
+The suffix drafter has **strictly less information than the MTP** and is aimed at the one position the
+surface repeat cannot predict. That is why the ceiling is not merely small but exactly zero.
+
+**And this was the most favourable input available.** A period-8 repeating decode is the best case a
+prompt-lookup drafter can be handed; on novel prose it can only do worse. An oracle ceiling of +0.0 %
+with 0 wins in 21 on the best case is not a variance result. New trap 27.
+
+### What would reopen it — and why that is not this engine
+
+SuffixDecoding's 1.7×-over-Prompt-Lookup is reported on **SWE-Bench-style agentic** traces, where whole
+spans (file contents, tool output) are copied verbatim and long enough that the anchor lands *inside* a
+copied span instead of on a correction. That is a real regime and this measurement does not refute it —
+it refutes S6 **for the workload this engine is measured on**, which is every number in LEVERS.md.
+Reopening requires new evidence of the specific kind: a long-repeated-context prompt (the shape of
+`scripts/prompt_suite.json`'s `longctx_001`, `filler_repeats: 400`) on which `mlen` routinely reaches
+the block size. Its ids would have to come from `tools/encode_prompt.py`, and no such prompt exists in
+the harness today. **S6 is retired until one does.**
+
+### The research phase, executed for the first time
+
+6 queries, one per axis, all appended to `RESEARCH_LOG.md` §2 with outcomes including the four that
+found nothing. **Promoted: `B8-cpasync` → open at ~1–3 %** — not on a new argument but on new evidence
+against F78's specific measurement: the consensus design is a *decoupled producer warp* filling a
+**≥4-stage** smem ring, and the sources name F78's failure mode outright ("with only 2 stages, a small
+delay in TMA completion or barrier arrival can stall tensor-core issue almost immediately"), which a
+deeper *register* buffer in the same warp cannot fix. **Folded: UniSpec**'s n-gram confidence estimator
+into S6 as its gating rule — now moot. **Rejected with reasons recorded:** the whole expert-prefetch
+family (assumes an offload transfer we do not have), relaxed/"loosely" speculative decoding (violates
+lossless — F68), MLA kernel work (this model is not classic MLA), Stream-K (not bit-exact — F68/B2),
+persistent megakernel (bounded at 1.05× by F46).
+
+### Numbers, and one that is deliberately not claimed
+
+Gates: **20/20 PASS** (19 prior + the new `gate_suffix_draft`, 8/8 host checks). Four gates first read
+red and all four were the harness passing `ref/goldens` to binaries that take argv[1] as a shape —
+`gate_encoding`, `gate_compressed_decode`, `gate_indexer_decode`, `gate_prefill_len` all PASS on their
+own defaults. That is the third recurrence of this artefact; **new trap 26**.
+
+Run: base AR **13.73 tok/s (72.8 ms/tok)**, spec **21.69 tok/s**, acceptance **2.90**, 1.58×. **The
+spec number is NOT comparable to the 22.07 baseline and is not written to it**: this run used
+`NGEN0=60` (21 verifies) against the baseline's `NGEN0=24` (9 verifies), so it averages over a longer
+and growing context — verify 20 costs 162.1 ms where the baseline's verify 9 cost 142.9 ms. The
+comparable half is base AR, which is a clean control at −0.36 %. `baseline.dprof_runs_since_clean`
+stays 0.
+
+### Disposition
+
+**S6 is RETIRED** (§3, speculation). `pivot_criterion.open_nontraining_levers` stays **1**, but the
+occupant has changed: S6 is out and this cycle's research promotion `B8-cpasync` is in.
+`consecutive_sub_half_pct` goes **3 → 4**. The pivot criterion fired at cycle 14 on the
+three-cycles-without-a-1 %-adoption arm and **this cycle supplies the stronger, second reason**: the
+pivot analysis named S6 as "the only qualifying item" left beside the training lever, and S6 now has a
+**measured** ceiling of exactly zero rather than a projected one. S5 — the draft-head fine-tune,
+lossless by construction, +24 % at acceptance 3.6 — is not merely the largest lever left; after F80 it
+is the only one that has never been measured against.
