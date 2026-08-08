@@ -38,3 +38,11 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include -lineinfo
   kernels/hc_sinkhorn.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu \
   -o build/gate_prefill_len
 echo "built build/gate_prefill_len"
+# Gate MOE_SCAN — the parallel MoE grouping scans (k_moe_prefix_par / k_build_tiles_par) must be
+# BIT-IDENTICAL to the <<<1,1>>> kernels they replaced. Equality, not cosine: these are integer
+# scans. Sweeps nr below/at/above the 256-thread block width plus empty, exactly-16 and multi-tile
+# experts, because per LEVERS.md trap 9 a harness that cannot express the regime confirms itself.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_moe_scan.cu kernels/moe.cu kernels/tc_moe_gemm.cu kernels/dscratch.cu kernels/dprof.cu \
+  kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/mla_attn.cu -o build/gate_moe_scan
+echo "built build/gate_moe_scan"

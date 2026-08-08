@@ -19,18 +19,23 @@ Rules of the road:
 Current baseline (prompt 0, clocks pinned, post-Finding-72): **20.44 tok/s speculative**,
 **13.50 tok/s base AR** (74.1 ms/tok). `evidence/final6.log`.
 
-The K=5 verify is **157.0 ms** and splits into two populations that behave completely differently
-(`evidence/pinned.log`, `DSV4_DPROF=1 DSV4_KSWEEP=1`):
+The K=5 verify dprof TOTAL is **134.8 ms** and splits into two populations that behave completely
+differently (`evidence/moescan.log`, post-F73, `DSV4_DPROF=1 DSV4_KSWEEP=1`, clocks pinned):
 
-| group | ms | % | bytes | GB/s | headroom |
-|---|---|---|---|---|---|
-| routed MoE — `moe:w1w3` 43.2 + `moe:w2` 21.4 | **64.6** | 47 % | 10.08 GB | ~156 | **F64/F65 took 21 % off `w1w3` and 10 % off `w2`; still only ~67 % of roofline** |
-| `cattn:ogroup` | 20.9 | 13 % | 2.75 GB | ~131 | some |
-| `cattn:q_proj` | 19.4 | 12 % | 1.55 GB | ~80 | some |
-| `cattn:indexer` (21 layers) | 9.1 | 6 % | — | — | some |
-| `lm_head` | 6.9 | 4 % | 1.06 GB | ~154 | little |
-| `hc_pre` attn+ffn, `rmsnorm`, `moe:router/group/act/combine` | ~12.4 | 8 % | ~0 | — | latency-bound, not bytes |
-| `cattn:compress`, `cattn:sparse`, misc | ~4 | 3 % | — | — | already forked |
+| group | ms | % | headroom |
+|---|---|---|---|
+| routed MoE — `moe:w1w3` 40.4 + `moe:w2` 20.2 | **60.6** | 45 % | **F64/F65/F70/F72 took 21 % off `w1w3` and 10 % off `w2`; still only ~76 % of roofline** |
+| `cattn:ogroup` (`o:wo_a` 11.5 + `o:wo_b` 9.8 + rope) | 21.7 | 16 % | some |
+| `cattn:q_proj` (`q:wq_b` 11.2 + `q:wq_a` 6.7 + glue) | 20.0 | 15 % | some |
+| `lm_head` | 7.0 | 5 % | little |
+| `cattn:indexer` (21 layers) | 3.9 | 3 % | **F71 took 57 % off this; `i:score` is now 0.76** |
+| `hc_pre` attn+ffn, `rmsnorm`, `moe:router/group/act/combine` | ~10.2 | 8 % | latency-bound, not bytes |
+| `cattn:compress`, `cattn:sparse`, misc | ~3.6 | 3 % | already forked |
+
+**Ranking is now stable; the two fp8 GEMM blocks (`q_proj` + `ogroup` = 41.7 ms, 31 %) are the
+largest untouched region.** Their four marks — `q:wq_b` 11.2, `o:wo_a` 11.5, `o:wo_b` 9.8, `q:wq_a`
+6.7 — are all the same smem-staged fp8 tile at different N, and F67 already refuted the two obvious
+reroutes. Nothing here is a geometry bug (F73 audited that); it is kernel efficiency.
 
 **This table was WRONG for the whole project and Finding 64 fixed it.** The MoE was believed to be at
 the roofline on the strength of a *modelled* expert union of 29.9 at K=5; the measured union is
@@ -62,6 +67,7 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 | **MoE row amortisation, RB=4 fitted to the measured histogram** | **+7.4 % spec, +2.3 % base AR; verify −9.3 %** | **64, 65, 70** |
 | **`index_score` warp-per-output** | **+4.4 % spec, +7.1 % base AR** (`i:score` −87 %) | **71** |
 | **MoE GEMV `uint2` weight loads (no funnel)** | **verify −2.8 %, `moe:w1w3` −7.0 %** | **72** |
+| **MoE grouping scans parallelised (`k_moe_prefix`, `k_build_tiles` were `<<<1,1>>>`)** | **`moe:group` −20.3 %** (2.66 → 2.12 ms) = ~0.4 % of the verify. Bit-identical. End-to-end **not** claimed — see F73 | **73** |
 
 ---
 
@@ -112,7 +118,8 @@ Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is 
 
 | # | lever | expected | why it might work / what to watch |
 |---|---|---|---|
-| B0 | **audit every kernel for thread-per-output at decode shapes** | **unknown, but F71 was +4.4 %** | `index_score` was one thread per (query,row) — 95 threads, one block — and cost 4.2 % of the verify. Nothing had ever checked launch geometry against decode-sized inputs. Candidates with the same shape: `k_topk_verify` (`<<<K,32>>>` with `if(threadIdx.x) return` — **5 working threads**), `k_topk_decode` (`<<<1,32>>>`, one thread), `k_moe_prefix` (`<<<1,1>>>`). Each is small today but the same mistake. |
+| ~~B0~~ | ~~audit every kernel for thread-per-output at decode shapes~~ | **NAMED LIST EXHAUSTED, F71 + F73** | `index_score` **+4.4 %** (F71). `k_moe_prefix` and `k_build_tiles`, both `<<<1,1>>>` over `nr=160`, fixed in F73: `moe:group` −20.3 %, and both now sit at the **launch-latency floor** (0.24–0.25 ms / 43 layers, vs 0.19 for a trivially parallel neighbour). The rest are measured under B0's own 0.5 ms bar: `k_topk_verify`/`k_topk_decode` → `i:topk` = **0.12 ms**; `k_dg`/`k_advance_T`/`k_incr` are genuinely one scalar's work. **The class paid twice and is now dry** — reopening needs a *new* kernel with a bad geometry, not another pass over these. |
+| B8 | **the fp8 GEMM block: `q:wq_b` 11.2 + `o:wo_a` 11.5 + `o:wo_b` 9.8 + `q:wq_a` 6.7 = 39.2 ms (29 %)** | unknown; largest untouched region | Same smem-staged tile at four N. Not a geometry bug (F73 audited). F67 closed both reroutes (M=K GEMV at all N, and small-N only) and F68 closed split-K **on numerics, not speed**. What is *not* closed: nobody has counted this kernel's actual bytes from the source the way F64 did for the MoE, and §1's old "~80 GB/s" for `q_proj` was a region number over a region containing five kernels. **Falsify by counting bytes per mark first** — if `q:wq_b` is already at roofline this is dead and should be retired in one cycle without a build. |
 | B1 | **more fork sites** (§5 pricing table) | ~0.3–1 %/pair | The three obvious independent chains are taken. Remaining pairs are small; check the partner is *not* already saturated or the gain collapses. |
 | ~~B2~~ | ~~split-K on the small-N GEMMs~~ | **RETIRED, F68** | 512 rows = 32 m16 tiles = 32 blocks on 20 SMs. **Not bit-exact** — a K-split reduction changes accumulation order, so it needs a tolerance gate, not an equality gate. |
 | B3 | **fuse `wq_a`+`wkv` into one launch** | ~0.5 % | Combined N = 1536 is still only 192 warps, so it barely moves `N/8` (F67). And `wkv` is already forked to a side stream by C1 and fully hidden (`q:kv_join` = 0.05 ms), so there is nothing left to overlap. Low value now. |
@@ -189,7 +196,20 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
    from the main layers' weights and applied it to the MTP draft blocks — different tensors, different
    alignment, `misaligned address`. Process-wide was too coarse; per-call was correct but cost 3.05 ms
    of host stall *inside a GPU mark*. The struct was the right key.
-12. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
+12. **A change that is flat in K has a free within-run control: K=1.** F73's fix saved the same ~0.5 ms
+   at every K (the `mg:*` marks are identical at K=1 and K=5). The run showed K=5 −3.2 %, base AR
+   +4.4 %, spec +2.5 % — and K=1 **+0.2 %**. A K-flat change cannot produce a K-dependent delta, so
+   the end-to-end movement was noise and was not claimed. **Before believing a cross-run end-to-end
+   delta, find a mark inside the same run that the change must not have moved.**
+13. **Check what a control was actually measuring before averaging it.** F73 nearly used three
+   `uint2*.log` runs as a variance estimate. Two of them are F72's *buggy* per-call-align8
+   intermediates (`moe:group` 6.41 and 5.79 vs the shipped 2.66) — averaging them would have
+   manufactured a 3 % "control spread" out of a known bug. There was exactly **one** valid control.
+14. **A single-thread loop over N elements is not N serial memory latencies.** F73 predicted 160
+   dependent loads ≈ 35 µs/layer and measured ≈ 12. Only the *additions* chain; the `counts[e]` loads
+   are independent, so the compiler pipelines them. Serial-scan geometry is worth ~2x here, not 6x —
+   size the lever off the dependency graph, not the trip count.
+15. **Line numbers in CUDA error messages are where the error was *collected*, not where it happened.**
    `dsync` is a no-op under the arena, so the first real sync in a layer absorbs ~20 launches' worth of
    asynchronous faults. Use `DSV4_SYNCPROBE=1`.
 

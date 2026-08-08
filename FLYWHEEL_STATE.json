@@ -1,7 +1,7 @@
 {
-  "cycle": 9,
+  "cycle": 10,
   "phase": "A",
-  "consecutive_sub_half_pct": 0,
+  "consecutive_sub_half_pct": 1,
   "phaseB_top_history": [
     "moe-latency",
     "moe-latency"
@@ -12,50 +12,58 @@
     "verify_k5_ms": 132.53,
     "source_log": "evidence/final6.log",
     "measured": "2026-08-07",
-    "note": "prompt 0, clocks PINNED (jetson_clocks). Session start was 16.86 spec / 10.30 base non-graph. The engine is deterministic since F62, so identical configs reproduce exactly -- three baseline runs read 19.13 to the hundredth. Quote same-day controls, not older numbers."
+    "note": "prompt 0, clocks PINNED (jetson_clocks). 20.44/13.50 is evidence/final6.log, a CLEAN non-dprof run at the F72 build. Cycle 10 (F73) spent its one sanctioned run on DSV4_DPROF=1, so the post-F73 build has NO clean end-to-end number: evidence/moescan.log reads 20.43/13.75 WITH dprof overhead and is not comparable to this baseline. F73's gain is ~0.4% of the verify on the tight mark. The next cycle should take one clean non-dprof run to re-establish this line."
   },
   "queue": [
     {
-      "id": "B0",
+      "id": "B8",
       "stage": "open",
-      "what": "audit launch geometry at DECODE shapes. F71 found index_score was one thread per output (95 threads, one block) costing 4.2% of the verify; warp-per-output gave +4.4% spec and +7.1% base AR. Same shape is still present in k_topk_verify (<<<K,32>>> with an early return leaving 5 working threads), k_topk_decode (<<<1,32>>>, one thread) and k_moe_prefix (<<<1,1>>>).",
-      "expected": "each is small today (i:topk is 0.12 ms) but the class produced the biggest win of the session",
-      "falsify": "dprof-mark each before touching it; if the mark is <0.5 ms leave it and say so"
+      "what": "the fp8 GEMM block is the largest untouched region: q:wq_b 11.2 + o:wo_a 11.5 + o:wo_b 9.8 + q:wq_a 6.7 = 39.2 ms, 29% of the K=5 verify. All four are the same smem-staged fp8 tile at different N.",
+      "expected": "unknown - and that is the point; nobody has counted this kernel's bytes from the source the way F64 did for the MoE",
+      "falsify": "COUNT BYTES PER MARK BEFORE BUILDING ANYTHING. LEVERS.md section 1's old '~80 GB/s' for cattn:q_proj was a region number over five kernels. If q:wq_b is already at roofline, retire B8 in one cycle with no build. F67 already closed both reroutes and F68 closed split-K on numerics."
     },
     {
       "id": "B1",
       "stage": "open",
-      "what": "more fork sites. The three obvious independent chains are taken (shared expert, compressor emits, kv chain). Remaining candidate: the indexer q-path (idx_wq_b + rope + hadamard + fp4sim) depends only on iqrq/iqrs and could run under wq_b -- needs a THIRD stream/event pair, g_side and g_side2 are both outstanding there.",
-      "expected": "~1%",
-      "falsify": "price with the F56 table: expect 20-32% of the hidden op's standalone cost, and price it against the MAIN stream (F67)"
+      "what": "more fork sites. The three obvious independent chains are taken. Remaining candidate: the indexer q-path (idx_wq_b + rope + hadamard + fp4sim, i:qidx = 2.25 ms) depends only on iqrq/iqrs and could run under wq_b -- needs a THIRD stream/event pair, g_side and g_side2 are both outstanding there.",
+      "expected": "~0.5% (20-32% of 2.25 ms against a 134.8 ms verify)",
+      "falsify": "price with the F56 table BEFORE building: expect 20-32% of the hidden op's standalone cost, priced against the MAIN stream (F67). At i:qidx = 2.25 ms that is 0.45-0.72 ms = 0.3-0.5%. This is now a SUB-1% lever; say so."
     },
     {
       "id": "B5",
       "stage": "blocked",
       "what": "FP4 for MLA/dense weights -- moves the byte floor ~1.2x but violates 'no additional quantisation'. Needs an explicit decision from the operator to relax the constraint.",
       "falsify": "n/a"
+    },
+    {
+      "id": "RESEARCH",
+      "stage": "due",
+      "what": "B0 is exhausted (F71+F73) and B1 is now priced under 1%. If B8's byte count retires it, LEVERS.md section 4/5 drop below the '>=2 open levers at >=1%' bar and RESEARCH_LOG.md section 1's protocol FIRES.",
+      "falsify": "the research branch has still never executed (see loop.untested); the first cycle that takes it is unverified code path, not just an unverified idea"
     }
   ],
   "halt": false,
   "halt_reason": "",
-  "halt_considered": "Halt is set, but it does not block the next cycle: I3's first action is a unit-level allocator gate and Phase D is explicitly not blocked by a broken instrument. Do NOT spend a checkpoint load on I3 before the unit gate answers.",
+  "halt_considered": "Halt is set for a TOOLING reason, not an engineering one. Nothing about the engine is broken: 17/17 unit gates pass, the lossless gate passes, and the emitted sequence is byte-identical to the control. A cycle that cannot commit must not silently proceed to the next lever, because the next cycle would build on an unrecorded change and LEVERS.md would be right while git was wrong.",
   "last_result": {
-    "cycle": 7,
-    "lever": "C1 adopted (Finding 57); D1 fixed, which produced Finding 59; I3 refuted and parked (Finding 58); Finding 60 found.",
+    "cycle": 10,
+    "lever": "B0 (launch geometry at decode shapes) -- ADOPTED, Finding 73. B0's named candidate list is now exhausted.",
     "measured": {
-      "c1": "cattn:q_proj 23.85 -> 19.99 ms, ksweep K=5 153.48 -> 152.26, spec 17.48 -> 17.61, tokens identical",
-      "adaptive_vs_fixed": "first fixed-width control since Finding 49: adaptive is +9.5/+28.0/+7.9/+12.2% on prompts 1-4 and a WASH on the canonical prompt 0 it was fitted on. Byte-identical output on all 5 prompts -- losslessness properly tested for the first time.",
-      "adaptK_threshold": "1.0 / 1.5 / 1.75 are NOT separable: means 16.94 / 16.70 / 16.79 over 3 replicates x 4 prompts against a within-cell spread of 15%. 1.5 retained. Do not re-run without more replicates."
+      "moe:group": "2.66 -> 2.12 ms (-20.3%), the only region containing changed code",
+      "new_marks": "mg:count 0.19 / mg:prefix 0.25 / mg:scatter 0.24 / mg:tiles 0.24 at K=5, IDENTICAL at K=1 -> this cost is O(nr), independent of batch size, and the two fixed scans now sit at the launch-latency floor",
+      "losslessness": "26-token spec sequence byte-identical to control, acceptance 2.89 = 2.89, LOSSLESS GATE PASS, MATCH 5/5, first token 11111; new gate_moe_scan proves the kernels bit-identical over 41 nr/distribution cases",
+      "end_to_end": "ksweep K=5 132.53 -> 128.26, base 13.17 -> 13.75, spec 19.93 -> 20.43 -- ALL REFUSED as evidence, see negative_results"
     },
     "negative_results": [
-      "adaptK threshold sweep inconclusive -- between-threshold differences (1.4%) are far below within-cell spread (15%)",
-      "DSV4_ARENA_ZERO does not restore determinism: the arena is exonerated",
-      "clock pinning does NOT explain the replicate ramp (1.143 -> 1.107 only)",
-      "the indexer fault does not reproduce in three faithful reruns"
+      "the end-to-end delta is NOT this lever: the change is flat in K (proven by the mg:* marks) so it must move K=1 and K=5 by the same absolute ~0.5 ms; K=1 moved +0.2%, the wrong way, while K=5 moved -3.2%. Run-to-run variation.",
+      "base AR 13.75 with dprof ON exceeds the non-dprof final6.log run at 13.50, which is impossible if instrumentation costs anything -- the same conclusion from the other side",
+      "only ONE valid control existed: uint2.log (6.41) and uint2b.log (5.79) are F72's buggy per-call-align8 intermediates, not the shipped config",
+      "the serial scans cost ~12 us/layer, not the ~35 predicted: the counts[e] loads are independent, only the adds chain, so the compiler pipelines them",
+      "k_topk_verify / k_topk_decode measured at i:topk = 0.12 ms, under B0's own 0.5 ms bar -- left alone deliberately"
     ]
   },
-  "counter_note": "consecutive_sub_half_pct 6 -> 7, incremented because this cycle moved end-to-end 0.0%. It remains MISLEADING and the next executor should read it as such: cycles 2, 3, 4 and 5 were instrument and correctness repair, not levers, so the counter does not count three consecutive LEVERS under 0.5%. The Phase-A stopping rule must not be treated as fired on this number alone. It is now four cycles since a performance lever was measured, and that is the real signal: once I3 is closed, the loop owes itself either a Phase B re-profile or a D pass.",
-  "note_for_executor": "Read LEVERS.md and RESEARCH_LOG.md first; they are the dedup contract and the auditor enforces write-back on engine commits. The last five adoptions came from PROFILING, not literature: attribute before optimising (dprof marks are cheap and killed a lever before it was built, F67). Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log -- F68 is a fake +28% that passed every other gate.",
+  "counter_note": "consecutive_sub_half_pct reset to 0: F71 (+4.4%) and F72 (verify -2.8%) were real levers. F73 is a genuine but SMALL adoption (moe:group -20.3% = ~0.4% of the verify) and its end-to-end numbers were explicitly NOT claimed -- K=1 moved +0.2% while K=5 moved -3.2%, and the change is provably flat in K. Count F73 as a sub-0.5% lever.",
+  "note_for_executor": "YOU CANNOT RUN GIT \u2014 write .flywheel_commit_msg and stop; the harness commits and the auditor publishes. Cycles 9 and 10 both did correct work and were left uncommitted because the prompt told them to commit. Read LEVERS.md and RESEARCH_LOG.md first. Attribute before optimising: dprof marks are cheap and have twice changed the answer (F67 killed a lever before it was built; F73 used its own new marks to disprove its own end-to-end number). Any change that raises tok/s must keep 'LOSSLESS GATE ... PASS' in the run log.",
   "loop": {
     "executor": "scripts/flywheel.sh (one lever per tick, commits locally, cannot push)",
     "auditor": "scripts/flywheel_audit.sh (deterministic, ~70 lines, the ONLY thing that pushes)",

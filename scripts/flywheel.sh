@@ -142,14 +142,22 @@ PHASES, in order:
 
 7. WRITE BACK. Append one LOOP_LOG.md finding: what you tried, the numbers, and the mechanism —
    including for a FAILURE, with the number that killed it. Move the lever in LEVERS.md into adopted
-   or retired. Copy the run log into evidence/. Then commit locally with a message that states the
-   result in its first line. Do NOT push; the auditor publishes.
+   or retired. Copy the run log into evidence/.
+
+   YOU CANNOT RUN GIT. `git add`, `git commit`, `git push`, `git checkout` and `git reset` are ALL
+   denied to you by .claude/settings.json, and the denial is silent from your side — it is not a bug
+   to work around and retrying it just burns the rest of your turns. The harness commits for you:
+   **write your commit message to `.flywheel_commit_msg` in the repo root** (first line = the result,
+   e.g. "moe:group 2.66 -> 2.12 ms (-20%), bit-identical"), leave the tree dirty, and stop. If that
+   file is absent the harness logs "dirty but no .flywheel_commit_msg" and your entire cycle is left
+   uncommitted — which is exactly how cycles 9 and 10 were lost.
 
 HARD RULES
   - Numbers come from a log you produced this cycle. A number you cannot grep is a number that did
     not happen.
   - One change per measurement.
   - Prefer reverting to keeping something unmeasured.
+  - Never run git. Write .flywheel_commit_msg instead (see phase 7).
   - If a gate fails or a run crashes, STOP and write it up. A cycle that reports a real failure
     honestly is a good cycle.
   - Clocks must be pinned (`sudo jetson_clocks`) before any measurement, and say so in the write-up.

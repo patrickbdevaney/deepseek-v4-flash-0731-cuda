@@ -266,9 +266,42 @@ __global__ void k_grouped_w4a8_kernel(float* out, const uint8_t* const* wptr, co
     if(gid+8<me && n0+cn  <N) out[(size_t)(row0+gid+8)*N + n0+cn ]=c[2];
     if(gid+8<me && n0+cn+1<N) out[(size_t)(row0+gid+8)*N + n0+cn+1]=c[3];
 }
+// LAUNCH GEOMETRY (Finding 71's class, same fix as k_moe_prefix). The scan above is one thread
+// walking nr=160 experts, once per layer, and it sits in `moe:group` — a region that moves ~0.9 MB
+// and costs 2.66 ms of the K=5 verify, i.e. pure latency. One block, 256 threads, block scan of the
+// per-expert tile counts. Emission order is unchanged (expert-ascending, then row-ascending), so
+// tile_e[]/tile_row0[]/*ntiles are BIT-IDENTICAL to the serial version.
+#define TCM_SCAN_T 256
+__global__ void k_build_tiles_par(int* tile_e, int* tile_row0, int* ntiles, const int* __restrict__ off, int nr){
+    __shared__ int s[TCM_SCAN_T]; __shared__ int carry;
+    if(threadIdx.x==0) carry=0;
+    __syncthreads();
+    for(int base=0; base<nr; base+=TCM_SCAN_T){
+        int e = base + threadIdx.x;
+        int r0=0, nt=0;
+        if(e<nr){ r0=off[e]; nt=(off[e+1]-r0+15)>>4; }   // ceil(me/16) tiles for this expert
+        s[threadIdx.x]=nt;
+        __syncthreads();
+        for(int d=1; d<TCM_SCAN_T; d<<=1){
+            int t = (threadIdx.x>=d) ? s[threadIdx.x-d] : 0;
+            __syncthreads();
+            s[threadIdx.x] += t;
+            __syncthreads();
+        }
+        int excl = carry + s[threadIdx.x] - nt;          // this expert's first tile index
+        for(int j=0;j<nt;++j){ tile_e[excl+j]=e; tile_row0[excl+j]=r0+16*j; }
+        __syncthreads();
+        if(threadIdx.x==TCM_SCAN_T-1) carry += s[TCM_SCAN_T-1];
+        __syncthreads();
+    }
+    if(threadIdx.x==0) *ntiles = carry;
+}
 // Build tile descriptors on device from off[] (no host sync).
+// DSV4_SERIAL_SCAN=1 restores the <<<1,1>>> kernel so the A/B stays reachable.
 void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d, int nr, cudaStream_t s){
-    k_build_tiles<<<1,1,0,s>>>(tile_e, tile_row0, ntiles_d, off_d, nr);
+    static int serial = -1; if(serial<0) serial = getenv("DSV4_SERIAL_SCAN")!=nullptr;
+    if(serial) k_build_tiles    <<<1,1,0,s>>>(tile_e, tile_row0, ntiles_d, off_d, nr);
+    else       k_build_tiles_par<<<1,TCM_SCAN_T,0,s>>>(tile_e, tile_row0, ntiles_d, off_d, nr);
 }
 
 // ===================== M=1 fp4 GEMV (small-M decode, ORIGINAL fp4 layout, no repack) =====================

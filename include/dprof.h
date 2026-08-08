@@ -38,6 +38,11 @@ enum DProfId {
     DP_Q_AQX, DP_Q_WQA, DP_Q_RMSAQ, DP_Q_WQB, DP_Q_TAIL, DP_Q_KVJOIN,
     DP_O_ROPE, DP_O_WOA, DP_O_WOB,
     DP_I_QIDX, DP_I_IW, DP_I_SCORE, DP_I_TOPK,
+    // Fourth level, inside moe:group. 2.66 ms of the K=5 verify sits in a region that moves almost
+    // no bytes (gather+quant of maxm=30 rows is ~0.9 MB), so it is launch/latency, and TWO of its
+    // six launches are <<<1,1>>> serial scans over nr=160 (k_moe_prefix, k_build_tiles). Finding 71
+    // is the precedent for not guessing which: mark them.
+    DP_MG_COUNT, DP_MG_PREFIX, DP_MG_SCATTER, DP_MG_TILES,
     DP_N
 };
 

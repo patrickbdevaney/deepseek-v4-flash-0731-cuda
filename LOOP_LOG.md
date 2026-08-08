@@ -3793,3 +3793,110 @@ actually have** — and a constant 8 is a fact you can build on, not an obstacle
 The rule that covers both: **a cached property must be keyed on the thing it describes.** Process-wide
 was too coarse and per-call was too expensive; the struct was the right granularity, and it was the
 granularity the property actually belongs to.
+
+---
+
+## Finding 73 — the MoE grouping had two `<<<1,1>>>` scans over nr=160; parallelising them took `moe:group` down 20 %, and the end-to-end number that came with it is NOT the lever
+
+**ADOPTED on the tight mark. `moe:group` 2.66 → 2.12 ms (−20.3 %), bit-identical output.** The
+26-token spec sequence is byte-identical to the control, acceptance 2.89 = 2.89, LOSSLESS GATE PASS,
+MATCH 5/5, first-token argmax 11111. All 17 unit gates pass. Clocks pinned (`sudo jetson_clocks`);
+caches dropped before the run. Log: `evidence/moescan.log`, control `evidence/uint2c.log`.
+
+### The lever
+
+Lever B0 — audit launch geometry at DECODE shapes, the class that produced Finding 71. Two of
+`moe:group`'s six launches were one thread doing the whole problem:
+
+| kernel | geometry | work |
+|---|---|---|
+| `k_moe_prefix` | `<<<1,1>>>` | exclusive scan of `counts[160]` |
+| `k_build_tiles` | `<<<1,1>>>` | scan of `ceil(me/16)` over 160 experts, emitting tile descriptors |
+
+Both run once per layer, 43 layers per verify step and again per token in base AR. `moe:group` moves
+~0.9 MB (gather+quant of 30 rows), so its 2.66 ms was never bytes — it was latency, and nothing had
+checked the geometry. Replaced with one-block 256-thread Hillis-Steele scans, chunked so `nr>256`
+still works. Emission order is unchanged, so the outputs are **bit-identical integers**, not
+approximately equal. `DSV4_SERIAL_SCAN=1` restores the `<<<1,1>>>` kernels.
+
+### The attribution, which is the part worth keeping
+
+Four new fourth-level marks inside `moe:group` (`mg:count`, `mg:prefix`, `mg:scatter`, `mg:tiles`):
+
+| mark | K=5 | K=1 | geometry |
+|---|---|---|---|
+| `mg:count` | 0.19 | 0.20 | already parallel — **this is the launch floor** |
+| `mg:prefix` | 0.25 | 0.24 | was `<<<1,1>>>` |
+| `mg:scatter` | 0.24 | 0.24 | already parallel |
+| `mg:tiles` | 0.24 | 0.23 | was `<<<1,1>>>` |
+| unmarked remainder | 1.20 | — | `k_gather_x` + `act_quant_fp8` |
+
+Two things fall out. First, **the fixed scans now sit within 30 % of `mg:count`, a trivially parallel
+kernel over 30 elements — i.e. at the launch-latency floor of this box (~4.5–5.8 µs per launch).
+There is nothing left in them, and B0's MoE-grouping branch is closed.** Second, every mark is
+**identical at K=1 and K=5**: this cost is O(nr) and completely independent of batch size. That
+matters twice over — it is why the saving pays per token in base AR as well as per verify, and it is
+the internal control that killed the end-to-end claim below.
+
+By subtraction the two serial scans cost ~1.03 ms before (≈12 µs/layer each) against ~0.49 ms now.
+That is **half** what a naive model predicts: 160 dependent global loads at ~300 cycles would be
+~35 µs/layer. The loads of `counts[e]` are *independent* — only the additions chain — so the compiler
+pipelines them. **A single-thread loop over N elements is not N serial memory latencies unless the
+addresses depend on the previous iteration.** The win is real but it is a launch-geometry win of
+about 2x, not the 6x the latency model implied.
+
+### The end-to-end number, and why it is not being claimed
+
+| | `uint2c` (control) | `moescan` (this) | delta |
+|---|---|---|---|
+| ksweep K=1 | 64.73 | 64.84 | **+0.2 %** |
+| ksweep K=5 | 132.53 | 128.26 | −3.2 % |
+| base AR tok/s | 13.17 | 13.75 | +4.4 % |
+| spec tok/s | 19.93 | 20.43 | +2.5 % |
+
+Every one of those is in the right direction and every one is too big. The mechanism saves ~0.54 ms
+per 43-layer step. That is 0.4 % of the K=5 verify and ~0.7 % of a base-AR token — an order of
+magnitude under what the table shows.
+
+**The `mg:*` marks are the falsification.** The change is provably flat in K, so it must move K=1 and
+K=5 by the *same absolute* amount — ~0.5 ms, which is 0.8 % of K=1. K=1 moved **+0.11 ms, the wrong
+way**. A change that is flat in K cannot produce a K-dependent delta, so the −4.27 ms at K=5 is
+run-to-run variation, not the lever. `base` at 13.75 also *exceeds* the non-dprof `final6.log` run
+(13.50), which is impossible if dprof instrumentation costs anything at all — the same conclusion
+from the other side.
+
+So: adopted on `moe:group` −20 % plus a mechanism confirmed by four new marks, and **recorded as
+~0.4 % of the verify / ~0.7 % of a base-AR token, not as the +2.5 % the run printed.** This is
+Finding 70's rule pointed the other way — there a probe over-promised and in situ under-delivered;
+here the in-situ end-to-end over-delivered against the mark. Both times the mark plus the mechanism
+was the number to keep.
+
+**Only one valid control existed.** `uint2.log` (6.41 ms `moe:group`) and `uint2b.log` (5.79) are
+Finding 72's *buggy* per-call-align8 intermediates, not the shipped configuration; only `uint2c.log`
+(2.66) is. A cycle that had averaged all three would have invented a 3 % "control spread" out of a
+known bug. Check what a control was actually measuring before you use its variance.
+
+### B0's other named candidates, closed with numbers
+
+- `k_topk_verify` `<<<K,32>>>` with an early return leaving 5 working threads: `i:topk` = **0.12 ms**
+  at K=5, below B0's own 0.5 ms falsification bar. Leave it.
+- `k_topk_decode` `<<<1,32>>>`: same kernel family, bounded by the same mark.
+- `k_dg`, `k_advance_T`, `k_incr` `<<<1,1>>>`: genuinely one scalar's worth of work. Nothing to
+  parallelise.
+
+B0's named list is now exhausted: two fixed, the rest measured under the bar.
+
+### A gate for a bit-exactness claim, not an assertion
+
+`tests/gate_moe_scan.cu` (new, in `build_gate.sh`) diffs both scans against the `<<<1,1>>>` kernels
+for **equality**, over `nr` ∈ {1,2,15,16,17,160,255,256,257,400} — below, at and above the 256-thread
+block width so the chunk carry is actually exercised — crossed with dense / all-empty / one-expert /
+exactly-16-each row distributions, with the outputs poisoned to 0xEE first so a kernel that writes
+nothing cannot pass by inheriting the other's bytes. 41/41 exact. Per trap 9, a harness that cannot
+express the regime confirms itself; the `nr=257` and `nr=400` cases exist for exactly that reason.
+
+### Caveat on this cycle's evidence
+
+The one sanctioned full-model run was spent with `DSV4_DPROF=1`, so this build has **no clean
+non-dprof end-to-end number**. The 20.44 / 13.50 baseline in `FLYWHEEL_STATE.json` stands and was not
+re-measured; do not compare it against 20.43 / 13.75 from this log, which carries dprof overhead.

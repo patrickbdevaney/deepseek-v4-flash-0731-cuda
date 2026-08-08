@@ -4,6 +4,7 @@
 #include "dprof.h"
 #include <cuda_fp8.h>
 #include <cuda_fp16.h>
+#include <cstdlib>
 
 __constant__ float E2M1_MAG[8] = {0.f, 0.5f, 1.f, 1.5f, 2.f, 3.f, 4.f, 6.f};
 
@@ -210,6 +211,38 @@ __global__ void k_moe_count(int* counts, const int* idx, int n){
     int i=blockIdx.x*blockDim.x+threadIdx.x; if(i<n) atomicAdd(&counts[idx[i]],1); }
 __global__ void k_moe_prefix(int* off, const int* counts, int nr){   // nr<=~160: single-thread exclusive scan
     if(threadIdx.x||blockIdx.x) return; off[0]=0; for(int e=0;e<nr;++e) off[e+1]=off[e]+counts[e]; }
+// LAUNCH GEOMETRY (LOOP_LOG Finding 71's class). The scan above is ONE thread walking nr=160
+// entries, once per layer, 43 layers per verify step and again per token in base AR. It is not a
+// bytes problem — 640 B — it is 160 serial iterations on a 20-SM device inside a region
+// (`moe:group`) whose entire content is launch latency. Same shape as `index_score`: the work is
+// tiny, but nothing ever checked the geometry against the decode-sized input.
+//
+// Block-wide Hillis-Steele scan, one block, 256 threads, chunked so nr>256 still works. The result
+// is BIT-IDENTICAL to the serial version (integer addition, same values, same destinations), so
+// this is gated by equality, not tolerance.
+#define MOE_SCAN_T 256
+__global__ void k_moe_prefix_par(int* off, const int* __restrict__ counts, int nr){
+    __shared__ int s[MOE_SCAN_T]; __shared__ int carry;
+    if(threadIdx.x==0){ off[0]=0; carry=0; }
+    __syncthreads();
+    for(int base=0; base<nr; base+=MOE_SCAN_T){
+        int e = base + threadIdx.x;
+        s[threadIdx.x] = (e<nr) ? counts[e] : 0;
+        __syncthreads();
+        for(int d=1; d<MOE_SCAN_T; d<<=1){
+            int t = (threadIdx.x>=d) ? s[threadIdx.x-d] : 0;
+            __syncthreads();
+            s[threadIdx.x] += t;
+            __syncthreads();
+        }
+        if(e<nr) off[e+1] = carry + s[threadIdx.x];      // inclusive scan of counts == exclusive off[e+1]
+        __syncthreads();
+        if(threadIdx.x==MOE_SCAN_T-1) carry += s[MOE_SCAN_T-1];
+        __syncthreads();
+    }
+}
+// DSV4_SERIAL_SCAN=1 restores the <<<1,1>>> kernels so the A/B stays reachable (LEVERS.md rule).
+static inline bool moe_serial_scan(){ static int v=-1; if(v<0) v = getenv("DSV4_SERIAL_SCAN")!=nullptr; return v; }
 __global__ void k_moe_scatter(int* alltok, float* allwt, int* allslot, int* cursor, const int* idx, const float* wt,
                               const int* off, int bs, int na){
     int i=blockIdx.x*blockDim.x+threadIdx.x; if(i>=bs*na) return; int t=i/na, e=idx[i];
@@ -299,9 +332,16 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         alltok_d=(decltype(alltok_d))dmalloc((size_t)maxm*4); allwt_d=(decltype(allwt_d))dmalloc((size_t)maxm*4); allslot_d=(decltype(allslot_d))dmalloc((size_t)maxm*4);
         CU(cudaMemsetAsync(counts,0,nr*4,stream)); CU(cudaMemsetAsync(cursor,0,nr*4,stream));
         dprof_begin(DP_M_GROUP,stream);
+        dprof_begin(DP_MG_COUNT,stream);
         k_moe_count<<<(bs*na+63)/64,64,0,stream>>>(counts,idx,bs*na);
-        k_moe_prefix<<<1,1,0,stream>>>(off_d,counts,nr);
+        dprof_end(DP_MG_COUNT,stream);
+        dprof_begin(DP_MG_PREFIX,stream);
+        if(moe_serial_scan()) k_moe_prefix<<<1,1,0,stream>>>(off_d,counts,nr);
+        else                  k_moe_prefix_par<<<1,MOE_SCAN_T,0,stream>>>(off_d,counts,nr);
+        dprof_end(DP_MG_PREFIX,stream);
+        dprof_begin(DP_MG_SCATTER,stream);
         k_moe_scatter<<<(bs*na+63)/64,64,0,stream>>>(alltok_d,allwt_d,allslot_d,cursor,idx,wt,off_d,bs,na);
+        dprof_end(DP_MG_SCATTER,stream);
         // EXPERT UNION (DSV4_MOEUNION=1). The claim "the routed MoE is at the memory roofline" — the
         // single most load-bearing fact in the priority model, because it is 50% of the verify — rests
         // on a MODELLED union of 29.9 distinct experts at K=5 (ROOFLINE.md's c_v), never a measured
@@ -323,7 +363,9 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         }
         // -- tile descriptors (device) --
         int *tile_e,*tile_row0,*ntiles_d; tile_e=(decltype(tile_e))dmalloc(maxm*4); tile_row0=(decltype(tile_row0))dmalloc(maxm*4); ntiles_d=(decltype(ntiles_d))dmalloc(4);
+        dprof_begin(DP_MG_TILES,stream);
         tc_build_tiles(tile_e,tile_row0,ntiles_d,off_d,nr,stream);
+        dprof_end(DP_MG_TILES,stream);
         // -- repack every expert weight in place once (idempotent) + upload per-expert ptr tables to device --
         // GEMV path reads ORIGINAL fp4 (no repack).
         if(!g_moe_gemv) for(int e=0;e<nr;++e){ tc_ensure_repacked((uint8_t*)w.w1p[e],inter,dim,stream);
@@ -508,7 +550,8 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
             alltok_d=(decltype(alltok_d))dmalloc((size_t)maxm*4); allwt_d=(decltype(allwt_d))dmalloc((size_t)maxm*4); allslot_d=(decltype(allslot_d))dmalloc((size_t)maxm*4);
             CU(cudaMemsetAsync(counts,0,nr*4,stream)); CU(cudaMemsetAsync(cursor,0,nr*4,stream));
             k_moe_count<<<(bs*na+63)/64,64,0,stream>>>(counts,idx,bs*na);
-            k_moe_prefix<<<1,1,0,stream>>>(off_d,counts,nr);
+            if(moe_serial_scan()) k_moe_prefix<<<1,1,0,stream>>>(off_d,counts,nr);
+            else                  k_moe_prefix_par<<<1,MOE_SCAN_T,0,stream>>>(off_d,counts,nr);
             k_moe_scatter<<<(bs*na+63)/64,64,0,stream>>>(alltok_d,allwt_d,allslot_d,cursor,idx,wt,off_d,bs,na);
             CU(cudaMemcpy(off.data(),off_d,(nr+1)*4,cudaMemcpyDeviceToHost));   // small sync (grid sizes); zero-sync = Step 1b
             dfree(counts); dfree(off_d); dfree(cursor);

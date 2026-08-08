@@ -23,6 +23,7 @@ const char* kName[DP_N] = {
     "    q:aq(x)", "    q:wq_a", "    q:rms+aq", "    q:wq_b", "    q:tail", "    q:kv_join",
     "    o:rope", "    o:wo_a", "    o:wo_b",
     "    i:qidx", "    i:iw", "    i:score", "    i:topk",
+    "      mg:count", "      mg:prefix", "      mg:scatter", "      mg:tiles",
 };
 } // namespace
 
