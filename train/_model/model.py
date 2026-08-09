@@ -747,6 +747,38 @@ def get_dspark_topk_idxs(window_size: int, bsz: int, block_size: int, start_pos:
     return matrix.int().view(1, 1, -1).expand(bsz, block_size, -1).contiguous()
 
 
+
+# ---------------------------------------------------------------------------------------------
+# S5 TRAINING PORT. `apply_rotary_emb` above ends in `y.copy_(x)` -- an in-place write into a SLICE
+# VIEW of a tensor autograd still needs, which raises
+#   "one of the variables needed for gradient computation has been modified by an inplace
+#    operation ... is at version 2; expected version 0"
+# the moment a gradient crosses it. That is fine for the inference path this file was written for
+# (torch.inference_mode has no version counter) and fatal for training.
+#
+# It CANNOT be fixed with the `.data.copy_` straight-through trick used for act_quant. Simulated
+# quantisation is a small perturbation whose identity gradient is the standard QAT approximation;
+# a rotary embedding is a real rotation, so identity gradients would be WRONG, not approximate.
+#
+# So: an out-of-place twin, plus a slice helper that rebuilds the tensor with only its last `rd`
+# columns rotated. The arithmetic is copied verbatim from apply_rotary_emb -- only the write is
+# different -- so the forward VALUE is unchanged and this is not a numerics change.
+def apply_rotary_emb_oop(x: torch.Tensor, freqs_cis: torch.Tensor, inverse: bool = False) -> torch.Tensor:
+    xc = torch.view_as_complex(x.float().unflatten(-1, (-1, 2)))
+    if inverse:
+        freqs_cis = freqs_cis.conj()
+    if xc.ndim == 3:
+        freqs_cis = freqs_cis.view(1, xc.size(1), xc.size(-1))
+    else:
+        freqs_cis = freqs_cis.view(1, xc.size(1), 1, xc.size(-1))
+    return torch.view_as_real(xc * freqs_cis).flatten(-2).to(x.dtype)
+
+
+def rope_tail(x: torch.Tensor, rd: int, freqs_cis: torch.Tensor, inverse: bool = False) -> torch.Tensor:
+    """Return x with its LAST rd columns rotated, out of place."""
+    return torch.cat([x[..., :-rd], apply_rotary_emb_oop(x[..., -rd:], freqs_cis, inverse)], dim=-1)
+
+
 class DSparkAttention(Attention):
 
     def forward(self, x: torch.Tensor, start_pos: int, main_x: torch.Tensor):
@@ -757,7 +789,7 @@ class DSparkAttention(Attention):
 
         main_freqs_cis = self.freqs_cis[start_pos:start_pos+seqlen]
         main_kv = self.kv_norm(self.wkv(main_x))
-        apply_rotary_emb(main_kv[..., -rd:], main_freqs_cis)
+        main_kv = rope_tail(main_kv, rd, main_freqs_cis)
         act_quant(main_kv[..., :-rd], 64, scale_fmt, scale_dtype, True)
 
         if start_pos == 0:
@@ -773,17 +805,19 @@ class DSparkAttention(Attention):
 
         q = self.q_norm(self.wq_a(x))
         q = self.wq_b(q).unflatten(-1, (self.n_local_heads, self.head_dim))
-        q *= torch.rsqrt(q.square().mean(-1, keepdim=True) + self.eps)
-        apply_rotary_emb(q[..., -rd:], freqs_cis)
+        # OUT-OF-PLACE for training: `q *= s` where s depends on q overwrites an operand
+        # multiplication's backward still needs. Same class as the rotary sites above.
+        q = q * torch.rsqrt(q.square().mean(-1, keepdim=True) + self.eps)
+        q = rope_tail(q, rd, freqs_cis)
         kv = self.kv_norm(self.wkv(x))
-        apply_rotary_emb(kv[..., -rd:], freqs_cis)
+        kv = rope_tail(kv, rd, freqs_cis)
         act_quant(kv[..., :-rd], 64, scale_fmt, scale_dtype, True)
 
         topk_idxs = get_dspark_topk_idxs(win, bsz, block_size, start_pos)
         self.kv_cache[:bsz, start_pos % win] = main_kv.squeeze(1)
         kv = torch.cat([self.kv_cache[:bsz], kv], dim=1)
         o = sparse_attn(q, kv, self.attn_sink, topk_idxs, self.softmax_scale)
-        apply_rotary_emb(o[..., -rd:], freqs_cis, True)
+        o = rope_tail(o, rd, freqs_cis, True)
 
         o = o.view(bsz, block_size, self.n_local_groups, -1)
         wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)

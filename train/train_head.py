@@ -324,7 +324,11 @@ def main():
             logits, conf = forward_head_tf(blocks[-1], hb, seed, tgt)
             lg = logits[0]                                   # (BS, V)
             l, parts = dspark_loss(lg, tgt, lg.detach(), None, None, gamma)
-            (l / len(sel)).backward()
+            # PHASE A IS SHARED. The KV-cache fill runs once per sequence, outside this loop, and
+            # every position's graph traces back through it -- so the first backward frees it and
+            # the second raises "Trying to backward through the graph a second time". retain_graph
+            # keeps phase A alive across the positions that share it; only the last may free it.
+            (l / len(sel)).backward(retain_graph=(t != sel[-1]))
             tot_loss += float(l.detach()); nb += 1
             for k2 in nparts: nparts[k2] += parts[k2]
         gn = torch.nn.utils.clip_grad_norm_([p for _, p in tp], 1.0)

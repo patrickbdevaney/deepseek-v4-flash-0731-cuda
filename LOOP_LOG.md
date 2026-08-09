@@ -6044,3 +6044,53 @@ remaining items were priced and rejected individually, with reasons, rather than
 
 **The binding constraint is no longer kernel efficiency. It is acceptance, and acceptance is a
 training problem.**
+
+## Finding 99 — GATE 1 CLOSED: the training loop runs end to end. The port was 6 rotary sites + one `*=`, and the fix that mattered was `retain_graph`
+
+`train/_model/model.py` ported for autograd; `train/train_head.py` completes.
+
+```
+[train] load_state_dict: 0 missing, 0 unexpected
+[train] step 1: T=1022 positions=4 loss=1.0521 ce=10.5213 grad_norm=2310.5471 tensors_with_grad=68/72
+[train] STAGE0 OK (real forward + backward)
+```
+
+### What the port actually was
+
+F91 counted ~16 in-place sites and called it a port of the whole file. **Only 8 are on the DSpark
+path**, and the backbone's (lines 373-539) are never executed by us — this file is also the
+inference reference, so leaving them alone is correct, not laziness.
+
+* **6 rotary sites.** `apply_rotary_emb` ends in `y.copy_(x)`, an in-place write into a SLICE VIEW.
+  Added an out-of-place twin + a `rope_tail(x, rd, ...)` helper that rebuilds the tensor with only
+  its last `rd` columns rotated. **The arithmetic is copied verbatim — only the write differs — so
+  the forward value is unchanged and this is NOT a numerics change**, which matters given F89.
+  **Rotary could NOT take the `.data.copy_` straight-through trick used for `act_quant`**: simulated
+  quantisation is a small perturbation whose identity gradient is the standard QAT approximation,
+  while a rotation's identity gradient is simply wrong.
+* **One `q *= rsqrt(...)`** where the multiplier depends on `q` — overwrites an operand that
+  multiplication's own backward still needs.
+* **`logits[:, i].add_()`** is in `forward_head`, already replaced by the teacher-forced variant.
+
+### The last blocker was structural, not syntactic
+
+After the port, `backward` raised *"Trying to backward through the graph a second time"*. Phase A
+(the KV-cache fill) runs ONCE per sequence outside the position loop, so every position's graph
+traces back through it and the first backward frees it. Fixed with
+`backward(retain_graph=(t != sel[-1]))` — keep the shared phase alive, let only the last position
+free it. **That is a property of the two-phase design (F91), not a bug**, and it is the reason the
+cheap O(T) cache fill is shared at all.
+
+### NOT DONE — two parts of the loss are inert, and the run above does not train anything meaningful
+
+1. **`tv=0.0000`.** The TV term is **90 % of the loss weight** and is currently zero because the
+   trainer passes `lg.detach()` as its own target. The real target distribution must be reconstructed
+   from the captured taps through the FROZEN `lm_head` — tap[2] is layer 42, the last backbone layer,
+   so `p ~ softmax(head(norm(hc_head(tap[2]))))`. Until that is wired, the run optimises CE alone.
+2. **The confidence head is unused** (`conf=None`), so `a_conf = 1.0` of the objective is absent and
+   4 of 72 tensors get no gradient — almost certainly its projection. Needs accepted/rejected labels,
+   which the capture must record alongside the taps.
+
+**So Gate 1 is mechanically closed and session 1 is NOT yet runnable.** Wiring those two is the last
+work before the 500-sample narrow proof, and both are contained: one reconstruction from data we
+already capture, one extra field in the capture record.
