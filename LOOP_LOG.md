@@ -5799,3 +5799,59 @@ applies. **What is solid is the SIGN, not the size:** tau rises 5->6 on 4 of 4 r
 tok/s rises on 4 of 4, which a 3.5 % run-to-run spread cannot manufacture. Adopting BLK=6 for
 realistic workloads is justified; quoting "+3.3 %" as a measured gain is not, until a second pair
 confirms it.
+
+## Finding 95 — adaptive block size: **NEGATIVE (+0.2 % vs fixed 5, -4.6 % vs fixed 6)**. It oscillates, and the reason is F92's transient
+
+**Operator-run.** `evidence/adaptblk_suite.log`, all 9 prompts, NGEN0=200, start BLK=5, controller
+free in [3,6], window 8 verifies, grow at `tau >= BLK-0.75`, shrink at `tau <= BLK-1.75`.
+`LOSSLESS GATE PASS`, `MATCH 5/5` — it is correct, it is just not better.
+
+| | suite mean (8 real) |
+|---|---|
+| fixed BLK=5 (F93) | 22.29 tok/s |
+| **adaptive [3,6]** | **22.34 tok/s (+0.2 %)** |
+| **fixed BLK=6** (F94, on its 4 prompts) | **29.43** |
+| **adaptive** (same 4 prompts) | **28.09 (-4.6 %)** |
+
+**A wash against fixed 5, and materially WORSE than simply fixing 6.**
+
+### Why — and it connects two findings
+
+The controller **thrashes**: 3-8 moves per prompt, e.g. prompt 3 goes `5->4->3->4->5->4->3->4`
+and prompt 0 goes `5->4->5->4->5->6`. It almost never sits at a width long enough to profit from it,
+because each move clears the history and re-enters a measurement transient.
+
+The root cause is **Finding 92**. tau is **1.39 over the first 32 generated tokens** and only reaches
+~3.2 after ~128, because the drafter's 128-token sliding window has to FILL. The controller starts
+measuring immediately, sees the transient, and shrinks — every prompt's first move is downward
+(`tau=1.75 -> BLK 4`, `tau=1.12 -> BLK 4`, `tau=1.00 -> BLK 3`). It then has to climb back through
+the same hysteresis it just paid for. **It is not adapting to the workload; it is chasing the
+window-fill curve.**
+
+That is a real insight and it is the useful part of this finding: **any controller keyed on
+short-horizon acceptance will fight the transient F92 measured.** A fix has to either suppress
+adaptation until ~128 generated tokens, or use a window long enough that the transient is a small
+fraction of it — at which point, on a 200-token generation, there is almost nothing left to adapt
+over.
+
+### The decision
+
+**Ship fixed BLK=6 for realistic workloads; do not ship the controller.** F94 already established
+6 > 5 on 4 of 4 realistic prompts, and the controller costs 4.6 % against that while adding a
+mutable width, a device-buffer ceiling and an oscillation failure mode. `DSV4_ADAPTBLK` stays in the
+tree, default OFF, as the A/B arm and as the starting point for a transient-aware version.
+
+**Note the shape of the win it gave up**: the three collapsed categories DID improve (+1.4 to +1.8 %
+on code_gen, explanation, reasoning) because shrinking below 5 genuinely helps a drafter that cannot
+fill a block. The idea is right; the signal is too noisy at this horizon to act on.
+
+### Second buffer-sizing near-miss in three findings
+
+`dbid`, `dmarg`, `xemb`, `xa`, `xb` are all sized from `BLKMAX`, which a `BLK0=5` sweep sets to 5 —
+so the controller stepping to 6 would have overrun all five, and like F93's verify-side buffers it
+would **not have crashed**, it would have corrupted the last drafted proposal. Fixed at the sizing
+site (`BLKMAX >= 6` whenever `DSV4_ADAPTBLK` is set), not at the controller.
+
+**Pattern worth naming: any change to a width parameter must be paired with an audit of everything
+sized from it.** Twice in three findings the code change was trivial and the buffer sizing was the
+real work, and both times the failure mode was silent corruption rather than a crash.

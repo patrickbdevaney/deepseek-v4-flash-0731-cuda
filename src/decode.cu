@@ -18,6 +18,7 @@
 //          headdir defaults to <dir> when the checkpoint has embedded mtp.* (0731 does).
 #include <unordered_map>
 #include <chrono>
+#include <deque>
 #include "weight_store.h"
 #include "deepseek_v4.h"
 #include "block.h"
@@ -140,6 +141,12 @@ int main(int argc, char** argv){
                            "(argv[2] is prompt 0; DSV4_PROMPTS adds the rest)\n", i2, promptSweep[i2], prompts.size());
             return 2; }
     int BLKMAX=0; for(int v:blkSweep) if(v>BLKMAX) BLKMAX=v;
+    // DSV4_ADAPTBLK can GROW the block past what the sweep asked for, and every draft-side device
+    // buffer (dbid, dmarg, xemb, xa, xb) is sized from BLKMAX. A sweep at BLK0=5 sets BLKMAX=5, so
+    // the controller stepping to 6 would overrun all five -- and, exactly like F93's verify-side
+    // buffers, it would NOT crash: it would corrupt the last drafted proposal. Raise the ceiling
+    // here, where the buffers are sized, not where the controller is written.
+    if(getenv("DSV4_ADAPTBLK") && BLKMAX < 6) BLKMAX = 6;
     // VERIFY WIDTH vs DRAFT WIDTH -- they are NOT the same number, and conflating them cost us a
     // whole token of ceiling. The verify spends vtok[0] on the ALREADY-KNOWN token and fills
     // vtok[1..VB-1] from draft[], so verifying all BLK proposals needs VB = BLK+1. The drafter has
@@ -704,7 +711,28 @@ int main(int argc, char** argv){
         if(memtrace){ size_t fb,tb; cudaMemGetInfo(&fb,&tb);
             printf("[memtrace] entering point %zu (prompt %d): free %.3f GiB of %.1f\n",
                    bsi, promptSweep[bsi], fb/1073741824.0, tb/1073741824.0); fflush(stdout); }
-        const int BLK = blkSweep[bsi], NPASS = passSweep[bsi];
+        const int BLK0 = blkSweep[bsi], NPASS = passSweep[bsi];
+        // ADAPTIVE BLOCK SIZE (DSV4_ADAPTBLK=1). F94 measured that the right block is a property of
+        // the WORKLOAD, not of the model: on realistic prompts BLK=6 beat 5 on 4 of 4, while the
+        // canonical low-acceptance prompt regressed monotonically (24.38 -> 22.91 -> 20.87 for
+        // 5 -> 6 -> 8) because its tau never moved off 3.61 and it paid a wider verify for width it
+        // could not use. `adaptK` already adapts the width WITHIN a block from the draft's own
+        // margins; the block itself was still a compile-time constant.
+        //
+        // The controller is deliberately dumb and hysteretic. The signal is the accepted-token
+        // count, which is a COUNTED INTEGER and therefore immune to the ~1.5% cross-run timing floor
+        // of trap 25 -- the same property that made S6's oracle resolvable. Grow when the drafter is
+        // saturating the block it has, shrink when it is not using it, and never faster than one
+        // step per window so a single lucky verify cannot move it.
+        //
+        // BLK=8 is NOT reachable by this controller and that is deliberate: F94 measured tau FALLING
+        // 6 -> 8 on 3 of 4 prompts, because the block conditions on DSPARK_NOISE_TID at positions
+        // 1..BLK-1 and a wider noise field degrades proposals the head was getting right. The head
+        // was trained at 5 and generalises exactly one position. The cap is that measurement.
+        static const bool adaptblk = getenv("DSV4_ADAPTBLK") != nullptr;
+        const int ABLK_MIN = 3, ABLK_MAX = 6, ABLK_WIN = 8;
+        int BLK = adaptblk ? BLK0 : BLK0;          // BLK is now MUTABLE when adaptblk is on
+        std::deque<int> acc_hist;                  // recent accepted-token counts
         // adaptK = 0 means fixed width, i.e. exactly the previous behaviour. The default comes from
         // a within-run A/B (Finding 49): 3694 -> 3616 ms for the SAME 61 tokens, +2.1%. The
         // threshold is fitted on 18 verifies of one prompt, so it is deliberately on the permissive
@@ -1090,6 +1118,25 @@ int main(int argc, char** argv){
                     acc_rrsy+=(g_rawsync_ms-rsy0)-rsyd; acc_rsn+=(g_rawsync_n-rsyn0)-rsynd; } }
             if(nverify>0){ spec_ms+=ms; timed_tok+=acc+1; } ++nverify;   // exclude round 0 (warmup: head repack)
             printf("  verify %d: accepted %d/%d (K=%d) + correction -> +%d tokens (%.1f ms)  cpos=%d\n", nverify, acc, VB-1, VB, acc+1, ms, cpos);
+            if(adaptblk){
+                acc_hist.push_back(acc);
+                if((int)acc_hist.size() > ABLK_WIN) acc_hist.pop_front();
+                if((int)acc_hist.size() == ABLK_WIN){
+                    double mtok = 0; for(int a2 : acc_hist) mtok += a2 + 1;
+                    mtok /= ABLK_WIN;                                   // mean tokens/verify == tau
+                    int nb = BLK;
+                    // Saturating: tau within 0.75 of the ceiling this block can deliver (BLK), so
+                    // the drafter is being cut off rather than running out of confidence.
+                    if(mtok >= BLK - 0.75 && BLK < ABLK_MAX) nb = BLK + 1;
+                    // Idle width: tau more than 1.75 below the ceiling means we are paying for
+                    // verify positions the adaptive gate is declining anyway.
+                    else if(mtok <= BLK - 1.75 && BLK > ABLK_MIN) nb = BLK - 1;
+                    if(nb != BLK){
+                        printf("  [adaptblk] tau=%.2f over last %d -> BLK %d -> %d\n", mtok, ABLK_WIN, BLK, nb);
+                        BLK = nb; acc_hist.clear();                    // re-measure at the new width
+                    }
+                }
+            }
         }
         double avg_acc=(double)sgen.size()/nverify;
         double ms_per_tok = timed_tok>0 ? spec_ms/timed_tok : 0;
