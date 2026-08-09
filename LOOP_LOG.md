@@ -6537,3 +6537,76 @@ and `multi_turn`).
 
 The suite also moved out of a session-scoped temp directory into `protocol/suite_prompts.txt`. A
 frozen measurement protocol that lives somewhere it can be garbage-collected is not frozen.
+
+---
+
+## Finding 107 (PRELIMINARY, n=47) — the draft-vocab trim is measured on the target's own outputs at last, and it is **net negative at every corpus size we could capture**. F97 said this lever was downstream of S5's capture; the capture is now producing the data, and the answer is no
+
+F97 killed the id-ordered variants and named the one condition that would revive the lever: a
+frequency ranking fitted to a corpus *representative of serving traffic*, which S5's capture
+produces as a by-product. Session 1's pass 1 is generating exactly that corpus right now, so the
+ranking is buildable from partial data — 47 sequences, 27.7 k of the target's own generated tokens.
+
+`tools/vocab_rank.py`. The discipline it exists to enforce: **the ranking is fitted on a train split
+and scored on held-out sequences it has never seen**, because a ranking scored on its own corpus
+reports ~100 % by construction. F97 was already shown that shape once and correctly refused it.
+
+```
+      K   fitted %  HELD-OUT %     gap
+   8000   100.000%     78.226%  21.774      <- fitted number is meaningless
+  64000   100.000%     78.226%  21.774
+```
+
+**Held-out coverage is flat in K.** That is the whole story: the ranking has 1 922 entries, shorter
+than any K tested, so the miss is not "tokens ranked too low" — it is **tokens never seen**. K is not
+the variable. Corpus size is.
+
+### The curve, and it does not get there
+
+| train seq | distinct | held-out coverage | miss |
+|---|---|---|---|
+| 4 | 333 | 52.7 % | 47.3 % |
+| 9 | 930 | 63.6 % | 36.4 % |
+| 18 | 1 416 | 72.0 % | 28.0 % |
+| 37 | 1 922 | **78.2 %** | **21.8 %** |
+
+Miss multiplies by **0.784 per doubling** of corpus — a geometric decay against an exponential
+requirement. Reaching the ~0.1 % miss this lever needs takes **~2.7 x 10^8 sequences.**
+
+### Priced in tau, so the verdict is computed rather than asserted
+
+Model, assumption stated: per-position acceptance independent with probability p, tau = 1 + sum
+p^i over the block (the 1 is the bonus token, which this project's tau includes). p0 = 0.7578
+reproduces the measured tau 3.5362 at block 6. A vocabulary miss ends a run exactly as a rejection
+does, so it multiplies per-position acceptance by (1-m). Gain column uses **K=64000, the most
+conservative trim tested**.
+
+| sequences | miss | tau | tau cost | ms saved | **net** |
+|---|---|---|---|---|---|
+| **500** (session 1) | 9.01 % | 2.98 | -4.25 tok/s | +1.04 | **-14.2 %** |
+| 2 000 (session 2) | 5.61 % | 3.18 | -2.76 | +1.04 | **-7.6 %** |
+| 5 000 (session 3 max) | 4.11 % | 3.27 | -2.06 | +1.04 | **-4.5 %** |
+| 20 000 | 2.56 % | 3.37 | -1.31 | +1.04 | **-1.2 %** |
+| 100 000 | 1.48 % | 3.44 | -0.77 | +1.04 | **+1.2 %** |
+
+**The lever does not cross zero until ~100 000 sequences, and it buys +1.2 % there.** At the
+measured generate rate that capture is ~200x session 1 — over a month of wall time — for a gain
+smaller than the 3.5 % run-to-run spread this project refuses to promote inside.
+
+### Why the estimate is OPTIMISTIC, which matters more than its being preliminary
+
+The held-out sequences come from the **same domain** as the training ones (reasoning, from
+MetaMathQA / UltraInteract / orca-math). Real serving traffic spans the eight suite categories.
+Cross-domain coverage can only be worse than within-domain coverage, so the true miss rate at any
+corpus size is **above** these numbers and the true net is **below** them.
+
+### Status
+
+**PRELIMINARY: n=47 sequences of one domain.** F94 is this project's own precedent for a number
+measured on a convenient subset and quoted as general — it reported +3.3 % on four prompts chosen
+because they were ceiling-bound, against +1.6 % on the full suite. So this is recorded as a strong
+signal and not a closure. `tools/vocab_rank.py --curve` re-runs in one command against the full 500
+when pass 1 lands, and against session 2's 2 000 after that.
+
+If the full-corpus curve confirms it, the entry in `LEVERS.md` moves from *blocked* to **closed,
+twice measured** — and the useful part of that is knowing not to spend the capture on it.

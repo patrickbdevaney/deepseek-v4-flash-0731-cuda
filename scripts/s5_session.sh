@@ -33,6 +33,18 @@ DIE(){ LOG "HALT: $*"; exit 1; }
 
 SW=$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$N+1)))")
 
+# ---------------------------------------------------------------- preflight: will this fit on disk?
+# Measured, not guessed: trial captures ran 6.8 MB per ~200-token sequence = ~33 KB/token, and the
+# mtp shards are 7.01 GB. Running out of disk in the middle of a safetensors write leaves a
+# truncated file that may still partially load -- far worse than refusing to start.
+FREE_GB=$(df -BG --output=avail /home/patrickd | tail -1 | tr -dcs '0-9' ' ' | tr -d ' ')
+NEED_GB=$(python3 -c "
+cap = $N * ($NGEN + 40) * 33e3 / 1e9    # taps + lm_in over prompt+generated
+print(int(cap + 1 + 7 + 7 + 4))          # + trained bf16 + built head + archive copy + slack")
+LOG "preflight: need ~${NEED_GB} GB, have ${FREE_GB} GB free"
+[ "$FREE_GB" -ge "$NEED_GB" ] || DIE "insufficient disk: need ~${NEED_GB} GB, have ${FREE_GB} GB. \
+Free space or reduce N before starting -- a truncated safetensors write is worse than not starting."
+
 # ---------------------------------------------------------------- pass 1: regenerate with the target
 if [ ! -s "$GEN" ]; then
     LOG "pass 1: regenerating $N responses x $NGEN tokens"

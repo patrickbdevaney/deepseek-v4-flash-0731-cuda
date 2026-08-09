@@ -145,12 +145,24 @@ def promote(a):
     dst = os.path.join(STORE, a.name)
     os.makedirs(dst, exist_ok=True)
     files = []
+    n_skip = 0
     for fn in sorted(os.listdir(a.head)):
         src = os.path.join(a.head, fn)
         if not os.path.isfile(src):
             continue
-        shutil.copy2(src, os.path.join(dst, fn))
-        files.append({"file": fn, "bytes": os.path.getsize(src), "sha256": sha256(src)})
+        d = os.path.join(dst, fn)
+        h = sha256(src)
+        # `archive` runs first and unconditionally, so in the normal flow these bytes are ALREADY
+        # here. A head is ~7 GB; re-copying it is 7 GB of pointless writes per session, and by
+        # session 3 the captures alone are tens of GB. Verify by content, not by mtime: matching
+        # sha256 is the only evidence that skipping the copy is safe.
+        if os.path.exists(d) and os.path.getsize(d) == os.path.getsize(src) and sha256(d) == h:
+            n_skip += 1
+        else:
+            shutil.copy2(src, d)
+        files.append({"file": fn, "bytes": os.path.getsize(src), "sha256": h})
+    if n_skip:
+        print(f"  {n_skip}/{len(files)} file(s) already archived byte-identically; not re-copied")
     shutil.copy2(a.eval, os.path.join(dst, "eval.log"))
 
     rev = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
