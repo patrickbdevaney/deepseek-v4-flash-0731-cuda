@@ -238,6 +238,7 @@ def main():
     print(f"[train] trainable tensors in graph: {len(tp)} / {n_tr/1e6:.1f} M", flush=True)
     opt = torch.optim.AdamW([p for _, p in tp], lr=a.lr, betas=(0.9, 0.95), weight_decay=0.0)
 
+    _dbg = {"agree":0,"hit":0,"n":0,"tgt_top1_p":0.0,"drf_top1_p":0.0,"m":0}
     gamma = float(margs.dspark_block_size)
     BS = margs.dspark_block_size
 
@@ -325,12 +326,35 @@ def main():
         # backward immediately after each position's forward keeps each graph valid, and accumulates
         # into .grad exactly as a summed loss would.
         opt.zero_grad(set_to_none=True)
-        h0, main_x = blocks[0].forward_embed(main_hidden, ids[:1].clone())
-        hh = h0
-        for blk in blocks:                                   # phase A: fill the cache, O(T)
-            hh = blk(hh, 0, ids[:1].clone(), main_x)
+        # PHASE A UNDER no_grad, and this is a design decision, not a workaround.
+        #
+        # The cache fill writes blk.kv_cache IN PLACE, so its autograd history persists in a module
+        # buffer across shards -- shard n+1's fill then traces back into shard n's freed graph and
+        # raises "backward through the graph a second time". `retain_graph` does not fix that; it
+        # only defers it, because the offending reference is the BUFFER, not the loop.
+        #
+        # Building the graph is also not what we want. Gradient reaches main_proj through phase B's
+        # OWN forward_embed at each training position; the cache is the model's CONTEXT, and
+        # treating context as given is the standard formulation. Dropping the phase-A path costs a
+        # second-order term and buys independent per-position graphs, no retain_graph, less memory
+        # and a faster step.
+        with torch.no_grad():
+            h0, main_x = blocks[0].forward_embed(main_hidden, ids[:1].clone())
+            hh = h0
+            for blk in blocks:                               # phase A: fill the cache, O(T)
+                hh = blk(hh, 0, ids[:1].clone(), main_x)
         tot_loss, nparts, nb = 0.0, {"ce": 0.0, "tv": 0.0, "conf": 0.0}, 0
         for t in sel:                                        # phase B: draft from each position
+            # SEVER THE CACHE HISTORY BEFORE EACH POSITION. Phase B also writes kv_cache
+            # (`kv_cache[:bsz, start_pos % win] = main_kv.squeeze(1)`), so position k+1's forward
+            # traces back into position k's already-freed graph through the module BUFFER. Running
+            # phase A under no_grad was necessary but not sufficient -- the writes inside phase B
+            # are the other half. detach_() in place leaves the VALUES (the context the attention
+            # needs) and drops only the history.
+            for _b in blocks:
+                for _n, _buf in _b.named_buffers(recurse=True):
+                    if _buf is not None and _buf.is_floating_point():
+                        _buf.detach_()
             # clone: `seed` was a VIEW of `ids`, and forward_embed writes through it
             # (`draft_input_ids[:, 0] = input_ids`), so successive positions bumped the
             # version counter of a tensor an earlier graph still referenced.
@@ -358,13 +382,23 @@ def main():
             # -- it is computable from the draft's own argmax against the ground truth.
             with torch.no_grad():
                 accepted = (lg.argmax(dim=-1) == tgt)
+                # DIAGNOSTIC. TV near 1.0 with acceptance ~30% is inconsistent for peaked
+                # distributions, so distinguish the two explanations before trusting either:
+                #   draft-argmax == target-argmax  -> alignment is right, the draft is just broad
+                #   near zero                      -> tgt_lg is misaligned and TV is meaningless
+                _dbg["agree"] += int((lg.argmax(-1) == tgt_lg.argmax(-1)).sum())
+                _dbg["hit"]   += int(accepted.sum())
+                _dbg["n"]     += tgt.numel()
+                _dbg["tgt_top1_p"] += float(F.softmax(tgt_lg, -1).max(-1).values.mean())
+                _dbg["drf_top1_p"] += float(F.softmax(lg.float(), -1).max(-1).values.mean())
+                _dbg["m"] += 1
             cvec = conf.reshape(-1)[:BS] if conf is not None else None
             l, parts = dspark_loss(lg, tgt, tgt_lg, cvec, accepted, gamma, a_conf=a.a_conf)
             # PHASE A IS SHARED. The KV-cache fill runs once per sequence, outside this loop, and
             # every position's graph traces back through it -- so the first backward frees it and
             # the second raises "Trying to backward through the graph a second time". retain_graph
             # keeps phase A alive across the positions that share it; only the last may free it.
-            (l / len(sel)).backward(retain_graph=(t != sel[-1]))
+            (l / len(sel)).backward()      # graphs are independent now; see phase A note
             tot_loss += float(l.detach()); nb += 1
             for k2 in nparts: nparts[k2] += parts[k2]
         gn = torch.nn.utils.clip_grad_norm_([p for _, p in tp], 1.0)
@@ -381,6 +415,12 @@ def main():
         if a.smoke:
             break
 
+    if _dbg["n"]:
+        print(f"[diag] draft-argmax == TARGET-argmax : {100*_dbg['agree']/_dbg['n']:.1f}%  "
+              f"| == ground-truth token: {100*_dbg['hit']/_dbg['n']:.1f}%")
+        print(f"[diag] mean top-1 prob  target {_dbg['tgt_top1_p']/_dbg['m']:.3f}  "
+              f"draft {_dbg['drf_top1_p']/_dbg['m']:.3f}   "
+              f"(TV near 1 with a PEAKED draft => misalignment; with a FLAT draft => genuine)")
     print("[train] STAGE0 OK (real forward + backward)"); return
 
     os.makedirs(a.out, exist_ok=True)

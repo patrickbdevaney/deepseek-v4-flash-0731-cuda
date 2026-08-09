@@ -6155,3 +6155,59 @@ log, and a `head_card.json` carrying the engine git rev, the base model and its 
 Registry seeded with the shipped head as the incumbent from the F96 clean baseline:
 **suite tau 3.5362, 22.6550 tok/s, base AR 13.76.** Every future head must beat 23.45 tok/s
 (22.655 x 1.035) to be promoted.
+
+## Finding 101 — SESSION 1 HALTED before capture: the ported forward reproduces the engine at **1.5 %** where the engine gets ~30 %. The equivalence gate fired, and it fired for free
+
+The two-pass flow works. The trainer runs end to end on real reasoning data. **And the numbers say
+do not use it.**
+
+### What was built and verified
+
+* `DSV4_GENOUT` (full prompt+generated id dump; the 40-token console print is unparseable) and
+  `DSV4_PROMPTS_FILE` (500 prompts x ~200 ids exceeds the environment-variable limit).
+* 500 reasoning prompts from **Open-PerfectBlend** — the corpus the DSpark paper used — via
+  MetaMathQA / UltraInteract_sft / orca-math, tokenizer gate passing.
+* Trial at 10 samples: **pass 1 round-trips 10/10 with exact seed prefixes**; **pass 2 captures
+  10/10 at 32.0 KB/token** with distinct per-slot std; the trainer completes all 10 shards.
+* Two more autograd defects fixed, both from in-place cache writes: phase A had to run under
+  `no_grad` (its history lives in a module BUFFER and survives across shards, which `retain_graph`
+  defers rather than fixes), and phase B's own cache writes need a per-position `detach_()`.
+
+### The measurement that stops it
+
+```
+[diag] draft-argmax == TARGET-argmax : 1.5%   | == ground-truth token: 1.5%
+[diag] mean top-1 prob  target 0.762  draft 0.309
+```
+
+The engine measures **tau 1.85 at block 6 on `reasoning`** — roughly **30 % per-position
+acceptance**. The ported forward agrees **1.5 %** of the time. That is a **20x discrepancy**, and it
+is not explained by a broad draft distribution: the draft's mean top-1 probability is 0.309, which
+is peaked, not flat. **The PyTorch draft path is not computing what the engine computes.**
+
+This is precisely the failure F91 named — *"a ported forward that differs from the server by more
+than that is worse than no fine-tune"* — and F89's 28 % acceptance loss from an accumulation-order
+change is the calibration for how little divergence this system tolerates.
+
+**Training on this would align the head to a function the server does not run.** Session 1 is
+halted before its 4.7 h of capture, not after.
+
+### The TV number is therefore also not trustworthy
+
+`tv = 0.95-1.0` looked like a striking result and I nearly acted on it: at a measured
+`alpha = 1 - TV = 0.03`, Nebius's hybrid gives `lambda = exp(-3 x 0.03) = 0.91`, i.e. **91 % KL** —
+which would invert F100's "do not adopt the LK hybrid" conclusion. **That inversion is now
+suspended**, because a TV computed against a draft that is 20x off is measuring the port's bug, not
+the objective. F100's arithmetic used `alpha = 0.692` inferred from tau; the honest position is that
+**neither number is established** until the forward matches.
+
+### What the gate needs, and why it must come before capture
+
+The equivalence check requires the ENGINE's own draft proposals for the same input, which the
+capture does not currently record. Concretely: add the draft's per-position argmax (and ideally its
+top-1 margin, which `hmarg[]` already computes) to the capture record, then require
+**draft-argmax agreement >= 90 %** between engine and port before any session runs.
+
+**Cost of finding this here: about twenty minutes. Cost of finding it after session 1: the session,
+plus a trained head that looked plausible and was aligned to nothing.** The 10-sample trial paid for
+itself, and so did adding a diagnostic instead of trusting a suspicious number.

@@ -1,2 +1,179 @@
 [parse] DSV4_PROMPTS_FILE /home/patrickd/s5-capture/trial_gen.txt -> 10 prompt(s)
 [decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=290
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 110.5/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 216.6 ms = 23.1 tok/s (43.313 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (70.1 ms warmup)
+  step 1 pos 6 -> token 16  (70.6 ms)
+  step 2 pos 7 -> token 455  (76.9 ms)
+  step 3 pos 8 -> token 6102  (68.9 ms)
+  step 4 pos 9 -> token 294  (69.8 ms)
+  step 5 pos 10 -> token 16603  (70.4 ms)
+  step 6 pos 11 -> token 344  (78.0 ms)
+  step 7 pos 12 -> token 29168  (70.0 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.1 ms/tok = 13.87 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 126.4 ms (= 25.3 ms/tok if all accepted vs 72.1 M=1 -> 2.85x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 6 6 6 6 6 6 6 6 6 6
+[spec] head built. mem 111.4/122.8 GiB
+[decode] PREFILL: 194 positions in 3369.0 ms = 57.6 tok/s (17.366 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p01_s000194.dspc  194 tok x (3 taps + 1 lm_in) x 4096 = 6.1 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=1 s=195)...
+[arena] first draft: draft footprint 215.05 MB, global hwm 215.05 MB / cap 512.00 MB (42.0%), draft path = ARENA
+  [margins] 3.23 0.46 0.01 0.69 2.25 3.01  K=2
+  verify 1: accepted 0/1 (K=2) + correction -> +1 tokens (125.8 ms)  cpos=195
+  [margins] 2.84 4.00 1.45 1.33 0.34 0.45  K=3
+  verify 2: accepted 0/2 (K=3) + correction -> +1 tokens (138.3 ms)  cpos=196
+  [margins] 3.54 1.16 4.87 4.92 0.36 0.31  K=2
+  verify 3: accepted 1/1 (K=2) + correction -> +2 tokens (116.3 ms)  cpos=198
+  [margins] 8.32 7.12 8.07 10.56 6.89 0.18  K=6
+  verify 4: accepted 5/5 (K=6) + correction -> +6 tokens (183.3 ms)  cpos=204
+
+[spec] generated 10 tokens over 4 verifies: mean tokens/verify = 2.50 (block=6, max 7)
+[spec] tokens: 318 685 271 35 35480 4772 769 260 39317 294
+[spec] SPEC-DECODE: 48.7 ms/tok = 20.55 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 1.48x)
+[decode] PREFILL: 208 positions in 3585.6 ms = 58.0 tok/s (17.238 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p02_s000208.dspc  208 tok x (3 taps + 1 lm_in) x 4096 = 6.5 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=2 s=209)...
+  [margins] 0.88 1.32 1.55 0.47 0.23 1.60  K=2
+  verify 1: accepted 0/1 (K=2) + correction -> +1 tokens (117.0 ms)  cpos=209
+  [margins] 10.78 1.20 1.23 1.08 0.92 0.45  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (121.0 ms)  cpos=211
+  [margins] 3.35 11.64 1.41 3.30 0.61 2.31  K=3
+  verify 3: accepted 2/2 (K=3) + correction -> +3 tokens (135.9 ms)  cpos=214
+  [margins] 9.17 4.28 0.31 4.63 0.20 0.04  K=3
+  verify 4: accepted 1/2 (K=3) + correction -> +2 tokens (136.5 ms)  cpos=216
+
+[spec] generated 8 tokens over 4 verifies: mean tokens/verify = 2.00 (block=6, max 7)
+[spec] tokens: 49036 14 3132 10531 15537 4630 362 260
+[spec] SPEC-DECODE: 56.2 ms/tok = 17.80 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 1.28x)
+[decode] PREFILL: 207 positions in 3560.3 ms = 58.1 tok/s (17.199 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p03_s000207.dspc  207 tok x (3 taps + 1 lm_in) x 4096 = 6.5 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=3 s=208)...
+  [margins] 3.78 0.00 1.76 0.75 2.61 0.63  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (122.6 ms)  cpos=209
+  [margins] 10.00 3.84 8.03 8.47 7.91 3.70  K=7
+  verify 2: accepted 6/6 (K=7) + correction -> +7 tokens (202.0 ms)  cpos=216
+
+[spec] generated 9 tokens over 2 verifies: mean tokens/verify = 4.50 (block=6, max 7)
+[spec] tokens: 344 42080 779 14 565 19 14 223 19
+[spec] SPEC-DECODE: 28.9 ms/tok = 34.65 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 2.50x)
+[decode] PREFILL: 216 positions in 3732.7 ms = 57.9 tok/s (17.281 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p04_s000216.dspc  216 tok x (3 taps + 1 lm_in) x 4096 = 6.8 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=4 s=217)...
+  [margins] 12.40 15.11 11.38 16.11 11.35 13.62  K=7
+  verify 1: accepted 6/6 (K=7) + correction -> +7 tokens (198.8 ms)  cpos=223
+  [margins] 15.98 12.21 18.84 12.45 11.19 11.67  K=7
+  verify 2: accepted 6/6 (K=7) + correction -> +7 tokens (207.8 ms)  cpos=230
+
+[spec] generated 14 tokens over 2 verifies: mean tokens/verify = 7.00 (block=6, max 7)
+[spec] tokens: 874 42492 223 18 62 682 262 565 1512 73 10 20 11 438
+[spec] SPEC-DECODE: 29.7 ms/tok = 33.69 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 2.43x)
+[decode] PREFILL: 195 positions in 3380.0 ms = 57.7 tok/s (17.334 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p05_s000195.dspc  195 tok x (3 taps + 1 lm_in) x 4096 = 6.1 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=5 s=196)...
+  [margins] 6.55 0.70 1.41 0.06 7.48 2.23  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (125.6 ms)  cpos=197
+  [margins] 1.38 0.26 2.80 1.64 1.56 2.71  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (116.4 ms)  cpos=199
+  [margins] 4.66 0.38 1.24 1.63 3.86 7.37  K=2
+  verify 3: accepted 0/1 (K=2) + correction -> +1 tokens (124.8 ms)  cpos=200
+  [margins] 1.39 3.38 3.15 0.86 7.29 1.37  K=4
+  verify 4: accepted 0/3 (K=4) + correction -> +1 tokens (148.5 ms)  cpos=201
+  [margins] 1.23 2.10 7.97 0.37 0.23 1.44  K=4
+  verify 5: accepted 0/3 (K=4) + correction -> +1 tokens (146.6 ms)  cpos=202
+  [margins] 2.12 1.70 4.00 0.63 1.05 4.64  K=4
+  verify 6: accepted 1/3 (K=4) + correction -> +2 tokens (151.2 ms)  cpos=204
+
+[spec] generated 9 tokens over 6 verifies: mean tokens/verify = 1.50 (block=6, max 7)
+[spec] tokens: 411 117393 49036 14 9487 362 1527 271 1
+[spec] SPEC-DECODE: 98.2 ms/tok = 10.18 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 0.73x)
+[decode] PREFILL: 233 positions in 4049.1 ms = 57.5 tok/s (17.378 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p06_s000233.dspc  233 tok x (3 taps + 1 lm_in) x 4096 = 7.3 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=6 s=234)...
+  [margins] 3.39 1.07 2.78 0.23 1.12 0.65  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (116.4 ms)  cpos=235
+  [margins] 10.38 4.61 9.04 8.20 0.38 0.31  K=5
+  verify 2: accepted 4/4 (K=5) + correction -> +5 tokens (172.9 ms)  cpos=240
+  [margins] 8.87 2.84 0.59 1.34 2.88 1.44  K=3
+  verify 3: accepted 2/2 (K=3) + correction -> +3 tokens (129.4 ms)  cpos=243
+
+[spec] generated 10 tokens over 3 verifies: mean tokens/verify = 3.33 (block=6, max 7)
+[spec] tokens: 270 1257 7655 304 270 1957 7655 16 455 11830
+[spec] SPEC-DECODE: 37.8 ms/tok = 26.47 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 1.91x)
+[decode] PREFILL: 210 positions in 3648.7 ms = 57.6 tok/s (17.375 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p07_s000210.dspc  210 tok x (3 taps + 1 lm_in) x 4096 = 6.6 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=7 s=211)...
+  [margins] 8.84 8.16 2.99 8.40 7.06 1.58  K=7
+  verify 1: accepted 2/6 (K=7) + correction -> +3 tokens (198.8 ms)  cpos=213
+  [margins] 10.45 8.46 2.36 8.39 7.45 3.64  K=7
+  verify 2: accepted 2/6 (K=7) + correction -> +3 tokens (197.0 ms)  cpos=216
+  [margins] 9.07 7.82 0.49 4.89 7.57 0.69  K=3
+  verify 3: accepted 2/2 (K=3) + correction -> +3 tokens (130.5 ms)  cpos=219
+
+[spec] generated 9 tokens over 3 verifies: mean tokens/verify = 3.00 (block=6, max 7)
+[spec] tokens: 16 61561 416 16 61561 2133 16 61561 3617
+[spec] SPEC-DECODE: 54.6 ms/tok = 18.33 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 1.32x)
+[decode] PREFILL: 233 positions in 4035.3 ms = 57.7 tok/s (17.319 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p08_s000233.dspc  233 tok x (3 taps + 1 lm_in) x 4096 = 7.3 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=8 s=234)...
+  [margins] 4.14 1.73 2.98 6.78 1.84 1.57  K=7
+  verify 1: accepted 0/6 (K=7) + correction -> +1 tokens (202.8 ms)  cpos=234
+  [margins] 10.07 0.27 7.22 0.78 1.98 0.18  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (123.9 ms)  cpos=236
+  [margins] 8.59 13.94 2.66 9.01 0.88 0.20  K=5
+  verify 3: accepted 4/4 (K=5) + correction -> +5 tokens (160.6 ms)  cpos=241
+
+[spec] generated 8 tokens over 3 verifies: mean tokens/verify = 2.67 (block=6, max 7)
+[spec] tokens: 75687 304 270 4337 9132 1512 26 32787
+[spec] SPEC-DECODE: 40.6 ms/tok = 24.61 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 1.77x)
+[decode] PREFILL: 196 positions in 3392.3 ms = 57.8 tok/s (17.308 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p09_s000196.dspc  196 tok x (3 taps + 1 lm_in) x 4096 = 6.1 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=9 s=197)...
+  [margins] 10.73 12.77 11.16 11.93 11.95 5.99  K=7
+  verify 1: accepted 6/6 (K=7) + correction -> +7 tokens (195.4 ms)  cpos=203
+  [margins] 15.26 14.92 12.13 9.09 8.24 0.61  K=6
+  verify 2: accepted 5/5 (K=6) + correction -> +6 tokens (182.3 ms)  cpos=209
+
+[spec] generated 13 tokens over 2 verifies: mean tokens/verify = 6.50 (block=6, max 7)
+[spec] tokens: 10758 940 223 21 90 11 24106 223 27 438 223 1892 271
+[spec] SPEC-DECODE: 30.4 ms/tok = 32.92 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 2.37x)
+[decode] PREFILL: 266 positions in 4659.3 ms = 57.1 tok/s (17.516 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/trial_cap/shard_p10_s000266.dspc  266 tok x (3 taps + 1 lm_in) x 4096 = 8.3 MB (32.0 KB/tok)
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=10 s=267)...
+  [margins] 0.39 1.26 1.25 0.16 0.21 0.67  K=2
+  verify 1: accepted 0/1 (K=2) + correction -> +1 tokens (125.4 ms)  cpos=267
+  [margins] 7.42 5.34 2.59 1.30 0.82 0.47  K=4
+  verify 2: accepted 2/3 (K=4) + correction -> +3 tokens (156.2 ms)  cpos=270
+  [margins] 0.48 3.64 1.54 3.15 3.86 1.20  K=6
+  verify 3: accepted 0/5 (K=6) + correction -> +1 tokens (184.4 ms)  cpos=271
+  [margins] 5.75 2.43 1.78 2.09 1.02 0.51  K=5
+  verify 4: accepted 2/4 (K=5) + correction -> +3 tokens (165.9 ms)  cpos=274
+
+[spec] generated 8 tokens over 4 verifies: mean tokens/verify = 2.00 (block=6, max 7)
+[spec] tokens: 4630 1393 1 3749 4630 1393 3749 4630
+[spec] SPEC-DECODE: 72.4 ms/tok = 13.82 tok/s  (vs base M=1 72.1 ms/tok = 13.87 tok/s -> 1.00x)
+
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.87 tok/s
+[blksweep]    6      1   1.50   1.50      1 |            2.50 |   48.7 | 20.55 | 1.48x
+[blksweep]    6      1   1.50   1.50      2 |            2.00 |   56.2 | 17.80 | 1.28x
+[blksweep]    6      1   1.50   1.50      3 |            4.50 |   28.9 | 34.65 | 2.50x
+[blksweep]    6      1   1.50   1.50      4 |            7.00 |   29.7 | 33.69 | 2.43x
+[blksweep]    6      1   1.50   1.50      5 |            1.50 |   98.2 | 10.18 | 0.73x
+[blksweep]    6      1   1.50   1.50      6 |            3.33 |   37.8 | 26.47 | 1.91x
+[blksweep]    6      1   1.50   1.50      7 |            3.00 |   54.6 | 18.33 | 1.32x
+[blksweep]    6      1   1.50   1.50      8 |            2.67 |   40.6 | 24.61 | 1.77x
+[blksweep]    6      1   1.50   1.50      9 |            6.50 |   30.4 | 32.92 | 2.37x
+[blksweep]    6      1   1.50   1.50     10 |            2.00 |   72.4 | 13.82 | 1.00x
+[decode] mem 109.2/122.8 GiB
