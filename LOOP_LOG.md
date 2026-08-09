@@ -6779,6 +6779,40 @@ is uncensored.
 A verify reaches K=7 only if **all six** clear the gate: **31.1 %** predicted against ~32 % measured,
 which validates the model.
 
+> **CORRECTED, same day — the model above is wrong and the agreement that "validated" it was a
+> coincidence.** The gate is `hmarg[VK-1]` with `VK` starting at 2, so it reads **`hmarg[1..5]`**;
+> position 0's margin **never gates anything** (the code comment says so explicitly: "`hmarg[VK-2]`
+> gates a token already in the block, which is the wrong one"). Replicating the loop exactly matches
+> the engine's recorded K on **16 810/16 837 = 99.84 %** of verifies. The six-conjunct model above
+> matches **41.17 %** — while reproducing the aggregate K=7 share to within a point.
+>
+> **That is the trap: the aggregate agreed while the per-verify assignment was wrong 59 % of the
+> time.** An aggregate match is not model validation; comparing against the engine's own recorded
+> decision is. The tell was a marginal value of *exactly* zero for position 5, which is not a number
+> a real effect produces.
+>
+> Corrected numbers, from the validated model — baseline **24.76 tok/s at 33.0 % K=7**:
+>
+> | additive shift on gating positions 1-5 | K=7 share | tok/s |
+> |---|---|---|
+> | none | 33.0 % | 24.76 |
+> | +0.5 | 40.7 % | 25.93 |
+> | **+1.0** | 56.9 % | **27.85** |
+> | **+1.5** | 100 % | **31.18** |
+>
+> So **~+1.2 to +1.3 reaches 30**, against the +1.4 the wrong model gave — the headline survives, the
+> mechanism does not.
+>
+> Marginal value of lifting one gating position, everywhere: p1 **+1.07**, p2 +0.94, p3 +0.75,
+> p4 +0.50, p5 +0.36 tok/s. Cumulatively **+6.42**, far more than the +3.62 sum: the gate is a
+> conjunction, so fixing positions together is worth much more than fixing them separately.
+>
+> **This also settles a lever before it was built.** The DSpark loss weights positions
+> 24.3/20.6/17.4/14.7/12.5/10.6 %, and the measured marginal-value profile decays with the same
+> shape — so **reweighting the loss toward late positions is not indicated.** The one asymmetry
+> worth knowing: position 0 carries the largest loss weight and has *zero* K-gating value; its
+> entire contribution is through the acceptance chain.
+
 | shift applied to every position | share reaching K=7 |
 |---|---|
 | none | 31.1 % |
