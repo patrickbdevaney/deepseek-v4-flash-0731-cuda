@@ -1,0 +1,66 @@
+[parse] DSV4_PROMPTS_FILE /home/patrickd/s5-capture/s1/c0/gen.txt -> 468 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=858
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 110.8/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 199.9 ms = 25.0 tok/s (39.971 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (66.4 ms warmup)
+  step 1 pos 6 -> token 16  (66.5 ms)
+  step 2 pos 7 -> token 455  (75.0 ms)
+  step 3 pos 8 -> token 6102  (67.0 ms)
+  step 4 pos 9 -> token 294  (66.5 ms)
+  step 5 pos 10 -> token 16603  (67.3 ms)
+  step 6 pos 11 -> token 344  (74.6 ms)
+  step 7 pos 12 -> token 29168  (67.9 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 69.3 ms/tok = 14.44 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 118.0 ms (= 23.6 ms/tok if all accepted vs 69.3 M=1 -> 2.94x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6
+[spec] head built. mem 113.3/122.8 GiB
+[decode] PREFILL: 546 positions in 9864.0 ms = 55.4 tok/s (18.066 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/s1/c0/cap/shard_p01_s000546.dspc  546 tok x (3 taps + 1 lm_in) x 4096 = 17.1 MB (32.0 KB/tok)
+[probe] wrote 16 draft probes (block=6) to /home/patrickd/s5-capture/s1/c0/cap/drafts_p01_s000546.txt
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=1 s=547)...
+[arena] first draft: draft footprint 215.05 MB, global hwm 424.49 MB / cap 2182.00 MB (19.5%), draft path = ARENA
+  [margins] 15.53 16.67 11.76 14.81 11.17 4.81  K=7
+  verify 1: accepted 6/6 (K=7) + correction -> +7 tokens (210.4 ms)  cpos=553
+  [margins] 15.11 14.54 11.11 6.77 9.15 5.49  K=7
+  verify 2: accepted 6/6 (K=7) + correction -> +7 tokens (210.7 ms)  cpos=560
+
+[spec] generated 14 tokens over 2 verifies: mean tokens/verify = 7.00 (block=6, max 7)
+[spec] tokens: 270 4892 14 295 6302 14 294 270 22467 3317 33 403 318 685
+[spec] SPEC-DECODE: 30.1 ms/tok = 33.23 tok/s  (vs base M=1 69.3 ms/tok = 14.44 tok/s -> 2.30x)
+[decode] PREFILL: 560 positions in 10110.5 ms = 55.4 tok/s (18.054 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/s1/c0/cap/shard_p02_s000560.dspc  560 tok x (3 taps + 1 lm_in) x 4096 = 17.5 MB (32.0 KB/tok)
+[probe] wrote 16 draft probes (block=6) to /home/patrickd/s5-capture/s1/c0/cap/drafts_p02_s000560.txt
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=2 s=561)...
+  [margins] 11.05 12.17 11.03 11.51 13.72 9.83  K=7
+  verify 1: accepted 6/6 (K=7) + correction -> +7 tokens (199.9 ms)  cpos=567
+  [margins] 16.15 11.59 12.35 13.95 8.15 12.28  K=7
+  verify 2: accepted 6/6 (K=7) + correction -> +7 tokens (207.8 ms)  cpos=574
+
+[spec] generated 14 tokens over 2 verifies: mean tokens/verify = 7.00 (block=6, max 7)
+[spec] tokens: 43 1309 260 4521 11394 339 43 1309 260 4521 11394 339 43 1309
+[spec] SPEC-DECODE: 29.7 ms/tok = 33.68 tok/s  (vs base M=1 69.3 ms/tok = 14.44 tok/s -> 2.33x)
+[decode] PREFILL: 564 positions in 10185.9 ms = 55.4 tok/s (18.060 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/s1/c0/cap/shard_p03_s000564.dspc  564 tok x (3 taps + 1 lm_in) x 4096 = 17.6 MB (32.0 KB/tok)
+[probe] wrote 16 draft probes (block=6) to /home/patrickd/s5-capture/s1/c0/cap/drafts_p03_s000564.txt
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=3 s=565)...
+  [margins] 12.05 15.88 12.86 16.18 8.70 11.76  K=7
+  verify 1: accepted 6/6 (K=7) + correction -> +7 tokens (201.9 ms)  cpos=571
+  [margins] 15.94 16.21 18.41 11.85 10.35 11.92  K=7
+  verify 2: accepted 6/6 (K=7) + correction -> +7 tokens (211.0 ms)  cpos=578
+
+[spec] generated 14 tokens over 2 verifies: mean tokens/verify = 7.00 (block=6, max 7)
+[spec] tokens: 19 14 223 779 14161 455 3287 344 42080 779 14 565 19 14
+[spec] SPEC-DECODE: 30.1 ms/tok = 33.18 tok/s  (vs base M=1 69.3 ms/tok = 14.44 tok/s -> 2.30x)

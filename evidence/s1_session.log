@@ -1,0 +1,8 @@
+[s5:s1 2026-08-09T03:32:19-04:00] preflight: need ~29 GB (peak = one chunk of 500), have 120 GB free
+  round-trip: 500/500 lines start with their exact seed
+[s5:s1 2026-08-09T03:32:19-04:00] pass 1 OK (500 sequences)
+[s5:s1 2026-08-09T03:32:19-04:00] hold-out: 32 sequence(s) reserved, 468 for training
+[s5:s1 2026-08-09T03:32:19-04:00] training in 1 chunk(s) of up to 468 sequence(s); peak capture on disk is one chunk
+[s5:s1 2026-08-09T03:32:19-04:00] chunk 0: capturing 468 sequence(s)
+[run_model] 117 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s1_c0_cap.log
+[run_model] pid 2100527   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s1_c0_cap.log
