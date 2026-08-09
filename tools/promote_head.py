@@ -78,6 +78,40 @@ def incumbent():
     return best
 
 
+
+def archive(a):
+    """UNCONDITIONAL save. Runs BEFORE the promotion gate and regardless of its verdict.
+
+    Promotion is a judgement; archiving is preservation, and conflating them loses data. A head that
+    misses the bar still carries information -- it is a measured point on the acceptance-vs-corpus
+    curve, and session 3's size is chosen from exactly those points. Losing a failed head means
+    re-running its session to recover a number we already paid for.
+    """
+    dst = os.path.join(STORE, a.name)
+    os.makedirs(dst, exist_ok=True)
+    files = []
+    for fn in sorted(os.listdir(a.head)):
+        src = os.path.join(a.head, fn)
+        if os.path.isfile(src):
+            shutil.copy2(src, os.path.join(dst, fn))
+            files.append({"file": fn, "bytes": os.path.getsize(src), "sha256": sha256(src)})
+    ev = parse_eval(a.eval) if a.eval and os.path.exists(a.eval) else {}
+    if a.eval and os.path.exists(a.eval):
+        shutil.copy2(a.eval, os.path.join(dst, "eval.log"))
+    rev = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    card = {"name": a.name, "archived_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "engine_git_rev": rev, "promoted": False, "measurement": ev,
+            "train_metrics_file": a.metrics, "notes": a.notes or "", "files": files}
+    if a.metrics and os.path.exists(a.metrics):
+        shutil.copy2(a.metrics, os.path.join(dst, "train_metrics.json"))
+        try: card["train_metrics"] = json.load(open(a.metrics))
+        except Exception: pass
+    json.dump(card, open(os.path.join(dst, "head_card.json"), "w"), indent=2)
+    print(f"ARCHIVED {a.name} -> {dst} ({len(files)} files, sha256 recorded)")
+    if ev.get("suite_tok_s"):
+        print(f"  suite mean: tau {ev['suite_tau']}  {ev['suite_tok_s']} tok/s")
+    return 0
+
 def promote(a):
     ev = parse_eval(a.eval)
     inc = incumbent()
@@ -99,6 +133,13 @@ def promote(a):
         print("REFUSED to promote:")
         for f in fails:
             print(f"  - {f}")
+        # Record the refusal in the registry too. A candidate that was measured and rejected is a
+        # data point; leaving it out of the ledger makes the record look like only winners existed.
+        if os.path.exists(REGISTRY) and ev.get("suite_tok_s"):
+            rev = subprocess.run(["git","rev-parse","HEAD"],capture_output=True,text=True).stdout.strip()
+            with open(REGISTRY, "a") as f:
+                f.write(f"| `{a.name}` | {ev['suite_tau']} | {ev['suite_tok_s']} | "
+                        f"{ev['base_ar_tok_s']} | `{rev[:9]}` | not promoted: {fails[0][:60]} |\n")
         return 1
 
     dst = os.path.join(STORE, a.name)
@@ -160,9 +201,14 @@ if __name__ == "__main__":
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("promote"); p.add_argument("--head", required=True)
     p.add_argument("--eval", required=True); p.add_argument("--name", required=True)
-    p.add_argument("--notes", default="")
+    p.add_argument("--notes", default=""); p.add_argument("--metrics", default=None)
+    q = sub.add_parser("archive"); q.add_argument("--head", required=True)
+    q.add_argument("--eval", default=None); q.add_argument("--name", required=True)
+    q.add_argument("--notes", default=""); q.add_argument("--metrics", default=None)
     sub.add_parser("list")
     a = ap.parse_args()
+    if a.cmd == "archive":
+        sys.exit(archive(a))
     if a.cmd == "list":
         print(open(REGISTRY).read() if os.path.exists(REGISTRY) else "(no registry yet)")
         sys.exit(0)

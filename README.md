@@ -73,7 +73,8 @@ not 233. See `wiki/measurement-and-traps.md`.
 | `RESEARCH_LOG.md` | the search dedup ledger |
 | `S5_RECIPE.md` | the draft-head fine-tuning recipe |
 | `S5_PROGRESSION.md` | the training session cadence, with stopping rules fixed before the data |
-| `HEAD_REGISTRY.md` | every draft-head candidate and whether it was promoted |
+| `HEAD_REGISTRY.md` | every draft-head candidate and whether it was promoted — **rejects included** |
+| `protocol/suite_prompts.txt` | the frozen 8-prompt eval suite, as token ids |
 | `DECODE_FLYWHEEL.md` | the autonomous optimisation loop's operating manual |
 
 ## The model

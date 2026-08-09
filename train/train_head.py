@@ -22,7 +22,7 @@ LOSS (DSpark paper == NVIDIA NeMo AutoModel defaults):
 
   usage:  python3 train/train_head.py --capture <dir> --ckpt <ckpt> --out <headdir> [--steps N]
 """
-import argparse, json, os, sys, time
+import argparse, json, math, os, sys, time
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -150,6 +150,8 @@ def main():
     ap.add_argument("--bisect", default=None, help="engine intermediates.bin to diff against")
     ap.add_argument("--gate", action="store_true", help="replay engine probes, report agreement")
     ap.add_argument("--smoke", action="store_true", help="load + one forward + one backward, then stop")
+    ap.add_argument("--metrics-out", default=None, dest="metrics_out",
+                    help="write per-step loss history + diagnostics as JSON (archived with the head)")
     a = ap.parse_args()
 
     dev = "cuda"
@@ -269,6 +271,7 @@ def main():
     opt = torch.optim.AdamW([p for _, p in tp], lr=a.lr, betas=(0.9, 0.95), weight_decay=0.0)
 
     _dbg = {"agree":0,"hit":0,"n":0,"tgt_top1_p":0.0,"drf_top1_p":0.0,"m":0}
+    _hist = []   # per-step loss record, written out by --metrics-out
     gamma = float(margs.dspark_block_size)
     BS = margs.dspark_block_size
 
@@ -503,7 +506,22 @@ def main():
             outs.append((logits, conf))
         return outs
 
+    # LR SCHEDULE. --warmup existed as a flag and did nothing: every step ran at the flat --lr.
+    # Fine-tuning a *pretrained* head at a flat 5e-5 from step 0 is the standard way to lose the
+    # thing you are trying to keep, and a flag that silently has no effect is the same failure
+    # class as the persistent=False buffers (F105) -- no error, plausible output, wrong function.
+    _nsteps = a.steps if a.steps > 0 else len(rows)
+    _nwarm = max(1, int(a.warmup * _nsteps))
+    def _lr_at(s):
+        if s < _nwarm: return a.lr * (s + 1) / _nwarm
+        prog = (s - _nwarm) / max(1, _nsteps - _nwarm)
+        return a.lr * 0.5 * (1.0 + math.cos(math.pi * min(1.0, prog)))
+    print(f"[train] lr schedule: linear warmup {_nwarm} step(s) -> cosine over {_nsteps}, "
+          f"peak {a.lr:g}", flush=True)
+
     for step, r in enumerate(rows):
+        lr_now = _lr_at(step)
+        for g in opt.param_groups: g["lr"] = lr_now
         sh = load_shard(os.path.join(a.capture, r["file"]), as_float32=True)
         taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)
         ids = torch.from_numpy(sh["ids"].copy()).to(dev).long()
@@ -609,6 +627,9 @@ def main():
               f"loss={tot_loss/max(nb,1):.4f} ce={nparts['ce']:.4f} tv={nparts['tv']:.4f} "
               f"conf={nparts['conf']:.4f} "
               f"grad_norm={float(gn):.4f} tensors_with_grad={ngrad}/{len(tp)}", flush=True)
+        _hist.append({"step": step, "T": T, "positions": len(sel),
+                      "loss": tot_loss / max(nb, 1), "ce": nparts["ce"], "tv": nparts["tv"],
+                      "conf": nparts["conf"], "grad_norm": float(gn), "lr": lr_now})
         if ngrad == 0:
             sys.exit("[train] FAIL: no gradients reached the trainable tensors")
         if a.smoke:
@@ -620,14 +641,43 @@ def main():
         print(f"[diag] mean top-1 prob  target {_dbg['tgt_top1_p']/_dbg['m']:.3f}  "
               f"draft {_dbg['drf_top1_p']/_dbg['m']:.3f}   "
               f"(TV near 1 with a PEAKED draft => misalignment; with a FLAT draft => genuine)")
-    print("[train] STAGE0 OK (real forward + backward)"); return
+    # The save used to sit behind an unconditional `return` left over from stage 0, when the only
+    # question was whether a backward pass ran at all. Reaching a real session with it still there
+    # would have burned the capture and the training run and produced no weights -- and the log
+    # would have said "STAGE0 OK".
+    if a.smoke:
+        print("[train] smoke run: not saving"); return
 
     os.makedirs(a.out, exist_ok=True)
     from safetensors.torch import save_file
     save = {k: v.detach().to(torch.bfloat16).cpu() for k, v in params.items()}
     save_file(save, os.path.join(a.out, "mtp_trained.safetensors"))
     print(f"[train] saved {len(save)} trained tensors -> {a.out}/mtp_trained.safetensors", flush=True)
-    print("[train] STAGE0 OK")
+
+    if a.metrics_out:
+        first = _hist[0] if _hist else {}
+        last = _hist[-1] if _hist else {}
+        tail = _hist[-max(1, len(_hist) // 10):] if _hist else []
+        met = {
+            "capture": a.capture, "n_sequences": len(rows), "steps": len(_hist),
+            "block": a.block, "lr_peak": a.lr, "warmup_steps": _nwarm,
+            "pos_per_seq": a.pos_per_seq, "a_conf": a.a_conf,
+            "trainable_params": int(n_train), "n_tensors": len(save),
+            "loss_first": first.get("loss"), "loss_last": last.get("loss"),
+            "loss_tail_mean": (sum(h["loss"] for h in tail) / len(tail)) if tail else None,
+            "ce_last": last.get("ce"), "tv_last": last.get("tv"), "conf_last": last.get("conf"),
+            "diag_draft_eq_target_argmax_pct": (100.0 * _dbg["agree"] / _dbg["n"]) if _dbg["n"] else None,
+            "diag_draft_eq_ground_truth_pct": (100.0 * _dbg["hit"] / _dbg["n"]) if _dbg["n"] else None,
+            "diag_target_top1_p": (_dbg["tgt_top1_p"] / _dbg["m"]) if _dbg["m"] else None,
+            "diag_draft_top1_p": (_dbg["drf_top1_p"] / _dbg["m"]) if _dbg["m"] else None,
+            "history": _hist,
+        }
+        os.makedirs(os.path.dirname(os.path.abspath(a.metrics_out)) or ".", exist_ok=True)
+        json.dump(met, open(a.metrics_out, "w"), indent=1)
+        print(f"[train] metrics -> {a.metrics_out}  "
+              f"(loss {met['loss_first']:.4f} -> {met['loss_last']:.4f}, "
+              f"tail mean {met['loss_tail_mean']:.4f})", flush=True)
+    print("[train] TRAIN OK")
 
 
 if __name__ == "__main__":

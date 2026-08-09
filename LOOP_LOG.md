@@ -6430,3 +6430,110 @@ guessing is expensive here: a plausible fix that changes nothing looks like evid
 next hypothesis.
 
 **Session 1 is unblocked.**
+
+---
+
+## Finding 106 — the automation audit: three defects on the path between "training finished" and "a head the engine can load", all of which would have surfaced only *after* the 5-hour capture was paid for
+
+The request was to make passing sessions chain automatically, save every meaningfully-produced
+head, and record per-run metrics. Building that orchestrator meant reading the whole path end to
+end for the first time — and the path had never been *run* end to end, because every session so far
+stopped at "does a backward pass work". Three things were waiting in it.
+
+### (a) The trainer could not save. A `return` from stage 0 was still in front of the save block
+
+```python
+    print("[train] STAGE0 OK (real forward + backward)"); return
+
+    os.makedirs(a.out, exist_ok=True)          # <- unreachable
+    save_file(save, os.path.join(a.out, "mtp_trained.safetensors"))
+```
+
+Left over from stage 0, when the only question was whether autograd reached the trainable tensors.
+Session 1 would have run its full training pass, printed a falling loss curve, printed
+**`[train] STAGE0 OK`**, and exited 0 with **no weights on disk**. The orchestrator's next step
+would have failed on a missing file, hours after the capture that produced it.
+
+The tell was never going to be an error. It was going to be a success message.
+
+### (b) `--warmup` was a flag that did nothing
+
+`--warmup 0.05` was parsed and never read; there was no scheduler, and every step ran at a flat
+`--lr 5e-5`. Fine-tuning a *pretrained* head at a flat peak rate from step 0 is a standard way to
+damage the thing you are trying to preserve. Implemented as linear warmup into a cosine decay over
+the known step count (`len(rows)`, since one epoch = one pass over the capture).
+
+Same failure class as F105: no error, plausible output, wrong function.
+
+### (c) The re-quantiser wrote a scale the engine decodes to a different number
+
+`build_trained_head.py` has to write trained bf16 back as FP8 e4m3 + block scale, because that is
+what the engine reads. The scale dtype in the checkpoint is **`F8_E8M0`** — a bare exponent, so the
+only representable values are exact powers of two:
+
+```
+mtp.0.attn.wq_a.weight  F8_E4M3  [1024, 4096]
+mtp.0.attn.wq_a.scale   F8_E8M0  [8, 32]        <- 128x128 blocks, confirmed
+```
+
+The first version computed a continuous `scale = amax/448`, divided the weights by **that**, and
+then rounded the exponent when storing. The engine dequantises with `exp2(byte - 127)` — the
+*rounded* value. Divisor and stored scale therefore disagree by up to sqrt(2), per block, on every
+FP8 weight in the head.
+
+**No gate in this project would have caught it.** The head would load, run, produce tokens, pass
+the LOSSLESS gate (verification is against the *target*, which is unaffected), and simply draft
+worse. The result would have read as "fine-tuning didn't help" and could plausibly have ended S5.
+
+Fixed by snapping the scale to a power of two **first** and quantising against that exact value
+(`ceil`, not `round` — rounding down pushes `|t|/scale` past 448 and clamps real weights). Two
+checks now exist:
+
+| check | result |
+|---|---|
+| `--selftest`, synthetic, decoded with the engine's `exp2(byte-127)` over raw bits | worst rel err **0.0524** |
+| per-tensor round-trip on the real trained data, at build time, refuses above 0.10 | wired |
+
+0.0524 is e4m3's own half-step (~0.0625). That is the floor, and it is the checkpoint's native
+precision for these tensors — not additional quantisation.
+
+**Why the selftest decodes raw bytes rather than calling `.float()`:** the question is not whether
+torch round-trips its own dtype. It is whether the byte we wrote means, *to the reader*, the number
+we intended. The reader is the engine.
+
+### What the orchestrator now enforces
+
+`scripts/s5_session.sh` — one script, seven steps, each verifying its own output before the next:
+
+1. **pass 1** generate — plus a round-trip check that every generated line *starts with its exact
+   seed prompt*, which is what F101's truncated dump failed
+2. **pass 2** capture — `read_capture.py` must print `VALIDATE: PASS`
+3. **equivalence gate** — port-vs-engine agreement must be >= 90 % **before** training, not after
+4. **train** — with the schedule from (b) and the save from (a), plus `--metrics-out`
+5. **build** — the write-back from (c), with its round-trip gate
+6. **eval** — the frozen protocol, `LOSSLESS GATE` mandatory
+7. **archive always, promote on merit, chain only on GO**
+
+### The chain rule is not the promotion rule, and conflating them would have ended S5 on session 1
+
+`promote_head.py` asks "is this better than the incumbent, across the whole suite, by more than the
+3.5 % run-to-run spread". `tools/session_gate.py` asks the earlier question: **did training move the
+thing this session was built to test?** Session 1 is a deliberately narrow single-domain proof — it
+can legitimately say GO while failing a suite-wide promotion bar, and gating the chain on promotion
+would have discarded exactly the evidence the session was designed to produce.
+
+Thresholds are transcribed from `S5_PROGRESSION.md` §2, written before the data exists:
+`reasoning tau >= 2.6` GO, `2.1-2.6` GO but re-price, `< 2.1` STOP, suite mean drops STOP,
+LOSSLESS fails STOP.
+
+**The gate validates against itself.** Run on the *untrained* F96 baseline it reproduces every
+category exactly — long_context 5.54, agentic_format 5.15, multi_turn 4.46, code_edit 4.43,
+short_factual 3.27, reasoning 1.85, code_gen 1.84, explanation 1.75, mean 3.5362 — and returns
+**STOP**, which is the correct verdict for a head that has not been trained. That agreement also
+independently confirms the prompt-index -> category map, which was established by *decoding*
+`protocol/suite_prompts.txt` with the checkpoint's own tokenizer rather than by matching token
+counts (two prompts are 15 ids long; a count-match would have had to guess between `explanation`
+and `multi_turn`).
+
+The suite also moved out of a session-scoped temp directory into `protocol/suite_prompts.txt`. A
+frozen measurement protocol that lives somewhere it can be garbage-collected is not frozen.

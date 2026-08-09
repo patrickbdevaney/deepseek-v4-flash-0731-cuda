@@ -176,3 +176,59 @@ Even a NO-GO session produces:
   checkpoint directory is never written.
 - Every session's headline number is a **clean run with the LOSSLESS gate passing**, or it is not
   quoted.
+
+---
+
+## 7. Automation: how a session actually runs, and what it is guaranteed to leave behind
+
+One command runs a session end to end and chains to the next **only on GO**:
+
+```bash
+scripts/s5_session.sh s1 <prompts> 500 512  [next_name next_prompts next_n]
+```
+
+Seven steps, each verifying its own output before the next begins (`scripts/s5_session.sh`; the
+three defects this design was written in response to are Finding 106):
+
+| # | step | the check that must pass |
+|---|---|---|
+| 1 | pass 1 — regenerate with the target | every line starts with its **exact** seed prompt |
+| 2 | pass 2 — capture taps, `lm_in`, engine probes | `read_capture.py` prints `VALIDATE: PASS` |
+| 3 | equivalence gate, **before** training | port-vs-engine draft agreement >= 90 % |
+| 4 | train | 1 epoch, warmup->cosine, `--metrics-out` |
+| 5 | build a loadable head | fp8/E8M0 round-trip error <= 0.10 |
+| 6 | eval on the frozen protocol | `LOSSLESS GATE ... PASS`, no instruments in the binary |
+| 7 | archive, promote, decide | see below |
+
+`S5_GEN=<file>` lets a session adopt a pass-1 dump produced outside the script. Pass 1 is the
+expensive step; it is never redone blindly.
+
+### Archive always, promote on merit, chain only on GO
+
+These are **three different decisions** and the script keeps them separate:
+
+* **Archive** is unconditional and happens *before* any judgement. Every head that training
+  meaningfully produces is copied to `~/model-backups/heads/<name>/` with a sha256 per file, its
+  `eval.log`, its `train_metrics.json` and a `head_card.json`, and gets a row in
+  `HEAD_REGISTRY.md` — **including rejects**, so the record does not look like only winners
+  existed. A rejected head is still a measured point on the acceptance-vs-corpus curve that
+  session 3's size is chosen from; discarding it means re-paying its capture to learn the same
+  thing twice.
+* **Promote** (`tools/promote_head.py`) asks whether this head beats the incumbent across the whole
+  suite by more than the 3.5 % run-to-run spread. It may fail without ending anything.
+* **Chain** (`tools/session_gate.py`) applies §2's pre-registered rule. **This is deliberately not
+  the promotion rule**: session 1 is a narrow single-domain proof and can legitimately say GO while
+  failing a suite-wide bar. Gating the chain on promotion would discard exactly the evidence the
+  session was built to produce. Exit 0 GO, 2 GO_REPRICE, 3 STOP; the chain continues on 0 and 2.
+
+### Metrics captured per run
+
+`train_metrics.json` — per-step loss/ce/tv/conf/grad_norm/lr history, plus the diagnostics that
+distinguish a genuinely broad draft from a misaligned target: `draft-argmax == target-argmax`,
+`== ground truth`, and the mean top-1 probability of each.
+
+`session_verdict.json` — the verdict, the reasons, per-category tau and tok/s, base AR, and the
+absolute path of the eval log it was derived from.
+
+Both are archived with the head, so a number in `HEAD_REGISTRY.md` can always be traced back to the
+run and the loss curve that produced it.
