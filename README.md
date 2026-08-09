@@ -6,19 +6,42 @@ MXFP4) with embedded **DSpark** self-speculative decoding, MLA + DSA attention, 
 
 No Python on the hot path. Every kernel gated against a PyTorch oracle before it is trusted.
 
+> ## Why
+>
+> **Local frontier-adjacent intelligence, on hardware you own, fast enough to do long-horizon
+> agentic work unattended.** Neither half is rare alone — frontier capability is available through
+> an API, fast local decode is available on small models. **Both at once, on one box, with no
+> network in the loop, is not.**
+>
+> The four categories this engine runs *fastest* — long context 30.77, tool/JSON format 29.98,
+> multi-turn 28.97, code edit 26.81 tok/s — are precisely the shapes agentic coding produces.
+> Speculation pays where continuation is constrained, and agentic work is constrained by definition.
+>
+> **Every gain here is lossless**: emitted tokens identical to base AR, checked on every run. That
+> invariant is what keeps "fast" and "frontier" from becoming a trade.
+>
+> **[`NORTH_STAR.md`](NORTH_STAR.md)** — the full argument, including the one number in it that is
+> still inherited rather than measured.
+
 ---
 
 ## Where the numbers are today
 
 | | measured | ceiling | |
 |---|---|---|---|
-| **speculative decode** | **22.15 tok/s** | 23.2–25.9 | 96 % of the realistic ceiling |
-| **base AR decode** | **13.83 tok/s** | 14.33–15.98 | 97 % of the realistic ceiling |
-| acceptance | 2.89 / 5 | — | the remaining 1.4× lives here |
-| **prefill (PS=1022)** | **62.4 tok/s** | — | +30.3 % this session, still open |
+| **speculative decode**, 8-prompt suite mean | **22.66 tok/s** | — | best category **30.77** |
+| acceptance τ, suite mean | **3.54 / 7** | 7 at block 6 | the remaining headroom lives here |
+| **base AR decode** | **13.76 tok/s** | 14.33–15.98 | **97 %** of the realistic floor |
+| **prefill (PS=1022)** | **62.4 tok/s** | — | +30.3 % (F85/F86/F88) |
 
-All decode figures from `evidence/clean_post_f83.log`: clocks pinned, caches dropped, `GATE PASS`,
-`LOSSLESS GATE PASS`, no profiling instruments in the binary.
+From `evidence/baseline_blk6_suite.log`: clean run, clocks pinned, caches dropped, `GATE PASS`,
+`LOSSLESS GATE PASS`, block 6, no profiling instruments in the binary.
+
+**The measurement protocol is part of the number.** τ is quoted as an **8-prompt suite mean at
+NGEN0 ≥ 200** — past the drafter's 128-token sliding window. F92 measured τ at **1.39 over the first
+32 generated tokens**, rising to ~3.2 only after ~128, so a short-generation acceptance figure is a
+transient and is not comparable to anything, including this project's own earlier numbers. The
+canonical 6-token prompt is retained as a **control only**; it is the worst case.
 
 **The single most important correction this project has made to its own model of itself:** the
 long-quoted "19.0 tok/s AR roofline" is a *normalisation constant, not a target*. It assumes every
@@ -30,6 +53,7 @@ not 233. See `wiki/measurement-and-traps.md`.
 
 | page | what it holds |
 |---|---|
+| **[`NORTH_STAR.md`](NORTH_STAR.md)** | why this project exists, what it is for, and the open capability question |
 | **[`wiki/kernel-optimisations.md`](wiki/kernel-optimisations.md)** | every adopted AR/spec-decode optimisation: mechanism, measured gain, and the gate that proved it |
 | **[`wiki/negative-results.md`](wiki/negative-results.md)** | the levers that were built and **retired**, with the number that killed each. Larger than the win list, and more useful. |
 | **[`wiki/prefill-optimisation.md`](wiki/prefill-optimisation.md)** | B9 — why prefill ran decode-shaped kernels, and the four fixes (+30.3 %) |
@@ -45,9 +69,11 @@ not 233. See `wiki/measurement-and-traps.md`.
 | `MODEL_INVENTORY.md` | checkpoint identity + every architectural constant, each traceable to a file |
 | `HARDWARE.md` | the box, the memory constraint, `sm_110a` empirical facts |
 | `LEVERS.md` | the implementation dedup ledger — what is open, what is closed, and why |
-| `LOOP_LOG.md` | 88 findings, chronological. The primary source for everything in the wiki. |
+| `LOOP_LOG.md` | 104 findings, chronological. The primary source for everything in the wiki. |
 | `RESEARCH_LOG.md` | the search dedup ledger |
 | `S5_RECIPE.md` | the draft-head fine-tuning recipe |
+| `S5_PROGRESSION.md` | the training session cadence, with stopping rules fixed before the data |
+| `HEAD_REGISTRY.md` | every draft-head candidate and whether it was promoted |
 | `DECODE_FLYWHEEL.md` | the autonomous optimisation loop's operating manual |
 
 ## The model
