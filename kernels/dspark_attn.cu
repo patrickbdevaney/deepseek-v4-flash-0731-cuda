@@ -22,6 +22,18 @@ void dspark_main_kv(float* main_kv, const float* main_x, const MLAWeights& w, in
     dksync(stream); dkfree(xq); dkfree(xs);
 }
 
+// F103 localised the port's 18557x divergence to dspark_block_forward. These stage dumps take it
+// one level deeper: whichever sub-stage first disagrees is the bug. Written only when decode.cu
+// points g_dspark_dump at a file, and only for the block it wants -- otherwise a no-op branch.
+FILE* g_dspark_dump = nullptr;
+static void dsp_dump(const char* tag, const float* dev, size_t n){
+    if(!g_dspark_dump) return;
+    std::vector<float> hv(n);
+    if(cudaMemcpy(hv.data(),dev,n*4,cudaMemcpyDeviceToHost)!=cudaSuccess) return;
+    uint32_t L=(uint32_t)strlen(tag), N=(uint32_t)n;
+    fwrite(&L,4,1,g_dspark_dump); fwrite(tag,1,L,g_dspark_dump);
+    fwrite(&N,4,1,g_dspark_dump); fwrite(hv.data(),4,n,g_dspark_dump);
+}
 void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int t,
                          const MLAWeights& w, const float* cosB, const float* sinB,
                          int block, int win, float eps, cudaStream_t stream){
@@ -49,9 +61,20 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
     rmsnorm(bkv, bkv, w.kv_norm, block, HEAD_DIM, eps, true, stream);
     rope_interleaved(bkv + NOPE_DIM, cosB, sinB, block, ROPE_DIM, false, HEAD_DIM, 1, stream);
     act_quant_fp8sim(bkv, block, NOPE_DIM, 64, HEAD_DIM, stream);
+    if(g_dspark_dump){ cudaStreamSynchronize(stream);
+        // The SHAPE is the hypothesis: nwin = min(t+1, win) context keys plus `block` block-keys.
+        // If the port attends to a different COUNT the output magnitude changes by orders of
+        // magnitude, which is exactly the 30161x rel_err F104 measured -- a wrong-count bug
+        // rescales, a wrong-keys bug only rotates.
+        float shp[4] = {(float)t,(float)nwin,(float)wstart,(float)n};
+        uint32_t L=8,N=4; fwrite(&L,4,1,g_dspark_dump); fwrite("a_shape",1,7,g_dspark_dump);
+        fwrite("",1,1,g_dspark_dump); fwrite(&N,4,1,g_dspark_dump); fwrite(shp,4,4,g_dspark_dump);
+        dsp_dump("a_q", q, (size_t)block*Kd);
+        dsp_dump("a_bkv", bkv, (size_t)block*HEAD_DIM); }
     // kv = [main-KV window ⊕ block-KV]
     CU(cudaMemcpyAsync(kv_all, main_kv + (size_t)wstart*HEAD_DIM, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
     CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, bkv, (size_t)block*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+    if(g_dspark_dump){ cudaStreamSynchronize(stream); dsp_dump("a_kv_all", kv_all, (size_t)n*HEAD_DIM); }
     // dense idxs [block, n]: every block query attends to all n (window ⊕ block), per get_dspark_topk_idxs
     std::vector<int> hidx((size_t)block*n); for(int m=0;m<block;++m) for(int k=0;k<n;++k) hidx[(size_t)m*n+k]=k;
     int* idx; CU(dkmalloc(&idx,(size_t)block*n*4)); CU(cudaMemcpyAsync(idx,hidx.data(),(size_t)block*n*4,cudaMemcpyHostToDevice,stream));
@@ -68,18 +91,6 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
 // ---- DSparkBlock forward (block_forward with dspark_attn) ----
 #include "hc.h"
 #include "moe.h"
-// F103 localised the port's 18557x divergence to dspark_block_forward. These stage dumps take it
-// one level deeper: whichever sub-stage first disagrees is the bug. Written only when decode.cu
-// points g_dspark_dump at a file, and only for the block it wants -- otherwise a no-op branch.
-FILE* g_dspark_dump = nullptr;
-static void dsp_dump(const char* tag, const float* dev, size_t n){
-    if(!g_dspark_dump) return;
-    std::vector<float> hv(n);
-    if(cudaMemcpy(hv.data(),dev,n*4,cudaMemcpyDeviceToHost)!=cudaSuccess) return;
-    uint32_t L=(uint32_t)strlen(tag), N=(uint32_t)n;
-    fwrite(&L,4,1,g_dspark_dump); fwrite(tag,1,L,g_dspark_dump);
-    fwrite(&N,4,1,g_dspark_dump); fwrite(hv.data(),4,n,g_dspark_dump);
-}
 void dspark_block_forward(float* out, const float* x, const int* input_ids, const float* main_kv, int t,
                           const BlockWeights& w, const float* cosB, const float* sinB, int block, int win,
                           int iters, float eps, cudaStream_t stream){

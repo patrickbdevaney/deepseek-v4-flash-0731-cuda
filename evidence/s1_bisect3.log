@@ -1,0 +1,48 @@
+[parse] DSV4_PROMPTS_FILE /home/patrickd/s5-capture/one.txt -> 1 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=218
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 109.9/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 214.3 ms = 23.3 tok/s (42.853 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (69.5 ms warmup)
+  step 1 pos 6 -> token 16  (70.4 ms)
+  step 2 pos 7 -> token 455  (78.5 ms)
+  step 3 pos 8 -> token 6102  (70.4 ms)
+  step 4 pos 9 -> token 294  (71.3 ms)
+  step 5 pos 10 -> token 16603  (70.3 ms)
+  step 6 pos 11 -> token 344  (78.1 ms)
+  step 7 pos 12 -> token 29168  (71.5 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.9 ms/tok = 13.71 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 125.7 ms (= 25.1 ms/tok if all accepted vs 72.9 M=1 -> 2.90x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 6
+[spec] head built. mem 110.8/122.8 GiB
+[decode] PREFILL: 194 positions in 3365.3 ms = 57.6 tok/s (17.347 ms/tok)
+[capture] wrote /home/patrickd/s5-capture/bisect3/shard_p01_s000194.dspc  194 tok x (3 taps + 1 lm_in) x 4096 = 6.1 MB (32.0 KB/tok)
+[probe] intermediates dumped at t=8 -> /home/patrickd/s5-capture/bisect3/intermediates.bin
+[probe] wrote 2 draft probes (block=6) to /home/patrickd/s5-capture/bisect3/drafts_p01_s000194.txt
+[spec] decoding 8 tokens (block=6, draft passes=1, adaptK=1.50, prompt=1 s=195)...
+[arena] first draft: draft footprint 215.05 MB, global hwm 219.73 MB / cap 512.00 MB (42.9%), draft path = ARENA
+  [margins] 3.23 0.46 0.01 0.69 2.25 3.01  K=2
+  verify 1: accepted 0/1 (K=2) + correction -> +1 tokens (125.8 ms)  cpos=195
+  [margins] 2.84 4.00 1.45 1.33 0.34 0.45  K=3
+  verify 2: accepted 0/2 (K=3) + correction -> +1 tokens (139.9 ms)  cpos=196
+  [margins] 3.54 1.16 4.87 4.92 0.36 0.31  K=2
+  verify 3: accepted 1/1 (K=2) + correction -> +2 tokens (117.9 ms)  cpos=198
+  [margins] 8.32 7.12 8.07 10.56 6.89 0.18  K=6
+  verify 4: accepted 5/5 (K=6) + correction -> +6 tokens (183.1 ms)  cpos=204
+
+[spec] generated 10 tokens over 4 verifies: mean tokens/verify = 2.50 (block=6, max 7)
+[spec] tokens: 318 685 271 35 35480 4772 769 260 39317 294
+[spec] SPEC-DECODE: 49.0 ms/tok = 20.42 tok/s  (vs base M=1 72.9 ms/tok = 13.71 tok/s -> 1.49x)
+[decode] mem 110.8/122.8 GiB

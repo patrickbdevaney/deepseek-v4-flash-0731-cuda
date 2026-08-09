@@ -182,7 +182,8 @@ def main():
         os.environ.setdefault("RANK", "0"); os.environ.setdefault("WORLD_SIZE", "1")
         try: dist.init_process_group("gloo", rank=0, world_size=1)
         except Exception as e: print(f"[train] note: dist init skipped ({e})", flush=True)
-    from model import ModelArgs, DSparkBlock, ParallelEmbedding, ParallelHead  # type: ignore
+    from model import (ModelArgs, DSparkBlock, ParallelEmbedding, ParallelHead,  # type: ignore
+                       get_dspark_topk_idxs)
     _cfg = json.load(open(os.path.join(HERE, "_model", "dspark_config.json")))
     # Construct in BF16. The checkpoint config says dtype=fp8 / expert_dtype=fp4, which makes
     # model.Linear allocate PACKED quantised buffers -- experts come out [2048,2048] (two fp4 per
@@ -215,6 +216,25 @@ def main():
         r = blk.load_state_dict(sub, strict=False)
         missing_all += [f"mtp.{i}.{m}" for m in r.missing_keys]
         unexpected_all += [f"mtp.{i}.{u}" for u in r.unexpected_keys]
+    # RE-MATERIALISE NON-PERSISTENT BUFFERS. `freqs_cis` is registered with persistent=False, so it
+    # is excluded from state_dict BY DESIGN -- load_state_dict never fills it -- while to_empty()
+    # has already replaced it with uninitialised memory. The port was therefore doing every rotary
+    # embedding against GARBAGE, which is why q and the block-KV both diverged from an input that
+    # was exact, and why main_x and hc_pre (the only stages with no rope) were fine.
+    #
+    # to_empty() silently invalidates every non-persistent buffer. load_state_dict cannot warn about
+    # it, because from its point of view nothing is missing.
+    from model import precompute_freqs_cis  # type: ignore
+    _osl = _cfg.get("original_seq_len", 65536)
+    nbuf = 0
+    for blk in blocks:
+        at = blk.attn
+        fc = precompute_freqs_cis(at.rope_head_dim, margs.max_seq_len, _osl,
+                                  margs.rope_theta, margs.rope_factor,
+                                  margs.beta_fast, margs.beta_slow).to(dev)
+        at.freqs_cis = fc; nbuf += 1
+    print(f"[train] re-materialised freqs_cis on {nbuf} attention module(s) "
+          f"(persistent=False buffers are NOT in state_dict and to_empty() zapped them)", flush=True)
     print(f"[train] load_state_dict: {len(missing_all)} missing, {len(unexpected_all)} unexpected", flush=True)
     for m in missing_all[:8]: print(f"    missing:    {m}", flush=True)
     for u in unexpected_all[:8]: print(f"    unexpected: {u}", flush=True)
@@ -323,7 +343,20 @@ def main():
             print(f"  {tag:<16} cosine={cos:+.6f} rel_err={rel:.4f}  {flag}")
 
         with torch.no_grad():
-            h0, mx0 = blocks[0].forward_embed(main_hidden, ids[:1].clone())
+            # PREFILL ONLY UP TO THE PROBE POSITION. The kv_cache is a RING indexed by
+            # absolute_pos % win: a full-length prefill wraps it, so after T=194 with win=128 slot 0
+            # holds absolute position 128, not 0. get_dspark_topk_idxs(start_pos=8) then returns raw
+            # slots arange(9) = 0..8, which contain absolute 128..136 -- the WRONG KEYS, while the
+            # engine reads main_kv[wstart..t] = absolute 0..8.
+            #
+            # The reference is not wrong: at inference start_pos >= win, so it reads the WHOLE ring
+            # and the rotation is irrelevant (attention is permutation-invariant over keys once RoPE
+            # has baked position in). It was MY harness driving it at start_pos=8 against a
+            # full-length prefill -- a state serving never produces. Prefilling to exactly t+1 makes
+            # seqlen <= win take the non-wrapping branch, so slot i == absolute i and the port reads
+            # what the engine reads.
+            ctx = main_hidden[:, :t_probe + 1]
+            h0, mx0 = blocks[0].forward_embed(ctx, ids[:1].clone())
             hh = h0
             for blk in blocks:
                 hh = blk(hh, 0, ids[:1].clone(), mx0)
@@ -348,6 +381,23 @@ def main():
             cmp("b_hcpre_attn_comb", comb_g)
             x1n = b0.attn_norm(x1)
             cmp("b_rmsnorm_attn", x1n)
+            # ---- replicate DSparkAttention's q and assembled kv, and diff them ----
+            at = b0.attn
+            _rd = at.rope_head_dim; _win = at.window_size
+            _seqlen = mx.size(1)
+            _fc = at.freqs_cis[int(t_probe) + _seqlen: int(t_probe) + _seqlen + BS]
+            _q = at.q_norm(at.wq_a(x1n))
+            _q = at.wq_b(_q).unflatten(-1, (at.n_local_heads, at.head_dim))
+            _q = _q * torch.rsqrt(_q.square().mean(-1, keepdim=True) + at.eps)
+            from model import rope_tail as _rt
+            _q = _rt(_q, _rd, _fc)
+            cmp("a_q", _q)
+            _bkv = at.kv_norm(at.wkv(x1n)); _bkv = _rt(_bkv, _rd, _fc)
+            cmp("a_bkv", _bkv)
+            _ti = get_dspark_topk_idxs(_win, 1, BS, int(t_probe))
+            _kvfull = torch.cat([at.kv_cache[:1], _bkv], dim=1)
+            _sel = _kvfull[0][_ti[0, 0].long()]          # the 15 keys actually attended
+            cmp("a_kv_all", _sel)
             # continue exactly as Block.forward does, comparing each remaining stage
             ao = b0.attn(x1n, int(t_probe), mx)
             cmp("b_attn_out", ao)
@@ -394,13 +444,15 @@ def main():
             taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)
             ids  = torch.from_numpy(sh["ids"].copy()).to(dev).long()
             T = taps.size(0); main_hidden = taps.reshape(1, T, -1)
-            with torch.no_grad():
-                h0, mx0 = blocks[0].forward_embed(main_hidden, ids[:1].clone())
-                hh = h0
-                for blk in blocks:
-                    hh = blk(hh, 0, ids[:1].clone(), mx0)
             for line in open(gpath):
                 v = line.split(); t = int(v[0]); eng = [int(x) for x in v[2:2 + BS]]
+                # Re-prefill to exactly t+1 per probe: the kv_cache is a ring and a full-length
+                # prefill wraps it, so slot i != absolute i. See the --bisect note.
+                with torch.no_grad():
+                    h0, mx0 = blocks[0].forward_embed(main_hidden[:, :t + 1], ids[:1].clone())
+                    hh = h0
+                    for blk in blocks:
+                        hh = blk(hh, 0, ids[:1].clone(), mx0)
                 for _b in blocks:
                     for _n, _bu in _b.named_buffers(recurse=True):
                         if _bu is not None and _bu.is_floating_point():

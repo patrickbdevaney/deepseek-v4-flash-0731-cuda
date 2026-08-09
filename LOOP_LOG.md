@@ -6364,3 +6364,69 @@ Two rounds of bisect, four runs total, and the search went: whole pipeline -> on
 sub-stage, with a correct component cleared along the way. The next round dumps inside
 `dspark_attn_forward` (q, kv, the topk index, pre-softmax scores) and the same procedure will
 separate "my sparse_attn is wrong" from "the port's attention sees the wrong context".
+
+## Finding 105 — THE PORT IS FIXED. `freqs_cis` is a `persistent=False` buffer that `to_empty()` zapped: the port was doing every rotary embedding against **uninitialised memory**. 0/288 -> **265/288 (92.0 %)**
+
+### The bug
+
+```python
+self.register_buffer("freqs_cis", freqs_cis, persistent=False)
+```
+
+`persistent=False` excludes a buffer from `state_dict` **by design**. The training loader calls
+`to_empty(device=dev)` to materialise the meta-device modules, which replaces every buffer with
+**uninitialised memory**, and then `load_state_dict` fills only what the checkpoint contains —
+which, correctly, does not contain `freqs_cis` (it is computed, not stored; the checkpoint has no
+`freqs*` tensor at all).
+
+**So `load_state_dict` reported `0 missing, 0 unexpected` — truthfully — while the rotary tables were
+garbage.** No error, no warning, no missing key. The port did every RoPE against noise.
+
+### Why the bisect found it and five hypotheses did not
+
+The signature was there once the sub-stages were compared:
+
+```
+b_rmsnorm_attn   cosine=+0.999998  OK     <- input to attention is EXACT
+a_q              cosine=+0.400545  DIVERGED
+a_bkv            cosine=+0.379183  DIVERGED
+```
+
+**Both `q` and the block-KV diverge from an exact input, and their only shared step is
+`rope_tail(..., freqs_cis)`.** `main_x` and the whole `hc_pre` chain were fine precisely because
+neither applies rope. That is a two-line deduction from the data, and it is not one I would have
+reached by inspection — I had already cleared RoPE as a candidate in F102 on the grounds that an
+indexing error preserves magnitude, and this was not an indexing error.
+
+### Result
+
+| stage | before | after |
+|---|---|---|
+| `a_q` | 0.400545 | **0.999574** |
+| `a_bkv` | 0.379183 | **0.999782** |
+| `a_kv_all` | 0.433926 | **0.999429** |
+| `b_attn_out` | 0.193596 (rel_err 29435) | **0.998897** (rel_err 0.047) |
+| `after_block2` | 0.046774 | **0.997544** |
+
+```
+[gate] PORT vs ENGINE draft agreement: 265/288 = 92.0%  (need >= 90%)
+```
+
+**PASSES.** The residual ~8 % is bf16 rounding compounding through three blocks plus greedy-argmax
+ties — the per-stage `rel_err ~0.05` is exactly bf16, and no stage reads `**DIVERGED**`.
+
+### The transferable lesson
+
+**`to_empty()` silently invalidates every non-persistent buffer, and `load_state_dict` cannot warn
+about it** — from its point of view nothing is missing. Any meta-device materialisation must
+re-run whatever computed the non-persistent buffers. This is a general PyTorch hazard, not
+something specific to this model.
+
+It also belongs to the pattern this session has hit repeatedly: **the failure was silent and
+plausible.** Six hypotheses (STE, seed clone, `retain_graph`, block width, Sinkhorn, ring-wrap) were
+wrong; three rounds of bisect and four dumps found it. Two of those six — block width and ring-wrap —
+were **real bugs that were not this bug**, and fixing them changed nothing, which is exactly why
+guessing is expensive here: a plausible fix that changes nothing looks like evidence against the
+next hypothesis.
+
+**Session 1 is unblocked.**
