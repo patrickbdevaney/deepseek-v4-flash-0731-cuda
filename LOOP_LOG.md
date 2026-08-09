@@ -6211,3 +6211,54 @@ top-1 margin, which `hmarg[]` already computes) to the capture record, then requ
 **Cost of finding this here: about twenty minutes. Cost of finding it after session 1: the session,
 plus a trained head that looked plausible and was aligned to nothing.** The 10-sample trial paid for
 itself, and so did adding a diagnostic instead of trusting a suspicious number.
+
+## Finding 102 — the equivalence gate is built and the port scores **0/288**. It is fundamentally wrong, not marginally, and guessing has been the wrong method
+
+### The oracle exists now
+
+`DSV4_CAPTURE` also writes `drafts_pNN_sNNNNNN.txt`: for 16 positions spread across the captured
+range, the ENGINE's own `t`, seed token, `BLK` draft ids and `BLK` margins, produced by re-running
+the identical draft chain (`dspark_main_kv` -> `k_embed` -> `k_hc_expand` -> 3x
+`dspark_block_forward` -> `dspark_forward_head`) against the KV the prefill already built.
+
+**It had to be a probe, not a log of the decode loop.** The capture covers prefill positions
+`0..PSp-1` while spec decode visits positions AFTER `PSp`; logging the loop yields drafts at
+positions we hold no taps for, and the two sets never intersect. Getting `anchor` right mattered
+too — the spec loop uses `anchor = cpos-1, ctx = cpos`, so a probe at `pctx = t+1` needs
+`panchor = t`. A gate calibrated against wrong drafts is worse than no gate.
+
+**Sanity check on the oracle itself:** the engine's drafts match the actual next tokens
+**48-59 %** of the time on self-generated text. That is the number the port has to reproduce.
+
+### The verdict
+
+```
+[gate] PORT vs ENGINE draft agreement: 0/288 = 0.0%  (need >= 90% before any session runs)
+```
+
+**Zero.** Not the 1.5 % of F101 — that run compared a 5-wide port against a 6-wide engine, which was
+itself a real defect (`inference/config.json` says `dspark_block_size: 5`, the width the head was
+TRAINED at, while the engine's serving default has been 6 since F94/F96; the port now takes
+`--block`, defaulting to 6). Fixing that did not help, which is itself information: **the block
+width was not the cause.**
+
+0/288 against a 129,280-token vocabulary is not an off-by-one. An indexing error would still agree
+on the easy tokens. The port's draft path and the engine's share essentially nothing.
+
+### What I am NOT going to do
+
+Guess again. Four guesses this session were wrong — the STE, the seed clone, `retain_graph`, and now
+the block width — and each cost a run. The candidates left (RoPE offset, `start_pos`/`anchor`
+semantics, phase-A cache contents, `main_x` slicing) are indistinguishable from the outside.
+
+**The next step is intermediate-tensor comparison**, and it needs the engine to dump `main_x`, each
+block's output and the pre-bias logits at one probe position. Then the first tensor that diverges
+names the bug in one run instead of four. That is bounded instrumentation, and it is the same move
+that turned F101 from a mystery into a measurement.
+
+### What this cost and what it bought
+
+**Cost: no capture time at all.** The gate fired before session 1's 4.7 hours, which is exactly what
+it was placed there to do. **Bought:** a permanent, cheap oracle that any future port change is
+scored against automatically, plus the knowledge that the engine's own draft accuracy on
+self-generated text is 48-59 % — a number nothing else in this project had.

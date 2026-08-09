@@ -146,6 +146,8 @@ def main():
                     help="confidence-BCE weight; 0 until free-running labels exist (see comment)")
     ap.add_argument("--pos-per-seq", type=int, default=8, help="training positions sampled per sequence")
     ap.add_argument("--strict", action="store_true", help="fail on any state_dict mismatch")
+    ap.add_argument("--block", type=int, default=6, help="draft block; MUST match the engine (default 6)")
+    ap.add_argument("--gate", action="store_true", help="replay engine probes, report agreement")
     ap.add_argument("--smoke", action="store_true", help="load + one forward + one backward, then stop")
     a = ap.parse_args()
 
@@ -187,6 +189,13 @@ def main():
     # built at logical shape; this is also exactly what makes model.linear() take its F.linear
     # branch and keeps train/kernel.py's fp4_gemm/fp8_gemm unreachable (they raise if reached).
     _cfg["dtype"] = "bf16"; _cfg["expert_dtype"] = None
+    # BLOCK SIZE MUST MATCH THE ENGINE, and it does not by default. inference/config.json says
+    # dspark_block_size: 5 -- the width the head was TRAINED at -- while the engine's serving
+    # default is 6 since F94/F96. A 5-wide port against a 6-wide engine drafts a different number
+    # of noise tokens through a different attention length: not a subtle numerics gap, a different
+    # computation. This is the same trained-width vs serving-width distinction that produced F93's
+    # defect, showing up a third time.
+    _cfg["dspark_block_size"] = a.block
     margs = ModelArgs(**_cfg)
     print(f"[train] ModelArgs: n_mtp={margs.n_mtp_layers} block={margs.dspark_block_size} "
           f"taps={margs.dspark_target_layer_ids} markov_rank={margs.dspark_markov_rank}", flush=True)
@@ -270,6 +279,60 @@ def main():
             embeds.append(emb)
         conf = blk.confidence_head(x, torch.stack(embeds, dim=1))
         return torch.stack(out_logits, dim=1), conf
+
+
+    # ================= EQUIVALENCE GATE (--gate) =================
+    # F101 halted session 1 because the port agreed with the engine on 1.5% of draft positions.
+    # This replays the ENGINE's own probe positions and reports agreement, so the port can be
+    # bisected against per-position ground truth instead of guessed at.
+    #
+    # It must use the engine's GREEDY AUTOREGRESSIVE head, not the teacher-forced one: the engine
+    # feeds its OWN proposal at position i into the markov head for position i+1 (F27, device-side
+    # greedy AR over the block). Teacher forcing is correct for TRAINING and wrong for this
+    # comparison -- using it here would measure a different function than the server runs.
+    def forward_head_greedy(blk, x, seed):
+        x = blk.hc_head(x, blk.hc_head_fn, blk.hc_head_scale, blk.hc_head_base)
+        logits = blk.head(blk.norm(x), full_logits=True)          # (1, BS, V)
+        out = [int(seed.item())]
+        for i in range(blk.block_size):
+            bias, _ = blk.markov_head(torch.tensor([out[i]], device=x.device))
+            out.append(int((logits[:, i] + bias).argmax(dim=-1).item()))
+        return out[1:]
+
+    if a.gate:
+        import glob as _glob
+        tot = agree = 0
+        for prow in rows:
+            gpath = os.path.join(a.capture, prow["file"].replace("shard_", "drafts_").replace(".dspc", ".txt"))
+            if not os.path.exists(gpath):
+                continue
+            sh = load_shard(os.path.join(a.capture, prow["file"]), as_float32=True)
+            taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)
+            ids  = torch.from_numpy(sh["ids"].copy()).to(dev).long()
+            T = taps.size(0); main_hidden = taps.reshape(1, T, -1)
+            with torch.no_grad():
+                h0, mx0 = blocks[0].forward_embed(main_hidden, ids[:1].clone())
+                hh = h0
+                for blk in blocks:
+                    hh = blk(hh, 0, ids[:1].clone(), mx0)
+            for line in open(gpath):
+                v = line.split(); t = int(v[0]); eng = [int(x) for x in v[2:2 + BS]]
+                for _b in blocks:
+                    for _n, _bu in _b.named_buffers(recurse=True):
+                        if _bu is not None and _bu.is_floating_point():
+                            _bu.detach_()
+                with torch.no_grad():
+                    seed = ids[t:t + 1].clone()
+                    hb, mx = blocks[0].forward_embed(main_hidden[:, t:t + 1], seed)
+                    for blk in blocks:
+                        hb = blk(hb, int(t), seed, mx)
+                    port = forward_head_greedy(blocks[-1], hb, seed)
+                for k in range(BS):
+                    tot += 1; agree += int(port[k] == eng[k])
+            print(f"[gate] {os.path.basename(gpath)}: running agreement {100*agree/max(tot,1):.1f}%", flush=True)
+        print(f"[gate] PORT vs ENGINE draft agreement: {agree}/{tot} = {100*agree/max(tot,1):.1f}%  "
+              f"(need >= 90% before any session runs)")
+        return
 
     # ---- TRAINING-MODE FORWARD ----------------------------------------------------------------
     # The reference is two-phase and the probe found it the hard way: at start_pos == 0 the block

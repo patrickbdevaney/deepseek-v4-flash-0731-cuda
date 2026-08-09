@@ -975,6 +975,56 @@ int main(int argc, char** argv){
                    path, PSp, ntap, d, bytes/1048576.0, bytes/1024.0/PSp); fflush(stdout);
         }
         dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PSp, d, EPS); CU(cudaDeviceSynchronize());
+        // ---------------- S5 DRAFT PROBE (DSV4_CAPTURE) ----------------
+        // THE EQUIVALENCE ORACLE. F101: the PyTorch port agreed with the engine on 1.5% of draft
+        // positions where the engine itself gets ~30%, so training on it would have aligned the
+        // head to a function the server does not run. The gate that catches this needs the ENGINE's
+        // own proposals at the SAME positions the port is fed.
+        //
+        // It has to be a probe, not a log of the decode loop: the capture covers prefill positions
+        // 0..PSp-1, while spec decode visits positions AFTER PSp. Logging the decode would produce
+        // drafts at positions we hold no taps for -- the two would never line up.
+        //
+        // So: reuse the already-built KV (filled to PSp by the prefill above) and run the SAME
+        // draft chain the spec loop runs, with ctx = t+1 and cur = ids[t], for a spread of probe
+        // positions inside the captured range. This is the engine's answer to exactly the question
+        // the port is asked.
+        if(getenv("DSV4_CAPTURE")){
+            const int NPROBE = getenv("DSV4_NPROBE") ? atoi(getenv("DSV4_NPROBE")) : 16;
+            char ppath[1024]; snprintf(ppath,sizeof ppath,"%s/drafts_p%02d_s%06d.txt",
+                                       getenv("DSV4_CAPTURE"), promptSweep[bsi], PSp);
+            FILE* pf2 = fopen(ppath,"w");
+            std::vector<int> pbid(BLK,DSPARK_NOISE_TID), poo(BLK+1); std::vector<float> pmarg(BLK,0.f);
+            const std::vector<int>& pids2 = prompts[promptSweep[bsi]];
+            int nprobed = 0;
+            for(int pi=0; pi<NPROBE; ++pi){
+                int t = 8 + (int)((long)pi*(PSp-10)/ (NPROBE>1?NPROBE-1:1));   // spread, skip the warm-up
+                if(t<1 || t>=PSp) continue;
+                int pctx = t+1, panchor = t, pcur = pids2[t];   // spec loop: anchor=cpos-1, ctx=cpos
+                arena_reset();
+                for(int st=0;st<NSTAGE;++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, pctx, EPS);
+                pbid.assign(BLK,DSPARK_NOISE_TID); pbid[0]=pcur;
+                CU(cudaMemcpy(dbid,pbid.data(),BLK*4,cudaMemcpyHostToDevice));
+                k_embed<<<((size_t)BLK*d+255)/256,256>>>(xemb,emb,dbid,BLK,d);
+                k_hc_expand<<<((size_t)BLK*hc*d+255)/256,256>>>(xa,xemb,BLK,hc,d); CU(cudaDeviceSynchronize());
+                float *pc=xa,*pn=xb;
+                for(int st=0;st<NSTAGE;++st){ dspark_block_forward(pn,pc,dbid,mkv[st],panchor,mb[st],
+                        blk_cos+(size_t)pctx*hf, blk_sin+(size_t)pctx*hf, BLK,WINDOW,HC_SINKHORN_ITERS,EPS);
+                    std::swap(pc,pn); }
+                CU(cudaMemcpy(dfid,&pcur,4,cudaMemcpyHostToDevice));
+                dspark_forward_head(dout,pc,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,
+                                    VOCAB,DSPARK_MARKOV_RANK,EPS,dmarg); CU(cudaDeviceSynchronize());
+                CU(cudaMemcpy(poo.data(),dout,(BLK+1)*4,cudaMemcpyDeviceToHost));
+                CU(cudaMemcpy(pmarg.data(),dmarg,BLK*4,cudaMemcpyDeviceToHost));
+                if(pf2){ fprintf(pf2,"%d %d", t, pcur);
+                         for(int k=0;k<BLK;++k) fprintf(pf2," %d", poo[k+1]);
+                         for(int k=0;k<BLK;++k) fprintf(pf2," %.4f", pmarg[k]);
+                         fprintf(pf2,"\n"); }
+                ++nprobed;
+            }
+            if(pf2) fclose(pf2);
+            printf("[probe] wrote %d draft probes (block=%d) to %s\n", nprobed, BLK, ppath); fflush(stdout);
+        }
         // N1 BISECTION (DSV4_HASH=1). Finding 60 says the FIRST verify of every sweep point produces
         // a different margin vector on byte-identical input. Unit gates have since cleared the two
         // obvious suspects — tests/gate_scratch_init shows the prefill attention chain is
