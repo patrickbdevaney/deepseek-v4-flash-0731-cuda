@@ -160,6 +160,32 @@ LOG "building loadable head (re-quantising trained tensors to their ORIGINAL for
     --trained "/cap/$NAME/trained/mtp_trained.safetensors" --out "/cap/$NAME/head" 2>&1 | tail -3
 [ -s "$WORK/head/model.safetensors.index.json" ] || DIE "head build failed"
 
+# ---------------------------------------------------------------- re-fit adaptK (F111)
+# REQUIRED, not optional. The gate's job is to skip verify work that would be rejected, so the
+# optimal threshold is a function of drafter reliability -- and this session just changed drafter
+# reliability. Evaluating the trained head at a threshold fitted to the OLD drafter charges it for
+# a setting it did not choose, and F111's sweep says the optimum moves DOWN as the head improves.
+#
+# Fitted on the hold-out, never on the eval suite: fitting a hyperparameter on the set you then
+# report is the oldest way to manufacture a win.
+LOG "re-fitting adaptK on the trained head (F111: the optimum moves with drafter quality)"
+BEST=1.5; BESTR=0
+for THR in 0.0 0.5 1.0 1.5 2.0; do
+    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
+    DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
+        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:$THR:{i}' for i in range(1,9)))")" \
+        scripts/run_model.sh "$ROOT/evidence/${NAME}_adaptk_${THR}.log" ./build/decode \
+        "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 220
+    while pgrep -x decode >/dev/null; do sleep 30; done
+    R=$(python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_adaptk_${THR}.log" \
+          2>/dev/null | grep -oE 'median [0-9.]+' | head -1 | grep -oE '[0-9.]+' || echo 0)
+    LOG "  adaptK $THR -> hold-out median tau $R"
+    python3 -c "import sys; sys.exit(0 if float('$R') > float('$BESTR') else 1)" \
+        && { BEST=$THR; BESTR=$R; }
+done
+LOG "adaptK re-fit: $BEST (hold-out median tau $BESTR); shipped default was 1.5"
+echo "{\"adaptk\": $BEST, \"holdout_tau\": $BESTR}" > "$WORK/adaptk.json"
+
 # ---------------------------------------------------------------- eval on the FROZEN protocol
 LOG "eval: 8-prompt suite, NGEN0=200, block 6, clean"
 SUITE=$(cat "$ROOT/protocol/suite_prompts.txt")   # frozen in-repo; a temp-dir protocol is not a protocol
@@ -170,6 +196,24 @@ DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="6:1:1.5:0,6:1:1.5:1,6:1:1.5:2,6:1:1.5:3,6:1
 while pgrep -x decode >/dev/null; do sleep 60; done
 grep -q "LOSSLESS GATE: first 8 tokens match base AR -> PASS" "$ROOT/evidence/${NAME}_eval.log" \
     || DIE "LOSSLESS gate failed -- the fine-tuned head changes the emitted sequence"
+
+# THE PROTOCOL EVAL ABOVE STAYS AT adaptK 1.50, always. It is the number that goes in the registry,
+# because comparability with the F96 baseline is the whole point of freezing a protocol and a
+# re-fitted threshold would silently change what "suite mean" means. If the re-fit found something
+# better, it is measured HERE, separately, and shipping it would require re-baselining the
+# incumbent at the same threshold -- which is a decision, not a side effect.
+if [ "$BEST" != "1.5" ]; then
+    LOG "second eval at the re-fitted adaptK $BEST (reported separately; NOT the registry number)"
+    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
+    DSV4_PROMPTS="$SUITE" \
+        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:$BEST:{i}' for i in range(0,9)))")" \
+        scripts/run_model.sh "$ROOT/evidence/${NAME}_eval_adaptk${BEST}.log" ./build/decode \
+        "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 200
+    while pgrep -x decode >/dev/null; do sleep 30; done
+    python3 tools/session_gate.py --eval "$ROOT/evidence/${NAME}_eval_adaptk${BEST}.log" \
+        --json-out "$WORK/session_verdict_adaptk${BEST}.json" || true
+    LOG "NOTE: promoting at adaptK $BEST requires re-measuring the incumbent at $BEST first."
+fi
 
 # ---------------------------------------------------------------- secondary gate (F108)
 # The pre-registered gate reads tau off ONE suite prompt, which F108 measured to be below the
