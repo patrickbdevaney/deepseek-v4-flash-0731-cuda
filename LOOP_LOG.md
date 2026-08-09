@@ -6913,3 +6913,76 @@ calibration is measured and its position-independence is checked above, but the 
 estimate. It is used here as an *upper bound to close an avenue*, which is the one purpose an
 estimate is safe for — a lever this small does not become worth building if the estimate is off by
 half.
+
+---
+
+## Finding 111 (PRELIMINARY, n=2158 positions) — the gate threshold and the drafter are **coupled**: the optimal adaptK *falls* as the drafter improves, so F110's "the threshold is not a lever" does not survive training. Re-fitting adaptK on the trained head is a required post-training step
+
+F110 concluded that no K-selection policy is worth more than +1.8 % and that the whole path to
+30 tok/s runs through the margins. That conclusion has a premise nobody checked: **that margins of
+the required size exist.** The drafter is trained toward the target's distribution (TV carries 0.9
+of the loss weight), so the best it can do at a position is reproduce the *target's own* top-2
+logit gap. If the target is uncertain there, no training makes the draft confident.
+
+The capture stores the `lm_head` input, so the target's margin is directly computable:
+`margin = top1 - top2` of `lm_head @ lm_in[t]`. Over 2 158 positions of `trial_cap`:
+
+| p10 | p25 | median | p75 | p90 |
+|---|---|---|---|---|
+| 0.75 | 2.00 | **7.25** | 13.09 | 15.88 |
+
+**19.3 % of positions have a target margin below the shipped gate of 1.5.** A verify reaches K=7
+only if five consecutive gating margins clear, and measuring that conjunction by sliding window
+gives **51.2 %** — against **34.2 %** if the positions were independent. Adjacency correlation is
+worth +17 points, which is why it is measured rather than assumed: confident regions stay confident.
+
+### The first version of this analysis was incoherent, and fixing it is the finding
+
+Pairing the target's margins with pass 1's *measured acceptance* gave 26.77 tok/s, and I nearly
+recorded that as "30 is unreachable". It is not a valid pairing: a drafter whose margins equal the
+target's has essentially the target's distribution, so under greedy decode its argmax **is** the
+target's and acceptance approaches 1. Margins and acceptance have to be modelled consistently.
+
+Doing that, and sweeping the gate:
+
+| gate | K=7 share | tok/s @ p=0.85 | tok/s @ p=0.95 | tok/s @ p=1.00 |
+|---|---|---|---|---|
+| **0.00** | 100 % | **22.52** | **30.00** | **34.80** |
+| 0.50 | 75.2 % | 22.29 | 29.06 | 33.37 |
+| 1.00 | 59.1 % | 21.97 | 28.12 | 32.00 |
+| **1.50 (shipped)** | 51.2 % | 21.66 | 27.41 | 31.02 |
+| 3.00 | 37.4 % | 21.01 | 25.95 | 29.01 |
+
+**At every acceptance level the best gate is 0.** For a drafter whose margins track the target's,
+gating is pure loss — the gate's value comes from skipping verify work that would be rejected, and a
+reliable drafter has nothing to skip.
+
+### Why this does not contradict F109/F110, and what it changes
+
+It does not, because they measured *today's* drafter, whose acceptance at low margin is genuinely
+poor (32.7 % below margin 0.5). For that drafter the gate earns its keep, and lowering it to 1.0
+measured **-1.5 %**. Both are true; they are evaluated at different drafter quality.
+
+**The consequence is a step that "the threshold does not matter" would have skipped.** The optimal
+adaptK is a function of drafter reliability, and S5 changes drafter reliability. So:
+
+> **Re-fitting adaptK on the trained head is a required post-training step**, not an optional
+> refinement — and it must be re-fitted *before* the trained head is evaluated against the baseline,
+> or the evaluation charges the new drafter a threshold fitted to the old one.
+
+### The target-side number that actually bounds S5
+
+**30 tok/s needs per-position acceptance around 0.95 with the gate opened up.** Today the engine
+already achieves ~0.96 *on the 33 % of verifies that reach K=7* — a selected, easy subset. So the
+task is not "make acceptance higher than it has ever been"; it is **make the acceptance the drafter
+already reaches on easy positions hold on the hard ones**, and then stop throttling it.
+
+That is a materially more hopeful framing than F110's, and it is also falsifiable: the
+`--per-k`/`--accept` sweep re-runs on session 1's own capture.
+
+### Status
+
+**PRELIMINARY.** `trial_cap` is 10 sequences from the older prompt set, not the reasoning corpus,
+and the acceptance parameter is assumed rather than measured. This is a planning tool, not a
+measurement. It re-runs on session 1's capture in one command, and the acceptance figure becomes
+measurable rather than assumed once a trained head exists.
