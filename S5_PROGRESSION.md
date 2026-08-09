@@ -292,3 +292,52 @@ each sequence happened to run.
 The hard/soft split is checked against the literal strings `session_gate.py` emits, because getting
 that list wrong in the permissive direction would let a run that **changed the emitted sequence**
 be chained on — the one thing this project never trades (F68).
+
+---
+
+## 9. Session 1's baselines, fixed before any trained head exists
+
+Pass 1 completed **500/500 sequences**, every line round-trip verified against its seed, all with
+>= 512 generated tokens. Everything below is measured on the **untrained** head and is registered
+here so the post-training comparison cannot be re-anchored after the fact.
+
+### Primary gate (unchanged, §2)
+Suite reasoning prompt tau **>= 2.6** -> GO. Baseline 1.85.
+
+### Secondary gate (F108, F114)
+Hold-out = the **last 32** sequences of the corpus, never trained on, scored paired against the
+same prompts in the pass-1 log.
+
+| | median tau @ NGEN0=200 |
+|---|---|
+| hold-out (32), untrained | **3.584** |
+| full corpus (500), untrained | 3.441 |
+
+> **GO at >= 3.934** (+0.35). **Saturated below 3.734** (+0.15).
+
+### Margin profile (F109-F111) — the quantity that actually predicts tok/s
+66 488 verifies. Gating positions are **1-5**; position 0's margin never gates (it affects
+acceptance only).
+
+| pos | p10 | p25 | median | share >= 1.5 | gates? |
+|---|---|---|---|---|---|
+| 0 | 0.56 | 1.83 | 6.27 | 78.5 % | no |
+| 1 | 0.53 | 1.66 | 5.30 | 76.8 % | yes |
+| 2 | 0.43 | 1.30 | 4.30 | 72.6 % | yes |
+| 3 | 0.37 | 1.10 | 3.34 | 68.7 % | yes |
+| 4 | 0.34 | 0.99 | 2.98 | 66.5 % | yes |
+| 5 | 0.28 | 0.81 | 2.27 | 61.2 % | yes |
+
+**Full-width share: 33.2 % predicted, 33.2 % measured.** The model reproduces the engine exactly, so
+a predicted share after training can be trusted.
+
+`tools/margin_profile.py --log <trained hold-out eval> --vs margin_untrained.json` reports the shift
+per position in one command. Per F109: **+1.0 on the gating positions reaches ~27.9 tok/s, +1.5
+reaches ~31.2.** The gate is a conjunction, so the **weakest** position is what binds — position 5,
+whose p25 is 0.81 and needs +0.69 to clear the gate at the 25th percentile.
+
+### Required post-training step (F111)
+adaptK is re-fitted on the hold-out before the trained head is judged, because the optimal gate
+falls as the drafter improves. The **protocol eval stays pinned at adaptK 1.50** and remains the
+registry number; a re-fitted threshold is reported separately and shipping it would require
+re-baselining the incumbent at the same threshold.
