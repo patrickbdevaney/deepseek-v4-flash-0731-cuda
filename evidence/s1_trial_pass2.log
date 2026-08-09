@@ -1,0 +1,2 @@
+[parse] DSV4_PROMPTS_FILE /home/patrickd/s5-capture/trial_gen.txt -> 10 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=290

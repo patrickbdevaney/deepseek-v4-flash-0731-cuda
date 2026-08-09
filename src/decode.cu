@@ -106,6 +106,22 @@ int main(int argc, char** argv){
     // itself on reproducing prompt 0); inventing them is the mistake invariant "no invented model
     // constants" exists to stop.
     std::vector<std::vector<int>> prompts{ids};
+    // DSV4_PROMPTS_FILE: one ';'-free id list per LINE. DSV4_PROMPTS is an environment variable and
+    // 500 prompts x ~200 ids is ~500 KB, past the usual per-variable limit -- the S5 sessions need
+    // hundreds of prompts in one checkpoint load, so they cannot go through the environment.
+    if(const char* pf=getenv("DSV4_PROMPTS_FILE")){
+        FILE* f=fopen(pf,"r");
+        if(!f){ fprintf(stderr,"[parse] cannot open DSV4_PROMPTS_FILE %s\n",pf); return 2; }
+        char* line=nullptr; size_t cap=0; ssize_t n; int nl=0;
+        while((n=getline(&line,&cap,f))>0){
+            std::vector<int> cur; const char* q=line;
+            while(*q){ if(*q==','||*q==' '||*q=='\n'||*q=='\r'){ ++q; }
+                       else { cur.push_back(atoi(q)); while(*q && *q!=',' && *q!=' ' && *q!='\n' && *q!='\r') ++q; } }
+            if(cur.size()>=2){ prompts.push_back(cur); ++nl; }
+        }
+        free(line); fclose(f);
+        printf("[parse] DSV4_PROMPTS_FILE %s -> %d prompt(s)\n", pf, nl);
+    }
     if(const char* pv=getenv("DSV4_PROMPTS")){ std::vector<int> cur; const char* q=pv;
         while(*q){ if(*q==';'){ if(cur.size()>=2) prompts.push_back(cur); cur.clear(); ++q; }
                    else if(*q==','||*q==' '){ ++q; }
@@ -1227,6 +1243,22 @@ int main(int argc, char** argv){
         }
         printf("\n[spec] generated %d tokens over %d verifies: mean tokens/verify = %.2f (block=%d, max %d)\n", (int)sgen.size(), nverify, avg_acc, BLK, getenv("DSV4_NOVKPLUS")?BLK:BLK+1);
         printf("[spec] tokens:"); for(int i=0;i<(int)sgen.size() && i<40;++i) printf(" %d",sgen[i]); printf("\n");
+        // DSV4_GENOUT=<file>: append the FULL prompt+generated id sequence, one line per sweep
+        // point, in the exact ';'-separated form DSV4_PROMPTS accepts. This is what makes the
+        // two-pass S5 capture possible: pass 1 regenerates responses with the target (which is what
+        // every source in S5_RECIPE demands), pass 2 feeds prompt+response back as a prompt and
+        // captures the taps over the whole sequence. The 40-token console dump is for eyeballing;
+        // it cannot be parsed back because it is truncated, which is exactly the trap.
+        if(const char* go = getenv("DSV4_GENOUT")){
+            if(FILE* gf = fopen(go, "a")){
+                const std::vector<int>& pr = prompts[promptSweep[bsi]];
+                for(size_t i=0;i<pr.size();++i) fprintf(gf, "%s%d", i?",":"", pr[i]);
+                for(size_t i=0;i<sgen.size();++i) fprintf(gf, ",%d", sgen[i]);
+                fprintf(gf, "\n"); fclose(gf);
+                printf("[genout] wrote %zu prompt + %zu generated ids to %s\n",
+                       pr.size(), sgen.size(), go); fflush(stdout);
+            } else fprintf(stderr, "[genout] cannot open %s\n", go);
+        }
         // SPEC-vs-BASE EQUIVALENCE GATE (LOOP_LOG Finding 68). Speculative decoding is supposed to be
         // LOSSLESS: the verify corrects every draft, so the emitted sequence must equal what base AR
         // emits from the same prompt. Nothing checked that. The existing gates check the FIRST token
