@@ -5595,3 +5595,101 @@ mechanical, but a PORT, and every edit is a chance to diverge from the weights i
 The re-validation is not optional. F89 measured that this engine loses **28 % of acceptance** from an
 accumulation-order change alone; a ported forward that differs from the server by more than that is
 worse than no fine-tune. The equivalence gate has to come before the capture, not after.
+
+## Finding 92 — the three free measurements: the suite mean is **21.55 tok/s (not 27-30)**, but tau is **transient-suppressed and more than doubles over the drafter's 128-token window**
+
+**Operator-run, `evidence/tau_suite_m1m2.log`.** 9 prompts (canonical control + one per category from
+`scripts/prompt_suite.json`, ids from the checkpoint's own tokenizer, self-gated), NGEN0=200 — the
+first time this engine has ever generated past the drafter's 128-token sliding window.
+
+### M1 — the prompt-suite re-baseline REFUTES the workflow's headline
+
+| category | tau | tok/s |
+|---|---|---|
+| long_context (83 tok) | **4.43** | **28.25** |
+| agentic_format (35) | 3.96 | 26.52 |
+| code_edit (42) | 3.85 | 25.67 |
+| multi_turn (15) | 3.62 | 27.12 |
+| canonical control (6) | 3.41 | 23.74 |
+| short_factual (13) | 2.87 | 22.30 |
+| code_gen (27) | 1.83 | 14.61 |
+| reasoning (38) | 1.80 | 14.80 |
+| explanation (15) | **1.68** | **13.12** |
+| **MEAN of the 8 real prompts** | **3.00** | **21.55** |
+| recorded baseline (canonical, NGEN0=24) | 2.89 | 22.15 |
+
+**The deep-research synthesis claimed we were "already at 27.4-30.7 tok/s" on realistic prompts and
+that most of the S5 budget was therefore spent before the first gradient step. That is wrong.** The
+realistic-prompt mean is **21.55 tok/s — slightly BELOW our recorded 22.15 baseline.** The
+1023-token code prompt that produced tau 3.57-4.00 was a favourable case, not a representative one,
+and I extrapolated from it in exactly the way the report warned against.
+
+**Our recorded baseline is representative.** That is the single most useful thing these measurements
+established, and it cost one run.
+
+The spread is real and matches the literature: **2.15x in tok/s (13.12 to 28.25)**, against a
+published intrinsic domain spread of 2.1x for block/semi-AR drafters. It is **bimodal, and the split
+is semantic**: constrained continuation (long context, tool format, code edit, multi-turn) runs
+tau 3.6-4.4, while OPEN-ENDED GENERATION (explanation, reasoning, code_gen) collapses to tau
+1.68-1.83. A drafter cannot guess what has not been constrained.
+
+### M2 — CONFIRMED, and the effect is large
+
+tau binned by generated-token index, pooled over all 9 prompts:
+
+| generated tokens | n | tau |
+|---|---|---|
+| 0-31 | 59 | **1.39** |
+| 32-63 | 125 | 1.83 |
+| 64-95 | 89 | 2.96 |
+| 96-127 | 90 | **3.23** |
+| 128-159 | 101 | 2.84 |
+| 160-191 | 92 | 3.13 |
+| 192-223 | 86 | 2.97 |
+| 224-255 | 25 | 3.36 |
+
+**tau more than doubles — 1.39 to ~3.2 — and plateaus at 96-128 generated tokens, exactly the
+drafter's 128-token sliding window (`sliding_window: 128`).** The predicted mechanism, confirmed:
+the drafter's receptive field must FILL before it can draft well, and a short generation measures
+mostly the transient.
+
+Consequence: **every short-generation acceptance number in this project understates steady state.**
+Our 2.89 was measured at NGEN0=24 — entirely inside the first two bins. The same prompt at NGEN0=200
+gives **3.41 (+18 %)**, and the true steady state is ~3.1-3.2.
+
+**Reporting rule earned: quote tau at steady state, past 128 generated tokens, and say the
+generation length.** A tau without a generation length is not comparable to anything, including our
+own earlier numbers.
+
+### M3 — the bonus-token audit is clean, but it found a real defect
+
+The convention is correct and comparable: `verify N: accepted acc/(VB-1) + correction -> +(acc+1)
+tokens`, `tau = total/nverify` — **the bonus token is included**, same as SPEED-Bench, DSpark and
+Nebius. There is no +1.00 shift, and the workflow's proposed correction is refuted.
+
+But tracing it exposed this:
+
+```cpp
+int VK = BLK;                                   // caps at BLK = 5
+const int VB = VK;
+vtok[0] = cur;                                  // one slot spent on the KNOWN token
+for(int i=1;i<VB;++i) vtok[i] = draft[i-1];     // so only VB-1 = 4 drafts are verified
+```
+
+`hmarg[]` carries **BLK = 5** margins, so the drafter produces five proposals — and `draft[4]` is
+computed every round and **never verified**. Our ceiling is 5, not 6. That is exactly why the DSpark
+paper reports **6.11** accepted length at gamma=5: it verifies gamma+1 positions.
+
+**We pay to generate a token we discard, and our ceiling is one short of the architecture's.**
+Raising the cap to `VK <= BLK+1` verifies all five drafts for one extra verify position; F64's union
+measurements say that position costs ~14 % more expert bytes (K=4 union 15.16 -> K=5 17.53) for
+20 % more ceiling, and `seqmax` already carries `+ BLKMAX + 8` of slack. **This is the cheapest
+untested lever found in this session and it needs no training.**
+
+### What this does to S5
+
+The headroom is real but must be quoted correctly: steady-state suite tau is **~3.0-3.1 against a
+ceiling of 5** (6 if the draft[4] defect is fixed). The three collapsed categories — explanation,
+reasoning, code_gen at tau 1.68-1.83 — are open-ended generation, and are exactly where a fine-tune
+on target-regenerated responses should help most. **Set the S5 success criterion as the 8-prompt
+suite mean at NGEN0>=200, not as a single number on the canonical prompt.**
