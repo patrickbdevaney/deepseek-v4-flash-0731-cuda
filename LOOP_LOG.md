@@ -6837,3 +6837,79 @@ distribution. REAP then removed **37.5 % of the routed experts**, which changes 
 The drafter is therefore mismatched to its own target *by construction*, and repairing exactly that
 mismatch is what S5 does. This is the strongest prior that the +1.4 shift is reachable — and it is
 still a prior, not a measurement.
+
+---
+
+## Finding 110 — **no K-selection policy can be worth more than +1.8 %.** The shipped greedy rule is within 1.8 % of the theoretical optimum, so 100 % of the remaining path to 30 tok/s is the margins themselves
+
+F109 established that tok/s is governed by the K-mix and that a fitted threshold schedule buys
++0.4 %. That leaves an obvious objection: the engine's rule is **greedy** — it stops at the first
+margin below the gate, even when every later margin is large. A smarter rule might do much better.
+This closes that question with an upper bound rather than another point estimate.
+
+### First, the enabling measurement: margin is a position-independent sufficient statistic
+
+P(accept | reached that position), by margin bucket, per draft position:
+
+| margin | p0 | p1 | p2 | p3 | p4 | p5 |
+|---|---|---|---|---|---|---|
+| 1.5-2.0 | 58.7 % | 58.6 % | 61.5 % | 59.1 % | 60.3 % | 66.7 % |
+| 2.0-3.0 | 68.4 % | 70.6 % | 69.6 % | 73.0 % | 73.6 % | 70.1 % |
+| 3.0-5.0 | 82.4 % | 85.3 % | 85.0 % | 85.9 % | 89.8 % | 84.7 % |
+| 5.0-8.0 | 93.5 % | 96.4 % | 97.0 % | 97.1 % | 98.0 % | 94.9 % |
+| 8.0+ | 99.7 % | 99.8 % | 99.8 % | 99.9 % | 99.6 % | 99.5 % |
+
+**The columns agree.** Conditional on reaching a position, its margin predicts acceptance the same
+way regardless of which position it is. Position 0 is verified unconditionally, so it supplies the
+sub-1.5 region the operating threshold censors everywhere else:
+
+```
+P(accept | margin):  <0.5 0.327 | 0.5-1 0.428 | 1-1.5 0.518 | 1.5-2 0.599
+                     2-3  0.704 | 3-5   0.850 | 5-8   0.960 | 8+    0.998
+```
+
+This is what makes an optimal policy computable at all: expected tokens at any width follow from the
+prefix products of the calibration, including widths this log never ran.
+
+### The optimal policy, and it is barely better than the shipped one
+
+Choosing K per verify to maximise `E[tokens] - r * cost(K)` — renewal-reward with `r` iterated to
+its fixed point, which is the correct criterion rather than the myopic tokens-per-ms ratio:
+
+| policy | tok/s | vs shipped |
+|---|---|---|
+| greedy, threshold 1.0 | 24.07 | **-1.5 %** |
+| greedy, threshold 1.25 | 24.29 | -0.6 % |
+| **greedy, threshold 1.5 (shipped)** | **24.44** | — |
+| greedy, threshold 2.0 | 24.55 | +0.4 % |
+| **optimal lookahead** | **24.89** | **+1.8 %** |
+
+**+1.8 % is the ceiling on the whole avenue**, not the value of one candidate. It is what a policy
+with perfect knowledge of the calibration and no restriction to a threshold rule achieves. The
+shipped rule — one scalar, greedy, no lookahead — is within 1.8 % of it.
+
+The +0.4 % for a flat 2.0 here independently reproduces the +0.53 % from F109's exact stricter-only
+replay, by a completely different method (calibration model vs counterfactual replay of observed
+acceptance). Two methods agreeing on a small number is worth more than either alone.
+
+### What this settles
+
+The K-mix is not a lever. Between F109's fitted schedule (+0.4 %) and this bound (+1.8 %), every
+route through the controller is inside or barely outside the 3.5 % run-to-run spread.
+
+**So the path to 30 tok/s is entirely the margins, and the size of the required shift is already
+measured: +1.0 additive on gating positions 1-5 reaches 27.85 tok/s, +1.5 reaches 31.18.** There is
+no controller change that substitutes for it, and now there is a number saying so rather than an
+assumption.
+
+That is a good outcome for S5's justification and a bad one for anyone hoping for a free win: the
+fine-tune is not one lever among several, it is the only one left.
+
+### Caveat, stated because it bounds the claim
+
+The optimal-policy figure is **model-based**. A looser policy verifies positions this log never
+verified, so expected tokens come from the calibration rather than from observed acceptance. The
+calibration is measured and its position-independence is checked above, but the +1.8 % is an
+estimate. It is used here as an *upper bound to close an avenue*, which is the one purpose an
+estimate is safe for — a lever this small does not become worth building if the estimate is off by
+half.
