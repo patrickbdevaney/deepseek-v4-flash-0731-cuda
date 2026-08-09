@@ -5752,3 +5752,50 @@ correctly declines to spend.
 2. **Every acceptance number this project has ever quoted was against a ceiling one token short of
    the architecture's.** The DSpark paper's 6.11 was never out of reach; we were measuring a
    different quantity.
+
+## Finding 94 — block size: **6 wins (+3.3 %), 8 loses (-5.5 %)**, and the head generalises exactly ONE position past its training width
+
+**Operator-run.** `evidence/blocksize_sweep.log`, 15 points: BLK in {5,6,8} x 5 prompts, NGEN0=200,
+`adaptK=1.50` (the shipped setting, so this is the realistic operating point, not a forced-width
+ceiling). **Control: prompt 0 at BLK=5 reproduces the F93 run to 0.08 %** (3.61/24.38 vs 3.61/24.36),
+so the sweep measures block size and not drift.
+
+| prompt | tau 5 -> 6 -> 8 | tok/s 5 -> 6 -> 8 | 6v5 | 8v6 |
+|---|---|---|---|---|
+| agentic | 4.41 -> 5.15 -> 5.10 | 28.18 -> **29.96** -> 28.83 | **+6.3 %** | -3.8 % |
+| long_context | 5.00 -> 5.54 -> 5.43 | 30.95 -> **31.96** -> 28.72 | +3.3 % | -10.1 % |
+| code_edit | 4.08 -> 4.43 -> 4.04 | 26.13 -> **26.82** -> 23.82 | +2.6 % | -11.2 % |
+| multi_turn | 4.06 -> 4.46 -> 5.10 | 28.71 -> 28.99 -> **29.85** | +1.0 % | +3.0 % |
+| canonical | 3.61 -> 3.61 -> 3.48 | **24.38** -> 22.91 -> 20.87 | -6.0 % | -8.9 % |
+| **realistic mean** | | **28.49 -> 29.43 -> 27.80** | **+3.3 %** | **-5.5 %** |
+
+`LOSSLESS GATE PASS`, `MATCH 5/5`.
+
+### The mechanism is visible in tau, not in tok/s
+
+**tau RISES 5->6 on all four realistic prompts. It FALLS 6->8 on three of four** (long_context
+5.54 -> 5.43, code_edit 4.43 -> 4.04, agentic 5.15 -> 5.10). The drafter is not merely failing to
+*pay* for positions 7-8 — it is producing *worse* drafts when asked for them, because the whole
+block conditions on `DSPARK_NOISE_TID` at positions 1..BLK-1 and a wider noise field degrades the
+proposals it was getting right.
+
+**The head was trained at block 5 and generalises exactly one position past that, not three.** That
+is a cleaner statement of the limit than any acceptance number, and it says the remaining width
+headroom is not reachable by configuration — it needs training.
+
+### Block size is a per-workload parameter, not a global one
+
+The canonical prompt **regresses monotonically** (24.38 -> 22.91 -> 20.87) while its tau is flat
+(3.61 -> 3.61 -> 3.48): a low-acceptance workload pays the wider verify for width it cannot use.
+`adaptK` already adapts width *within* a block from the draft's own margins; **the block itself is
+still a compile-time constant.** Making BLK follow measured acceptance the same way is the obvious
+next lever, and F94 is its evidence.
+
+### Honest limit on the magnitude
+
+`long_context` measured **29.89** at BLK=5 in the F93 run and **30.95** here — the same
+configuration, 3.5 % apart. So the +3.3 % headline sits inside single-pair noise and trap 25
+applies. **What is solid is the SIGN, not the size:** tau rises 5->6 on 4 of 4 realistic prompts and
+tok/s rises on 4 of 4, which a 3.5 % run-to-run spread cannot manufacture. Adopting BLK=6 for
+realistic workloads is justified; quoting "+3.3 %" as a measured gain is not, until a second pair
+confirms it.
