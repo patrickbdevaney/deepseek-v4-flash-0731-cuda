@@ -30,6 +30,8 @@
 #include "compressor.h"
 #include "dscratch.h"
 #include "dprof.h"
+// void-returning CU for use inside lambdas that cannot return an int
+#define CU_V(x) do{ cudaError_t e_=(x); if(e_){ fprintf(stderr,"cuda %s @%d\n",cudaGetErrorString(e_),__LINE__); abort(); } }while(0)
 #include "dspark_real.h"   // DSpark head: main_x, tap_pool, forward_head, markov
 #include "dspark_attn.h"   // dspark_main_kv, dspark_block_forward
 #include "yarn.h"
@@ -1007,15 +1009,32 @@ int main(int argc, char** argv){
                 CU(cudaMemcpy(dbid,pbid.data(),BLK*4,cudaMemcpyHostToDevice));
                 k_embed<<<((size_t)BLK*d+255)/256,256>>>(xemb,emb,dbid,BLK,d);
                 k_hc_expand<<<((size_t)BLK*hc*d+255)/256,256>>>(xa,xemb,BLK,hc,d); CU(cudaDeviceSynchronize());
+                // INTERMEDIATE DUMP (DSV4_PROBE_DUMP=<file>), first probe position only.
+                // F102: the port scores 0/288 and four guesses at the cause were all wrong. Dumping
+                // the tensors the port must reproduce turns "which of four candidates" into "the
+                // first one that diverges", in one run instead of four.
+                FILE* dmp = (pi==0 && getenv("DSV4_PROBE_DUMP")) ? fopen(getenv("DSV4_PROBE_DUMP"),"wb") : nullptr;
+                auto dump = [&](const char* tag, const float* dev, size_t n){
+                    if(!dmp) return; std::vector<float> hv(n);
+                    CU_V(cudaMemcpy(hv.data(),dev,n*4,cudaMemcpyDeviceToHost));
+                    uint32_t L=(uint32_t)strlen(tag), N=(uint32_t)n;
+                    fwrite(&L,4,1,dmp); fwrite(tag,1,L,dmp); fwrite(&N,4,1,dmp); fwrite(hv.data(),4,n,dmp); };
+                if(dmp){ uint32_t meta[3]={(uint32_t)t,(uint32_t)pcur,(uint32_t)BLK};
+                         fwrite(meta,4,3,dmp);
+                         dump("main_x_t", main_x+(size_t)t*d, d); }
                 float *pc=xa,*pn=xb;
+                dump("after_embed", pc, (size_t)BLK*hc*d);
                 for(int st=0;st<NSTAGE;++st){ dspark_block_forward(pn,pc,dbid,mkv[st],panchor,mb[st],
                         blk_cos+(size_t)pctx*hf, blk_sin+(size_t)pctx*hf, BLK,WINDOW,HC_SINKHORN_ITERS,EPS);
-                    std::swap(pc,pn); }
+                    std::swap(pc,pn);
+                    char tg[24]; snprintf(tg,sizeof tg,"after_block%d",st); dump(tg, pc, (size_t)BLK*hc*d); }
                 CU(cudaMemcpy(dfid,&pcur,4,cudaMemcpyHostToDevice));
                 dspark_forward_head(dout,pc,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,
                                     VOCAB,DSPARK_MARKOV_RANK,EPS,dmarg); CU(cudaDeviceSynchronize());
                 CU(cudaMemcpy(poo.data(),dout,(BLK+1)*4,cudaMemcpyDeviceToHost));
                 CU(cudaMemcpy(pmarg.data(),dmarg,BLK*4,cudaMemcpyDeviceToHost));
+                if(dmp){ fclose(dmp); printf("[probe] intermediates dumped at t=%d -> %s\n",
+                                             t, getenv("DSV4_PROBE_DUMP")); fflush(stdout); }
                 if(pf2){ fprintf(pf2,"%d %d", t, pcur);
                          for(int k=0;k<BLK;++k) fprintf(pf2," %d", poo[k+1]);
                          for(int k=0;k<BLK;++k) fprintf(pf2," %.4f", pmarg[k]);

@@ -6262,3 +6262,55 @@ that turned F101 from a mystery into a measurement.
 it was placed there to do. **Bought:** a permanent, cheap oracle that any future port change is
 scored against automatically, plus the knowledge that the engine's own draft accuracy on
 self-generated text is 48-59 % — a number nothing else in this project had.
+
+## Finding 103 — BISECT SUCCEEDS: everything up to `after_embed` is EXACT, and the first DSpark block explodes by 18557x. Four guesses became one measurement
+
+`DSV4_PROBE_DUMP` writes the engine's intermediate tensors at one probe position; `--bisect` diffs
+the port against them stage by stage.
+
+```
+[bisect] engine probe: t=8 seed=39317 block=6
+[bisect] port seed=39317 (engine 39317) MATCH
+  main_x_t         cosine=+0.999671 rel_err=0.0257        OK
+  after_embed      cosine=+1.000000 rel_err=0.0000        OK        <- EXACT
+  after_block0     cosine=+0.193362 rel_err=18557.0156    **DIVERGED**
+  after_block1     cosine=+0.110499 rel_err=8702.6494     **DIVERGED**
+  after_block2     cosine=+0.045801 rel_err=2879.2866     **DIVERGED**
+```
+
+### What this eliminates, and it is most of the search space
+
+* **The seed is right** (39317 both sides) — so `t`, the id indexing and the capture alignment are
+  correct.
+* **`main_x` is right** (cosine 0.9997; the 0.026 is bf16 rounding) — so `main_proj`, `main_norm`,
+  the FP8 128x128 block-scale dequantisation and the tap layout are all correct. **The whole
+  capture-v2 chain is validated by this line.**
+* **`after_embed` is EXACT** (cosine 1.000000, rel_err 0.0000) — so `forward_embed`, the noise-token
+  fill, the embedding and the hc expansion are correct, and the port's block width now matches.
+
+**All four of my guesses from F102 are dead.** RoPE offset, `start_pos`/`anchor`, phase-A cache
+contents and `main_x` slicing all sit upstream of or inside a stage that is provably exact.
+
+### What it isolates
+
+`dspark_block_forward` — one function. And `rel_err = 18557` with cosine 0.19 is a **magnitude
+explosion**, not a rotation or an off-by-one: an indexing error preserves scale and loses direction,
+while this loses both. The prime suspects are therefore the two things in that block that carry a
+SCALE and that the port reimplements rather than inherits:
+
+1. **`hc_split_sinkhorn` in `train/kernel.py`** — my transcription of the tilelang kernel. If `comb`
+   is under-normalised the residual compounds across 4 streams x 3 blocks, which is exactly the
+   shape of a 4-figure blow-up. I already got this function wrong once (F-port: hc_scale is a
+   3-vector, `pre` adds eps, `post` carries a factor 2, and `comb` starts with a row softmax) and
+   corrected it by transcription — but transcription was never verified against a number.
+2. **The MXFP4 expert dequantisation** — though `main_x` being right narrows this, because the FP8
+   path is proven and only the MXFP4 nibble/scale path is untested.
+
+### Why this was worth building instead of guessing again
+
+Four guesses cost four runs and were all wrong. **One dump plus one comparator cost two runs and
+eliminated the entire upstream half of the pipeline**, including — as a bonus — an independent
+validation that capture format v2 is correct, which nothing else had checked.
+
+The next bisect goes one level deeper: dump inside `dspark_block_forward` (post-attention,
+post-`hc_post`, post-MoE) and the same procedure names the sub-stage.

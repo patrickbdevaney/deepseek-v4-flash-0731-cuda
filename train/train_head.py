@@ -147,6 +147,7 @@ def main():
     ap.add_argument("--pos-per-seq", type=int, default=8, help="training positions sampled per sequence")
     ap.add_argument("--strict", action="store_true", help="fail on any state_dict mismatch")
     ap.add_argument("--block", type=int, default=6, help="draft block; MUST match the engine (default 6)")
+    ap.add_argument("--bisect", default=None, help="engine intermediates.bin to diff against")
     ap.add_argument("--gate", action="store_true", help="replay engine probes, report agreement")
     ap.add_argument("--smoke", action="store_true", help="load + one forward + one backward, then stop")
     a = ap.parse_args()
@@ -280,6 +281,66 @@ def main():
         conf = blk.confidence_head(x, torch.stack(embeds, dim=1))
         return torch.stack(out_logits, dim=1), conf
 
+
+
+    # ================= BISECT (--bisect <intermediates.bin>) =================
+    # Reads the engine's intermediate tensors at one probe position and reports, stage by stage,
+    # where the port first diverges. F102: the port scores 0/288 and four guesses at the cause were
+    # all wrong (STE, seed clone, retain_graph, block width). This replaces guessing with the one
+    # question that matters -- which tensor is the FIRST to disagree.
+    if a.bisect:
+        import struct as _st
+        with open(a.bisect, "rb") as f:
+            t_probe, cur_probe, blk_probe = _st.unpack("<3I", f.read(12))
+            eng = {}
+            while True:
+                hdr = f.read(4)
+                if len(hdr) < 4: break
+                L = _st.unpack("<I", hdr)[0]
+                tag = f.read(L).decode()
+                n = _st.unpack("<I", f.read(4))[0]
+                eng[tag] = np.frombuffer(f.read(4 * n), dtype="<f4").copy()
+        print(f"[bisect] engine probe: t={t_probe} seed={cur_probe} block={blk_probe}")
+        print(f"[bisect] tensors: {[(k, v.size) for k, v in eng.items()]}")
+        if blk_probe != BS:
+            print(f"[bisect] WARNING: engine block {blk_probe} != port block {BS}; pass --block {blk_probe}")
+
+        sh = load_shard(os.path.join(a.capture, rows[0]["file"]), as_float32=True)
+        taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)
+        ids  = torch.from_numpy(sh["ids"].copy()).to(dev).long()
+        T = taps.size(0); main_hidden = taps.reshape(1, T, -1)
+
+        def cmp(tag, port_t):
+            if tag not in eng:
+                return
+            e = torch.from_numpy(eng[tag]).to(dev).float().flatten()
+            p_ = port_t.detach().float().flatten()
+            if e.numel() != p_.numel():
+                print(f"  {tag:<16} SHAPE MISMATCH engine {e.numel()} vs port {p_.numel()}"); return
+            cos = float(torch.nn.functional.cosine_similarity(e.unsqueeze(0), p_.unsqueeze(0)))
+            rel = float((e - p_).norm() / (e.norm() + 1e-9))
+            flag = "OK" if cos > 0.999 else ("CLOSE" if cos > 0.9 else "**DIVERGED**")
+            print(f"  {tag:<16} cosine={cos:+.6f} rel_err={rel:.4f}  {flag}")
+
+        with torch.no_grad():
+            h0, mx0 = blocks[0].forward_embed(main_hidden, ids[:1].clone())
+            hh = h0
+            for blk in blocks:
+                hh = blk(hh, 0, ids[:1].clone(), mx0)
+            for _b in blocks:
+                for _n, _bu in _b.named_buffers(recurse=True):
+                    if _bu is not None and _bu.is_floating_point(): _bu.detach_()
+            seed = ids[t_probe:t_probe + 1].clone()
+            hb, mx = blocks[0].forward_embed(main_hidden[:, t_probe:t_probe + 1], seed)
+            print(f"[bisect] port seed={int(seed.item())} (engine {cur_probe}) "
+                  f"{'MATCH' if int(seed.item())==cur_probe else '** MISMATCH **'}")
+            cmp("main_x_t", mx)
+            cmp("after_embed", hb)
+            for i, blk in enumerate(blocks):
+                hb = blk(hb, int(t_probe), seed, mx)
+                cmp(f"after_block{i}", hb)
+        print("[bisect] the FIRST **DIVERGED** line above is the bug")
+        return
 
     # ================= EQUIVALENCE GATE (--gate) =================
     # F101 halted session 1 because the port agreed with the engine on 1.5% of draft positions.
