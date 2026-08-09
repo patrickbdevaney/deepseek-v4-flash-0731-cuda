@@ -84,7 +84,18 @@ the wrong loss** — it converges to solutions that do not maximise acceptance u
 constraints. Their Gaussian-mixture demonstration: KL reaches 50.2% acceptance, TV reaches **60.2%**
 at identical capacity. DSpark's α_tv=0.9 already embodies that finding.
 
-**Optional upgrade, and I rate it worth taking (medium confidence).** Nebius's hybrid schedules
+> **CORRECTION (deep-research workflow, 19 agents).** The "+5.6 % from LK" below is a **T=1**
+> number and is a **net loss at our operating point**. Two reasons. (1) Nebius's own KL-FT -> LK-FT
+> delta is **4.79 -> 4.83 = +0.83 %**, and that is a delta over a *plain KL* baseline. (2) Ours is
+> already TV-dominant (`a_tv = 0.9` of 2.0), and acceptance **alpha = 1 - TV(p,q)** (Leviathan,
+> 2211.17192 Thm 3.5) -- so we ALREADY optimise the acceptance objective. Instantiating Nebius's own
+> hybrid at our operating point: tau 2.89 at block 5 -> per-position alpha 0.692 -> lambda =
+> exp(-3 x 0.692) = **0.125**, i.e. 12.5 % KL / 87.5 % TV, against DSpark's shipped 10 % CE / 90 % TV.
+> **The two objectives differ by 2.5 percentage points of mixing weight.** Re-baselined for T=1
+> degradation our tau would be 2.67, LK lifts it to 2.82, x 7.664 = **21.6 tok/s < 22.15**.
+> **Do not adopt the LK hybrid.** Keep the shipped 3-term loss.
+
+**Optional upgrade — SUPERSEDED, see the correction above.** Nebius's hybrid schedules
 between the two:
 
 ```
