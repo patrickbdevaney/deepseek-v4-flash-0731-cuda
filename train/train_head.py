@@ -129,6 +129,21 @@ def main():
     ap.add_argument("--steps", type=int, default=0, help="0 = one pass over the capture (1 epoch)")
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--warmup", type=float, default=0.05)
+    # a_conf DEFAULTS TO 0, deliberately, and the DSpark paper's value is 1.0.
+    #
+    # Wired and measured: ce=10.43, tv=0.93, conf=10034. The confidence term is ~1000x the other
+    # two and would swamp the objective. Two reasons, and neither is a coding error:
+    #   * the head takes the UN-normalised x (pre self.norm), whose scale is large -- the captured
+    #     taps have std ~190 -- so its raw logit is large;
+    #   * it was trained to predict acceptance under FREE-RUNNING drafting, and teacher forcing
+    #     makes almost every position accepted, so it is confidently wrong on this data by
+    #     construction. That is the HASS mismatch showing up in the confidence signal rather than
+    #     in the draft input.
+    # Fixing it needs free-running draft labels (session 2's HASS work), not a scale factor. Until
+    # then the term is OFF and sessions train on ce+tv, which are correct. Shipping a loss term
+    # that is 1000x the others without understanding it is how you get a plausible wrong answer.
+    ap.add_argument("--a-conf", type=float, default=0.0, dest="a_conf",
+                    help="confidence-BCE weight; 0 until free-running labels exist (see comment)")
     ap.add_argument("--pos-per-seq", type=int, default=8, help="training positions sampled per sequence")
     ap.add_argument("--strict", action="store_true", help="fail on any state_dict mismatch")
     ap.add_argument("--smoke", action="store_true", help="load + one forward + one backward, then stop")
@@ -292,6 +307,9 @@ def main():
         sh = load_shard(os.path.join(a.capture, r["file"]), as_float32=True)
         taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)
         ids = torch.from_numpy(sh["ids"].copy()).to(dev).long()
+        lm_in = (torch.from_numpy(sh["lm_in"].copy()).to(dev).to(torch.bfloat16)
+                 if sh.get("lm_in") is not None else None)
+        head_w = aux["head.weight"]
         T = taps.size(0)
         main_hidden = taps.reshape(1, T, -1)
         # A position is trainable only if all BS targets exist after it.
@@ -323,7 +341,25 @@ def main():
             tgt = ids[t + 1:t + 1 + BS]
             logits, conf = forward_head_tf(blocks[-1], hb, seed, tgt)
             lg = logits[0]                                   # (BS, V)
-            l, parts = dspark_loss(lg, tgt, lg.detach(), None, None, gamma)
+            # TARGET DISTRIBUTION for the TV term, from the CAPTURED lm_head input.
+            # It is NOT reconstructible from the taps: those are h.mean(dim=hc) while this is the
+            # learned Sinkhorn hc_head combination. Passing lg.detach() (what stage 0 did) makes
+            # TV(p,q) identically zero and silently drops 90% of the loss weight -- measured as
+            # tv=0.0000. The target for draft position k is the base model's distribution at the
+            # position that produced token tgt[k], i.e. lm_in[t+k].
+            if lm_in is None:
+                sys.exit("[train] FAIL: capture is v1 (no lm_head input). Re-capture with the "
+                         "current engine; the TV term cannot be computed without it.")
+            with torch.no_grad():
+                rows = lm_in[t:t + BS].to(dev)               # (BS, d)
+                tgt_lg = F.linear(rows.to(head_w.dtype), head_w).float()
+            # CONFIDENCE LABEL: did this draft position match the target's own next token? That is
+            # exactly what the confidence head is trained to predict, and it needs no capture field
+            # -- it is computable from the draft's own argmax against the ground truth.
+            with torch.no_grad():
+                accepted = (lg.argmax(dim=-1) == tgt)
+            cvec = conf.reshape(-1)[:BS] if conf is not None else None
+            l, parts = dspark_loss(lg, tgt, tgt_lg, cvec, accepted, gamma, a_conf=a.a_conf)
             # PHASE A IS SHARED. The KV-cache fill runs once per sequence, outside this loop, and
             # every position's graph traces back through it -- so the first backward frees it and
             # the second raises "Trying to backward through the graph a second time". retain_graph
@@ -338,6 +374,7 @@ def main():
         nparts = {k2: v / max(nb, 1) for k2, v in nparts.items()}
         print(f"[train] step {step}: T={T} positions={len(sel)} "
               f"loss={tot_loss/max(nb,1):.4f} ce={nparts['ce']:.4f} tv={nparts['tv']:.4f} "
+              f"conf={nparts['conf']:.4f} "
               f"grad_norm={float(gn):.4f} tensors_with_grad={ngrad}/{len(tp)}", flush=True)
         if ngrad == 0:
             sys.exit("[train] FAIL: no gradients reached the trainable tensors")

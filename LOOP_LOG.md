@@ -6094,3 +6094,64 @@ cheap O(T) cache fill is shared at all.
 **So Gate 1 is mechanically closed and session 1 is NOT yet runnable.** Wiring those two is the last
 work before the 500-sample narrow proof, and both are contained: one reconstruction from data we
 already capture, one extra field in the capture record.
+
+## Finding 100 — TV target wired (it was NOT reconstructible from the taps), confidence term measured and DELIBERATELY GATED OFF, and the head-preservation machinery built
+
+### The TV target: F99's plan was wrong and the code says why
+
+F99 recorded "recompute the target distribution from the taps through the frozen lm_head". **The
+taps cannot do that.** `k_tap_pool` writes `h.mean(dim=hc)` — an UNWEIGHTED mean — while the real
+lm_head input is `hc_head(h, hc_fn, hc_scale, hc_base)`, a LEARNED Sinkhorn-normalised combination
+followed by `rmsnorm`. No arithmetic turns one into the other.
+
+**Capture format v2** stores the real thing: the same `hc_head`+`rmsnorm` the `head_fwd` path runs,
+over all prefill positions. The expensive part — the 129,280-column lm_head GEMM — stays in
+training as one matmul against a frozen weight. Cost **+8 KB/token (24 -> 32.0 KB/tok, measured)**;
+storage was never the constraint. The trainer now **hard-fails on a v1 capture** rather than falling
+back, because a `tv=0.0000` that looks like a working run is exactly what hid this through Gate 1.
+
+Measured with all terms live: **ce 10.43, tv 0.9254** (was 0.0000), 69/72 tensors with gradient.
+
+### The confidence term is measured, understood, and OFF
+
+`conf = 10034` against ce 10.43 and tv 0.93 — **~1000x the other two.** Two causes, neither a
+coding error:
+
+1. The head takes the **un-normalised** `x` (pre `self.norm`), whose scale is large — the captured
+   taps have std ~190 — so its raw logit is large. `binary_cross_entropy_with_logits` is the correct
+   function; the head genuinely returns a logit, not a probability.
+2. It was trained to predict acceptance under **free-running** drafting, and teacher forcing makes
+   almost every position accepted, so it is confidently wrong on this data **by construction**.
+   **That is the HASS mismatch appearing in the confidence signal rather than in the draft input.**
+
+Fixing it needs free-running draft labels — session 2's HASS work — not a scale factor. So
+`--a-conf` defaults to **0.0** (the paper's value is 1.0) and sessions train on ce+tv, which are
+correct. **Shipping a loss term 1000x the others without understanding it is how a plausible wrong
+answer gets produced.**
+
+### The product was half unprotected
+
+The product of this project is two things: **the CUDA engine** (in git, therefore safe) and **the
+speculator weights** (not in git, therefore at risk). A winning head would have been an untracked
+`.safetensors` in a scratch directory, its measurement in a log due to be overwritten and its
+lineage nowhere.
+
+`tools/promote_head.py` + `HEAD_REGISTRY.md` fix that, and **the selection rule is fixed now, before
+any candidate exists, so it cannot be fitted to a result**:
+
+1. `LOSSLESS GATE ... PASS` must appear — a head that changes the emitted sequence is disqualified
+   at any tau. **F68 is why.**
+2. First-token `GATE PASS`.
+3. The frozen protocol: 8-prompt suite, NGEN0>=200, block 6, adaptK 1.50, **clean run** (the tool
+   refuses a log containing `[dprof]`/`[specprof]`/`[ksweep]`/`[moebytes]`).
+4. Suite mean must beat the incumbent by more than the **measured 3.5 % run-to-run spread** (F94).
+   **Ties go to the incumbent.**
+5. Prompt 0 is a CONTROL and is excluded from the mean (F96).
+
+Promotion copies the weights to `~/model-backups/heads/<name>/` with **sha256 per file**, the eval
+log, and a `head_card.json` carrying the engine git rev, the base model and its REAP parameters
+(256 -> 160 experts), the full per-prompt measurement, and the incumbent it beat.
+
+Registry seeded with the shipped head as the incumbent from the F96 clean baseline:
+**suite tau 3.5362, 22.6550 tok/s, base AR 13.76.** Every future head must beat 23.45 tok/s
+(22.655 x 1.035) to be promoted.

@@ -900,6 +900,26 @@ int main(int argc, char** argv){
         // One file per sweep point, so DSV4_PROMPTS + DSV4_BLKSWEEP capture N samples per checkpoint
         // load -- the load is ~10 minutes and must be amortised, not paid per sample.
         if(const char* capdir = getenv("DSV4_CAPTURE")){
+            // FORMAT v2 adds the LM-HEAD INPUT per position, and it is not optional.
+            //
+            // F99 recorded the plan as "reconstruct the target distribution from the taps through
+            // the frozen lm_head". That is WRONG and the code says why: k_tap_pool writes
+            // `h.mean(dim=hc)` -- an UNWEIGHTED mean -- while the real path is
+            // `hc_head(h, hc_fn, hc_scale, hc_base)`, a LEARNED Sinkhorn-normalised combination
+            // followed by rmsnorm. The tap is not the lm_head input and no amount of arithmetic
+            // turns one into the other.
+            //
+            // Without it the TV term -- 90% of the loss weight -- has no target and the trainer
+            // silently optimises CE alone (measured: tv=0.0000). So capture the real thing: run
+            // the same hc_head+rmsnorm the head_fwd path runs, over ALL prefill positions. The
+            // expensive part (the lm_head GEMM over 129280 columns) stays in training, where it is
+            // one matmul against a frozen weight; here we only store its 4096-wide input.
+            // Cost: +8 KB/token on top of 24, and storage was never the constraint (F90).
+            float* lmin = nullptr;
+            { CU(cudaMalloc(&lmin,(size_t)PSp*d*4));
+              hc_head(lmin, h, hc_fn, hc_sc, hc_bs, PSp, hc, d, HC_EPS);
+              rmsnorm(lmin, lmin, norm_w, PSp, d, EPS, true, 0);
+              CU(cudaDeviceSynchronize()); }
             const size_t ntap=3, nvals=(size_t)PSp*ntap*d;
             std::vector<float> hf(nvals);
             CU(cudaMemcpy(hf.data(), mh_pre, nvals*4, cudaMemcpyDeviceToHost));
@@ -909,15 +929,21 @@ int main(int argc, char** argv){
             FILE* f=fopen(path,"wb");
             if(!f){ fprintf(stderr,"[capture] FAIL: cannot open %s\n", path); return 4; }
             const std::vector<int>& pids = prompts[promptSweep[bsi]];
-            uint32_t hdr[8] = {0x43505344u, 1u, (uint32_t)PSp, (uint32_t)ntap, (uint32_t)d, 1u,
-                               (uint32_t)pids.size(), 0u};
+            // v2: header word 7 (was reserved) is now 1 = an lm_head-input block follows the taps.
+            uint32_t hdr[8] = {0x43505344u, 2u, (uint32_t)PSp, (uint32_t)ntap, (uint32_t)d, 1u,
+                               (uint32_t)pids.size(), 1u};
+            std::vector<float> hf2((size_t)PSp*d);
+            CU(cudaMemcpy(hf2.data(), lmin, hf2.size()*4, cudaMemcpyDeviceToHost));
+            std::vector<uint16_t> hb2(hf2.size());
+            for(size_t i2=0;i2<hf2.size();++i2){ uint32_t u; memcpy(&u,&hf2[i2],4); hb2[i2]=(uint16_t)(u>>16); }
             size_t w = 0;
             w += fwrite(hdr,4,8,f);
             w += fwrite(pids.data(),4,pids.size(),f);
             w += fwrite(hb.data(),2,nvals,f);
+            w += fwrite(hb2.data(),2,hb2.size(),f);
             long bytes = ftell(f);
             fclose(f);
-            if(w != 8+pids.size()+nvals){ fprintf(stderr,"[capture] FAIL: short write to %s\n", path); return 4; }
+            if(w != 8+pids.size()+nvals+(size_t)PSp*d){ fprintf(stderr,"[capture] FAIL: short write to %s\n", path); return 4; }
             // Manifest is append-only and one line per sample, so a killed run resumes from the last
             // COMPLETE line rather than re-deriving progress from directory listings.
             char mpath[1024]; snprintf(mpath,sizeof mpath,"%s/manifest.jsonl", capdir);
@@ -928,8 +954,9 @@ int main(int argc, char** argv){
                         pids.size(), bytes);
                 fclose(mf);
             }
-            printf("[capture] wrote %s  %d tok x %zu taps x %d  = %.1f MB\n",
-                   path, PSp, ntap, d, bytes/1048576.0); fflush(stdout);
+            cudaFree(lmin);
+            printf("[capture] wrote %s  %d tok x (%zu taps + 1 lm_in) x %d = %.1f MB (%.1f KB/tok)\n",
+                   path, PSp, ntap, d, bytes/1048576.0, bytes/1024.0/PSp); fflush(stdout);
         }
         dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PSp, d, EPS); CU(cudaDeviceSynchronize());
         // N1 BISECTION (DSV4_HASH=1). Finding 60 says the FIRST verify of every sweep point produces

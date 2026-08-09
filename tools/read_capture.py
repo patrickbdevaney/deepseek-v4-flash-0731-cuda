@@ -34,7 +34,7 @@ def load_shard(path, as_float32=False):
         magic, ver, n_tok, n_taps, d, dtype, n_ids, _ = hdr
         if magic != MAGIC:
             raise ValueError(f"{path}: bad magic {magic:#x} (expected {MAGIC:#x})")
-        if ver != 1:
+        if ver not in (1, 2):
             raise ValueError(f"{path}: unsupported version {ver}")
         if dtype != 1:
             raise ValueError(f"{path}: unsupported dtype {dtype} (only bf16=1)")
@@ -42,11 +42,23 @@ def load_shard(path, as_float32=False):
         raw = np.frombuffer(f.read(2 * n_tok * n_taps * d), dtype="<u2")
         if raw.size != n_tok * n_taps * d:
             raise ValueError(f"{path}: truncated: got {raw.size} of {n_tok*n_taps*d} tap values")
+        # v2 appends the LM-HEAD INPUT per position (hc_head + rmsnorm output). It is NOT
+        # reconstructible from the taps -- those are h.mean(dim=hc), while this is the learned
+        # Sinkhorn-normalised hc_head combination -- and without it the TV term has no target.
+        lm_in = None
+        if ver >= 2 and hdr[7] == 1:
+            lraw = np.frombuffer(f.read(2 * n_tok * d), dtype="<u2")
+            if lraw.size != n_tok * d:
+                raise ValueError(f"{path}: truncated lm_head input: {lraw.size} of {n_tok*d}")
+            lm_in = lraw.reshape(n_tok, d)
     taps = raw.reshape(n_tok, n_taps, d)
     if as_float32:
         # bf16 -> fp32 is an exact widening: the bf16 bits ARE the top half of the fp32 word.
         taps = (taps.astype(np.uint32) << 16).view(np.float32)
-    return {"ids": ids, "taps": taps, "n_tok": n_tok, "n_taps": n_taps, "d": d}
+        if lm_in is not None:
+            lm_in = (lm_in.astype(np.uint32) << 16).view(np.float32)
+    return {"ids": ids, "taps": taps, "lm_in": lm_in, "n_tok": n_tok, "n_taps": n_taps,
+            "d": d, "version": ver}
 
 def validate(capdir):
     man = os.path.join(capdir, "manifest.jsonl")
