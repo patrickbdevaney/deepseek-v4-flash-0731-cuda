@@ -6986,3 +6986,66 @@ That is a materially more hopeful framing than F110's, and it is also falsifiabl
 and the acceptance parameter is assumed rather than measured. This is a planning tool, not a
 measurement. It re-runs on session 1's capture in one command, and the acceptance figure becomes
 measurable rather than assumed once a trained head exists.
+
+---
+
+## Finding 112 — this engine **verifies greedily**, so the acceptance criterion is argmax match; the DSpark loss puts 0.9 of its weight on distribution match and 0.1 on argmax match. That split is imported from a formulation this engine does not use
+
+`src/decode.cu`, the acceptance loop:
+
+```c
+std::vector<int> tam(VB); for(...) tam[i]=argmax over VOCAB;      // target's ARGMAX
+int acc=0; while(acc<VB-1 && draft[acc]==tam[acc]) ++acc;         // exact id match
+```
+
+**Acceptance is `draft[i] == target_argmax[i]`.** Nothing about probabilities enters it. And the
+capture's ground-truth token *is* the target's argmax, because pass 1 generates greedily.
+
+The training objective is
+
+```
+L = sum_k w_k * [ a_ce*CE(p_k, y_k) + a_tv*TV(p_k, q_k) ]      a_ce 0.1, a_tv 0.9
+```
+
+CE is the term that directly raises the probability of the token acceptance is tested against. It
+carries **10 %** of the weight. TV, which matches the entire 129 280-way distribution, carries
+**90 %**.
+
+That split is correct for **sampling-based** speculative decoding, where the acceptance probability
+is `min(1, p_target/p_draft)` and the whole distribution genuinely decides. This engine is greedy.
+
+### Why this is an ablation and NOT "set a_ce to 1.0"
+
+TV is not decoration here, for a reason specific to this engine: **TV is what keeps the draft's
+margin calibrated, and the adaptK gate reads the margin.** F110 measured that margin predicts
+acceptance consistently across all six draft positions — that calibration is an asset, and it is
+exactly what a pure-CE objective would be free to destroy. CE rewards putting mass on the right
+token and says nothing about being *appropriately unconfident* when the target is uncertain. An
+overconfident drafter has large margins, opens the gate wide, and gets rejected — the worst case
+for this engine, because it pays full K=7 verify cost for a short accepted run.
+
+So the two terms serve two different measured mechanisms:
+
+| term | what it buys | measured in |
+|---|---|---|
+| CE | argmax match = **acceptance** | F109 (tokens per verify) |
+| TV | margin calibration = **correct K choice** | F110 (P(accept given margin), stable across positions) |
+
+The DSpark weighting was chosen for neither of these; it was chosen for a different acceptance rule.
+
+### The experiment, which is cheap because the capture is the expensive part
+
+`--a-ce` and `--a-tv` are now flags. Training is a small fraction of a session's cost once the
+capture exists, so the ablation is affordable at session 1's scale and should be run there:
+
+| a_ce | a_tv | hypothesis |
+|---|---|---|
+| 0.1 | 0.9 | DSpark default, the control |
+| 0.5 | 0.5 | balanced |
+| 0.9 | 0.1 | argmax-dominant |
+
+**Both quantities must be reported for each, not just tau:** hold-out acceptance *and* the
+margin-vs-acceptance calibration from `tools/adaptk_fit.py`. A variant that raises acceptance while
+decalibrating the margin can look better on tau at fixed adaptK and be worse once adaptK is re-fitted
+(F111) — and the whole point of measuring both is that this failure is invisible in the headline
+number.

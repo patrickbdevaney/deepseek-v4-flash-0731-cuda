@@ -142,6 +142,14 @@ def main():
     # Fixing it needs free-running draft labels (session 2's HASS work), not a scale factor. Until
     # then the term is OFF and sessions train on ce+tv, which are correct. Shipping a loss term
     # that is 1000x the others without understanding it is how you get a plausible wrong answer.
+    # a_ce / a_tv are exposed because this engine VERIFIES GREEDILY (F112): acceptance is
+    # `draft[i] == target_argmax[i]`, so the criterion the drafter is scored on is argmax match,
+    # not distribution match. The DSpark defaults (ce 0.1 / tv 0.9) come from a formulation where
+    # the whole distribution decides acceptance. TV still earns its place -- it is what keeps the
+    # draft's MARGIN calibrated, and the margin is what the adaptK gate reads -- so this is an
+    # ablation to run, not a knob to turn to 1.0.
+    ap.add_argument("--a-ce", type=float, default=0.1, dest="a_ce")
+    ap.add_argument("--a-tv", type=float, default=0.9, dest="a_tv")
     ap.add_argument("--a-conf", type=float, default=0.0, dest="a_conf",
                     help="confidence-BCE weight; 0 until free-running labels exist (see comment)")
     ap.add_argument("--pos-per-seq", type=int, default=8, help="training positions sampled per sequence")
@@ -668,7 +676,8 @@ def main():
                 _dbg["drf_top1_p"] += float(F.softmax(lg.float(), -1).max(-1).values.mean())
                 _dbg["m"] += 1
             cvec = conf.reshape(-1)[:BS] if conf is not None else None
-            l, parts = dspark_loss(lg, tgt, tgt_lg, cvec, accepted, gamma, a_conf=a.a_conf)
+            l, parts = dspark_loss(lg, tgt, tgt_lg, cvec, accepted, gamma,
+                                   a_ce=a.a_ce, a_tv=a.a_tv, a_conf=a.a_conf)
             # PHASE A IS SHARED. The KV-cache fill runs once per sequence, outside this loop, and
             # every position's graph traces back through it -- so the first backward frees it and
             # the second raises "Trying to backward through the graph a second time". retain_graph
