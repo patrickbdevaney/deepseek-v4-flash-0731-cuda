@@ -6688,3 +6688,118 @@ length. The suite mean of 3.5362 is still the right *comparison* number, because
 eight prompts every time and that is what makes runs comparable. But it is a fixed benchmark, not
 an estimate of workload behaviour, and the two have been conflated whenever a category number was
 read as "this is how the engine does on reasoning."
+
+---
+
+## Finding 109 — what "30 tok/s" actually requires, derived from measured verify economics. The adaptive-K controller is already near-optimal (+0.4 %), so the entire remaining path runs through **margins**, and the block-6 hard ceiling is **34.77**
+
+Pass 1 emits, per verify, the draft's six logit margins, the chosen width K, the accepted count and
+the wall time. 15 800 of them on the reasoning corpus with the untrained head is enough to replace
+every estimate in this project's speed model with a measurement.
+
+### 1. Where the time goes
+
+| K | share of verifies | share of time | tokens / max | tok/s |
+|---|---|---|---|---|
+| 2 | 23.9 % | 17.3 % | 1.64/2 = 81.9 % | 14.57 |
+| 3 | 17.0 % | 13.9 % | 2.24/3 = 74.6 % | 17.69 |
+| 4 | 11.5 % | 10.5 % | 2.99/4 = 74.7 % | 21.14 |
+| 5 | 8.2 % | 8.3 % | 3.81/5 = 76.1 % | 24.33 |
+| 6 | 7.7 % | 8.8 % | 4.87/6 = 81.1 % | 27.67 |
+| **7** | **31.7 %** | **41.2 %** | **6.23/7 = 89.1 %** | **30.97** |
+
+Overall **24.41 tok/s**, mean 3.780 tokens/verify.
+
+**The headroom is not inside K=7.** When the engine drafts at full width it already accepts 89.1 %
+of the maximum. The gap is that **68 % of verifies never reach full width**, and a K=2 verify runs
+at 14.57 tok/s.
+
+### 2. The ceilings, exactly
+
+| | tok/s |
+|---|---|
+| every verify at K=7, acceptance unchanged | **30.97** |
+| every verify at K=7, perfect acceptance | **34.77** |
+| 85 % of verifies at K=7 | 29.80 |
+| 70 % | 28.50 |
+| 50 % | 26.53 |
+| today (31.7 %) | 24.41 |
+
+**30 tok/s sits just inside the block-6 ceiling and needs ~85-100 % of verifies at full width.**
+Anything past ~31 is not reachable at block 6 at all — which is why S5_PROGRESSION §3's block-8
+test is worth more than its acceptance number.
+
+### 3. The controller is already near-optimal — measured, and it is a negative result
+
+`src/decode.cu` gates each extension on `hmarg[VK-1] >= adaptK`, a **scalar 1.5 applied to every
+extension**. The extension cost is not constant (14.1 ms from K=2, 25.5 ms to K=7), so the required
+acceptance is not constant either — 34.9 % for the first extension, 63.1 % for the last. The margin
+is a well-calibrated predictor, so the schedule can be fitted rather than swept:
+
+| gating margin | P(accept) |
+|---|---|
+| 1.5-2.0 | 36.5 % |
+| 2.0-3.0 | 43.3 % |
+| 3.0-4.0 | 53.5 % |
+| 5.0-6.0 | 64.2 % |
+| 8.0-10.0 | 89.6 % |
+| 10+ | 95.5 % |
+
+which implies a rising schedule `[1.5, 1.5, 2.0, 3.0, 5.0]` instead of a flat 1.5.
+
+**Counterfactual replay over the same 15 630 verifies says it is worth +0.39 %.** A flat 2.0 gives
++0.53 %; flat 3, 4 and 5 are all *worse* than shipped. Every one of these is inside the 3.5 %
+run-to-run spread, so **the retune is not a lever and the shipped 1.5 stands.**
+
+The replay is exact rather than extrapolated: a stricter policy only verifies positions the log
+already verified, so no acceptance has to be guessed. The tool refuses any policy looser than the
+log's.
+
+**Two methodological corrections were needed to get this right.** The first fit used the
+*cumulative* P(accept | margin >= t) where the marginal decision needs the *bucket* conditional at
+t; the cumulative version averages in every high-margin position, overstates P everywhere, and
+returned a flat 1.0 — which was also the smallest grid value, the tell that the quantity was wrong.
+The second is censoring: the log ran at adaptK=1.5, so no gating position below 1.5 was ever
+verified. The fit can justify raising the threshold and **cannot** evaluate lowering it.
+
+### 4. So the whole remaining path runs through margins, and here is the size of the shift
+
+The engine computes all six margins on every verify regardless of the K it then picks, so this part
+is uncensored.
+
+| position | median margin | share >= 1.5 |
+|---|---|---|
+| 0 | 6.19 | 78.5 % |
+| 1 | 5.16 | 76.5 % |
+| 2 | 4.12 | 72.5 % |
+| 3 | 3.23 | 68.3 % |
+| 4 | 2.93 | 66.2 % |
+| 5 | 2.24 | 60.9 % |
+
+A verify reaches K=7 only if **all six** clear the gate: **31.1 %** predicted against ~32 % measured,
+which validates the model.
+
+| shift applied to every position | share reaching K=7 |
+|---|---|
+| none | 31.1 % |
+| **+1 additive** | 54.0 % |
+| **+2 additive** | 100 % |
+| x2 multiplicative | 44.7 % |
+| x5 | 65.9 % |
+| x10 | 79.7 % |
+
+**~+1.4 added to every margin reaches the ~85 % that 30 tok/s needs. Multiplicative sharpening does
+not get there** — even x10 only reaches 79.7 %, because scaling barely moves a margin already near
+zero, and it is the near-zero ones that cap K.
+
+That distinction matters for what the fine-tune has to do: it is not enough to make the draft
+*sharper* where it is already confident. It has to make it confident where it currently is not,
+which is a distributional change rather than a temperature change.
+
+### 5. The one structural reason to expect headroom
+
+The shipped MTP head was trained by the model's authors against the **unpruned** model's output
+distribution. REAP then removed **37.5 % of the routed experts**, which changes that distribution.
+The drafter is therefore mismatched to its own target *by construction*, and repairing exactly that
+mismatch is what S5 does. This is the strongest prior that the +1.4 shift is reachable — and it is
+still a prior, not a measurement.
