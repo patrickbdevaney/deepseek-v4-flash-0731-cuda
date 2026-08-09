@@ -232,3 +232,63 @@ absolute path of the eval log it was derived from.
 
 Both are archived with the head, so a number in `HEAD_REGISTRY.md` can always be traced back to the
 run and the loss curve that produced it.
+
+---
+
+## 8. Chunking, hold-out, and the secondary gate — added after F107/F108
+
+### Chunked sessions make peak disk independent of N
+
+§0 always priced storage as *"capture a shard, train on it, delete it"*, but the first orchestrator
+captured the whole corpus before training started. At 5 000 samples that is ~123 GB against 120 GB
+free — session 3 as planned would not have fitted.
+
+`S5_CHUNK=<n>` now interleaves capture and training and deletes each chunk once the trainer has
+consumed it, so **peak disk is one chunk regardless of session size**:
+
+| `S5_CHUNK` | peak, any N |
+|---|---|
+| 500 | ~29 GB |
+| 1 000 | ~38 GB |
+| 2 000 | ~56 GB |
+
+A chunked session is equivalent to a continuous one only if the weights **and** the AdamW moments
+carry across chunks and the LR schedule spans the session. `--resume` (weights + `opt_state.pt`)
+with `--total-steps`/`--step-offset` does that; without them chunking would be N little trainings
+wearing one session's name. `tools/merge_metrics.py` stitches the per-chunk histories back into one
+record, pooling diagnostics by sequence count rather than averaging percentages.
+
+Deleting a consumed chunk is safe because `gen.txt` is kept: a re-capture costs only the prefill
+(~0.4 h per 500), never the generate pass that is 88 % of the session.
+
+### The hold-out, and why the gate needed a second opinion
+
+F108 measured 63 real reasoning prompts with the **untrained** head and found median tau **3.483**
+at the protocol's own NGEN0=200 — while the suite's reasoning prompt, the sole basis for the
+session-1 gate, sits at **1.85**, below the minimum of its own category. The premise "reasoning is
+collapsed and training can repair it" rests on one unrepresentative prompt.
+
+`S5_HOLDOUT=<n>` (default 32) reserves the last N sequences of the corpus. They are **never trained
+on**, and the secondary gate scores them with the trained head against the *paired* untrained
+numbers already in the pass-1 log — same prompts, same token budget, one variable.
+
+`tools/holdout_tau.py` reads the engine's per-verify records rather than the summary line, so every
+sequence is truncated at a common budget. This matters: tau grows with generation length (F92,
+reproduced in F108 at 2.67 -> 4.10 from 32 to 512 tokens), so unmatched lengths measure how long
+each sequence happened to run.
+
+> **Secondary gate, declared before any trained head exists.** Median tau over the hold-out at
+> NGEN0=200, block 6, clean. **GO at >= +0.35 tau** over the paired untrained baseline (+2.7 tok/s,
+> +11.8 %); **saturated below +0.15**.
+
+### How the two combine
+
+| | |
+|---|---|
+| primary PASSES | authoritative; the chain proceeds. A pre-registered rule that gets renegotiated when inconvenient is not a rule. |
+| primary STOPs on **reasoning tau alone**, secondary GOes | **proceed** — F108 is the reason: the primary reads one prompt below its own category's minimum, and a 32-prompt estimate is better evidence than a 1-prompt one |
+| primary STOPs on LOSSLESS, `GATE FAIL`, instruments present, suite mean dropped, or a malformed log | **absolute.** No secondary result rescues these. A secondary GO against a broken LOSSLESS gate is not a rescue, it is overfitting to the hold-out. |
+
+The hard/soft split is checked against the literal strings `session_gate.py` emits, because getting
+that list wrong in the permissive direction would let a run that **changed the emitted sequence**
+be chained on — the one thing this project never trades (F68).

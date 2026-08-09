@@ -6610,3 +6610,81 @@ when pass 1 lands, and against session 2's 2 000 after that.
 
 If the full-corpus curve confirms it, the entry in `LEVERS.md` moves from *blocked* to **closed,
 twice measured** — and the useful part of that is knowing not to spend the capture on it.
+
+---
+
+## Finding 108 — the session-1 GO/NO-GO gate is calibrated on an **outlier prompt**. On 63 real reasoning prompts the *untrained* head already clears the bar, at matched generation length
+
+Session 1 exists to test one premise: that `reasoning` is a collapsed category at tau 1.85 and that
+training can repair it. The premise comes from **one prompt** — index 7 of the frozen suite, the
+bat-and-ball question. Pass 1 is currently generating 500 real reasoning prompts
+(MetaMathQA / UltraInteract_sft / orca-math) with the **untrained** head, which makes the premise
+checkable for free, from data already on disk, before the session's answer exists.
+
+### 63 sequences, untrained head, block 6
+
+| | tau |
+|---|---|
+| min | 1.95 |
+| p25 | 3.41 |
+| **median** | **4.13** |
+| p75 | 4.69 |
+| max | 5.63 |
+
+**Every one of the 63 is above the suite's reasoning point of 1.85.** 95.2 % are above the session-1
+GO bar of 2.6 — with no training at all.
+
+### Ruling out the obvious confounder, which is real but does not explain it
+
+These ran at NGEN=512; the protocol measures at NGEN0=200, and F92 established that tau climbs as
+the drafter's 128-token sliding window fills. So the comparison is only fair at matched length. The
+per-verify records in the log give it exactly, by truncating each sequence at a token budget:
+
+| budget | median tau | mean tau | share >= 2.6 |
+|---|---|---|---|
+| 32 | 2.667 | 2.742 | 57.1 % |
+| 100 | 3.281 | 3.309 | 88.9 % |
+| **200 (the protocol)** | **3.483** | **3.427** | **88.9 %** |
+| 300 | 3.553 | 3.607 | 92.1 % |
+| 512 | 4.095 | 4.001 | 95.2 % |
+
+The length effect is real — 2.67 at 32 tokens to 4.10 at 512, which independently reproduces F92's
+shape on new data. **But at the protocol's own 200 tokens the median is still 3.483 against the
+suite prompt's 1.85.** The suite's reasoning prompt is below the minimum of 63 samples of its own
+category.
+
+### Both numbers are true; the question is which is representative
+
+A bat-and-ball trick question is answered by deliberating, and deliberation is where a drafter has
+least to work with. Math and multi-step solutions are structurally repetitive — LaTeX, enumerated
+steps, restated quantities — and that is exactly what speculation feeds on. So 1.85 is a real
+measurement of a hard prompt, not an error. What it is *not* is a measurement of the category, and
+the session-1 plan reads it as one.
+
+### What this changes, and what it deliberately does not
+
+**It does not change the pre-registered gate.** Adjusting a threshold after seeing data is the exact
+failure the pre-registration exists to prevent, and the rule in `S5_PROGRESSION.md` §2 stands as
+written: suite reasoning prompt tau >= 2.6 -> GO. It will be reported.
+
+**It does add a second, better-powered gate, declared now, before any trained head exists**, with
+its baseline measured on the untrained head:
+
+> **Secondary gate.** Median tau over a **32-prompt reasoning hold-out**, never trained on, at
+> NGEN0=200, block 6, clean. **Untrained baseline: 3.483** (n=63, this finding).
+> **GO at >= 3.83** (+0.35 tau, which at the measured 7.664 tok/s per unit tau is +2.7 tok/s or
+> +11.8 % — a lift worth a session). Below +0.15 tau, the category is saturated and no amount of
+> reasoning data will move it.
+
+The hold-out must be **excluded from the training capture**, or it measures memorisation. The
+orchestrator now reserves the last `S5_HOLDOUT` sequences of the corpus for this and never trains
+on them.
+
+### The wider consequence for how this project reads its own suite
+
+Each of the three "collapsed" categories — reasoning 1.85, code_gen 1.84, explanation 1.75 — is
+**one prompt**. This finding shows one of them is unrepresentative by a factor of ~1.9 at matched
+length. The suite mean of 3.5362 is still the right *comparison* number, because it is the same
+eight prompts every time and that is what makes runs comparable. But it is a fixed benchmark, not
+an estimate of workload behaviour, and the two have been conflated whenever a category number was
+read as "this is how the engine does on reasoning."

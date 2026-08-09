@@ -38,12 +38,17 @@ SW=$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$N+1)))")
 # mtp shards are 7.01 GB. Running out of disk in the middle of a safetensors write leaves a
 # truncated file that may still partially load -- far worse than refusing to start.
 FREE_GB=$(df -BG --output=avail /home/patrickd | tail -1 | tr -dcs '0-9' ' ' | tr -d ' ')
+CHUNK="${S5_CHUNK:-$N}"                      # default: one chunk, i.e. capture the whole corpus
 NEED_GB=$(python3 -c "
-cap = $N * ($NGEN + 40) * 33e3 / 1e9    # taps + lm_in over prompt+generated
-print(int(cap + 1 + 7 + 7 + 4))          # + trained bf16 + built head + archive copy + slack")
-LOG "preflight: need ~${NEED_GB} GB, have ${FREE_GB} GB free"
+# Peak is ONE CHUNK of capture, because the interleaved loop below deletes each chunk once the
+# trainer has consumed it. Plus the per-chunk trained bf16 + optimizer state, the built head, and
+# the archive copy of it.
+cap = min($CHUNK, $N) * ($NGEN + 40) * 33e3 / 1e9
+print(int(cap + 2 + 7 + 7 + 4))")
+LOG "preflight: need ~${NEED_GB} GB (peak = one chunk of ${CHUNK}), have ${FREE_GB} GB free"
 [ "$FREE_GB" -ge "$NEED_GB" ] || DIE "insufficient disk: need ~${NEED_GB} GB, have ${FREE_GB} GB. \
-Free space or reduce N before starting -- a truncated safetensors write is worse than not starting."
+Set S5_CHUNK smaller (peak scales with the chunk, not with N) -- a truncated safetensors write is \
+worse than not starting."
 
 # ---------------------------------------------------------------- pass 1: regenerate with the target
 if [ ! -s "$GEN" ]; then
@@ -67,39 +72,87 @@ sys.exit(1 if bad else 0)
 PY
 LOG "pass 1 OK ($GOT sequences)"
 
-# ---------------------------------------------------------------- pass 2: capture taps + lm_in + probes
-if [ ! -s "$WORK/cap/manifest.jsonl" ]; then
-    LOG "pass 2: capturing taps, lm_head input and engine draft probes"
-    mkdir -p "$WORK/cap"
-    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
-    DSV4_PROMPTS_FILE="$GEN" DSV4_CAPTURE="$WORK/cap" DSV4_NPROBE=16 DSV4_BLKSWEEP="$SW" \
-        scripts/run_model.sh "$ROOT/evidence/${NAME}_pass2.log" ./build/decode \
-        "$CKPT" "0,671,6102,294,8760,344" 8 "" 8
-    while pgrep -x decode >/dev/null; do sleep 60; done
-fi
-python3 tools/read_capture.py "$WORK/cap" | tail -3
-python3 tools/read_capture.py "$WORK/cap" | grep -q "VALIDATE: PASS" || DIE "capture validation failed"
-LOG "pass 2 OK"
-
 DOCK=(sudo docker run --rm --runtime nvidia -v "$ROOT":/work -v "$CKPT":/ckpt:ro
       -v /home/patrickd/s5-capture:/cap -w /work "$IMG")
 
-# ---------------------------------------------------------------- equivalence gate BEFORE training
-LOG "equivalence gate: port vs engine drafts"
-"${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/cap" --ckpt /ckpt \
-    --out /cap/$NAME/x --gate 2>&1 | tee "$ROOT/evidence/${NAME}_gate.log" | tail -2
-AGREE=$(grep -oE 'agreement: [0-9]+/[0-9]+ = [0-9.]+%' "$ROOT/evidence/${NAME}_gate.log" | tail -1 |
-        grep -oE '[0-9.]+%$' | tr -d '%')
-python3 -c "import sys; sys.exit(0 if float('${AGREE:-0}') >= 90 else 1)" \
-    || DIE "port/engine agreement ${AGREE:-?}% < 90% -- training on this would align the head to a function the server does not run (F101)"
-LOG "gate OK (${AGREE}%)"
+# ---------------------------------------------------------------- pass 2 + train, INTERLEAVED
+# S5_PROGRESSION §0 always priced storage as "capture a shard, train on it, delete it" -- but the
+# first version of this script captured the entire corpus before training started, which at 5 000
+# samples is ~123 GB against 120 GB free. Interleaving makes peak disk ONE CHUNK regardless of N.
+#
+# A chunked session is only equivalent to a continuous one if BOTH the weights and the AdamW
+# moments carry across chunks, and the LR schedule spans the session rather than restarting inside
+# each chunk. `--resume` + `--total-steps`/`--step-offset` do that; without them chunking would be
+# N little trainings wearing one session's name.
+# HOLD-OUT (F108). The last S5_HOLDOUT sequences are reserved for the secondary gate and are never
+# trained on. Measuring the trained head on sequences it trained on would report memorisation, and
+# the whole point of the secondary gate is that it estimates the CATEGORY rather than one prompt.
+HOLD="${S5_HOLDOUT:-32}"
+NTRAIN=$(( N - HOLD ))
+[ "$NTRAIN" -gt 0 ] || DIE "N=$N leaves nothing to train on after a $HOLD-sequence hold-out"
+sed -n "$((NTRAIN+1)),${N}p" "$GEN" > "$WORK/holdout.txt"
+LOG "hold-out: $(wc -l < "$WORK/holdout.txt") sequence(s) reserved, $NTRAIN for training"
 
-# ---------------------------------------------------------------- train
-LOG "training (1 epoch, ce+tv; a_conf 0 until free-running labels exist -- F100)"
-"${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/cap" --ckpt /ckpt \
-    --out "/cap/$NAME/trained" --pos-per-seq 16 --metrics-out "/cap/$NAME/train_metrics.json" \
-    2>&1 | tee "$ROOT/evidence/${NAME}_train.log" | tail -4
-[ -s "$WORK/trained/mtp_trained.safetensors" ] || DIE "trainer produced no weights"
+CHUNK="${S5_CHUNK:-$NTRAIN}"                 # default: one chunk, i.e. the original behaviour
+NCHUNK=$(( (NTRAIN + CHUNK - 1) / CHUNK ))
+LOG "training in $NCHUNK chunk(s) of up to $CHUNK sequence(s); peak capture on disk is one chunk"
+PREV=""
+OFF=0
+for (( ci=0; ci<NCHUNK; ci++ )); do
+    LO=$(( ci * CHUNK )); HI=$(( LO + CHUNK )); [ "$HI" -gt "$NTRAIN" ] && HI=$NTRAIN
+    CDIR="$WORK/c$ci"; mkdir -p "$CDIR"
+    if [ ! -s "$CDIR/cap/manifest.jsonl" ]; then
+        sed -n "$((LO+1)),${HI}p" "$GEN" > "$CDIR/gen.txt"
+        CN=$(wc -l < "$CDIR/gen.txt")
+        [ "$CN" -gt 0 ] || DIE "chunk $ci is empty"
+        LOG "chunk $ci: capturing $CN sequence(s)"
+        mkdir -p "$CDIR/cap"
+        sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
+        DSV4_PROMPTS_FILE="$CDIR/gen.txt" DSV4_CAPTURE="$CDIR/cap" DSV4_NPROBE=16 \
+            DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$CN+1)))")" \
+            scripts/run_model.sh "$ROOT/evidence/${NAME}_c${ci}_cap.log" ./build/decode \
+            "$CKPT" "0,671,6102,294,8760,344" 8 "" 8
+        while pgrep -x decode >/dev/null; do sleep 60; done
+    fi
+    python3 tools/read_capture.py "$CDIR/cap" | tail -2
+    python3 tools/read_capture.py "$CDIR/cap" | grep -q "VALIDATE: PASS" \
+        || DIE "chunk $ci capture validation failed"
+
+    # The equivalence gate runs ONCE, on the first chunk. It tests the port against the engine, a
+    # property of the code and not of the data, so re-running it per chunk would only re-pay a
+    # weight load. It runs BEFORE any training: training against a port that disagrees with the
+    # engine aligns the head to a function the server does not run (F101/F105).
+    if [ "$ci" -eq 0 ]; then
+        LOG "equivalence gate: port vs engine drafts"
+        "${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/c0/cap" --ckpt /ckpt \
+            --out "/cap/$NAME/x" --gate 2>&1 | tee "$ROOT/evidence/${NAME}_gate.log" | tail -2
+        AGREE=$(grep -oE 'agreement: [0-9]+/[0-9]+ = [0-9.]+%' "$ROOT/evidence/${NAME}_gate.log" |
+                tail -1 | grep -oE '[0-9.]+%$' | tr -d '%')
+        python3 -c "import sys; sys.exit(0 if float('${AGREE:-0}') >= 90 else 1)" \
+            || DIE "port/engine agreement ${AGREE:-?}% < 90% -- training on this would align the head to a function the server does not run (F101)"
+        LOG "gate OK (${AGREE}%)"
+    fi
+
+    LOG "chunk $ci: training (ce+tv; a_conf 0 until free-running labels exist -- F100)"
+    RES=(); [ -n "$PREV" ] && RES=(--resume "/cap/$NAME/$(basename "$PREV")")
+    "${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/c$ci/cap" --ckpt /ckpt \
+        --out "/cap/$NAME/c$ci/trained" --pos-per-seq 16 "${RES[@]}" \
+        --total-steps "$NTRAIN" --step-offset "$OFF" \
+        --metrics-out "/cap/$NAME/c$ci/train_metrics.json" \
+        2>&1 | tee "$ROOT/evidence/${NAME}_c${ci}_train.log" | tail -4
+    [ -s "$CDIR/trained/mtp_trained.safetensors" ] || DIE "chunk $ci produced no weights"
+    OFF=$(( OFF + $(wc -l < "$CDIR/gen.txt") ))
+
+    # Delete the consumed capture -- the point of chunking. gen.txt is kept, so a re-capture costs
+    # only the prefill (~0.4 h per 500), never the generate pass that dominates the session.
+    if [ "$NCHUNK" -gt 1 ]; then
+        rm -rf "$CDIR/cap"
+        LOG "chunk $ci: capture deleted, $(df -BG --output=avail /home/patrickd | tail -1 | tr -d ' ') free"
+    fi
+    PREV="$CDIR/trained"
+done
+ln -sfn "$PREV" "$WORK/trained"
+python3 tools/merge_metrics.py "$WORK"/c*/train_metrics.json --out "$WORK/train_metrics.json" || true
 
 # ---------------------------------------------------------------- write a head the ENGINE can load
 LOG "building loadable head (re-quantising trained tensors to their ORIGINAL formats)"
@@ -117,6 +170,28 @@ DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="6:1:1.5:0,6:1:1.5:1,6:1:1.5:2,6:1:1.5:3,6:1
 while pgrep -x decode >/dev/null; do sleep 60; done
 grep -q "LOSSLESS GATE: first 8 tokens match base AR -> PASS" "$ROOT/evidence/${NAME}_eval.log" \
     || DIE "LOSSLESS gate failed -- the fine-tuned head changes the emitted sequence"
+
+# ---------------------------------------------------------------- secondary gate (F108)
+# The pre-registered gate reads tau off ONE suite prompt, which F108 measured to be below the
+# minimum of 63 samples of its own category. This runs the SAME hold-out prompts the head never
+# trained on, with the trained head, and pairs them against the untrained numbers already in the
+# pass-1 log -- same prompts, same budget, one variable.
+LOG "secondary gate: $HOLD-prompt reasoning hold-out, trained head"
+sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
+DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
+    DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$HOLD+1)))")" \
+    scripts/run_model.sh "$ROOT/evidence/${NAME}_holdout.log" ./build/decode \
+    "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 220
+while pgrep -x decode >/dev/null; do sleep 60; done
+BASE_MED=$(python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_pass1.log" \
+             --only-last "$HOLD" --json-out "$WORK/holdout_untrained.json" 2>/dev/null |
+           grep -oE 'median [0-9.]+' | head -1 | grep -oE '[0-9.]+' || echo 3.483)
+LOG "hold-out untrained baseline (paired, from pass 1): $BASE_MED"
+set +e
+python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_holdout.log" --baseline "$BASE_MED" \
+    --json-out "$WORK/holdout_trained.json" | tee -a "$ROOT/evidence/${NAME}_verdict.log"
+V2=${PIPESTATUS[0]}
+set -e
 
 # ---------------------------------------------------------------- archive ALWAYS
 # Unconditional, and BEFORE any judgement. A rejected head is still a measured point on the
@@ -138,10 +213,26 @@ python3 tools/session_gate.py --eval "$ROOT/evidence/${NAME}_eval.log" \
     --json-out "$WORK/session_verdict.json" | tee -a "$ROOT/evidence/${NAME}_verdict.log"
 V=${PIPESTATUS[0]}
 set -e
+# COMBINING THE TWO GATES. The primary (pre-registered, one suite prompt) stays authoritative for
+# anything it PASSES -- a rule can only be trusted if it is not renegotiated when inconvenient. The
+# secondary can rescue a primary STOP, because F108 showed the primary's prompt is below the
+# minimum of its own category and a category-level estimate is the better evidence. It cannot do
+# the reverse: a secondary GO against a primary that saw the suite mean DROP or the LOSSLESS gate
+# fail is not a rescue, it is overfitting to the hold-out, so those two reasons are absolute.
+# Every hard reason session_gate.py can write, matched literally. Getting this list wrong in the
+# permissive direction lets the secondary rescue a run that changed the emitted sequence -- the one
+# thing this project never trades (F68). Checked against the strings the tool actually emits.
+HARD=$(grep -cE "LOSSLESS|GATE FAIL|suite mean tau .* DROPPED|instruments|no reasoning-category" \
+       "$WORK/session_verdict.json" 2>/dev/null || echo 0)
+if [ "$V" = "3" ] && [ "$V2" = "0" ] && [ "$HARD" = "0" ]; then
+    LOG "primary STOP but secondary GO on the $HOLD-prompt hold-out, and no hard failure -- \
+proceeding per F108: the primary reads one prompt that sits below its own category's minimum"
+    V=2
+fi
 case "$V" in
-  0) LOG "GO" ;;
+  0) LOG "GO (primary); secondary exit $V2" ;;
   2) LOG "GO_REPRICE -- proceeding, but the next session's value estimate is halved" ;;
-  *) LOG "STOP by the pre-registered rule. Head and metrics are archived. Chain ends."; exit 3 ;;
+  *) LOG "STOP: primary $V, secondary $V2. Head and metrics are archived. Chain ends."; exit 3 ;;
 esac
 
 if [ -n "$NEXT_NAME" ]; then

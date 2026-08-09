@@ -150,6 +150,12 @@ def main():
     ap.add_argument("--bisect", default=None, help="engine intermediates.bin to diff against")
     ap.add_argument("--gate", action="store_true", help="replay engine probes, report agreement")
     ap.add_argument("--smoke", action="store_true", help="load + one forward + one backward, then stop")
+    ap.add_argument("--resume", default=None,
+                    help="previous chunk's --out dir: resumes trained weights AND AdamW moments")
+    ap.add_argument("--total-steps", type=int, default=0, dest="total_steps",
+                    help="steps in the WHOLE session across all chunks; the LR schedule spans this")
+    ap.add_argument("--step-offset", type=int, default=0, dest="step_offset",
+                    help="steps already done in earlier chunks, so the schedule continues")
     ap.add_argument("--metrics-out", default=None, dest="metrics_out",
                     help="write per-step loss history + diagnostics as JSON (archived with the head)")
     a = ap.parse_args()
@@ -261,7 +267,14 @@ def main():
         blk.head = lambda x, full_logits=False, _w=aux["head.weight"]: F.linear(x, _w.to(x.dtype))
 
     # Trainable = non-expert parameters of the live modules (so grads reach the real graph).
-    tp = [(n, p) for i, b in enumerate(blocks) for n, p in b.named_parameters() if ".experts." not in n]
+    # NAME THEM IN ENGINE SPACE. `b.named_parameters()` yields bare names like `attn.wq_a.weight`,
+    # identical across all three blocks -- the block index was bound and never used. That is
+    # harmless for the optimizer (it takes a list of tensors) and fatal for saving: a dict keyed on
+    # those names keeps only mtp.2 and silently drops two thirds of the trained head. Prefixing
+    # with the block index also puts these in the same key space as dequant_mtp() and
+    # build_trained_head(), so --resume matches by construction.
+    tp = [(f"mtp.{i}.{n}", p) for i, b in enumerate(blocks)
+          for n, p in b.named_parameters() if ".experts." not in n]
     for _, p in [(n, p) for b in blocks for n, p in b.named_parameters()]:
         p.requires_grad_(False)
     for _, p in tp:
@@ -269,6 +282,46 @@ def main():
     n_tr = sum(p.numel() for _, p in tp)
     print(f"[train] trainable tensors in graph: {len(tp)} / {n_tr/1e6:.1f} M", flush=True)
     opt = torch.optim.AdamW([p for _, p in tp], lr=a.lr, betas=(0.9, 0.95), weight_decay=0.0)
+
+    # ---- CHUNKED SESSIONS: resume weights AND optimizer state -----------------------------------
+    # S5_PROGRESSION §0 prices storage as "capture a shard, train on it, delete it", but the
+    # orchestrator captured the whole corpus first -- at 5 000 samples that is ~123 GB against 120
+    # free. Interleaving capture and training means a session runs as several trainer invocations,
+    # which is only equivalent to one long run if BOTH the weights and the AdamW moments carry
+    # over. Resuming weights alone would silently restart the moment estimates every chunk, which
+    # at beta2=0.95 is a real optimisation difference dressed up as a checkpoint.
+    if a.resume:
+        from safetensors.torch import load_file as _lf
+        rp = os.path.join(a.resume, "mtp_trained.safetensors")
+        prev = _lf(rp)
+        by_name = {n: p for n, p in tp}
+        n_ov = 0
+        with torch.no_grad():
+            for k, v in prev.items():                     # same key space, by construction
+                tgt = by_name.get(k)
+                if tgt is None:
+                    continue
+                tgt.copy_(v.to(tgt.device, tgt.dtype)); n_ov += 1
+        print(f"[train] resumed {n_ov}/{len(prev)} trained tensors from {rp}", flush=True)
+        if n_ov == 0:
+            sys.exit("[train] FAIL: --resume matched no tensor names; chunk 2 would silently "
+                     "restart from the base head and the loss curve would look fine")
+        op = os.path.join(a.resume, "opt_state.pt")
+        if os.path.exists(op):
+            opt.load_state_dict(torch.load(op, map_location=dev))
+            # AdamW state_dict keys params by INDEX in the param group, so a resume is only correct
+            # if `tp` is built in the same order every run. It is (deterministic iteration over
+            # blocks), but assert it rather than assume: a shifted index would apply mtp.0's
+            # moments to mtp.1's weights and still train to a falling loss.
+            n_state = len(opt.state_dict()["state"])
+            if n_state != len(tp):
+                sys.exit(f"[train] FAIL: resumed AdamW state has {n_state} entries against "
+                         f"{len(tp)} trainable tensors -- the param ordering changed and the "
+                         f"moments would be applied to the wrong weights")
+            print(f"[train] resumed AdamW state ({n_state} tensors with moments)", flush=True)
+        else:
+            print(f"[train] WARNING: no opt_state.pt in {a.resume}; AdamW moments restart at zero. "
+                  f"This is NOT equivalent to one continuous run.", flush=True)
 
     _dbg = {"agree":0,"hit":0,"n":0,"tgt_top1_p":0.0,"drf_top1_p":0.0,"m":0}
     _hist = []   # per-step loss record, written out by --metrics-out
@@ -510,17 +563,22 @@ def main():
     # Fine-tuning a *pretrained* head at a flat 5e-5 from step 0 is the standard way to lose the
     # thing you are trying to keep, and a flag that silently has no effect is the same failure
     # class as the persistent=False buffers (F105) -- no error, plausible output, wrong function.
-    _nsteps = a.steps if a.steps > 0 else len(rows)
+    # The schedule spans the SESSION, not the chunk. A per-chunk cosine would warm up and decay to
+    # zero inside every chunk -- N little trainings instead of one, which is not what chunking is
+    # for. --total-steps/--step-offset make an interrupted session equivalent to a continuous one.
+    _nlocal = a.steps if a.steps > 0 else len(rows)
+    _nsteps = a.total_steps if a.total_steps > 0 else _nlocal
     _nwarm = max(1, int(a.warmup * _nsteps))
     def _lr_at(s):
         if s < _nwarm: return a.lr * (s + 1) / _nwarm
         prog = (s - _nwarm) / max(1, _nsteps - _nwarm)
         return a.lr * 0.5 * (1.0 + math.cos(math.pi * min(1.0, prog)))
-    print(f"[train] lr schedule: linear warmup {_nwarm} step(s) -> cosine over {_nsteps}, "
-          f"peak {a.lr:g}", flush=True)
+    print(f"[train] lr schedule: linear warmup {_nwarm} step(s) -> cosine over {_nsteps} session "
+          f"step(s), peak {a.lr:g}; this chunk is steps "
+          f"{a.step_offset}..{a.step_offset+_nlocal-1}", flush=True)
 
     for step, r in enumerate(rows):
-        lr_now = _lr_at(step)
+        lr_now = _lr_at(a.step_offset + step)
         for g in opt.param_groups: g["lr"] = lr_now
         sh = load_shard(os.path.join(a.capture, r["file"]), as_float32=True)
         taps = torch.from_numpy(sh["taps"].copy()).to(dev).to(torch.bfloat16)
@@ -627,7 +685,7 @@ def main():
               f"loss={tot_loss/max(nb,1):.4f} ce={nparts['ce']:.4f} tv={nparts['tv']:.4f} "
               f"conf={nparts['conf']:.4f} "
               f"grad_norm={float(gn):.4f} tensors_with_grad={ngrad}/{len(tp)}", flush=True)
-        _hist.append({"step": step, "T": T, "positions": len(sel),
+        _hist.append({"step": a.step_offset + step, "T": T, "positions": len(sel),
                       "loss": tot_loss / max(nb, 1), "ce": nparts["ce"], "tv": nparts["tv"],
                       "conf": nparts["conf"], "grad_norm": float(gn), "lr": lr_now})
         if ngrad == 0:
@@ -650,9 +708,17 @@ def main():
 
     os.makedirs(a.out, exist_ok=True)
     from safetensors.torch import save_file
-    save = {k: v.detach().to(torch.bfloat16).cpu() for k, v in params.items()}
+    # `tp`, not a `params` dict -- which did not exist. The save block referenced an undefined name
+    # and was only ever reachable after the stage-0 `return` was removed, so it had never run.
+    save = {k: v.detach().to(torch.bfloat16).cpu() for k, v in tp}
+    if len(save) != len(tp):
+        sys.exit(f"[train] FAIL: {len(tp)} trainable tensors collapsed to {len(save)} keys -- "
+                 f"duplicate names would drop trained weights silently")
     save_file(save, os.path.join(a.out, "mtp_trained.safetensors"))
     print(f"[train] saved {len(save)} trained tensors -> {a.out}/mtp_trained.safetensors", flush=True)
+    torch.save(opt.state_dict(), os.path.join(a.out, "opt_state.pt"))
+    print(f"[train] saved AdamW state -> {a.out}/opt_state.pt (needed for --resume to be "
+          f"equivalent to one continuous run)", flush=True)
 
     if a.metrics_out:
         first = _hist[0] if _hist else {}
