@@ -68,6 +68,18 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
 // ---- DSparkBlock forward (block_forward with dspark_attn) ----
 #include "hc.h"
 #include "moe.h"
+// F103 localised the port's 18557x divergence to dspark_block_forward. These stage dumps take it
+// one level deeper: whichever sub-stage first disagrees is the bug. Written only when decode.cu
+// points g_dspark_dump at a file, and only for the block it wants -- otherwise a no-op branch.
+FILE* g_dspark_dump = nullptr;
+static void dsp_dump(const char* tag, const float* dev, size_t n){
+    if(!g_dspark_dump) return;
+    std::vector<float> hv(n);
+    if(cudaMemcpy(hv.data(),dev,n*4,cudaMemcpyDeviceToHost)!=cudaSuccess) return;
+    uint32_t L=(uint32_t)strlen(tag), N=(uint32_t)n;
+    fwrite(&L,4,1,g_dspark_dump); fwrite(tag,1,L,g_dspark_dump);
+    fwrite(&N,4,1,g_dspark_dump); fwrite(hv.data(),4,n,g_dspark_dump);
+}
 void dspark_block_forward(float* out, const float* x, const int* input_ids, const float* main_kv, int t,
                           const BlockWeights& w, const float* cosB, const float* sinB, int block, int win,
                           int iters, float eps, cudaStream_t stream){
@@ -76,12 +88,21 @@ void dspark_block_forward(float* out, const float* x, const int* input_ids, cons
     CU(dkmalloc(&x1,(size_t)block*d*4)); CU(dkmalloc(&post,(size_t)block*hc*4)); CU(dkmalloc(&comb,(size_t)block*hc*hc*4));
     CU(dkmalloc(&sub,(size_t)block*d*4)); CU(dkmalloc(&res2,(size_t)block*hc*d*4));
     hc_pre(x1, post, comb, x, w.hc_attn_fn, w.hc_attn_scale, w.hc_attn_base, block, hc, d, iters, eps, stream);
+    if(g_dspark_dump){ cudaStreamSynchronize(stream);
+        dsp_dump("b_hcpre_attn_x1", x1, (size_t)block*d);
+        dsp_dump("b_hcpre_attn_post", post, (size_t)block*hc);
+        dsp_dump("b_hcpre_attn_comb", comb, (size_t)block*hc*hc); }
     rmsnorm(x1, x1, w.attn_norm, block, d, eps, true, stream);
+    if(g_dspark_dump){ cudaStreamSynchronize(stream); dsp_dump("b_rmsnorm_attn", x1, (size_t)block*d); }
     dspark_attn_forward(sub, x1, main_kv, t, w.attn, cosB, sinB, block, win, eps, stream);
+    if(g_dspark_dump){ cudaStreamSynchronize(stream); dsp_dump("b_attn_out", sub, (size_t)block*d); }
     hc_post(res2, sub, x, post, comb, block, hc, d, stream);
+    if(g_dspark_dump){ cudaStreamSynchronize(stream); dsp_dump("b_hcpost_attn", res2, (size_t)block*hc*d); }
     hc_pre(x1, post, comb, res2, w.hc_ffn_fn, w.hc_ffn_scale, w.hc_ffn_base, block, hc, d, iters, eps, stream);
     rmsnorm(x1, x1, w.ffn_norm, block, d, eps, true, stream);
+    if(g_dspark_dump){ cudaStreamSynchronize(stream); dsp_dump("b_rmsnorm_ffn", x1, (size_t)block*d); }
     moe_forward(sub, x1, input_ids, w.ffn, block, stream);
+    if(g_dspark_dump){ cudaStreamSynchronize(stream); dsp_dump("b_moe_out", sub, (size_t)block*d); }
     hc_post(out, sub, res2, post, comb, block, hc, d, stream);
     dksync(stream);
     dkfree(x1);dkfree(post);dkfree(comb);dkfree(sub);dkfree(res2);

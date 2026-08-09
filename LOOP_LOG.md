@@ -6314,3 +6314,53 @@ validation that capture format v2 is correct, which nothing else had checked.
 
 The next bisect goes one level deeper: dump inside `dspark_block_forward` (post-attention,
 post-`hc_post`, post-MoE) and the same procedure names the sub-stage.
+
+## Finding 104 — the bug is `DSparkAttention`, and the Sinkhorn shim I suspected is EXONERATED at cosine 1.000000
+
+Sub-stage dumps inside `dspark_block_forward` (8 stages, `g_dspark_dump`, first block only) plus a
+comparator that calls the reference's own `hc_pre`/`hc_post` rather than reimplementing them:
+
+```
+main_x_t           cosine=+0.999671   OK
+after_embed        cosine=+1.000000   OK
+b_hcpre_attn_x1    cosine=+0.999999   OK
+b_hcpre_attn_post  cosine=+1.000000   OK
+b_hcpre_attn_comb  cosine=+1.000000   OK      <- hc_split_sinkhorn is CORRECT
+b_rmsnorm_attn     cosine=+0.999998   OK
+b_attn_out         cosine=+0.203301   rel_err=30161   **DIVERGED**
+```
+
+### My prime suspect was wrong, and that is the point of measuring
+
+F103 named `hc_split_sinkhorn` as the leading candidate: I had already got it wrong once, fixed it by
+transcription, and never verified the transcription against a number. **It is exact** — `comb` at
+cosine 1.000000, `post` at 1.000000. The transcription was right. Had I "fixed" it on suspicion I
+would have broken a correct function and still had the bug.
+
+**Five guesses this session, five wrong** (STE, seed clone, `retain_graph`, block width, Sinkhorn).
+Every one of them was resolved by a measurement, and the measurements cost less than the guesses.
+
+### What is isolated now
+
+`DSparkAttention.forward` — and `rel_err 30161` says magnitude, not orientation. The two things in
+that path the port supplies differently from the engine:
+
+1. **`sparse_attn` in `train/kernel.py`** is hand-written (gather + einsum + sink folded as an extra
+   zero-value logit). Checked by inspection against `mla_attn.cu`: the sink is applied UNSCALED
+   while scores are scaled, which matches; masking by `-inf` matches `if (idx<0) continue`.
+2. **The KV context.** The engine passes `main_kv` PRECOMPUTED by `dspark_main_kv` over the whole
+   context; the reference computes it inside from `main_x` and accumulates into `self.kv_cache`.
+   The gate feeds phase B a single position (`main_hidden[:, t:t+1]`), so if phase A did not leave
+   the window populated the port attends to **one** key where the engine attends to up to
+   **WINDOW=128** — which would change the output magnitude by orders of magnitude, exactly the
+   symptom.
+
+(2) is the stronger hypothesis precisely because it predicts a magnitude error rather than a
+direction error, and `cosine 0.20 / rel_err 30161` is a magnitude error.
+
+### Method note
+
+Two rounds of bisect, four runs total, and the search went: whole pipeline -> one function -> one
+sub-stage, with a correct component cleared along the way. The next round dumps inside
+`dspark_attn_forward` (q, kv, the topk index, pre-softmax scores) and the same procedure will
+separate "my sparse_attn is wrong" from "the port's attention sees the wrong context".

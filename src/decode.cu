@@ -1024,9 +1024,11 @@ int main(int argc, char** argv){
                          dump("main_x_t", main_x+(size_t)t*d, d); }
                 float *pc=xa,*pn=xb;
                 dump("after_embed", pc, (size_t)BLK*hc*d);
+                { extern FILE* g_dspark_dump; g_dspark_dump = dmp; }   // stage dumps for block 0 only
                 for(int st=0;st<NSTAGE;++st){ dspark_block_forward(pn,pc,dbid,mkv[st],panchor,mb[st],
                         blk_cos+(size_t)pctx*hf, blk_sin+(size_t)pctx*hf, BLK,WINDOW,HC_SINKHORN_ITERS,EPS);
                     std::swap(pc,pn);
+                    { extern FILE* g_dspark_dump; g_dspark_dump = nullptr; }  // only the FIRST block
                     char tg[24]; snprintf(tg,sizeof tg,"after_block%d",st); dump(tg, pc, (size_t)BLK*hc*d); }
                 CU(cudaMemcpy(dfid,&pcur,4,cudaMemcpyHostToDevice));
                 dspark_forward_head(dout,pc,dfid,hh_fn,hh_sc,hh_ba,hnorm,head_bf,mw1,mw2,1,BLK,hc,d,

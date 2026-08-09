@@ -336,6 +336,29 @@ def main():
                   f"{'MATCH' if int(seed.item())==cur_probe else '** MISMATCH **'}")
             cmp("main_x_t", mx)
             cmp("after_embed", hb)
+            # ---- diff BLOCK 0's sub-stages, using the MODEL's own hc_pre/hc_post ----
+            # Mirrors kernels/dspark_attn.cu dspark_block_forward:
+            #   hc_pre(attn) -> rmsnorm -> attn -> hc_post -> hc_pre(ffn) -> rmsnorm -> moe -> hc_post
+            # Calling the reference methods (not a second reimplementation) keeps this a diff of the
+            # port as it actually runs.
+            b0 = blocks[0]
+            x1, post_g, comb_g = b0.hc_pre(hb, b0.hc_attn_fn, b0.hc_attn_scale, b0.hc_attn_base)
+            cmp("b_hcpre_attn_x1", x1)
+            cmp("b_hcpre_attn_post", post_g)
+            cmp("b_hcpre_attn_comb", comb_g)
+            x1n = b0.attn_norm(x1)
+            cmp("b_rmsnorm_attn", x1n)
+            # continue exactly as Block.forward does, comparing each remaining stage
+            ao = b0.attn(x1n, int(t_probe), mx)
+            cmp("b_attn_out", ao)
+            hp = b0.hc_post(ao, hb, post_g, comb_g)
+            cmp("b_hcpost_attn", hp)
+            x2, post2, comb2 = b0.hc_pre(hp, b0.hc_ffn_fn, b0.hc_ffn_scale, b0.hc_ffn_base)
+            x2n = b0.ffn_norm(x2)
+            cmp("b_rmsnorm_ffn", x2n)
+            mo = b0.ffn(x2n, seed)
+            cmp("b_moe_out", mo)
+
             for i, blk in enumerate(blocks):
                 hb = blk(hb, int(t_probe), seed, mx)
                 cmp(f"after_block{i}", hb)
