@@ -131,7 +131,24 @@ int main(int argc, char** argv){
                    if(v>=2&&v<=16){ blkSweep.push_back(v); passSweep.push_back(np<1?1:np); adaptSweep.push_back(ak);
                                     promptSweep.push_back(pi); }
                    while(*q && *q!=',') ++q; if(*q==',') ++q; } }
-    if(blkSweep.empty()){ blkSweep.push_back(DSPARK_BLOCK); passSweep.push_back(1); adaptSweep.push_back(0.f); promptSweep.push_back(0); }
+    // DEFAULT SPECULATION BLOCK = 6, and it is deliberately NOT `DSPARK_BLOCK`.
+    //
+    // `DSPARK_BLOCK` is 5 because `config.json` says `dspark_block_size: 5` -- that is the width the
+    // head was TRAINED at, a model constant, and it stays untouched. The number of proposals the
+    // ENGINE asks for is a serving decision, and F94 measured 6 beating 5 on 4 of 4 realistic
+    // prompts (agentic +6.3%, long_context +3.3%, code_edit +2.6%, multi_turn +1.0%) with the
+    // LOSSLESS gate passing. It also measured 8 LOSING to 6 on 3 of 4, with tau itself falling --
+    // the head generalises exactly one position past its training width, not three. So 6 is the
+    // measured optimum, not a guess, and 7+ is closed by measurement rather than left open.
+    //
+    // F93 is the prerequisite: until the verify checked all BLK proposals instead of BLK-1, asking
+    // for a sixth was pointless because it could never be verified.
+    // DSV4_BLK overrides; DSV4_BLK=5 restores the pre-F94 default for the A/B.
+    if(blkSweep.empty()){
+        const char* be = getenv("DSV4_BLK");
+        int defblk = be ? atoi(be) : 6;
+        if(defblk < 2 || defblk > 16) defblk = 6;
+        blkSweep.push_back(defblk); passSweep.push_back(1); adaptSweep.push_back(0.f); promptSweep.push_back(0); }
     // A sweep point naming a prompt that was not supplied would silently run prompt 0 and report a
     // number against the wrong sequence. Refuse the whole run instead — a 10-minute load producing
     // a mislabelled table is the expensive failure here.

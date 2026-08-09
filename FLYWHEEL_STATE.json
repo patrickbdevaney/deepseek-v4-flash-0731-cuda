@@ -8,14 +8,16 @@
     "moe-latency"
   ],
   "baseline": {
-    "spec_tok_s": 22.15,
-    "base_tok_s": 13.78,
-    "acceptance": 2.89,
-    "speedup": 1.61,
-    "source_log": "evidence/clean_post_f83.log",
+    "spec_suite_mean_tok_s": 22.66,
+    "spec_suite_mean_tau": 3.536,
+    "base_ar_tok_s": 13.76,
+    "block": 6,
+    "adaptK": 1.5,
+    "source_log": "evidence/baseline_blk6_suite.log",
     "measured": "2026-08-08",
-    "dprof_runs_since_clean": 0,
-    "note": "CLEAN run, F83. No DSV4_DPROF, no DSV4_KSWEEP, no DSV4_SPECPROF; NDEC=8, NGEN0=24 (9 verifies), block=5, passes=1, adaptK=1.50, prompt 0; clocks pinned (sudo jetson_clocks), caches dropped. GATE PASS, MATCH 5/5, LOSSLESS GATE PASS, first token 11111, acceptance 2.89. THE DRAFT PATH IS NOW ON THE ARENA (lever B10, default ON, DSV4_DRAFT_RAW=1 restores raw) and the output is BIT-IDENTICAL to clean_post_f81.log: diff over the spec tokens, the base-AR tokens and all 45 drafter margins is EMPTY, and all nine verifies pair 1:1 at identical K and identical accept counts. The gain is 22.06 -> 22.15 spec (+0.41%) and 1196.7 -> 1190.7 ms on the nine paired verifies (-0.50%, 9/9 in one direction, per-verify -1.29/-0.09/-0.15/-0.26/-0.42/-0.94/-0.84/-0.32/-0.28%). Base AR went 13.83 -> 13.78 (-0.36%) and that path never touches the draft, so it is the control: cold prefill 206.1->206.9, base AR 72.3->72.6 and warm prefill 137.1->137.9 all moved the OTHER way, i.e. the pair drawn was a slow one and the nine draft-containing marks still went 9/9 faster. Per trap 25 a single cross-run pair cannot resolve 0.50% on its own; the number that does not need resolving is that F82 priced 10.19 ms/round of allocator host time, ALL of it was removed, and the round got 0.67 ms/round faster -- 6.5% of the prediction. Arena capacity checked and printed: draft footprint 210.72 MB (B10 estimated ~5 MB), global hwm 210.72 MB / cap 512.00 MB = 41.2%, and the DRAFT is now the arena's high-water mark, above the 43-layer prefill at PSp=5."
+    "protocol": "MANDATORY: 8-prompt suite from scripts/prompt_suite.json (one per category, ids from the checkpoint tokenizer), NGEN0=200 so tau is measured PAST the drafter 128-token sliding window (F92: tau is 1.39 over the first 32 generated tokens and only reaches ~3.2 after ~128). A tau without a generation length is not comparable to anything, including this project earlier numbers. Canonical 6-token prompt kept as a CONTROL only -- it is the worst case and regresses at block 6.",
+    "note": "CLEAN. No DSV4_DPROF/KSWEEP/SPECPROF/MOEUNION. Clocks pinned, caches dropped. GATE PASS, MATCH 5/5, LOSSLESS GATE PASS, base AR 13.76 unchanged. Block 6 is the engine default (F94); DSPARK_BLOCK stays 5 because that is the config value and the width the head was TRAINED at. Suite mean +1.6% over block 5; F94 quoted +3.3% on a 4-prompt subset that excluded every regressing prompt. Block 6 COSTS the low-acceptance cases: canonical -6.2%, code_gen -4.5%, reasoning -1.2%. That split is real and is what F95 adaptive block tried and failed to exploit.",
+    "dprof_runs_since_clean": 0
   },
   "queue": [
     {

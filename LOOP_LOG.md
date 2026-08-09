@@ -5855,3 +5855,56 @@ site (`BLKMAX >= 6` whenever `DSV4_ADAPTBLK` is set), not at the controller.
 **Pattern worth naming: any change to a width parameter must be paired with an audit of everything
 sized from it.** Twice in three findings the code change was trivial and the buffer sizing was the
 real work, and both times the failure mode was silent corruption rather than a crash.
+
+## Finding 96 — block 6 shipped as the default: **+1.6 % suite mean, not the +3.3 % F94 quoted** — the subset excluded every prompt that regresses
+
+**Operator-run, CLEAN.** `evidence/baseline_blk6_suite.log`. All 9 prompts, NGEN0=200, no profiling
+instruments, clocks pinned, caches dropped. `GATE PASS`, `MATCH 5/5`, `LOSSLESS GATE PASS`, base AR
+**13.76 unchanged**.
+
+| prompt | tau 5 -> 6 | tok/s 5 -> 6 | |
+|---|---|---|---|
+| agentic | 4.41 -> 5.15 | 28.15 -> 29.98 | **+6.5 %** |
+| long_context | 5.00 -> 5.54 | 29.89 -> 30.77 | +2.9 % |
+| code_edit | 4.08 -> 4.43 | 26.09 -> 26.81 | +2.8 % |
+| explanation | 1.70 -> 1.75 | 13.18 -> 13.38 | +1.5 % |
+| multi_turn | 4.06 -> 4.46 | 28.66 -> 28.97 | +1.1 % |
+| short_factual | 3.11 -> 3.27 | 22.95 -> 22.78 | -0.7 % |
+| reasoning | 1.82 -> 1.85 | 14.75 -> 14.58 | -1.2 % |
+| code_gen | 1.86 -> 1.84 | 14.63 -> 13.97 | **-4.5 %** |
+| canonical (control) | 3.61 -> 3.61 | 24.36 -> 22.86 | **-6.2 %** |
+| **SUITE MEAN (8)** | **3.25 -> 3.54 (+8.9 %)** | **22.29 -> 22.66** | **+1.6 %** |
+
+### The correction I owe on my own number
+
+F94 reported **+3.3 %**, measured on a 4-prompt subset — agentic, code_edit, long_context,
+multi_turn. **I picked those four because they were the ones pressing the ceiling**, which is
+exactly the set that benefits from a wider block. Re-measured here, that same subset still gives
++3.3 % (28.20 -> 29.13), so the number was not wrong — **the population was.** The full suite is
+**+1.6 %**, because four prompts regress and the subset contained none of them.
+
+**Selecting the measurement set by the mechanism you expect to help is a way to be precisely right
+about the wrong thing.** F94's conclusion (ship 6) survives; its magnitude does not.
+
+### The split is real and it is what F95 was reaching for
+
+Block 6 helps high-acceptance workloads and **costs** low-acceptance ones: canonical -6.2 %,
+code_gen -4.5 %. The spread between best (+6.5 %) and worst (-6.2 %) is ~13 points, so a controller
+that could route each workload to its own width is worth several times the +1.6 % that a single
+global constant buys. F95's controller failed by chasing F92's window-fill transient, not because
+the opportunity is absent — **the opportunity is now measured at ~13 points of spread.**
+
+### Shipped
+
+`DSV4_BLK` defaults to 6; `DSV4_BLK=5` restores the previous behaviour. **`DSPARK_BLOCK` stays 5**
+and is untouched: it is `config.json`'s `dspark_block_size`, the width the head was TRAINED at, and
+a model constant. The number of proposals the ENGINE requests is a serving decision. Conflating
+those two is what produced F93's defect in the first place.
+
+### The new baseline, with its protocol attached
+
+`FLYWHEEL_STATE.json` now records the baseline as an **8-prompt suite mean at NGEN0=200**, not a
+single canonical number, with F92's rule written into it: **tau must be measured past the drafter's
+128-token sliding window, and a tau without a generation length is not comparable to anything —
+including this project's own earlier numbers.** The canonical 6-token prompt is retained as a
+CONTROL only; it is the worst case and it regresses at block 6.
