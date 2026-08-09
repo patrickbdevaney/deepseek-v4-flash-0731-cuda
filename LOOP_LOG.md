@@ -5693,3 +5693,62 @@ ceiling of 5** (6 if the draft[4] defect is fixed). The three collapsed categori
 reasoning, code_gen at tau 1.68-1.83 — are open-ended generation, and are exactly where a fine-tune
 on target-regenerated responses should help most. **Set the S5 success criterion as the 8-prompt
 suite mean at NGEN0>=200, not as a single number on the canonical prompt.**
+
+## Finding 93 — ADOPTED: the verify was checking 4 of the drafter's 5 proposals. Verifying all five is **+8.3 % tau / +3.4 % tok/s, lossless, no training**
+
+**Operator-run.** `evidence/vkplus_suite.log` vs `evidence/tau_suite_m1m2.log` — identical 9 prompts,
+identical NGEN0=200, one change.
+
+### The defect
+
+`hmarg[]` carries **BLK = 5** margins, so the drafter has always produced five proposals. But the
+verify spends `vtok[0]` on the ALREADY-KNOWN token and fills `vtok[1..VB-1]` from `draft[]`, with
+`VK` capped at `BLK`. So it checked `draft[0..3]` and **`draft[4]` was computed every round and
+thrown away.** tau could never exceed 5 where the architecture allows 6 — which is exactly why the
+DSpark paper reports **6.11** accepted length at gamma=5 while our ceiling read 5.
+
+**Verify width and draft width are different numbers.** Verifying all BLK proposals needs
+`VB = BLK + 1`.
+
+### The part that would have been silent
+
+`hv`, `hv2`, `collK`, `logK`, `mh_v` were all allocated `BLKMAX * ...`. At `VB=6` against
+`BLKMAX=5` they overrun by exactly one position — and **that would not have crashed.** It would have
+corrupted the last verified token, which is the highest-value token in the block because it gates
+everything after it. Same shape as Finding 62. New `VBMAX = BLKMAX + 1` sizes every VERIFY-side
+buffer; the DRAFT-side ones (`dbid`, `dmarg`, `xemb`, `xa`, `xb`) correctly stay at `BLKMAX`,
+because the draft really is BLK wide.
+
+### Measured
+
+| prompt | tau | tok/s | |
+|---|---|---|---|
+| long_context | 4.43 -> **5.00** | 28.25 -> **29.89** | +5.8 % |
+| agentic_format | 3.96 -> 4.41 | 26.52 -> 28.15 | +6.1 % |
+| multi_turn | 3.62 -> 4.06 | 27.12 -> 28.66 | +5.7 % |
+| short_factual | 2.87 -> 3.11 | 22.30 -> 22.95 | +2.9 % |
+| canonical | 3.41 -> 3.61 | 23.74 -> 24.36 | +2.6 % |
+| code_edit | 3.85 -> 4.08 | 25.67 -> 26.09 | +1.6 % |
+| explanation | 1.68 -> 1.70 | 13.12 -> 13.18 | +0.5 % |
+| code_gen | 1.83 -> 1.86 | 14.61 -> 14.63 | +0.1 % |
+| reasoning | 1.80 -> 1.82 | 14.80 -> 14.75 | -0.3 % |
+| **SUITE MEAN** | **3.00 -> 3.26 (+8.3 %)** | **21.55 -> 22.29 (+3.4 %)** | |
+
+`GATE PASS`, `MATCH 5/5`, **`LOSSLESS GATE PASS`**. Base AR unchanged (13.80 -> 13.77).
+`DSV4_NOVKPLUS=1` restores the old cap.
+
+Predicted +3 to +8 % on the suite mean before the run; landed at +3.4 % tok/s. The DISTRIBUTION was
+predicted too and matters more than the mean: the gain is concentrated in the four categories
+already pressing the old ceiling, and is ~zero in the three collapsed ones (code_gen, reasoning,
+explanation) which never reach VK=5 — for them a sixth position is dead weight the adaptive gate
+correctly declines to spend.
+
+### Two consequences
+
+1. **`long_context` hit tau = 5.00 exactly, against the new ceiling of 6.** It is now pressing the
+   new limit as hard as it pressed the old one. **Block size > 5 (F43, conditionally retired
+   pending higher acceptance) is no longer conditional — it is the obvious next lever**, and this
+   finding is the acceptance evidence F43 was waiting for.
+2. **Every acceptance number this project has ever quoted was against a ceiling one token short of
+   the architecture's.** The DSpark paper's 6.11 was never out of reach; we were measuring a
+   different quantity.

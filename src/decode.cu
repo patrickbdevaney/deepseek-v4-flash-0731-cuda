@@ -140,13 +140,22 @@ int main(int argc, char** argv){
                            "(argv[2] is prompt 0; DSV4_PROMPTS adds the rest)\n", i2, promptSweep[i2], prompts.size());
             return 2; }
     int BLKMAX=0; for(int v:blkSweep) if(v>BLKMAX) BLKMAX=v;
+    // VERIFY WIDTH vs DRAFT WIDTH -- they are NOT the same number, and conflating them cost us a
+    // whole token of ceiling. The verify spends vtok[0] on the ALREADY-KNOWN token and fills
+    // vtok[1..VB-1] from draft[], so verifying all BLK proposals needs VB = BLK+1. The drafter has
+    // always produced BLK proposals (hmarg[] carries BLK margins) but the verify capped at VB=BLK,
+    // so draft[BLK-1] was computed every round and thrown away, and tau could never exceed BLK.
+    // That is why the DSpark paper reports 6.11 accepted length at gamma=5 while our ceiling read 5.
+    // Every VERIFY-side buffer must be sized from this, not from BLKMAX; the DRAFT-side ones
+    // (dbid, dmarg, xemb, xa, xb) stay at BLKMAX because the draft really is BLK wide.
+    int VBMAX = BLKMAX + 1;
     int SMAX=0; for(const auto& p:prompts) if((int)p.size()>SMAX) SMAX=(int)p.size();
-    int seqmax = SMAX + (NDEC>NGEN0?NDEC:NGEN0) + BLKMAX + 8;   // longest prompt + room for spec block overshoot
+    int seqmax = SMAX + (NDEC>NGEN0?NDEC:NGEN0) + VBMAX + 8;   // longest prompt + room for spec block overshoot
     // Parse-only self-gate: the sweep table is the thing most likely to be wrong, and checking it
     // after a 10-minute checkpoint load is checking it too late. DSV4_PARSE_ONLY=1 prints what was
     // parsed and exits before the load, so the table can be gated in milliseconds.
     if(getenv("DSV4_PARSE_ONLY")){
-        printf("[parse] %zu prompt(s), SMAX=%d, BLKMAX=%d, seqmax=%d\n", prompts.size(), SMAX, BLKMAX, seqmax);
+        printf("[parse] %zu prompt(s), SMAX=%d, BLKMAX=%d, VBMAX=%d, seqmax=%d\n", prompts.size(), SMAX, BLKMAX, VBMAX, seqmax);
         for(size_t i2=0;i2<prompts.size();++i2){ printf("[parse] prompt %zu (%zu ids):", i2, prompts[i2].size());
             for(int v:prompts[i2]) printf(" %d", v); printf("\n"); }
         for(size_t i2=0;i2<blkSweep.size();++i2)
@@ -672,8 +681,11 @@ int main(int argc, char** argv){
         int *dbid,*dfid,*dout; CU(cudaMalloc(&dbid,BLKMAX*4)); CU(cudaMalloc(&dfid,4)); CU(cudaMalloc(&dout,(BLKMAX+1)*4));
         float* dmarg; CU(cudaMalloc(&dmarg,BLKMAX*4));       // per-proposal top1-top2 logit margin
         float *xemb,*xa,*xb; CU(cudaMalloc(&xemb,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&xa,(size_t)BLKMAX*hc*d*4)); CU(cudaMalloc(&xb,(size_t)BLKMAX*hc*d*4));
-        float *hv,*hv2,*collK,*logK,*mh_v; CU(cudaMalloc(&hv,(size_t)BLKMAX*hc*d*4)); CU(cudaMalloc(&hv2,(size_t)BLKMAX*hc*d*4));
-        CU(cudaMalloc(&collK,(size_t)BLKMAX*d*4)); CU(cudaMalloc(&logK,(size_t)BLKMAX*VOCAB*4)); CU(cudaMalloc(&mh_v,(size_t)BLKMAX*3*d*4));
+        // VERIFY-side: sized VBMAX = BLKMAX+1. At VB=BLK+1 a BLKMAX-sized hv/collK/logK/mh_v
+        // overruns by exactly one position -- which would not crash, it would corrupt the last
+        // verified token. Same shape as Finding 62.
+        float *hv,*hv2,*collK,*logK,*mh_v; CU(cudaMalloc(&hv,(size_t)VBMAX*hc*d*4)); CU(cudaMalloc(&hv2,(size_t)VBMAX*hc*d*4));
+        CU(cudaMalloc(&collK,(size_t)VBMAX*d*4)); CU(cudaMalloc(&logK,(size_t)VBMAX*VOCAB*4)); CU(cudaMalloc(&mh_v,(size_t)VBMAX*3*d*4));
         std::vector<double> sweep_mstok(blkSweep.size()), sweep_acc(blkSweep.size());
         // The EFFECTIVE adaptK, which is not the requested one: a sweep entry of 0 falls through to
         // the 1.5 default unless NO_ADAPTK=1 is also in the environment, so a table printing the
@@ -1005,13 +1017,18 @@ int main(int argc, char** argv){
             // signal is the draft head's own top1-top2 logit margin, already computed while it takes
             // the argmax. Truncating is LOSSLESS: verifying fewer proposals cannot change what the
             // target emits, only how many tokens one verify can commit.
-            int VK = BLK;
+            // VKPLUS: verify all BLK proposals (VB = BLK+1), not BLK-1 of them. DSV4_NOVKPLUS=1
+            // restores the old cap for the A/B. The extension is gated on the LAST proposal's own
+            // margin, hmarg[BLK-1], which is in bounds precisely because hmarg carries BLK entries.
+            static const int novk = getenv("DSV4_NOVKPLUS") != nullptr;
+            const int VKCAP = novk ? BLK : BLK + 1;
+            int VK = VKCAP;
             if(adaptK > 0.f){
                 VK = 2;                                        // always verify at least cur + one proposal
                 // VK=k verifies [cur, draft[0..k-2]], so extending to k+1 ADDS draft[k-1]: the gate
                 // is that proposal's own margin, hmarg[VK-1]. (hmarg[VK-2] gates a token already in
                 // the block, which is the wrong one and always passes for a confident draft[0].)
-                while(VK < BLK && hmarg[VK-1] >= adaptK) ++VK;
+                while(VK < VKCAP && hmarg[VK-1] >= adaptK) ++VK;
             }
             // Print every verify's margins: one adaptK=0 run is then a CALIBRATION SET (margin vs
             // whether that proposal was actually accepted), from which the threshold is fitted
@@ -1117,7 +1134,7 @@ int main(int argc, char** argv){
             printf("[sfx]   a suffix match existed in %d/%d verifies; suffix beat MTP in %d, lost in %d\n",
                    sfx_hit, sfx_n, sfx_win, sfx_lose);
         }
-        printf("\n[spec] generated %d tokens over %d verifies: mean tokens/verify = %.2f (block=%d, max %d)\n", (int)sgen.size(), nverify, avg_acc, BLK, BLK);
+        printf("\n[spec] generated %d tokens over %d verifies: mean tokens/verify = %.2f (block=%d, max %d)\n", (int)sgen.size(), nverify, avg_acc, BLK, getenv("DSV4_NOVKPLUS")?BLK:BLK+1);
         printf("[spec] tokens:"); for(int i=0;i<(int)sgen.size() && i<40;++i) printf(" %d",sgen[i]); printf("\n");
         // SPEC-vs-BASE EQUIVALENCE GATE (LOOP_LOG Finding 68). Speculative decoding is supposed to be
         // LOSSLESS: the verify corrects every draft, so the emitted sequence must equal what base AR
