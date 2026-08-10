@@ -24,8 +24,30 @@ ROOT=/home/patrickd/deepseek-v4-flash-0731-cuda
 CKPT=/home/patrickd/models/DeepSeek-V4-Flash-0731-REAP
 HEAD="${1:?usage: suite_adaptk_sweep.sh <head-dir|\"\"> <tag> [thresholds...]}"
 TAG="${2:?tag}"; shift 2
-THRS=("$@"); [ "${#THRS[@]}" -gt 0 ] || THRS=(0.0 0.5 1.0 1.5 2.0 3.0)
+THRS=("$@"); [ "${#THRS[@]}" -gt 0 ] || THRS=(0.5 1.0 1.5 2.0 3.0)
 cd "$ROOT"
+
+# WARM-UP, DISCARDED (F120). The first run of a batch is systematically the slowest -- in both
+# batches measured, the lowest number was the first run -- and rates then drift UPWARD with run
+# order by ~6 % on a policy that never changes. The first version of this script swept thresholds in
+# increasing order, which confounded "stricter threshold" with "later in the batch" and produced an
+# apparent optimum at 2.0 that was exactly the size of the drift.
+echo "[sweep] warm-up run (discarded)"
+sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
+DSV4_PROMPTS="$(cat "$ROOT/protocol/suite_prompts.txt")" \
+    DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(0,9)))")" \
+    scripts/run_model.sh "$ROOT/evidence/suiteK_${TAG}_warmup.log" ./build/decode \
+    "$CKPT" "0,671,6102,294,8760,344" 8 "$HEAD" 200 >/dev/null 2>&1 || true
+while pgrep -x decode >/dev/null; do sleep 20; done
+
+# SHUFFLED, and seeded so the order is reproducible. Never sweep monotonically in the parameter
+# under test on a box whose rate drifts with run order.
+mapfile -t THRS < <(printf '%s\n' "${THRS[@]}" | python3 -c "
+import sys, random
+v = [l.strip() for l in sys.stdin if l.strip()]
+random.Random(20260810).shuffle(v)
+print('\n'.join(v))")
+echo "[sweep] shuffled order: ${THRS[*]}"
 
 for THR in "${THRS[@]}"; do
     OUT="$ROOT/evidence/suiteK_${TAG}_${THR}.log"
