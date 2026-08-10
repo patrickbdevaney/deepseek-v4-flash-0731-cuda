@@ -29,13 +29,25 @@ No Python on the hot path. Every kernel gated against a PyTorch oracle before it
 
 | | measured | ceiling | |
 |---|---|---|---|
-| **speculative decode**, 8-prompt suite mean | **22.66 tok/s** | — | best category **30.77** |
-| acceptance τ, suite mean | **3.54 / 7** | 7 at block 6 | the remaining headroom lives here |
+| **speculative decode**, 8-prompt suite mean | **24.52 tok/s** (`s1`, shipped) | — | best category **32.42** |
+| acceptance τ, suite mean | **3.58 / 7** | 7 at block 6 | the remaining headroom lives here |
 | **base AR decode** | **13.76 tok/s** | 14.33–15.98 | **97 %** of the realistic floor |
 | **prefill (PS=1022)** | **62.4 tok/s** | — | +30.3 % (F85/F86/F88) |
 
-From `evidence/baseline_blk6_suite.log`: clean run, clocks pinned, caches dropped, `GATE PASS`,
-`LOSSLESS GATE PASS`, block 6, no profiling instruments in the binary.
+The shipped speculator is the **`s1` fine-tuned draft head**, promoted over the stock one at
+**22.66 → 24.52 tok/s (+8.2 %)**. `s2` measures higher still (24.76) and is **not** shipped: the win
+is inside the measured 3.5 % run-to-run spread and ties go to the incumbent. Every candidate,
+rejects included, is in [`HEAD_REGISTRY.md`](HEAD_REGISTRY.md) with its weights archived.
+
+From `evidence/s1_eval.log` (stock baseline: `evidence/baseline_blk6_suite.log`): clean run, clocks
+pinned, caches dropped, `GATE PASS`, `LOSSLESS GATE PASS`, block 6, no profiling instruments in the
+binary.
+
+**One caveat that belongs next to the headline.** The trained heads win the frozen suite and *lose*
+to the stock head on held-out continuation drafting — measured against a true paired control, `s1`
+is −0.404 τ and `s2` −0.648 (F116). Training helps where the head is weak and hurts where it is
+strong (F117). The suite number is the honest promotion criterion because the suite is the
+representative mixed workload, but it is not the whole picture.
 
 **The measurement protocol is part of the number.** τ is quoted as an **8-prompt suite mean at
 NGEN0 ≥ 200** — past the drafter's 128-token sliding window. F92 measured τ at **1.39 over the first
