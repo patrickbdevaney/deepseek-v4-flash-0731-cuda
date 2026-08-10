@@ -7319,3 +7319,39 @@ gate is **not** too conservative, which closes the last open direction from F118
 4. Retroactively, this makes **F119's monotonic CE/TV ordering** (+1.7 % across four arms, run in
    sequence) even less interpretable than it was already called: the arms were also measured in
    order.
+
+## Finding 121 — with a warm-up and a shuffled order, **adaptK 2.0 genuinely beats the shipped 1.5** by +1.1 %. F120's "no threshold change is justified" was right about the method and wrong about the answer, and its 6 % noise figure was a cold-start artifact
+
+The rerun: 5 thresholds x 4 replicates, one discarded warm-up, all 20 measurements shuffled into a
+single seeded order so each threshold's repeats land at different points in the batch, with the run
+index recorded and fitted as a covariate (`tools/sweep_analyze.py`).
+
+| adaptK | n | mean tok/s | sd | drift-adjusted vs 1.5 | t |
+|---|---|---|---|---|---|
+| 0.5 | 4 | 23.17 | 0.01 | **-1.447** | -17.00 |
+| 1.0 | 4 | 23.92 | 0.27 | **-0.624** | -6.36 |
+| **1.5** (shipped) | 4 | 24.63 | 0.10 | reference | — |
+| **2.0** | 4 | **24.89** | 0.02 | **+0.278** | **+3.23** |
+| 3.0 | 4 | 24.76 | 0.01 | +0.154 | +1.79 |
+
+**The measurement noise was never 6 %.** Residual sd is **0.120 tok/s (0.5 %)**, and within-threshold
+sd is 0.01-0.27. F120 estimated 6 % from five replicates that *included the first run of a batch*;
+that run was 23.25 against a steady-state ~24.6, so the "noise" it measured was almost entirely one
+cold-start transient. With the warm-up discarded, the fitted drift term collapses to **+0.010 tok/s
+per run (t=1.83)** — small and not significant across 20 runs. The cold start is real; the persistent
+drift is not.
+
+So F120's two conclusions split. The **methodological** one holds and was worth the detour — sweep
+order must be shuffled and a warm-up discarded, and without those this sweep is uninterpretable. The
+**substantive** one ("no threshold change is justified") was an artifact of an underpowered design:
+at n=4 with a warm-up, **adaptK 2.0 beats 1.5 by +0.278 tok/s (+1.1 %) at t=3.2**, and 3.0 is worse
+than 2.0, putting the optimum near 2.0. Lowering the threshold is strongly bad, and monotonically so
+(1.0 is -0.6, 0.5 is -1.4), which independently reconfirms F120's surviving half: the gate is not too
+conservative.
+
+**Disposition.** +1.1 % is real, cheap (a single constant) and below the 3.5 % *head* promotion band
+— but that band exists for heads, which differ in behaviour, not for a threshold measured against
+itself with replicates. Before shipping it: the sweep was fitted on the `s1` head alone, so it is
+being confirmed on `s2` (1.5 / 2.0 / 2.5, n=4). If 2.0 replicates there, adopting it means
+**re-baselining every registry number at 2.0**, because `HEAD_REGISTRY.md` is defined at adaptK 1.50
+and a mixed-threshold registry compares nothing.
