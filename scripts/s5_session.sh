@@ -253,17 +253,34 @@ DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
     scripts/run_model.sh "$ROOT/evidence/${NAME}_holdout.log" ./build/decode \
     "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 220
 while pgrep -x decode >/dev/null; do sleep 60; done
-# READ THE JSON, DO NOT GREP THE PIPELINE. `... | head -1 | grep ... || echo D` under `set -o
-# pipefail` is a trap: head closes the pipe, the upstream grep dies of SIGPIPE, the pipeline reports
-# failure even though it printed the right answer, and the `|| echo` fallback appends a SECOND value.
-# That produced BASE_MED='3.584\n3.483' and killed the secondary gate with an argparse error, after
-# the eval it was meant to judge had already run.
-python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_pass1.log" \
-    --only-last "$HOLD" --json-out "$WORK/holdout_untrained.json" >/dev/null 2>&1 || true
+# A TRUE PAIRED CONTROL, NOT A PROXY. This gate used to read its untrained baseline out of the
+# pass-1 log. That is the same prompts but NOT the same measurement: pass 1 drafts from a short seed
+# over positions 0..512, while this eval prefills a 512-token prompt and drafts positions 512..732.
+# On s1 the regime gap was worth about +1.36 tau -- far larger than the training effect it was
+# supposed to measure -- and it flipped the verdict. Proxy said tau 3.584 -> 4.536, "+0.952, GO".
+# The real control, untrained head over these exact prompts and budget, measured 4.940: training had
+# made the hold-out WORSE by 0.30 tau, and the gate reported a pass.
+#
+# The control depends only on the hold-out file and the UNTRAINED head, so it is identical for every
+# session over the same corpus -- run it once, cache it, reuse it.
+if [ ! -s "$WORK/holdout_control.json" ]; then
+    LOG "paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)"
+    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
+    DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
+        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$HOLD+1)))")" \
+        scripts/run_model.sh "$ROOT/evidence/${NAME}_holdout_control.log" ./build/decode \
+        "$CKPT" "0,671,6102,294,8760,344" 8 "" 220
+    while pgrep -x decode >/dev/null; do sleep 30; done
+    python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_holdout_control.log" \
+        --json-out "$WORK/holdout_control.json" >/dev/null 2>&1 || true
+fi
 BASE_MED=$(python3 -c "
-import json,sys
-try: print(float(json.load(open('$WORK/holdout_untrained.json'))['median']))
-except Exception: print(3.483)" 2>/dev/null || echo 3.483)
+import json
+try: print(float(json.load(open('$WORK/holdout_control.json'))['median']))
+except Exception: print(0)" 2>/dev/null || echo 0)
+[ "$BASE_MED" = "0" ] && DIE "paired control produced no baseline -- refusing to judge the trained \
+head against a proxy measured in a different context regime (that is exactly how s1 passed a gate \
+it should have failed)"
 LOG "hold-out untrained baseline (paired, from pass 1): $BASE_MED"
 set +e
 python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_holdout.log" --baseline "$BASE_MED" \
