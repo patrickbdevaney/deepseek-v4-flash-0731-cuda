@@ -416,3 +416,44 @@ the ~1 GB of **trained tensors** plus the card, eval and metrics. `tools/build_t
 git and its re-quantisation is deterministic and self-checked, so the loadable head rebuilds from
 those in about a minute. Full materialised heads are kept for session heads; arms keep the compact
 form. Nothing that cost GPU time is discarded.
+
+## 11. Session 3 — what it can actually be, and the two constraints the original plan missed
+
+Section 3 planned session 2 as **2 000 samples across the three collapsed categories** to measure the
+size slope, and section 4 sized session 3 from that slope. Neither is available as written.
+
+**Constraint 1: there is no size slope to size anything from.** Session 2 was deliberately run at
+s1's budget (472 vs 468 training sequences) to isolate *corpus composition*, which F117 shows was
+the right question — single-domain training trades strong categories for weak ones. But it means the
+two sessions differ in mix, not size, so **the size axis is still completely unmeasured**. Session 3
+has to be the size experiment session 2 was originally meant to be.
+
+**Constraint 2: a balanced 2 000-sample corpus is impossible from the available sources.** The
+binding category is `agentic_format` at **240** usable prompts (BFCL), so the largest balanced corpus
+is **8 x 240 = 1 920**. 2 000 would need 250 per category. Any corpus above 1 920 is balanced only in
+name, and F117 is the finding that says imbalance is not a free variable.
+
+So **session 3 = 1 536 prompts, 192 per category** (1 472 train + 64 hold-out), a clean **3.1x** of
+session 2's training set and the first real point on the size axis. `mixed_prompts_s3.txt` is built
+and its invariants are checked:
+
+| check | result |
+|---|---|
+| s3 hold-out in s3 train | **0** (required) |
+| s3 hold-out in the s2 corpus at all | **0** |
+| s2 hold-out in s3 train | 64 (expected — s3 is a superset of s2) |
+
+That second row is the useful one. **s3's hold-out is disjoint from both training sets**, so it is
+the one instrument that can compare the untrained control, the s2 head and the s3 head on equal
+footing — which is exactly what a slope measurement needs and what comparing each head to its own
+hold-out cannot give.
+
+**Expected cost and expected value, stated before running it.** ~19 h wall clock (pass 1 ~11 h,
+capture ~5.5 h, train ~1 h, evals ~1.5 h), peak disk ~10 GB with `S5_CHUNK=500`. Against that: the
+untrained -> s1 step bought +5.5 % on the suite, s1 -> s2 bought +1.4 % (inside noise), and the
+objective ablation bought nothing (F119). A 3.1x data increase landing in the same +1-3 % band would
+be **at or below this box's measurement floor** (F120: sd 2.1 % per measurement, 6 % spread across
+identical-policy replicates). So session 3 must be evaluated with **replicates, n >= 3 on the frozen
+suite**, or its result will be as uninterpretable as the first adaptK sweep was. Both prior sessions
+returned GO_REPRICE, which halves the value estimate each time; this is priced accordingly and is
+worth running once, as the only untested axis, not worth iterating blindly.
