@@ -7121,3 +7121,109 @@ hardcoded constant that could drift away from the set it describes.
 For the record, the full-corpus untrained figure also lands well above the frozen suite's single
 reasoning prompt (1.85), reproducing F108 at 10x the sample: **the suite's reasoning point remains
 below the minimum of 500 real reasoning prompts** (min 1.653 is close, but the median is 3.441).
+
+## Finding 115 — training moves acceptance **at draft position 0 and essentially nowhere else**; the deep positions were already near-saturated, and the exposure-bias explanation I reached for first is wrong
+
+Both the untrained and the s1-trained head pass the LOSSLESS gate, so on the frozen suite they emit
+the **identical token stream** (1828 vs 1831 tokens). Nothing differs except how that stream is
+segmented into verifies: **621 -> 562 verifies, -9.5 %**. That makes the comparison exact.
+
+Per-position acceptance hazard `h(j) = P(accept j | reached j)`, `tools/accept_profile.py`:
+
+| pos | run 0 | s1 | delta |
+|---|---|---|---|
+| **0** | 52.7 % | **78.3 %** | **+25.6** |
+| 1 | 90.2 % | 89.9 % | -0.2 |
+| 2 | 96.7 % | 95.3 % | -1.4 |
+| 3 | 96.7 % | 95.5 % | -1.3 |
+| 4 | 93.5 % | 88.8 % | -4.7 |
+| 5 | 96.8 % | 89.1 % | -7.7 |
+
+The whole gain sits at position 0. Deeper positions are flat to negative, and the confound runs the
+wrong way to rescue them: a better drafter extends more often, so its deep denominators include
+marginal cases run 0 never verified. Controlling for that makes it worse — **at matched width K=7
+the trained head accepts fewer tokens than the untrained one (5.458 -> 4.919)**. Decomposing tau's
++0.314: **+0.180 re-segmentation, +0.135 draft quality**. Half the headline gain is the controller
+choosing different widths, not the head drafting further.
+
+**A hypothesis I recorded and then had to withdraw before acting on it.** I attributed the flat deep
+positions to the teacher-forcing mismatch `train_head.py:352` names, and was about to build
+free-running/HASS labels on that basis. Working it through first: a verify only *reaches* position j
+if positions 0..j-1 were accepted, which means the draft's prefix there **equals** the target's. So
+teacher forcing feeds exactly the right context for every position that can matter, and exposure
+bias does not apply to this engine's accepted-prefix path. The real explanation is duller and fits
+the numbers better: **headroom**. Position 0 had 47 points of it; positions 1-5 sat at 90-97 % and
+had 3-10. Training went where the room was. The cost of checking was ten minutes; the cost of not
+checking would have been building the wrong thing.
+
+## Finding 116 — the F108 secondary gate was comparing across **two different measurement regimes**, and it passed a head that had regressed. Replicated on two sessions
+
+The gate read its untrained baseline out of the pass-1 log: same prompts, but pass 1 drafts from a
+short seed over positions 0..512 while the hold-out eval prefills a 512-token prompt and drafts
+512..732. Drafting the model's own long continuation is systematically easier.
+
+| | untrained | trained | verdict |
+|---|---|---|---|
+| proxy baseline (pass 1) | 3.584 | 4.536 | +0.952 **GO** |
+| **true paired control** | **4.940** | 4.536 | **-0.404 SATURATED** |
+
+The regime gap was worth **~+1.36 tau** — far larger than the training effect it was meant to
+measure — and it inverted the sign. The hazard profile agrees independently (h(j) down at nearly
+every position, pooled rate 26.99 -> 26.24). Session 2, different corpus, balanced hold-out,
+**replicates it**: control 6.061 -> trained 5.414, **-0.648, SATURATED**. Under the old proxy both
+sessions would have reported GO.
+
+So the standing result is: **the trained heads win the frozen suite and lose to the untrained head
+on held-out continuation drafting.** `scripts/s5_session.sh` now runs a real control and dies rather
+than fall back to a proxy; the control depends only on the hold-out file and the untrained head, so
+it is cached once per corpus.
+
+## Finding 117 — single-domain training **trades the head's strong categories for its weak ones**; balancing the corpus repairs some of it and not all
+
+s1 trained on reasoning only. Per-category on the frozen suite the effect is rank-ordered, and s2
+re-runs the identical budget (472 vs 468 sequences) on a corpus balanced 8 ways:
+
+| category | run 0 | s1 | s2 | s1-run0 | s2-run0 |
+|---|---|---|---|---|---|
+| agentic_format | 5.15 | 4.70 | 4.70 | -0.45 | **-0.45** |
+| code_edit | 4.43 | 3.89 | 4.14 | -0.54 | -0.29 |
+| code_gen | 1.84 | 2.35 | 2.24 | +0.51 | +0.40 |
+| explanation | 1.75 | 2.28 | 2.32 | +0.53 | +0.57 |
+| long_context | 5.54 | 4.53 | 4.35 | -1.01 | **-1.19** |
+| multi_turn | 4.46 | 5.23 | 5.26 | +0.77 | +0.80 |
+| reasoning | 1.85 | 2.56 | 2.53 | +0.71 | +0.68 |
+| short_factual | 3.27 | 3.07 | 3.48 | -0.20 | +0.21 |
+| **suite mean** | 3.5362 | 3.5762 | **3.6275** | | |
+
+Balancing repaired short_factual and halved code_edit; **long_context and agentic_format are
+untouched by it** and remain well below where the untrained head started. Corpus composition was a
+real but partial explanation — something in the training degrades the strong cases regardless of
+what data it sees, which is what F112's objective ablation exists to test.
+
+Suite pooled rate: 23.42 -> 24.70 (s1) -> **25.04 (s2)**. s2 is the best head measured and was
+**not promoted**: 24.76 on the promote metric against an incumbent 24.52 is +1.0 %, inside the
+measured 3.5 % run-to-run spread, and ties go to the incumbent.
+
+## Finding 118 — margins rose 27 % and the verify width did not follow. F109 priced the path to 30 tok/s through gating margins; that mechanism is far weaker than it was priced
+
+`tools/ablation_report.py`, median top1-top2 over the gating positions 1-5 — the quantity adaptK
+actually reads — against the full-width share it is supposed to control:
+
+| head | gate margin | K=7 share | h(0) | suite tok/s |
+|---|---|---|---|---|
+| untrained | 2.18 | 22.9 % | 52.7 % | 23.42 |
+| s1 | 2.85 | 24.2 % | 78.3 % | 24.70 |
+| s2 | 2.78 | 23.6 % | 83.8 % | 25.04 |
+| s2 @ 0.5/0.5 | 2.89 | 21.1 % | 83.4 % | 25.15 |
+
+**+27 % gating margin bought +0.7 points of full width**, and the arm with the largest margin has
+the *smallest* K=7 share. F109 reduced "can this reach 30 tok/s" to raising gating margins by
++1.0 to +1.5; margins moved by roughly that much in relative terms and the width distribution barely
+noticed. The conjunction model that predicted the width mix exactly on the untrained head
+(33.2 % predicted = 33.2 % measured) does not transport to a trained one.
+
+This also corrects **F111**. Once adaptK is re-fitted on decode *rate* rather than tau — tau and
+rate anti-correlate across this range, and the tau criterion picked the worst threshold of five on
+s1 — the optimum comes back **1.5 on both sessions**, the shipped default. F111's "the optimum falls
+as the drafter improves" was an artifact of fitting the wrong objective on a hold-out where the gate
+barely binds (mean K 5.26 at threshold 0.0 vs 5.27 at 1.5).
