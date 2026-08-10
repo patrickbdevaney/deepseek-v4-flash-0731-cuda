@@ -7227,3 +7227,48 @@ rate anti-correlate across this range, and the tau criterion picked the worst th
 s1 — the optimum comes back **1.5 on both sessions**, the shipped default. F111's "the optimum falls
 as the drafter improves" was an artifact of fitting the wrong objective on a hold-out where the gate
 barely binds (mean K 5.26 at threshold 0.0 vs 5.27 at 1.5).
+
+## Finding 119 — **F112's CE/TV hypothesis is not supported.** All four arms land inside the run-to-run spread, and the mechanism the ablation proposed is falsified by its own margin column
+
+F112 argued the loss is misaligned with the metric: the engine verifies **greedily** (accept iff the
+draft's argmax equals the target's) and adaptK gates on the **margin**, while the loss puts 0.9 of
+its weight on TV — matching the target's full distribution, which a *flatter* draft can satisfy. The
+training diagnostics supported the premise: mean top-1 prob **target 0.841 vs draft 0.715**.
+
+Four arms, all retrained on the **same** 472 captured s2 sequences and measured on the **same**
+frozen suite at the **same** adaptK 1.5 — one variable:
+
+| a_ce / a_tv | suite tok/s (pooled) | suite tau | h(0) | K=7 share | gate margin | m(0) |
+|---|---|---|---|---|---|---|
+| 0.1 / 0.9 (shipped) | 25.04 | 3.6275 | 83.8 % | 23.6 % | 2.78 | 4.25 |
+| 0.5 / 0.5 | 25.15 | 3.6412 | 83.4 % | 21.1 % | 2.89 | 4.50 |
+| 0.9 / 0.1 | 25.26 | 3.6400 | 83.3 % | 21.6 % | 2.91 | 4.63 |
+| **1.0 / 0.0** (pure CE) | **25.47** | **3.6712** | 83.8 % | 22.1 % | 2.78 | 4.54 |
+
+The ordering is monotonic in CE weight, which is suggestive. It is also **not a result**: the total
+spread across all four arms is **+1.7 %**, and this project's own measured run-to-run spread on this
+suite is **3.5 %** — the ablation's entire effect fits inside the noise band twice over. On the
+promotion metric every arm refuses: best is 25.10 against a 25.37 bar.
+
+**The proposed mechanism is affirmatively falsified, which is the more useful half.** The claim was
+CE weight -> sharper draft -> larger gating margins -> the gate extends more often -> higher rate.
+Draft sharpness at position 0 did rise (m(0) 4.25 -> 4.54..4.63). The gating margin did **not** move
+monotonically (2.78, 2.89, 2.91, 2.78) and the full-width share **fell** (23.6 % -> 22.1 %). So the
+one arm with the highest rate has the *same* gate margin and *less* full width than the arm it
+beats. Whatever separates these arms, it is not the margin->width->rate chain the ablation was built
+to test — which is the same chain F118 already found unresponsive.
+
+Comparing the extreme arms position by position, the differences are as small as the aggregate says:
+h(j) moves -0.1, +1.3, -0.7, -0.2, -0.4, +5.7 points, for +0.6 % tau.
+
+**Disposition: the CE/TV split is not a lever at this scale, and the F112 objective-misalignment
+story should not be carried forward as an explanation for the hold-out regressions (F116).** The
+premise remains true — the draft really is flatter than the target, and the loss really does weight
+a criterion the engine does not use — but correcting it buys nothing measurable, so the premise was
+not load-bearing. Cost of learning this: ~75 min of retraining against an existing capture, because
+the capture was kept.
+
+All four arms are archived (`s2-abl-*`) with sha256, eval and metrics, and all four appear in
+`HEAD_REGISTRY.md` as rejects. The archives hold the ~1 GB of trained tensors rather than 7 GB of
+mostly byte-identical checkpoint experts; `tools/build_trained_head.py` rebuilds the loadable head
+deterministically.
