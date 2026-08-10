@@ -341,3 +341,78 @@ adaptK is re-fitted on the hold-out before the trained head is judged, because t
 falls as the drafter improves. The **protocol eval stays pinned at adaptK 1.50** and remains the
 registry number; a re-fitted threshold is reported separately and shipping it would require
 re-baselining the incumbent at the same threshold.
+
+## 10. What actually happened — sessions 1 and 2, as run
+
+Sections 2-4 are the plan written before any data existed. This section is the record of what was
+run, what it measured, and where the plan was wrong. Findings F115-F118 carry the detail.
+
+### 10.1 Session 1 (`s1`) — 500 sequences, reasoning-only corpus
+
+| stage | result |
+|---|---|
+| pass 1 generate | 500/500, every line round-trip verified against its seed |
+| pass 2 capture | 468 sequences, 276 611 tokens, 8.6 GB, `VALIDATE: PASS` (92 min) |
+| equivalence gate | port vs engine draft agreement **93.4 %** (needs >= 90 %) |
+| train | 468 steps, loss 0.838 -> 0.739, 72 tensors |
+| head build | 7.01 GB, fp8 round-trip worst rel err **0.0014** (e4m3 half-step is 0.0625) |
+| adaptK re-fit | **1.5** (unchanged) once fitted on rate rather than tau |
+| primary gate | **GO_REPRICE** — reasoning tau 2.56, in [2.1, 2.6) |
+| secondary gate | **SATURATED** against the true control (-0.404 tau); the proxy said GO |
+| promotion | **PROMOTED** — suite 22.66 -> 24.52 tok/s (+8.2 % over the incumbent) |
+
+Wall clock ~6 h end to end. It died twice before completing, both in orchestration rather than in
+the model: an **absolute** `trained` symlink that resolves on the host and dangles inside the
+container, and a build-time write-back guard that refused the 27 fp32 tensors (`attn_sink` among
+them). Sessions are now resumable per chunk, so a failure in build/refit/eval costs the build
+onward rather than a 2 h re-capture.
+
+### 10.2 Session 2 (`s2`) — 536 sequences, corpus balanced 8 ways
+
+Same training budget as s1 (472 vs 468 sequences), so **corpus composition is the single changed
+variable**. The hold-out is balanced too, 8 per category, because s1's reasoning-only hold-out turned
+out to be a blunt instrument: on it the adaptK gate barely binds (mean K 5.26 at threshold 0.0 vs
+5.27 at 1.5), so it cannot see the constraint the suite sees.
+
+| stage | result |
+|---|---|
+| pass 1 / capture | 536 generated, 472 captured, equivalence gate **92.4 %** |
+| train | loss 0.642 -> 0.573 |
+| adaptK re-fit | **1.5** again, on rate |
+| primary gate | **GO_REPRICE** — reasoning tau 2.53 |
+| secondary gate | **SATURATED** against its own balanced control (-0.648 tau) |
+| promotion | **REFUSED** — 24.76 vs incumbent 24.52 is +1.0 %, inside the 3.5 % spread; ties go to the incumbent |
+
+s2 is the best head measured (suite pooled **25.04 tok/s** vs s1 24.70 vs untrained 23.42) and is
+**not** the shipped head, because the margin is inside run-to-run noise. That is the registry
+behaving correctly, not a bug to route around.
+
+### 10.3 Where the plan was wrong
+
+1. **The secondary gate compared across two measurement regimes** and inverted its own sign (F116).
+   It read the untrained baseline out of pass 1 — same prompts, but pass 1 drafts from a short seed
+   over positions 0..512 while the hold-out eval drafts 512..732. The gap was worth ~+1.36 tau,
+   larger than the effect being measured. Fixed: a true paired control, cached once per corpus, and
+   the gate now dies rather than fall back to a proxy.
+2. **adaptK was re-fitted on tau**, which anti-correlates with rate across this range; on s1 it
+   selected the worst threshold of the five swept. Fixed: fit on pooled tok/s. Both sessions then
+   return **1.5**, the shipped default, which also retires F111's "the optimum falls as the drafter
+   improves".
+3. **F109's pricing of the path to 30 tok/s through gating margins does not survive** (F118).
+   Margins rose 27 % and the full-width share moved 0.7 points.
+4. **Corpus composition was a real but partial explanation** (F117). Balancing repaired
+   `short_factual` and half of `code_edit`, and left `long_context` and `agentic_format` untouched.
+
+### 10.4 Artifacts each phase leaves behind
+
+Archiving is unconditional and runs **before** the promotion gate, because promotion is a judgement
+and archiving is preservation. Every head lands in `~/model-backups/heads/<name>/` with sha256 per
+file, its `eval.log`, its `train_metrics.json`, and a `head_card.json` recording the engine git rev
+it was measured against. `HEAD_REGISTRY.md` lists every candidate including the rejects.
+
+Roughly 6.6 GB of each 7.01 GB head is untouched checkpoint tensors copied byte-for-byte (the build
+log reports `copied 2905 untouched (experts byte-for-byte)`), so for ablation arms the archive holds
+the ~1 GB of **trained tensors** plus the card, eval and metrics. `tools/build_trained_head.py` is in
+git and its re-quantisation is deterministic and self-checked, so the loadable head rebuilds from
+those in about a minute. Full materialised heads are kept for session heads; arms keep the compact
+form. Nothing that cost GPU time is discarded.
