@@ -7272,3 +7272,50 @@ All four arms are archived (`s2-abl-*`) with sha256, eval and metrics, and all f
 `HEAD_REGISTRY.md` as rejects. The archives hold the ~1 GB of trained tensors rather than 7 GB of
 mostly byte-identical checkpoint experts; `tools/build_trained_head.py` rebuilds the loadable head
 deterministically.
+
+## Finding 120 — the suite adaptK sweep is **confounded by run order**, and an accidental replicate shows this box's decode-rate measurement drifts ~6 % within a batch. No threshold change is justified; the protocol needs a warm-up and a shuffled order
+
+The sweep was run on the shipped `s1` head over the frozen suite, thresholds 0.0 .. 3.0:
+
+| adaptK | tok/s | tok/verify | ms/tok | mean K | K=7 | K=2 |
+|---|---|---|---|---|---|---|
+| 0.0 → **eff 1.50** | 23.25 | 3.547 | 43.0 | 3.99 | 24.2 % | 37.9 % |
+| 0.5 | 22.59 | 3.711 | 44.3 | 5.08 | 45.5 % | 18.4 % |
+| 1.0 | 23.83 | 3.618 | 42.0 | 4.39 | 31.8 % | 30.9 % |
+| 1.5 (shipped) | 24.50 | 3.547 | 40.8 | 3.99 | 24.2 % | 37.9 % |
+| 2.0 | 24.87 | 3.472 | 40.2 | 3.72 | 19.9 % | 42.4 % |
+| 3.0 | 24.72 | 3.321 | 40.4 | 3.40 | 13.4 % | 49.3 % |
+
+**The engine clamps `adaptK 0.0` to the default 1.50** (`0.00 -> 1.50` in the eff column), so that
+row is not a policy — it is an accidental **replicate** of the 1.5 row. Its decode behaviour is
+bit-identical to 1.5: same 562 verifies, same 1831 tokens, and all **562/562** verifies match on
+both `(K, accepted)`. The two runs differ **only** in wall time, by **5.4 %**. That is a clean
+estimate of measurement noise with zero behavioural contamination.
+
+Three further replicates of the same policy give **23.25, 24.00, 24.49, 24.50, 24.64** (n=5):
+mean 24.18, sd 0.51 (**2.1 %**), full spread **6.0 %**.
+
+**And the noise is not symmetric — it is a drift.** The replicate batch, on a policy that never
+changed, rises monotonically with run order: 23.999 -> 24.487 -> 24.638. The sweep ran its
+thresholds in **increasing** order, so "stricter threshold" and "later in the batch" move together
+and **cannot be separated in this data**. The apparent optimum at 2.0 (+1.5 % over 1.5, itself
+inside the replicate band) is exactly the size of the drift. **No threshold change is justified**,
+and the earlier read that "stricter is winning" does not survive its own control.
+
+What *does* survive: **adaptK 0.5 is genuinely worse** (22.59, below the whole replicate band), and
+it has a mechanism rather than just a number — it really does widen the verify (mean K 5.08, K=7
+45.5 % vs 24.2 %), and the extra width costs more ms than it earns (44.3 vs 40.8 ms/tok). So the
+gate is **not** too conservative, which closes the last open direction from F118's width analysis.
+
+**Consequences for the protocol, which matter beyond this sweep.**
+1. The **first run of a batch is systematically slow** — the lowest number in each batch is its
+   first, in both batches. Sweeps must discard a warm-up run.
+2. Sweep order must be **shuffled or interleaved**, never monotonic in the parameter under test.
+3. The **3.5 % promotion band** is defensible only if the drift is controlled: with the cold first
+   run excluded the four remaining replicates span 2.7 % (sd ~1.2 %), but including it the spread is
+   6.0 %. Every promotion decision made so far still stands — `s1` won by 8.2 %, and every refusal
+   (`s2` +1.0 %, the four F119 arms +1.0..2.4 %) was inside the band under either reading — but the
+   band was doing that job by luck as much as by design.
+4. Retroactively, this makes **F119's monotonic CE/TV ordering** (+1.7 % across four arms, run in
+   sequence) even less interpretable than it was already called: the arms were also measured in
+   order.
