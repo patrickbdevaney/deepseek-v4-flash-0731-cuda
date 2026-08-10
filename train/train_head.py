@@ -658,8 +658,12 @@ def main():
                 sys.exit("[train] FAIL: capture is v1 (no lm_head input). Re-capture with the "
                          "current engine; the TV term cannot be computed without it.")
             with torch.no_grad():
-                rows = lm_in[t:t + BS].to(dev)               # (BS, d)
-                tgt_lg = F.linear(rows.to(head_w.dtype), head_w).float()
+                # NOT `rows` -- that name holds the manifest list this loop is iterating, and
+                # rebinding it here left `n_sequences: len(rows)` in the metrics reporting the last
+                # batch width (6) instead of the corpus size (468). Training was unaffected (the
+                # for-loop holds its own iterator), but merge_metrics pools chunks BY that field.
+                lm_rows = lm_in[t:t + BS].to(dev)            # (BS, d)
+                tgt_lg = F.linear(lm_rows.to(head_w.dtype), head_w).float()
             # CONFIDENCE LABEL: did this draft position match the target's own next token? That is
             # exactly what the confidence head is trained to predict, and it needs no capture field
             # -- it is computable from the draft's own argmax against the ground truth.

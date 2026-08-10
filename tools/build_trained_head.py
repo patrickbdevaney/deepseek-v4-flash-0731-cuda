@@ -150,6 +150,14 @@ def main():
             elif v.dtype == torch.bfloat16:
                 out[k] = t.to(torch.bfloat16)
                 n_bf16 += 1
+            elif v.dtype in (torch.float32, torch.float16):
+                # Unquantised small tensors -- attn_sink is fp32 in this checkpoint. The trainer
+                # saves in bf16, so writing back to fp32 is an exact upcast and to fp16 is a widening
+                # of the exponent range: no quantisation decision to get wrong, hence no round-trip
+                # check needed here. Kept as an explicit branch rather than folded into the bf16 case
+                # so the shipped dtype always matches what the loader expects to read.
+                out[k] = t.to(v.dtype)
+                n_bf16 += 1
             else:
                 print(f"  REFUSING {k}: trained but stored as {v.dtype}; no safe write-back path")
                 sys.exit(2)

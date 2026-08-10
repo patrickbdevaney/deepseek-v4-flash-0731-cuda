@@ -101,6 +101,14 @@ OFF=0
 for (( ci=0; ci<NCHUNK; ci++ )); do
     LO=$(( ci * CHUNK )); HI=$(( LO + CHUNK )); [ "$HI" -gt "$NTRAIN" ] && HI=$NTRAIN
     CDIR="$WORK/c$ci"; mkdir -p "$CDIR"
+    # RESUMABLE. A chunk whose weights already exist is done; re-running the session then costs the
+    # build onward, not the ~2 h capture. Without this, a failure in ANY later stage (build, refit,
+    # eval) forced a full re-capture to retry a step that had nothing to do with the data.
+    if [ -s "$CDIR/trained/mtp_trained.safetensors" ]; then
+        LOG "chunk $ci: already trained, reusing (rm -rf $CDIR/trained to force a re-run)"
+        OFF=$(( OFF + $(wc -l < "$CDIR/gen.txt" 2>/dev/null || echo 0) ))
+        PREV="c$ci/trained"; continue
+    fi
     if [ ! -s "$CDIR/cap/manifest.jsonl" ]; then
         sed -n "$((LO+1)),${HI}p" "$GEN" > "$CDIR/gen.txt"
         CN=$(wc -l < "$CDIR/gen.txt")
@@ -149,9 +157,13 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
         rm -rf "$CDIR/cap"
         LOG "chunk $ci: capture deleted, $(df -BG --output=avail /home/patrickd | tail -1 | tr -d ' ') free"
     fi
-    PREV="$CDIR/trained"
+    PREV="c$ci/trained"
 done
+# RELATIVE, deliberately. $WORK is bind-mounted into the container at /cap/$NAME, so an ABSOLUTE
+# symlink to /home/patrickd/... resolves on the host and dangles inside the container -- which is
+# exactly how the first s1 run died, after 2 h of capture and a clean train, at the build step.
 ln -sfn "$PREV" "$WORK/trained"
+[ -s "$WORK/trained/mtp_trained.safetensors" ] || DIE "trained symlink does not resolve: $PREV"
 python3 tools/merge_metrics.py "$WORK"/c*/train_metrics.json --out "$WORK/train_metrics.json" || true
 
 # ---------------------------------------------------------------- write a head the ENGINE can load
