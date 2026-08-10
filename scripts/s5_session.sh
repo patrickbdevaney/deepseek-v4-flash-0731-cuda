@@ -189,14 +189,23 @@ for THR in 0.0 0.5 1.0 1.5 2.0; do
         scripts/run_model.sh "$ROOT/evidence/${NAME}_adaptk_${THR}.log" ./build/decode \
         "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 220
     while pgrep -x decode >/dev/null; do sleep 30; done
-    R=$(python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_adaptk_${THR}.log" \
+    # SELECT ON RATE, NOT tau. tau is tokens per verify; the objective is tokens per second, and
+    # rate = tau / (ms per verify). Lowering the threshold widens the verify, buying tau at a
+    # more-than-proportional cost in ms, so the two anti-correlate. On s1 the tau criterion selected
+    # adaptK 0.5, which measured the WORST rate of the five swept (25.12 vs 26.78 at 1.5) -- it did
+    # not just miss the optimum, it walked away from it. tau is still logged: it is the acceptance
+    # half of the story and the secondary gate is defined on it.
+    T=$(python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_adaptk_${THR}.log" \
           2>/dev/null | grep -oE 'median [0-9.]+' | head -1 | grep -oE '[0-9.]+' || echo 0)
-    LOG "  adaptK $THR -> hold-out median tau $R"
+    R=$(python3 tools/holdout_rate.py --log "$ROOT/evidence/${NAME}_adaptk_${THR}.log" \
+          --quiet 2>/dev/null || echo 0)
+    LOG "  adaptK $THR -> hold-out $R tok/s pooled (median tau $T)"
     python3 -c "import sys; sys.exit(0 if float('$R') > float('$BESTR') else 1)" \
         && { BEST=$THR; BESTR=$R; }
 done
-LOG "adaptK re-fit: $BEST (hold-out median tau $BESTR); shipped default was 1.5"
-echo "{\"adaptk\": $BEST, \"holdout_tau\": $BESTR}" > "$WORK/adaptk.json"
+LOG "adaptK re-fit: $BEST ($BESTR tok/s pooled on the hold-out); shipped default was 1.5"
+echo "{\"adaptk\": $BEST, \"holdout_tok_s\": $BESTR, \"criterion\": \"pooled tok/s\"}" \
+    > "$WORK/adaptk.json"
 
 # ---------------------------------------------------------------- eval on the FROZEN protocol
 LOG "eval: 8-prompt suite, NGEN0=200, block 6, clean"
