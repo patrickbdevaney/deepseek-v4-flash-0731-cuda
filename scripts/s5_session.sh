@@ -195,8 +195,13 @@ for THR in 0.0 0.5 1.0 1.5 2.0; do
     # adaptK 0.5, which measured the WORST rate of the five swept (25.12 vs 26.78 at 1.5) -- it did
     # not just miss the optimum, it walked away from it. tau is still logged: it is the acceptance
     # half of the story and the secondary gate is defined on it.
-    T=$(python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_adaptk_${THR}.log" \
-          2>/dev/null | grep -oE 'median [0-9.]+' | head -1 | grep -oE '[0-9.]+' || echo 0)
+    # same pipefail/SIGPIPE trap as the secondary gate below -- go through the JSON, not a grep chain
+    python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_adaptk_${THR}.log" \
+        --json-out "$WORK/tau_${THR}.json" >/dev/null 2>&1 || true
+    T=$(python3 -c "
+import json
+try: print(float(json.load(open('$WORK/tau_${THR}.json'))['median']))
+except Exception: print(0)" 2>/dev/null || echo 0)
     R=$(python3 tools/holdout_rate.py --log "$ROOT/evidence/${NAME}_adaptk_${THR}.log" \
           --quiet 2>/dev/null || echo 0)
     LOG "  adaptK $THR -> hold-out $R tok/s pooled (median tau $T)"
@@ -248,9 +253,17 @@ DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
     scripts/run_model.sh "$ROOT/evidence/${NAME}_holdout.log" ./build/decode \
     "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 220
 while pgrep -x decode >/dev/null; do sleep 60; done
-BASE_MED=$(python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_pass1.log" \
-             --only-last "$HOLD" --json-out "$WORK/holdout_untrained.json" 2>/dev/null |
-           grep -oE 'median [0-9.]+' | head -1 | grep -oE '[0-9.]+' || echo 3.483)
+# READ THE JSON, DO NOT GREP THE PIPELINE. `... | head -1 | grep ... || echo D` under `set -o
+# pipefail` is a trap: head closes the pipe, the upstream grep dies of SIGPIPE, the pipeline reports
+# failure even though it printed the right answer, and the `|| echo` fallback appends a SECOND value.
+# That produced BASE_MED='3.584\n3.483' and killed the secondary gate with an argparse error, after
+# the eval it was meant to judge had already run.
+python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_pass1.log" \
+    --only-last "$HOLD" --json-out "$WORK/holdout_untrained.json" >/dev/null 2>&1 || true
+BASE_MED=$(python3 -c "
+import json,sys
+try: print(float(json.load(open('$WORK/holdout_untrained.json'))['median']))
+except Exception: print(3.483)" 2>/dev/null || echo 3.483)
 LOG "hold-out untrained baseline (paired, from pass 1): $BASE_MED"
 set +e
 python3 tools/holdout_tau.py --log "$ROOT/evidence/${NAME}_holdout.log" --baseline "$BASE_MED" \
