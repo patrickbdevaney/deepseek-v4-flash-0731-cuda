@@ -518,6 +518,34 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 
 ---
 
+### 6b. Long-run pipeline traps — the S5 class, and the one preflight that closes it
+
+Every S5 failure was in a code path that only executes hours into a run. None were hard bugs; all
+were cheap to find and expensive to hit.
+
+| # | what failed | when it surfaced | why no gate caught it |
+|---|---|---|---|
+| 1 | `trained` symlink was **absolute** | build step, after 2 h capture + clean train | it resolves on the host; only the container sees it dangle |
+| 2 | build refused the 27 **fp32** tensors | build step, again | the dtype branch had only ever seen fp8 + bf16 |
+| 3 | `\| head -1 \| ... \|\| echo D` under **pipefail** emitted the value *and* the fallback | secondary gate, after the eval it judged had run | SIGPIPE makes a correct pipeline report failure |
+| 4 | `--resume` built with **`basename`**, pointing at a symlink created only *after* the chunk loop | hour 4 of a 19 h session | **never executed**: s1 and s2 both ran in one chunk |
+| 5 | AdamW resume asserted `len(state) == len(params)` | same run, minutes later | lazy optimizer state never satisfies it; also never executed |
+
+**The rule this yields: exercise the LATE stages EARLY, at toy scale, on real data.**
+`scripts/s5_preflight.sh` runs the real `s5_session.sh` unmodified on 4 prompts with `S5_CHUNK=1`,
+which forces a **2-chunk split** — the only way to execute the resume path — and asserts stage
+*markers* rather than the quality verdict, because a head trained on two sequences is supposed to
+fail its gates. ~20 minutes, and it would have caught all five of the above. **Run it before every
+full session, and after any change to the session script or the trainer.**
+
+Two further rules, each bought with a cycle:
+
+- **Never edit a script that is currently executing.** bash reads a script by byte offset, so
+  inserting lines into a running file shifts what it reads next. Editing `ce_tv_ablation.sh` mid-run
+  killed it after arm 1 and cost ~20 minutes and a relaunch. `pgrep -f <script>` before any edit.
+- **A toy-scale run must use real data.** Toy SCALE is the point; toy DATA would exercise a
+  tokenisation path the real session never takes, and prove nothing about the path that matters.
+
 ## 7. Instruments available (all off by default)
 
 | knob / tool | what it answers |
