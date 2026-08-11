@@ -10,7 +10,7 @@ with the best of them per byte.
 | | total / active | quantisation | `B_tok` | decode | engine |
 |---|---|---|---|---|---|
 | **DeepSeek V4-Flash-0731-REAP** (this repo) | 284 B → REAP ~180 B / **13 B active** | routed experts MXFP4; MLA+dense FP8; 1.74 GB/token still BF16 | **12.26 GB** | 13.8 AR / **24.5 spec** | pure CUDA |
-| **Laguna S-2.1-NVFP4** (`~/laguna-s1-cuda-server`) | 117.6 B / **8.5 B active** | routed experts NVFP4; everything else was BF16, self-quantised to FP8 | **6.251 GB** | **33.0 AR** / 41 code / **49.7 edit** | pure CUDA |
+| **Laguna S-2.1-NVFP4** (`~/laguna-s1-cuda-server`) | 117.6 B / **8.5 B active** | routed experts NVFP4; everything else was BF16, self-quantised to FP8 | **6.251 GB** | **33.0 AR** / 40.1 code / **49.7 edit** (DFlash) | pure CUDA |
 | **Qwen 3.5 122B A10B** | 122 B / **10 B active** | NVFP4 | ~5.3 GB (est.) | **~50 spec** | vLLM + DFlash |
 
 `B_tok` for this repo and for Laguna are measured from their own checkpoints and roofline docs.
@@ -20,15 +20,31 @@ Qwen's is an estimate from its active-parameter count at NVFP4 — treat it as �
 
     decode x B_tok = useful weight traffic
 
-| | tok/s | x `B_tok` | = effective |
-|---|---|---|---|
-| Qwen + vLLM/DFlash | 50.0 | 5.3 GB | ~265 GB/s |
-| **this engine + s1 head** | 24.5 | 12.26 GB | **~300 GB/s** |
-| Laguna AR (no speculation) | 33.0 | 6.251 GB | 206 GB/s (**91 % of its byte wall**) |
+**Compare like with like.** Laguna was measured both ways — AR *and* DFlash speculation — so its
+non-speculative 33.0 must not be set beside two speculative numbers. Split by mode:
 
-Qwen's 2.0x decode advantage over this repo is *the same number* as its 2.0-2.3x byte advantage.
-Per byte moved, this engine is at or above vLLM+DFlash. **There is no engine gap to close** — the
-difference is what the checkpoint asks the memory system to move.
+| mode | model | tok/s | x `B_tok` | = effective |
+|---|---|---|---|---|
+| **spec** | Laguna, edit-style | 49.7 | 6.251 GB | **311 GB/s** |
+| **spec** | **this engine + s1 head** | 24.5 | 12.26 GB | **301 GB/s** |
+| **spec** | Qwen + vLLM/DFlash | 50.0 | ~5.3 GB | ~265 GB/s |
+| **spec** | Laguna, code | 40.1 | 6.251 GB | 251 GB/s |
+| **AR** | Laguna | 33.0 | 6.251 GB | **206 GB/s** (91 % of its byte wall) |
+| **AR** | **this engine** | 13.8 | 12.26 GB | **169 GB/s** |
+
+Two different conclusions fall out, and only one of them is comfortable:
+
+1. **Speculation here is at parity or better.** 301 GB/s against Qwen's 265 and Laguna's 251-311.
+   Qwen's 2.0x decode advantage is the same number as its 2.0-2.3x byte advantage — that gap is the
+   checkpoint, not the engine.
+2. **AR here is 22 % behind a peer pure-CUDA engine on the same box.** 169 vs 206 GB/s. Worse, this
+   project's own *optimistic* AR floor — 15.98 tok/s, every byte mark at full DRAM rate — is
+   **196 GB/s, below what Laguna already achieves in practice.** So the internal floor is too
+   conservative, and matching Laguna's byte efficiency would put AR at **16.8 tok/s**.
+
+That second row is the most useful number in this document: it is external, measured on the same
+hardware by a different implementation, and it prices lever #1 (MoE GEMV) without relying on this
+project's own model of itself.
 
 ## Three architectural facts that set `B_tok` here
 
@@ -102,3 +118,12 @@ Sources: [DeepSeek-V4 on Day 0 (LMSYS)](https://www.lmsys.org/blog/2026-04-25-de
 [DeepSeek V4 in vLLM](https://vllm.ai/blog/2026-04-24-deepseek-v4) ·
 [DeepSeek V4 GA architecture](https://huggingface.co/blog/ResterChed/deepseek-v4-ga-architecture) ·
 local: `~/laguna-s1-cuda-server/{README,ROOFLINE,OPTIMIZATION_LOG,ACTIVATION_SPARSITY,COST_MODEL_CORRECTION}.md`
+
+## Companion appendix
+
+The Laguna-facing half of this comparison lives in that repo as
+`~/laguna-s1-cuda-server/APPENDIX_CROSS_MODEL.md`. The two are maintained together — the comparison
+is only meaningful with all three models on one axis, and each repo needs the half that bears on its
+own remaining work. One item runs the other way: Laguna's `ACTIVATION_SPARSITY.md` killed the
+published 2.5x-MoE-layer sparsity claim on a `moe_intermediate` 1024 argument, and **this
+checkpoint's `moe_intermediate` is 2048** — the one lever that failed there may survive here.
