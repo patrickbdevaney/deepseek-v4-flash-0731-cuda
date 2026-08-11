@@ -7418,3 +7418,45 @@ recorded as exhausted as a percentage lever.
 Already closed, for the record: block size (F43), draft refinement (F45), K-selection policy
 (+1.8 % ceiling, F110), gating margins (F118), the CE/TV objective (F119), and the adaptK threshold
 (+1.3 %, real but small, F121).
+
+## Finding 123 — the MoE activation-sparsity lever is **dead here too**, despite `moe_intermediate` 2048 sitting above the published range. The width hypothesis was directionally right and quantitatively irrelevant
+
+arXiv:2605.08575 claims pre-trained MoE experts are internally dormant — up to ~90 % of a selected
+expert's intermediate neurons zeroable, for 2.5x MoE-layer and 1.2x end-to-end. The sibling Laguna
+project measured it on its own weights and killed it, attributing the failure to width: **every
+published measurement uses `moe_intermediate` >= 1408, and Laguna's is 1024.** This checkpoint's is
+**2048**, above the published range, which made it the one lever in that cross-model comparison
+where the information flowed the other way.
+
+Measured with `tools/activation_sparsity.py`, same method as Laguna's, on **562 real expert-token
+rows** from an S5 capture (192 hidden states routed through layer 41's real router — 76 distinct
+experts of 160 — against MXFP4-dequantised `w1`/`w3`):
+
+| sparsity | (1) unstructured | (2) **block-32** | (3) block-32, sorted |
+|---:|---:|---:|---:|
+| 0.25 | 0.0257 | 0.2634 | 0.2108 |
+| 0.50 | 0.0950 | 0.4428 | 0.3661 |
+| 0.75 | 0.2301 | 0.6393 | 0.5517 |
+| **0.87** | **0.3501** | **0.7634** | **0.6795** |
+| 0.90 | 0.3949 | 0.8014 | 0.7210 |
+
+**Width helped, and it did not matter.** Every cell is better than Laguna's — at the paper's 0.87
+operating point, 0.3501/0.7634/0.6795 against their 0.4374/0.8314/0.8220, a 15-20 % improvement
+exactly where doubling `moe_intermediate` predicts one. And it is still nowhere near usable:
+**block-32 costs 76 % relative L2 error at the paper's operating point, and 26 % even at 0.25
+sparsity**, where three quarters of the neurons are kept.
+
+Column (2) is the one that decides it. Unstructured sparsity is unimplementable on a GEMV that reads
+32-value MXFP4 blocks — the block is the smallest unit a kernel can skip — so column (1) is
+informational. The offline permutation rescue (column 3) buys 8 points at 0.87, not the order of
+magnitude required.
+
+**Dequant verified before trusting the negative**: the dequantised `w1` has mean +0.00003, std
+0.02595, range ±0.125, 12.5 % exact zeros (E2M1 has a zero code in 2 of 16 patterns), row-norm CV
+0.029. A wrong nibble order or scale would show as a degenerate or wildly-scaled distribution. This
+is a trained weight matrix.
+
+**Disposition: closed, in both projects, for the same reason at two different widths.** The lever
+does not fail because these models are narrow; it fails because dormancy in these experts is not
+block-aligned, and block alignment is the only form a kernel can exploit. Cost to establish: one
+CPU-only script, no GPU time, run while session 3 held the device.
