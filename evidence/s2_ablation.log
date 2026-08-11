@@ -1,0 +1,36 @@
+[abl 2026-08-10T12:09:15-04:00] capture /home/patrickd/s5-capture/s2/c0/cap has 472 sequences; arms: 0.5:0.5 0.9:0.1 1.0:0.0
+[abl 2026-08-10T12:09:15-04:00] ce0.5_tv0.5: training (a_ce=0.5 a_tv=0.5) on the SAME 472 captured sequences
+[train] saved 72 trained tensors -> /cap/s2/abl_ce0.5_tv0.5/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s2/abl_ce0.5_tv0.5/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s2/abl_ce0.5_tv0.5/train_metrics.json  (loss 1.5314 -> 1.2178, tail mean 1.2327)
+[train] TRAIN OK
+[abl 2026-08-10T12:28:48-04:00] ce0.5_tv0.5: building head
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /cap/s2/abl_ce0.5_tv0.5_head  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[abl 2026-08-10T12:28:59-04:00] ce0.5_tv0.5: eval on the FROZEN suite, adaptK 1.5, NGEN0=200 -- identical protocol to every head
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s2_abl_ce0.5_tv0.5_eval.log
+[run_model] pid 3043024   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s2_abl_ce0.5_tv0.5_eval.log
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s2_abl_ce0.5_tv0.5_eval.log
+  lossless=True  gate=True  blocks=[6]  instruments=none
+    multi_turn       tau  5.26    32.44 tok/s
+    agentic_format   tau  4.70    29.67 tok/s
+    long_context     tau  4.35    26.31 tok/s
+    code_edit        tau  4.12    27.09 tok/s
+    short_factual    tau  3.71    26.08 tok/s
+    reasoning        tau  2.50    20.39 tok/s
+    explanation      tau  2.32    19.03 tok/s
+    code_gen         tau  2.17    17.53 tok/s
+  suite mean tau 3.6412  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO_REPRICE
+  - reasoning tau 2.50 in [2.1, 2.6) -- real but small; re-price the full run at roughly half
+  -> /home/patrickd/s5-capture/s2/abl_ce0.5_tv0.5_verdict.json
+/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s2_abl_ce0.5_tv0.5_eval.log: 9 prompts
+  tok/verify 3.597   ms/tok 39.8
+  tok/s pooled 25.15   mean 24.65   range 17.53-32.44
+rm: cannot remove '/home/patrickd/s5-capture/s2/abl_ce0.5_tv0.5_head/model.safetensors.index.json': Permission denied
+rm: cannot remove '/home/patrickd/s5-capture/s2/abl_ce0.5_tv0.5_head/config.json': Permission denied
+rm: cannot remove '/home/patrickd/s5-capture/s2/abl_ce0.5_tv0.5_head/model-00047-of-00048.safetensors': Permission denied
+rm: cannot remove '/home/patrickd/s5-capture/s2/abl_ce0.5_tv0.5_head/model-00048-of-00048.safetensors': Permission denied
+rm: cannot remove '/home/patrickd/s5-capture/s2/abl_ce0.5_tv0.5_head/model-00046-of-00048.safetensors': Permission denied
+rm: cannot remove '/home/patrickd/s5-capture/s2/abl_ce0.5_tv0.5/opt_state.pt': Permission denied

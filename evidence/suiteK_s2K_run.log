@@ -1,0 +1,47 @@
+[sweep] s2K: 3 thresholds x 4 reps, shuffled (seed 20260810), plus a discarded warm-up
+[sweep] warm-up (discarded)
+[sweep] order: 1.5 1 1.5 2 2.0 2 1.5 3 2.5 1 2.0 0 2.5 0 2.0 3 2.5 2 2.5 3 1.5 0 2.0 1 
+  [ 0] adaptK 1.5  rep 1 : 24.691 tok/s
+  [ 1] adaptK 1.5  rep 2 : 24.908 tok/s
+  [ 2] adaptK 2.0  rep 2 : 25.26 tok/s
+  [ 3] adaptK 1.5  rep 3 : 25.015 tok/s
+  [ 4] adaptK 2.5  rep 1 : 25.327 tok/s
+  [ 5] adaptK 2.0  rep 0 : 25.297 tok/s
+  [ 6] adaptK 2.5  rep 0 : 25.346 tok/s
+  [ 7] adaptK 2.0  rep 3 : 25.32 tok/s
+  [ 8] adaptK 2.5  rep 2 : 25.357 tok/s
+  [ 9] adaptK 2.5  rep 3 : 25.324 tok/s
+  [10] adaptK 1.5  rep 0 : 25.067 tok/s
+  [11] adaptK 2.0  rep 1 : 25.24 tok/s
+
+[sweep] s2K complete -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s2K_measurements.csv
+
+12 measurements over 3 thresholds
+
+   adaptK   n     mean      sd     min     max
+      1.5   4    24.92    0.17   24.69   25.07
+      2.0   4    25.28    0.04   25.24   25.32
+      2.5   4    25.34    0.02   25.32   25.36
+
+OLS  tok_s ~ threshold + run_index      (reference threshold 1.5, residual sd 0.090 tok/s)
+            term   estimate       se       t
+           const     24.871    0.053  465.60
+         thr=2.0      0.320    0.067    4.75
+         thr=2.5      0.373    0.069    5.40
+       run_index      0.014    0.008    1.70
+
+  DRIFT: +0.0140 tok/s per run  (+0.17 tok/s across the whole batch of 12)
+  This is the term the first sweep confounded with the threshold. It is estimated here
+  rather than assumed away, and the threshold effects below have it removed.
+
+  THRESHOLD EFFECTS vs 1.5, drift-adjusted:
+    thr=2.0      +0.320 tok/s  (t=+4.75)  DISTINGUISHABLE
+    thr=2.5      +0.373 tok/s  (t=+5.40)  DISTINGUISHABLE
+
+  |t| >= 2 is the bar. Anything below it is a number, not a result -- this box's
+  identical-policy replicates span 6 % (F120), which is larger than every effect the
+  first sweep appeared to find.
+
+  CONCLUSION: thr=2.0, thr=2.5 differ from 1.5 beyond measurement
+  error. Shipping any of them still requires re-baselining the incumbent at that
+  threshold -- the registry number is defined at adaptK 1.50.

@@ -1,0 +1,7 @@
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s1_holdout_control.log
+[run_model] pid 2740802   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s1_holdout_control.log
+=== CONTROL DONE ===
+hold-out tau at budget 200 tokens: n=32
+  median 4.940   mean 5.014   p25 3.774   p75 6.581   min 1.779   max 7.000
+  baseline (untrained) 3.483   delta +1.457 tau  (+11.16 tok/s, +49.3%)
+  VERDICT (secondary): GO   [GO >= +0.35, saturated < +0.15]

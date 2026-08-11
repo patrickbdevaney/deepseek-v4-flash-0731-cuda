@@ -1,0 +1,9 @@
+[run_model] 118 GiB available; launching detached -> evidence/suiteK_s1_rep_r1.log
+[run_model] pid 3161974   watch: tail -f evidence/suiteK_s1_rep_r1.log
+  r1 23.999
+[run_model] 118 GiB available; launching detached -> evidence/suiteK_s1_rep_r2.log
+[run_model] pid 3163386   watch: tail -f evidence/suiteK_s1_rep_r2.log
+  r2 24.487
+[run_model] 118 GiB available; launching detached -> evidence/suiteK_s1_rep_r3.log
+[run_model] pid 3164763   watch: tail -f evidence/suiteK_s1_rep_r3.log
+  r3 24.638

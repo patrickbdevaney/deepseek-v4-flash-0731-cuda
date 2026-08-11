@@ -1,0 +1,10 @@
+[s5:s1 2026-08-09T21:45:38-04:00] preflight: need ~29 GB (peak = one chunk of 500), have 109 GB free
+  round-trip: 500/500 lines start with their exact seed
+[s5:s1 2026-08-09T21:45:38-04:00] pass 1 OK (500 sequences)
+[s5:s1 2026-08-09T21:45:38-04:00] hold-out: 32 sequence(s) reserved, 468 for training
+[s5:s1 2026-08-09T21:45:38-04:00] training in 1 chunk(s) of up to 468 sequence(s); peak capture on disk is one chunk
+[s5:s1 2026-08-09T21:45:38-04:00] chunk 0: already trained, reusing (rm -rf /home/patrickd/s5-capture/s1/c0/trained to force a re-run)
+merged 1 chunk(s), 468 sequences, 468 steps: loss 0.8384303972125053 -> 0.738633736709744 (tail mean 0.5404177391279993) -> /home/patrickd/s5-capture/s1/train_metrics.json
+[s5:s1 2026-08-09T21:45:38-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+trained tensors: 72
+  REFUSING mtp.0.attn.attn_sink: trained but stored as torch.float32; no safe write-back path

@@ -1,0 +1,32 @@
+[sweep] s1 adaptK 0.0
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_0.0.log
+[run_model] pid 3151154   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_0.0.log
+  adaptK 0.0  23.253
+[sweep] s1 adaptK 0.5
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_0.5.log
+[run_model] pid 3152669   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_0.5.log
+  adaptK 0.5  22.595
+[sweep] s1 adaptK 1.0
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_1.0.log
+[run_model] pid 3154135   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_1.0.log
+  adaptK 1.0  23.83
+[sweep] s1 adaptK 1.5
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_1.5.log
+[run_model] pid 3156166   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_1.5.log
+  adaptK 1.5  24.498
+[sweep] s1 adaptK 2.0
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_2.0.log
+[run_model] pid 3157500   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_2.0.log
+  adaptK 2.0  24.869
+[sweep] s1 adaptK 3.0
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_3.0.log
+[run_model] pid 3158814   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/suiteK_s1_3.0.log
+  adaptK 3.0  24.724
+
+[sweep] s1 summary (pooled tok/s over the 9 suite prompts):
+  0.0     tok/verify 3.547   ms/tok 43.0
+  0.5     tok/verify 3.711   ms/tok 44.3
+  1.0     tok/verify 3.618   ms/tok 42.0
+  1.5     tok/verify 3.547   ms/tok 40.8
+  2.0     tok/verify 3.472   ms/tok 40.2
+  3.0     tok/verify 3.321   ms/tok 40.4

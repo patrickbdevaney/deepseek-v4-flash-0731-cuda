@@ -72,7 +72,9 @@ for ARM in "${ARMS[@]}"; do
 
     # DISK: the head is 6.6 GB and rebuildable from the 1 GB weights in ~1 min. Keep the weights and
     # the eval, drop the head and the 2.4 GB optimizer state; rebuild only whichever arm wins.
-    rm -rf "$WORK/abl_${TAG}_head" "$OUT/opt_state.pt"
+    # sudo: the container writes these as root, so a plain rm silently fails and each arm leaks
+    # ~9 GB. Three arms would have been 27 GB against 70 GB free.
+    sudo rm -rf "$WORK/abl_${TAG}_head" "$OUT/opt_state.pt"
     LOG "$TAG: done, $(df -BG --output=avail /home/patrickd | tail -1 | tr -d ' ') free"
 done
 

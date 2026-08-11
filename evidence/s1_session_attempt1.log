@@ -1,0 +1,24 @@
+[s5:s1 2026-08-09T03:32:19-04:00] preflight: need ~29 GB (peak = one chunk of 500), have 120 GB free
+  round-trip: 500/500 lines start with their exact seed
+[s5:s1 2026-08-09T03:32:19-04:00] pass 1 OK (500 sequences)
+[s5:s1 2026-08-09T03:32:19-04:00] hold-out: 32 sequence(s) reserved, 468 for training
+[s5:s1 2026-08-09T03:32:19-04:00] training in 1 chunk(s) of up to 468 sequence(s); peak capture on disk is one chunk
+[s5:s1 2026-08-09T03:32:19-04:00] chunk 0: capturing 468 sequence(s)
+[run_model] 117 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s1_c0_cap.log
+[run_model] pid 2100527   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s1_c0_cap.log
+total: 276611 tokens, 8645.2 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s1 2026-08-09T05:04:46-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p468_s000572.txt: running agreement 93.4%
+[gate] PORT vs ENGINE draft agreement: 41943/44928 = 93.4%  (need >= 90% before any session runs)
+[s5:s1 2026-08-09T05:10:33-04:00] gate OK (93.4%)
+[s5:s1 2026-08-09T05:10:33-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s1/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s1/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s1/c0/train_metrics.json  (loss 0.8384 -> 0.7386, tail mean 0.5404)
+[train] TRAIN OK
+merged 1 chunk(s), 6 sequences, 468 steps: loss 0.8384303972125053 -> 0.738633736709744 (tail mean 0.5404177391279993) -> /home/patrickd/s5-capture/s1/train_metrics.json
+[s5:s1 2026-08-09T05:29:10-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+    with safe_open(filename, framework="pt", device=device) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: No such file or directory: /cap/s1/trained/mtp_trained.safetensors

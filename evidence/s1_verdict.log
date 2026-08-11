@@ -1,0 +1,15 @@
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s1_eval.log
+  lossless=True  gate=True  blocks=[6]  instruments=none
+    multi_turn       tau  5.23    32.42 tok/s
+    agentic_format   tau  4.70    29.76 tok/s
+    long_context     tau  4.53    28.36 tok/s
+    code_edit        tau  3.89    25.85 tok/s
+    short_factual    tau  3.07    21.56 tok/s
+    reasoning        tau  2.56    20.45 tok/s
+    code_gen         tau  2.35    18.51 tok/s
+    explanation      tau  2.28    19.21 tok/s
+  suite mean tau 3.5762  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO_REPRICE
+  - reasoning tau 2.56 in [2.1, 2.6) -- real but small; re-price the full run at roughly half
+  -> /home/patrickd/s5-capture/s1/session_verdict.json
