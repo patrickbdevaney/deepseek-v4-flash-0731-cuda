@@ -72,6 +72,7 @@ not 233. See `wiki/measurement-and-traps.md`.
 | **[`wiki/draft-head-finetuning.md`](wiki/draft-head-finetuning.md)** | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, and what the literature actually says |
 | **[`wiki/measurement-and-traps.md`](wiki/measurement-and-traps.md)** | how a number becomes trustworthy here, and the 30+ ways one has failed to |
 | **[`wiki/hardware-sm110a.md`](wiki/hardware-sm110a.md)** | Thor: measured bandwidth **and compute** peaks, and the `sm_110a` ISA facts already settled |
+| **[`wiki/cross-model-decode-comparison.md`](wiki/cross-model-decode-comparison.md)** | why this checkpoint decodes at half Qwen's rate on the same box — and why that is a quantisation ranking, not an engine ranking |
 
 ## Reference documents
 
