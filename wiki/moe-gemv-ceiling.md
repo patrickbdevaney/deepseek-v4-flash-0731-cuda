@@ -1,4 +1,15 @@
-# MoE GEMV — where the 33 % goes, and the one-line cause nobody has removed
+# MoE GEMV — where the 33 % goes
+
+> **ANSWERED, and it redirects the lever.** Open question 3 below asked whether Laguna's 206 GB/s
+> advantage is kernel quality or mix. It is **mix**. Laguna's own MoE kernel `k_moe_gateup_rp` runs
+> at **177 GB/s = 70 % of its 254 ceiling**; ours runs at **155 GB/s = 67 % of our 233**. Those are
+> the same kernel quality. The gap is entirely in the **dense/MLA GEMVs**: theirs measure
+> **228-236 GB/s** (`o_proj` 228, `q_proj` 236), ours measure **115-195**. And dense is **72 % of our
+> `B_tok`**. Priced: dense at 228 GB/s takes the AR step 79.1 → 65.0 ms, i.e. **12.6 → 15.4 tok/s**,
+> which is essentially the whole gap the cross-model comparison found. **The MoE GEMV is not lever #1;
+> the dense/MLA GEMV path is.** The alignment finding below still stands and still applies — the same
+> `WeightStore` policy misaligns every tensor, not only the experts — but it should be aimed at the
+> dense path first, where the bytes and the deficit both are.
 
 **Status: research, not yet implemented.** Lever #1 in `LEVERS.md` §8. Everything below is either
 measured (marked) or derived from measured numbers (marked). Nothing here has been built.
