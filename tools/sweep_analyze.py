@@ -39,7 +39,14 @@ def main():
     if not rows:
         sys.exit(f"no usable measurements in {a.csv}")
 
-    thrs = sorted({r["thr"] for r in rows}, key=float)
+    # factor levels are numeric for a threshold sweep and head NAMES for a head-off; sort
+    # numerically when we can so the table reads in order, otherwise alphabetically
+    def _key(x):
+        try:
+            return (0, float(x), "")
+        except ValueError:
+            return (1, 0.0, x)
+    thrs = sorted({r["thr"] for r in rows}, key=_key)
     print(f"\n{len(rows)} measurements over {len(thrs)} thresholds\n")
     print(f"  {'adaptK':>7} {'n':>3} {'mean':>8} {'sd':>7} {'min':>7} {'max':>7}")
     raw = {}
