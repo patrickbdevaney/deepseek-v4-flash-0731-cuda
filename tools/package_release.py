@@ -34,6 +34,21 @@ def sha256(p, buf=1 << 20):
     return h.hexdigest()
 
 
+def _meas(card):
+    """Normalise the measurement block.
+
+    `archive` and `promote` write the same numbers under different names (`suite_tok_s` vs
+    `suite_mean_tok_s`), so a reader that knows only one spelling silently reports a promoted head
+    as unmeasured -- which is exactly how the shipped head first showed up in this listing with a
+    dash where its 24.515 should have been.
+    """
+    m = dict(card.get("measurement") or {})
+    for a, b in (("suite_tok_s", "suite_mean_tok_s"), ("suite_tau", "suite_mean_tau")):
+        if m.get(a) is None and m.get(b) is not None:
+            m[a] = m[b]
+    return m
+
+
 def candidates():
     out = []
     if not os.path.isdir(STORE):
@@ -46,7 +61,7 @@ def candidates():
             c = json.load(open(card))
         except (json.JSONDecodeError, OSError):
             continue
-        m = c.get("measurement") or {}
+        m = _meas(c)
         out.append({"name": n, "dir": os.path.join(STORE, n),
                     "tok_s": m.get("suite_tok_s"), "tau": m.get("suite_tau"),
                     "promoted": c.get("promoted"), "rev": c.get("engine_git_rev", "")[:9],
@@ -181,7 +196,7 @@ def main():
     card = {}
     if os.path.exists(os.path.join(src, "head_card.json")):
         card = json.load(open(os.path.join(src, "head_card.json")))
-    meas = card.get("measurement") or {}
+    meas = _meas(card)
 
     os.makedirs(a.out, exist_ok=True)
     copied = []
