@@ -321,12 +321,31 @@ def main():
             # if `tp` is built in the same order every run. It is (deterministic iteration over
             # blocks), but assert it rather than assume: a shifted index would apply mtp.0's
             # moments to mtp.1's weights and still train to a falling loss.
-            n_state = len(opt.state_dict()["state"])
-            if n_state != len(tp):
-                sys.exit(f"[train] FAIL: resumed AdamW state has {n_state} entries against "
+            #
+            # CHECK INDEX ALIGNMENT, NOT COUNT EQUALITY. AdamW creates state LAZILY -- only for
+            # params that have actually received a gradient -- so `len(state)` is legitimately
+            # smaller than `len(tp)`. This engine reports `tensors_with_grad=69/72` on every session
+            # (a_conf=0 zeroes the confidence term, and a few tensors never get a gradient from
+            # ce+tv), so the old `n_state != len(tp)` test rejected every correct multi-chunk resume.
+            # It never fired before s3 because s1 and s2 ran in a single chunk and no resume happened.
+            #
+            # What actually has to hold is that the INDICES line up: the group must contain exactly
+            # len(tp) params in the same order, and every state key must index into that range. That
+            # is the shifted-index failure the original comment was worried about, tested directly.
+            sd = opt.state_dict()
+            n_state = len(sd["state"])
+            n_params = sum(len(g["params"]) for g in sd["param_groups"])
+            if n_params != len(tp):
+                sys.exit(f"[train] FAIL: resumed optimizer covers {n_params} params against "
                          f"{len(tp)} trainable tensors -- the param ordering changed and the "
                          f"moments would be applied to the wrong weights")
-            print(f"[train] resumed AdamW state ({n_state} tensors with moments)", flush=True)
+            bad = [k for k in sd["state"] if not (isinstance(k, int) and 0 <= k < len(tp))]
+            if bad:
+                sys.exit(f"[train] FAIL: resumed AdamW state has out-of-range param indices "
+                         f"{bad[:8]} for {len(tp)} trainable tensors")
+            print(f"[train] resumed AdamW state: {n_state}/{len(tp)} tensors carry moments "
+                  f"({len(tp)-n_state} never received a gradient, expected), indices aligned",
+                  flush=True)
         else:
             print(f"[train] WARNING: no opt_state.pt in {a.resume}; AdamW moments restart at zero. "
                   f"This is NOT equivalent to one continuous run.", flush=True)

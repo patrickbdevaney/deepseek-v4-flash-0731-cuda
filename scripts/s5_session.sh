@@ -142,7 +142,16 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
     fi
 
     LOG "chunk $ci: training (ce+tv; a_conf 0 until free-running labels exist -- F100)"
-    RES=(); [ -n "$PREV" ] && RES=(--resume "/cap/$NAME/$(basename "$PREV")")
+    # PREV is already chunk-relative ("c0/trained"); `basename` collapsed it to "trained" and
+    # pointed --resume at /cap/$NAME/trained, which does not exist DURING the loop -- that symlink is
+    # created after it. Every prior session ran in a single chunk (NCHUNK=1, so PREV stayed empty and
+    # this line never fired), which is how a broken resume survived two sessions unexercised and then
+    # killed s3 four hours in, after chunk 0 had trained fine and chunk 1 had captured and validated.
+    RES=(); [ -n "$PREV" ] && RES=(--resume "/cap/$NAME/$PREV")
+    if [ -n "$PREV" ] && [ ! -s "$WORK/$PREV/mtp_trained.safetensors" ]; then
+        DIE "chunk $ci: --resume target $WORK/$PREV/mtp_trained.safetensors is missing; refusing to \
+train a chunk as if it were a fresh session (that would silently discard every earlier chunk)"
+    fi
     "${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/c$ci/cap" --ckpt /ckpt \
         --out "/cap/$NAME/c$ci/trained" --pos-per-seq 16 "${RES[@]}" \
         --total-steps "$NTRAIN" --step-offset "$OFF" \
