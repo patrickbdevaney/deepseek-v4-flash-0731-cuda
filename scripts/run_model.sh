@@ -29,10 +29,18 @@ if [ $# -lt 2 ]; then
 fi
 LOG="$1"; shift
 
-# Fail fast if the lock is already held, rather than queueing behind a 10-minute load.
+# Bounded wait, not fail-fast. The lock is released by the watcher subshell below, which notices the
+# child's exit on a 5 s poll -- while callers wait for the run to end with `while pgrep -x decode;
+# do sleep 30; done`. Those are different conditions: for up to ~5 s decode is gone but the lock is
+# still held. `flock -n` turned that window into an instant failure, and under `set -e` it killed
+# session 3 outright at 18:07 after 19 h of work, between two adaptK sweep points.
+#
+# 60 s preserves the original intent -- do not queue behind a 10-minute model load -- while covering
+# the handoff window by an order of magnitude. A caller that genuinely collides with a long run still
+# gets refused, just 60 s later.
 exec 9>"$LOCK"
-if ! flock -n 9; then
-    echo "REFUSED: another full-model process holds $LOCK" >&2
+if ! flock -w 60 9; then
+    echo "REFUSED: another full-model process held $LOCK for the full 60s wait" >&2
     echo "  running: $(ps -o pid,etime,args -C decode -C forward -C load_device --no-headers 2>/dev/null || echo '(none named)')" >&2
     exit 1
 fi
