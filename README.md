@@ -81,7 +81,7 @@ not 233. See `wiki/measurement-and-traps.md`.
 | `MODEL_INVENTORY.md` | checkpoint identity + every architectural constant, each traceable to a file |
 | `HARDWARE.md` | the box, the memory constraint, `sm_110a` empirical facts |
 | `LEVERS.md` | the implementation dedup ledger — what is open, what is closed, and why |
-| `LOOP_LOG.md` | 104 findings, chronological. The primary source for everything in the wiki. |
+| `LOOP_LOG.md` | 111 findings, chronological. The primary source for everything in the wiki. |
 | `RESEARCH_LOG.md` | the search dedup ledger |
 | `S5_RECIPE.md` | the draft-head fine-tuning recipe |
 | `S5_PROGRESSION.md` | the training session cadence, with stopping rules fixed before the data |
