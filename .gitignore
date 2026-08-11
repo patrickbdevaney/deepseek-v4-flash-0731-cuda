@@ -15,3 +15,7 @@ FLYWHEEL_STOP
 .flywheel_audited
 .flywheel_commit_msg
 .flywheel_last_run.jsonl
+
+# python bytecode from the analysis tools
+__pycache__/
+*.pyc
