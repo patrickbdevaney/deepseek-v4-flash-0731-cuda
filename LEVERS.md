@@ -546,3 +546,31 @@ union **17.53** distinct experts over 30 rows, 43 layers. Rows per expert: **1 �
 | `tests/gate_suffix_draft` | is the S6 matcher right? 8 host checks, no CUDA, no checkpoint — so the probe cannot retire S6 on a bug |
 | `TCB_CPA=<stages>` | stage the fp8 tile's B rows with a `cp.async` ring `<stages>` deep, one K-block per stage, instead of the KC register array. **Bit-identical and 15–53 % SLOWER** (2–26 % even at cp-size 16) — default OFF, see §3 (F81). `TCB_CPA_UF` is the issue-loop unroll; **1 is required**, since unrolling keeps H addresses live and costs a block/SM (78 regs vs 48) |
 | `tests/gate_tc_fp8_kc` (extended, F81) | now also sweeps `TCB_CPA ∈ {2,4,8}` against KC=1 at every M and both B offsets, **including a depth larger than KB** so the empty-`commit_group` padding that holds `wait_group` at a compile-time depth is exercised. Without that padding the mma reads a stage that has not landed — a race, and trap 9 says a sweep that cannot express the regime confirms itself |
+
+---
+
+## 8. The post-S5 queue — ranked against F122's ceiling arithmetic
+
+S5 (draft-head fine-tuning) is close to exhausted: three sessions moved the suite from 22.66 to
+24.52 tok/s shipped, the objective ablation moved nothing (F119), and the adaptK threshold is worth
+a real but small +1.3 % (F121). What remains is ranked below **by whether it moves the ceiling or
+merely approaches it**, which is the distinction F122 makes precise:
+
+    verify_ms(K) = 69.9 + 17.11 * K
+    intercept = the base AR step, amortised across the block  -> what speculation buys
+    slope     = one more verified position                    -> what bounds every method
+
+Block-6 perfect-acceptance ceiling **40.6 tok/s**; asymptote **58.4**; shipped 24.52 is **60 %** of
+the block-6 ceiling.
+
+| # | lever | moves | measured size | why it is where it is |
+|---|---|---|---|---|
+| 1 | **MoE GEMV efficiency** | intercept **and** slope | at ~55 % of achievable | The largest measured gap left. It is the only item that lifts base AR decode *and* every verify width at once, so it raises the whole table rather than one row. Occupancy and the register-cap knob are already exhausted (B7/B7'), so this needs a different kernel, not another launch-geometry tweak. |
+| 2 | **m16 B-repack (M>=2 only)** | slope | M>=2 by construction | Attacks the 17.11 ms per-position term directly, which is the term that bounds *any* speculative method. No base-decode effect at all, so it is pure verify/draft win and is invisible to the base number. |
+| 3 | **acceptance** | approaches the ceiling | tau 3.5362 -> 3.6712 over three sessions | Cannot exceed 40.6 at block 6 however good the drafter gets. Now measured to be a small lever, which is itself the S5 result. Any further work here needs a *different idea*, not more data — block size (F43), draft refinement (F45), K-selection (F110), gating margins (F118) and the CE/TV objective (F119) are all closed. |
+| 4 | **prompt-lookup / n-gram speculation** | approaches the ceiling | untried | The one genuinely untried *technique*. It proposes tokens by copying spans from the prompt/context instead of running a drafter, so it is nearly free to produce and lossless under greedy verification. It does **not** reduce the slope — a copied token still consumes a verify position — so it cannot raise the ceiling; it can push acceptance toward it on copy-heavy spans, which is the `code_edit` / `long_context` / agentic-diff shape this engine exists to serve. Complements the MTP head rather than replacing it: use the lookup when a span matches, the drafter otherwise. |
+
+**Do not re-propose** tree / multi-candidate speculation (Medusa, SpecInfer, EAGLE-2 style) without
+new evidence about the slope. On a dense model extra tree nodes are nearly free in weight traffic,
+which is the premise of the whole family; on this engine every candidate position costs the same
+17.11 ms as a depth position while carrying lower marginal acceptance. F122 has the argument.
