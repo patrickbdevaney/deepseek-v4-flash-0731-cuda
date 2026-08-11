@@ -7355,3 +7355,66 @@ itself with replicates. Before shipping it: the sweep was fitted on the `s1` hea
 being confirmed on `s2` (1.5 / 2.0 / 2.5, n=4). If 2.0 replicates there, adopting it means
 **re-baselining every registry number at 2.0**, because `HEAD_REGISTRY.md` is defined at adaptK 1.50
 and a mixed-threshold registry compares nothing.
+
+## Finding 122 — the ceiling arithmetic for **any** speculative method on this engine: `verify_ms(K) = 69.9 + 17.11K`. Block-6 perfect acceptance is ~40.6 tok/s, the asymptote is ~58.4, and none of the remaining gap is reachable by changing the speculation technique
+
+Fitting the measured per-width verify times from `evidence/s1_eval.log` (K = verified positions):
+
+    verify_ms(K) = 69.9 + 17.11 * K       R^2 essentially 1 over K=2..7
+
+The **intercept 69.9 ms is the base AR step** (measured 72.5 ms) — one full pass over the weights,
+paid once per verify however wide it is. That term is what speculation amortises and why it works
+at all. The **slope 17.11 ms is the marginal cost of one more verified position**, and it is what
+bounds everything, because *every accepted token consumes exactly one verify position*:
+
+| block | rate at PERFECT acceptance |
+|---|---|
+| 6 | 40.6 tok/s |
+| 8 | 43.5 |
+| 10 | 45.7 |
+| 32 | 53.5 |
+| infinity | **58.4** |
+
+Today's shipped 24.52 sits at **60 % of the block-6 perfect-acceptance ceiling**. So there is real
+headroom — about 1.65x — but the shape of the cost function says where it is not.
+
+**Why width-based methods (tree/Medusa/SpecInfer-style multi-candidate) do not pay here.** On a
+dense model, extra tree nodes are nearly free in weight traffic, which is the entire premise of tree
+speculation. On this engine every candidate position costs the same 17.11 ms as a depth position
+while carrying *lower* marginal acceptance, because it is an alternative that is probably wrong
+rather than a continuation that is probably right. Tree speculation is therefore priced at depth
+rates with worse odds. That is the structural reason to expect the prior DFlash result — "DDTree
+correct but does not beat linear, depth-dominated" — to reproduce here rather than to be a quirk of
+that model.
+
+**Why the slope is not what it looks like, twice over.** The two intuitive explanations are both
+already refuted in this log, and both were checked before being repeated here:
+
+- **MoE expert-union dilation** — refuted by code inspection (F13): `k_grouped_w4a8` already dedups
+  by expert, reading each weight byte once per tile. The union instrumentation confirms real
+  routing overlap (|union| at K=2 is 9.67 experts per layer, not 12).
+- **DSA per-query-position work** — refuted by the layer-flavour split (F14): the DSA layers grow
+  the *slowest* of the three flavours (2.488x vs 2.754x for pure-sliding), and the indexer is
+  0.05 ms of a 96 ms step.
+
+The mechanism that survived was the **attention/indexer/compressor glue** at M>=2 — correctness-first
+kernels that were optimal at M=1 and fell off a cliff at M>=2 (F15, whose first attribution to the
+GEMM fallback was itself retracted). That lever was subsequently taken, and glue fusion is now
+recorded as exhausted as a percentage lever.
+
+**What is actually left, ranked by measured size.** None of it is a speculation technique:
+
+1. **MoE GEMV efficiency — ~55 % of achievable.** The largest single gap, and it helps the base AR
+   step *and* the verify, so it raises the intercept and the slope together.
+2. **m16 B-repack, M>=2 only.** Attacks the 17.11 ms slope directly and therefore every ceiling in
+   the table above, while doing nothing for base decode by construction.
+3. **Acceptance**, now measured to be a small lever: three fine-tune sessions moved suite tau
+   3.5362 -> 3.6712 and the objective ablation moved nothing (F119).
+4. **Prompt-lookup / n-gram speculation** — the one genuinely untried *technique*. It does not
+   reduce the 17.11 ms slope (a copied token still needs a verify position), so it cannot raise the
+   ceiling; what it can do is push acceptance toward that ceiling on copy-heavy spans, which is
+   exactly the `code_edit` / `long_context` / agentic-diff shape this engine exists to serve.
+
+Already closed, for the record: block size (F43), draft refinement (F45), K-selection policy
+(+1.8 % ceiling, F110), gating margins (F118), the CE/TV objective (F119), and the adaptK threshold
+(+1.3 %, real but small, F121).
