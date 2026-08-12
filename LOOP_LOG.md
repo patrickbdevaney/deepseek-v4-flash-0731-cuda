@@ -7548,3 +7548,37 @@ cycles a pool of `R` copies with `R x 33.6 MB` well over L2. The numbers barely 
 which is luck rather than vindication: any GEMV benchmark on this box that does not exceed 33.6 MB is
 measuring the wrong memory, and the coincidence that these weights are exactly L2-sized makes it easy
 to miss.
+
+## Finding 126 — the dependent layer sequence costs **~4 %**, not the missing 20-30 %. And the comparison that motivated the whole search may be instrument mismatch
+
+F125's surviving hypothesis was that the in-situ deficit is pipeline drain: the benchmark launches
+back-to-back on independent buffers so DRAM never empties, while a real forward serialises 43 layers,
+each consuming the previous one's output. `tools/gemv_chain_bench.cu` inserts a real read-after-write
+between consecutive GEMVs — the actual dependency structure — and changes nothing else:
+
+| shape | INDEP | CHAIN | delta |
+|---|---|---|---|
+| `wq_b` [32768,1024] | 204.3 | 195.3 | **-4.4 %** |
+| `wo_a` [8192,4096] | 223.8 | 214.6 | **-4.1 %** |
+| `wo_b` [4096,8192] | 224.7 | 215.5 | **-4.1 %** |
+
+**The dependency is real and it is ~4 points.** It does not explain a 20-30 % gap, so overlap /
+graph capture / deeper prefetch is not sitting on a large prize either. Sixth hypothesis, sixth
+refutation.
+
+**And a caveat that should have come earlier.** `INDEP` here reads 204-225 GB/s where F125's
+benchmark read 225-246 on the same shapes and the same box — a 5-10 % spread between two
+microbenchmarks that differ only in harness. That is the same order as the residual gap being chased.
+Meanwhile the "in situ 168-195" figures come from `dprof`'s per-kernel accounting inside a real
+decode step, which is a **different instrument** measuring a different thing.
+
+So the honest position is: **the 20-30 % "gap" may be substantially an artefact of comparing a
+microbenchmark to dprof, and the remaining real deficit is smaller than the number that motivated
+this search.** Before anyone spends more on it, the two instruments have to be reconciled on the same
+kernel — otherwise this is the F120 mistake again in a new place: a confident number derived from two
+measurements that were never comparable.
+
+**Disposition: the dense-GEMV line of attack is closed** — kernel refuted (F125), dependency
+quantified at ~4 % (here), and the motivating gap itself now in question. What survives untouched is
+the *byte* argument, which does not depend on any of this: the dense path is 72 % of `B_tok` and
+halving its precision halves those bytes regardless of how efficiently they are moved.
