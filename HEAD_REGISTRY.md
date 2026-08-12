@@ -18,3 +18,4 @@ speculator weights (not in git, therefore at risk). This registry plus
 | `s2-abl-ce0.5_tv0.5` | 3.6412 | 24.8175 | 13.76 | `e2a6cb47a` | not promoted: suite 24.82 tok/s does not beat incumbent 24.52 by the 3.5%  |
 | `s2-abl-ce0.9_tv0.1` | 3.64 | 24.8975 | 14.14 | `e2a6cb47a` | not promoted: suite 24.90 tok/s does not beat incumbent 24.52 by the 3.5%  |
 | `s2-abl-ce1.0_tv0.0` | 3.6712 | 25.1038 | 13.7 | `e2a6cb47a` | not promoted: suite 25.10 tok/s does not beat incumbent 24.52 by the 3.5%  |
+| `s3` | 3.8438 | 25.5312 | 13.8 | `85dbea6cf` | PROMOTED |

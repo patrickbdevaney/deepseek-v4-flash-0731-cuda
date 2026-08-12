@@ -1,0 +1,33 @@
+[s5:s3 2026-08-10T22:46:28-04:00] preflight: need ~29 GB (peak = one chunk of 500), have 64 GB free
+[s5:s3 2026-08-10T22:46:28-04:00] pass 1: regenerating 1536 responses x 512 tokens
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_pass1.log
+[run_model] pid 3346582   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_pass1.log
+  round-trip: 1536/1536 lines start with their exact seed
+[s5:s3 2026-08-11T09:23:42-04:00] pass 1 OK (1536 sequences)
+[s5:s3 2026-08-11T09:23:42-04:00] hold-out: 64 sequence(s) reserved, 1472 for training
+[s5:s3 2026-08-11T09:23:42-04:00] training in 3 chunk(s) of up to 500 sequence(s); peak capture on disk is one chunk
+[s5:s3 2026-08-11T09:23:42-04:00] chunk 0: capturing 500 sequence(s)
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_c0_cap.log
+[run_model] pid 3674870   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_c0_cap.log
+total: 321987 tokens, 10063.3 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3 2026-08-11T11:11:16-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p500_s000608.txt: running agreement 92.3%
+[gate] PORT vs ENGINE draft agreement: 44316/48000 = 92.3%  (need >= 90% before any session runs)
+[s5:s3 2026-08-11T11:17:22-04:00] gate OK (92.3%)
+[s5:s3 2026-08-11T11:17:22-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3/c0/train_metrics.json  (loss 0.9736 -> 0.5291, tail mean 0.5014)
+[train] TRAIN OK
+[s5:s3 2026-08-11T11:37:12-04:00] chunk 0: capture deleted, 58G free
+[s5:s3 2026-08-11T11:37:12-04:00] chunk 1: capturing 500 sequence(s)
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_c1_cap.log
+[run_model] pid 3743679   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_c1_cap.log
+total: 325802 tokens, 10182.6 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3 2026-08-11T13:26:47-04:00] chunk 1: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[rank0]:   File "/opt/venv/lib/python3.12/site-packages/safetensors/torch.py", line 336, in load_file
+[rank0]:     with safe_open(filename, framework="pt", device=device) as f:
+[rank0]:          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]: FileNotFoundError: No such file or directory: /cap/s3/trained/mtp_trained.safetensors

@@ -1,0 +1,57 @@
+[headoff] materialising s2-abl-ce1.0_tv0.0 from its trained tensors
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /out/s2-abl-ce1.0_tv0.0  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[headoff] final: 4 heads x 4 reps at adaptK 1.5, shuffled, plus a warm-up
+  [ 0] s3                         rep 2 : 24.791 tok/s
+  [ 1] s1                         rep 0 : 24.363 tok/s
+  [ 2] s2                         rep 3 : 24.919 tok/s
+  [ 3] s2-abl-ce1.0_tv0.0         rep 1 : 25.089 tok/s
+  [ 4] s2                         rep 0 : 24.883 tok/s
+  [ 5] s3                         rep 3 : 25.307 tok/s
+  [ 6] s2-abl-ce1.0_tv0.0         rep 3 : 25.344 tok/s
+  [ 7] s3                         rep 1 : 25.329 tok/s
+  [ 8] s1                         rep 2 : 24.601 tok/s
+  [ 9] s2                         rep 1 : 24.921 tok/s
+  [10] s2-abl-ce1.0_tv0.0         rep 0 : 25.372 tok/s
+  [11] s1                         rep 3 : 24.541 tok/s
+  [12] s2-abl-ce1.0_tv0.0         rep 2 : 25.364 tok/s
+  [13] s1                         rep 1 : 24.551 tok/s
+  [14] s3                         rep 0 : 25.312 tok/s
+  [15] s2                         rep 2 : 24.957 tok/s
+
+
+16 measurements over 4 thresholds
+
+   adaptK   n     mean      sd     min     max
+       s1   4    24.51    0.10   24.36   24.60
+       s2   4    24.92    0.03   24.88   24.96
+  s2-abl-ce1.0_tv0.0   4    25.29    0.14   25.09   25.37
+       s3   4    25.18    0.26   24.79   25.33
+
+OLS  tok_s ~ threshold + run_index      (reference threshold s3, residual sd 0.125 tok/s)
+            term   estimate       se       t
+           const     25.058    0.077  327.41
+          thr=s1     -0.705    0.089   -7.92
+          thr=s2     -0.284    0.088   -3.21
+  thr=s2-abl-ce1.0_tv0.0      0.083    0.089    0.94
+       run_index      0.019    0.007    2.85
+
+  DRIFT: +0.0195 tok/s per run  (+0.31 tok/s across the whole batch of 16)
+  This is the term the first sweep confounded with the threshold. It is estimated here
+  rather than assumed away, and the threshold effects below have it removed.
+
+  THRESHOLD EFFECTS vs s3, drift-adjusted:
+    thr=s1       -0.705 tok/s  (t=-7.92)  DISTINGUISHABLE
+    thr=s2       -0.284 tok/s  (t=-3.21)  DISTINGUISHABLE
+    thr=s2-abl-ce1.0_tv0.0 +0.083 tok/s  (t=+0.94)  not distinguishable from the reference
+
+  |t| >= 2 is the bar. Anything below it is a number, not a result -- this box's
+  identical-policy replicates span 6 % (F120), which is larger than every effect the
+  first sweep appeared to find.
+
+  CONCLUSION: thr=s1, thr=s2 differ from s3 beyond measurement
+  error. Shipping any of them still requires re-baselining the incumbent at that
+  threshold -- the registry number is defined at adaptK 1.50.
+
+[headoff] the winner is the head with the largest POSITIVE effect at |t| >= 2.
+[headoff] package it with:  python3 tools/package_release.py --head <name> --out <dir>

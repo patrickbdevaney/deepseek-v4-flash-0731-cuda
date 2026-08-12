@@ -1,0 +1,17 @@
+run_index,threshold,rep,tok_s,log
+0,s3,2,24.791,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s3_r2.log
+1,s1,0,24.363,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s1_r0.log
+2,s2,3,24.919,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2_r3.log
+3,s2-abl-ce1.0_tv0.0,1,25.089,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2-abl-ce1.0_tv0.0_r1.log
+4,s2,0,24.883,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2_r0.log
+5,s3,3,25.307,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s3_r3.log
+6,s2-abl-ce1.0_tv0.0,3,25.344,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2-abl-ce1.0_tv0.0_r3.log
+7,s3,1,25.329,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s3_r1.log
+8,s1,2,24.601,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s1_r2.log
+9,s2,1,24.921,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2_r1.log
+10,s2-abl-ce1.0_tv0.0,0,25.372,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2-abl-ce1.0_tv0.0_r0.log
+11,s1,3,24.541,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s1_r3.log
+12,s2-abl-ce1.0_tv0.0,2,25.364,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2-abl-ce1.0_tv0.0_r2.log
+13,s1,1,24.551,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s1_r1.log
+14,s3,0,25.312,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s3_r0.log
+15,s2,2,24.957,/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/headoff_final_s2_r2.log

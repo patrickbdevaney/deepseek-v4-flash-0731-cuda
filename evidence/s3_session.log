@@ -1,0 +1,88 @@
+[s5:s3 2026-08-11T18:54:02-04:00] preflight: need ~29 GB (peak = one chunk of 500), have 45 GB free
+  round-trip: 1536/1536 lines start with their exact seed
+[s5:s3 2026-08-11T18:54:02-04:00] pass 1 OK (1536 sequences)
+[s5:s3 2026-08-11T18:54:02-04:00] hold-out: 64 sequence(s) reserved, 1472 for training
+[s5:s3 2026-08-11T18:54:02-04:00] training in 3 chunk(s) of up to 500 sequence(s); peak capture on disk is one chunk
+[s5:s3 2026-08-11T18:54:02-04:00] chunk 0: already trained, reusing (rm -rf /home/patrickd/s5-capture/s3/c0/trained to force a re-run)
+[s5:s3 2026-08-11T18:54:02-04:00] chunk 1: already trained, reusing (rm -rf /home/patrickd/s5-capture/s3/c1/trained to force a re-run)
+[s5:s3 2026-08-11T18:54:02-04:00] chunk 2: already trained, reusing (rm -rf /home/patrickd/s5-capture/s3/c2/trained to force a re-run)
+merged 3 chunk(s), 1472 sequences, 1472 steps: loss 0.9736005757004023 -> 0.04045040856999549 (tail mean 0.4446075509756595) -> /home/patrickd/s5-capture/s3/train_metrics.json
+[s5:s3 2026-08-11T18:54:02-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+  wrote model-00048-of-00048.safetensors
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /cap/s3/head  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[s5:s3 2026-08-11T18:54:19-04:00] re-fitting adaptK on the trained head (F111: the optimum moves with drafter quality)
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_0.0.log
+[run_model] pid 3967429   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_0.0.log
+[s5:s3 2026-08-11T18:59:53-04:00]   adaptK 0.0 -> hold-out 20.617 tok/s pooled (median tau 3.8711)
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_0.5.log
+[run_model] pid 3970335   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_0.5.log
+[s5:s3 2026-08-11T19:05:26-04:00]   adaptK 0.5 -> hold-out 20.523 tok/s pooled (median tau 4.469)
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_1.0.log
+[run_model] pid 3973323   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_1.0.log
+[s5:s3 2026-08-11T19:10:28-04:00]   adaptK 1.0 -> hold-out 21.074 tok/s pooled (median tau 3.9131)
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_1.5.log
+[run_model] pid 3975953   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_1.5.log
+[s5:s3 2026-08-11T19:16:01-04:00]   adaptK 1.5 -> hold-out 20.57 tok/s pooled (median tau 3.7732)
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_2.0.log
+[run_model] pid 3978768   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_adaptk_2.0.log
+[s5:s3 2026-08-11T19:21:03-04:00]   adaptK 2.0 -> hold-out 22.298 tok/s pooled (median tau 4.186)
+[s5:s3 2026-08-11T19:21:03-04:00] adaptK re-fit: 2.0 (22.298 tok/s pooled on the hold-out); shipped default was 1.5
+[s5:s3 2026-08-11T19:21:03-04:00] eval: 8-prompt suite, NGEN0=200, block 6, clean
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_eval.log
+[run_model] pid 3981375   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_eval.log
+[s5:s3 2026-08-11T19:24:05-04:00] second eval at the re-fitted adaptK 2.0 (reported separately; NOT the registry number)
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_eval_adaptk2.0.log
+[run_model] pid 3982959   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_eval_adaptk2.0.log
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_eval_adaptk2.0.log
+  lossless=True  gate=True  blocks=[6]  instruments=none
+    multi_turn       tau  5.86    34.58 tok/s
+    code_edit        tau  3.85    26.01 tok/s
+    long_context     tau  3.85    24.98 tok/s
+    reasoning        tau  3.77    26.82 tok/s
+    agentic_format   tau  3.34    23.32 tok/s
+    short_factual    tau  3.32    24.10 tok/s
+    explanation      tau  2.93    22.80 tok/s
+    code_gen         tau  2.35    18.67 tok/s
+  suite mean tau 3.6587  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.77 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3/session_verdict_adaptk2.0.json
+[s5:s3 2026-08-11T19:27:08-04:00] NOTE: promoting at adaptK 2.0 requires re-measuring the incumbent at 2.0 first.
+[s5:s3 2026-08-11T19:27:08-04:00] secondary gate: 64-prompt reasoning hold-out, trained head
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_holdout.log
+[run_model] pid 3984587   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_holdout.log
+[s5:s3 2026-08-11T19:52:10-04:00] paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_holdout_control.log
+[run_model] pid 3997503   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_holdout_control.log
+[s5:s3 2026-08-11T20:15:14-04:00] hold-out untrained baseline (paired, from pass 1): 6.0
+hold-out tau at budget 200 tokens: n=64
+  median 4.622   mean 4.651   p25 3.458   p75 5.829   min 1.844   max 7.000
+  baseline (untrained) 6.000   delta -1.378 tau  (-10.56 tok/s, -46.6%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+ARCHIVED s3 -> /home/patrickd/model-backups/heads/s3 (5 files, sha256 recorded)
+  suite mean: tau 3.8438  25.5312 tok/s
+  5/5 file(s) already archived byte-identically; not re-copied
+PROMOTED s3
+  suite mean: tau 3.8438  25.5312 tok/s  (base AR 13.8)
+  beats incumbent s1: 24.52 -> 25.53 tok/s (+4.1%)
+  artifact: /home/patrickd/model-backups/heads/s3  (5 files, sha256 recorded)
+[s5:s3 2026-08-11T20:15:33-04:00] PROMOTED
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3_eval.log
+  lossless=True  gate=True  blocks=[6]  instruments=none
+    multi_turn       tau  6.09    35.08 tok/s
+    code_edit        tau  4.20    27.16 tok/s
+    long_context     tau  3.94    24.39 tok/s
+    reasoning        tau  3.85    26.70 tok/s
+    agentic_format   tau  3.64    24.55 tok/s
+    short_factual    tau  3.48    24.74 tok/s
+    explanation      tau  3.06    22.80 tok/s
+    code_gen         tau  2.49    18.83 tok/s
+  suite mean tau 3.8438  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.85 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3/session_verdict.json
+[s5:s3 2026-08-11T20:15:33-04:00] GO (primary); secondary exit 3
+[s5:s3 2026-08-11T20:15:33-04:00] no next session configured; stopping here
