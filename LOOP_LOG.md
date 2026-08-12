@@ -7701,3 +7701,34 @@ M=1 kernels (`float4` on ogroup: 13.26 -> 14.81) and `tests/gate_nvfp4_ogroup_mk
 NR=1/2/4) are all sound and kept. What is not sound is the premise that halving dense bytes buys
 proportional decode on **this** engine. It would buy it on an AR-only engine; speculation already
 took most of it.
+
+## Finding 130 — shipping adaptK 2.0 **failed on the shipped head**, and it revives F111's coupling: a threshold fitted on a weaker drafter does not transfer to a stronger one
+
+adaptK 2.0 was the highest-confidence item on the list: powered sweeps on **s1** (n=4, +0.278 tok/s,
+t=3.2) and **s2** (n=4, +0.320, t=4.75), plus s3's in-session re-fit, all putting the optimum at
+2.0-2.5. It was shipped as the default and measured on the frozen suite with the **shipped s3 head**:
+
+| adaptK | tok/verify | ms/tok | tok/s |
+|---|---|---|---|
+| 1.5 | 3.736 | 40.4 | **24.73** |
+| 2.0 | 3.562 | 42.0 | **23.84** |
+
+**-3.6 %. Reverted.**
+
+**Why it failed, and it is not a measurement error this time.** The sweeps were run on the **s1 and
+s2 heads**; s3's own re-fit ran on the **hold-out**, which F129 independently showed is the wrong
+instrument. s3 is a materially better drafter (suite tau 3.84 against s1's 3.58), and a better
+drafter earns wider verifies -- so its optimal threshold is **lower**, not higher. Raising the gate
+truncates verifies that s3 would have won: tok/verify falls 3.736 -> 3.562, which is the mechanism
+showing up directly in the acceptance column.
+
+**That is F111, alive.** F121 retired F111's "the optimum falls as the drafter improves" as an
+artifact of fitting on tau rather than rate. F121 was right about the artifact and wrong to retire
+the claim: fitted on *rate*, on the *suite*, against the *shipped* head, the optimum does move with
+drafter quality, and it moves in the direction F111 said.
+
+**The rule this yields, which is the third instance of the same lesson in one session:** a
+hyperparameter measured against one head, one instrument or one trace is a fact about *that*
+configuration. adaptK on s1/s2 (+1.3 %), NVFP4 on the canonical prompt (+5.7 %), and the CE/TV
+ablation at n=1 (-1.7 %) were all real numbers that reversed sign or vanished under the shipping
+condition. **Measure the thing that ships.**

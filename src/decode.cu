@@ -795,6 +795,13 @@ int main(int argc, char** argv){
         const float adaptK = adaptSweep[bsi] < 0.f ? 0.f
                            : adaptSweep[bsi] > 0.f ? adaptSweep[bsi]
                            : (getenv("NO_ADAPTK") ? 0.f : 1.5f);
+        // STAYS 1.5. Shipping 2.0 was attempted and REVERTED (F130). The powered sweeps that
+        // justified it were run on the s1 and s2 heads (+0.278 t=3.2, +0.320 t=4.75), and s3's own
+        // re-fit was on the hold-out, which F129 shows is the wrong instrument. Measured on the
+        // frozen suite with the SHIPPED s3 head, 2.0 is a REGRESSION: 24.73 -> 23.84, tok/verify
+        // 3.736 -> 3.562. That is F111's coupling, alive after all -- a better drafter earns wider
+        // verifies, so its optimal threshold is LOWER, and a threshold fitted on a weaker head does
+        // not transfer to a stronger one.
         // This point's prompt. Named `pids`/`ps`/`PSp`, NOT `ids`/`s`/`PS`: the previous version
         // shadowed the outer names, and `run_layer` — a [&] lambda defined at outer scope — went on
         // binding the OUTER `PS`. See Finding 52. Every device buffer above is sized at the
