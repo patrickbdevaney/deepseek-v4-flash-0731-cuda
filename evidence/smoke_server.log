@@ -1,0 +1,25 @@
+== 127.0.0.1:8080 ==
+  [PASS] /health
+  [PASS] /v1/models lists the model
+  [PASS] /metrics is Prometheus text
+  [PASS] GET / serves the web UI
+         content: Paris
+  [PASS] chat/completions answers the factual probe
+  [PASS] usage is reported
+  [PASS] timings carry tok/s (14.823330104243809)
+  [PASS] thinking mode returns reasoning_content (95 bytes)
+  [PASS] content is separate from reasoning
+  [PASS] prefix cache hit on a repeated prompt (8 tokens)
+  [PASS] stream emits SSE data frames
+  [PASS] stream chunks have the right object type
+  [PASS] stream terminates with [DONE]
+  [PASS] stream carries finish_reason
+  [PASS] stream carries a final usage chunk
+  [PASS] tool call parsed: get_weather {"city": "Beijing"}
+  [PASS] finish_reason is tool_calls
+         text:  Paris. The capital of Spain is Madrid
+  [PASS] /v1/completions raw prompt
+  [PASS] malformed JSON -> 400
+  [PASS] over-long request -> 400, not a crash
+
+Gate SERVER: 20 passed, 0 failed -> PASS

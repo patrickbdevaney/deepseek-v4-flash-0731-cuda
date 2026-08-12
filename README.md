@@ -135,3 +135,18 @@ reports `GATE FAIL` against a different sequence.
 Useful environment flags are catalogued in `LEVERS.md` §5. The two that matter most:
 `MOE_MMA=1` (tensor-core MoE — right for prefill, **wrong for decode**) and `DSV4_DPROF=1`
 (multi-level named GPU-phase timing, ~0.4 % overhead).
+
+### The server (Phase 6)
+
+```bash
+bash scripts/build_server.sh    # gates, server, terminal client
+bash scripts/serve.sh           # CPU gates as preflight, then listen on :8080
+build/dsv4-chat                 # terminal client
+                                # web UI at http://localhost:8080/
+```
+
+OpenAI-compatible: `/v1/chat/completions` (streaming and not), `/v1/completions`, `/v1/models`,
+`/health`, `/metrics`. Tool calls, thinking blocks, and a KV prefix cache for agentic turns. One
+binary, no Python on the request path. See **`SERVER.md`** for the surface, the gates and the
+design decisions — in particular why the tokenizer is not gemma's and why the engine is a separate
+translation unit from `src/decode.cu`.

@@ -7763,3 +7763,156 @@ repeating the substitution this task existed to end.
 **The honest form of the claim is now:** this box serves a checkpoint that scores 91.7 % on GSM8K at
 24.73 tok/s, and the broader capability figure remains inherited from the base model. That is a much
 smaller inherited surface than before, and it is the right size for what was actually measured.
+
+---
+
+## F132 — the DeepSeek-V4 tokenizer is ByteLevel BPE, and adapting gemma's would have been silent
+
+`include/tokenizer.h` (gemma-4) and DeepSeek-V4 are different animals. gemma is SentencePiece-style:
+`' '` → `▁`, `byte_fallback` on, an effectively no-op pre-tokenizer. DeepSeek-V4 is **ByteLevel BPE**
+(GPT-2 lineage): 128 000 vocab + 1 283 added tokens, `byte_fallback` **off** because it cannot be
+needed, and a four-stage pre-tokenizer that splits before BPE runs — `\p{N}{1,3}` isolated, CJK/kana
+isolated, the GPT-style alternation, then the byte→unicode map.
+
+The failure mode this avoids is the dangerous kind: a tokenizer adapted by habit produces ids that
+are *wrong but plausible*, nothing errors, and the model answers a different question than the one
+asked. Nothing downstream can detect it.
+
+Two implementation notes:
+
+* **Unicode general categories are baked, not parsed.** `std::regex` has no `\p{L}`. Rather than
+  vendor a unicode engine for five yes/no questions, `tools/gen_unicode_tables.py` walks every
+  codepoint once, offline, into 1 529 sorted ranges (`include/unicode_cat.h`, 26 KB). Codegen, so
+  "no Python on the hot path" is untouched.
+* **The third stage needs real backtracking.** `\s+(?!\S)` is a lookahead;
+  `[^\r\n\p{L}\p{P}\p{S}]?[\p{L}\p{M}]+` needs its optional first character tried greedily and then
+  given back. Both are implemented literally.
+
+**Gated exact against HF over a corpus built to break ByteLevel ports** — digit-run boundaries, CJK
+adjacent to latin, whitespace before words vs at end-of-string, CRLF, combining marks, emoji/ZWJ,
+added tokens at both ends and adjacent, invalid-UTF-8 bytes, plus the repo's prompt suite, the chat
+encoder's four golden outputs and 400 GSM8K rows:
+
+```
+encode 2118/2118 exact (173 399 reference tokens) | roundtrip 2118/2118 | stream 2118/2118
+1.24 M tokens/s
+```
+
+## F133 — a streaming splitter has to be chunk-boundary independent, and `\x9CD` is one escape
+
+Thinking-mode generation *starts inside* the reasoning block (the prompt ends with `<think>`), so the
+server splits `{reasoning}</think>{content}<｜DSML｜tool_calls>…` live. Two hazards, both of which
+produce garbage only sometimes:
+
+1. `"</thi"` + `"nk>"` across a token boundary must not reach the client as content → hold back the
+   longest possible marker prefix.
+2. A held-back boundary can land mid-UTF-8-character, and every delta goes into a JSON string —
+   nlohmann *throws* on invalid UTF-8, turning a CJK answer into a mid-stream 500 → round emit
+   boundaries down to a character boundary.
+
+`tests/gate_stream.cpp` asserts the split is identical whether fed 1 byte at a time, in 22-byte
+chunks (exactly the marker length), or all at once. 11/11.
+
+**Bug worth keeping:** the markers were first written `"<\xEF\xBD\x9CDSML…"`. C hex escapes do not
+stop at two digits — `\x9CD` is a single escape and overflows. Written as literal UTF-8 instead,
+which is what `encoding_dsv4.h` already did for the same reason.
+
+## F134 — the serving engine is a second implementation, and it agrees with decode.cu
+
+`src/decode.cu` is the instrument every finding here was taken with; refactoring it would invalidate
+the readings. So `src/engine.cu` is a new TU over the same kernels carrying only the shipping
+configuration (block 6, adaptK 1.5, VKPLUS, embedded `mtp.0/1/2`), and `tests/gate_engine.cu` holds
+it to decode.cu's own gate:
+
+```
+greedy from BOS + "The capital of France is" -> 11111 16 455 6102 294 16603 344 29168
+                                             = " Paris. The capital of Spain is Madrid"
+two greedy runs from a fresh context: identical
+```
+
+Sampling and speculation compose exactly: the verify accepts `draft[i]` iff it equals the token the
+*target* emits there, so replacing argmax with a draw from the target's own conditional keeps every
+emitted token a sample from the model. Speculation decides how many positions are evaluated per
+forward, never which token comes out. It costs **acceptance** (matching a random draw is harder than
+matching an argmax), so tok/s falls with temperature — measured, not assumed. `temperature: 0` is the
+greedy path.
+
+## F135 — the prefix cache is 5.0x on prefill, and token-identity is not a property these kernels have
+
+Prefix caching: rewind to the longest shared prefix, extend the remainder with the M=K verify kernel
+at an offset — the same batched-forward-at-a-position the accept path already runs every round.
+Rewind is exact by construction: window and `xin` caches are position-indexed, and compressed layers
+carry a row count that is `floor(n/ratio)`, the same accounting the accept path does when discarding
+rows from rejected drafts.
+
+**Measured** (40-token second turn, 32 shared): prefill **710 ms → 143 ms, 5.0x**.
+
+The correctness question needed the right instrument. Comparing generated *tokens* can only say
+"diverged at step k", which is equally consistent with a broken KV and with a near-tie. So compare
+the state: the target's logits for the next position, reached different ways.
+
+Measuring `max|d|` over the whole 129 280-wide vocab is the wrong instrument -- it reports whichever
+logit is noisiest, typically some token at -30 no sampler will reach. What decides a token is the
+ordering of the head, so the metric is the largest disagreement among the reference's own top-16
+(`head|d|`) plus how many of its top-5 survive.
+
+```
+cold reference: argmax 9544, top1-top2 margin 0.2122
+shared K=9..20 (K%4 = 0,1,2,3 all covered): argmax 9544 for ALL TWELVE, top5 kept 4-5/5
+```
+
+Every shared-prefix length reproduces the cold decision, **including the ones that resume in the
+middle of a compression group** — the case production actually hits, since a conversation shares
+whatever length it shares, and the case both earlier tests missed by happening to land on multiples
+of 4.
+
+**But token-identity is unachievable, and the control proves it without involving the cache at all.**
+Re-running the *same cached state* with only the extension batch shape changed (`ext_chunk` 64 vs 7)
+moves the head of the logits by **1.40** and drops one of the top 5 — against a decision margin of
+0.21. That is far too large for reassociation of a sum; the likely mechanism is MoE expert
+*selection* flipping on near-tied routing scores, which swaps whole expert outputs rather than
+perturbing one. Cold-vs-cached worst case over the sweep was **2.47, i.e. 1.8x that floor**, with
+the same argmax throughout.
+
+So cold and cached generate 20 identical tokens and then split at a near-tie. Requiring
+"cached tokens == cold tokens" would be requiring something the model does not deliver even with no
+cache in play — the same thing decode.cu already records when it attributes M=K-verify vs
+K-sequential-decode differences to "MoE-atomic near-ties". The gate asserts the decidable property
+(same argmax from every shared length, head-of-distribution differences inside the measured floor)
+and *reports* the token divergence with its depth.
+
+**Open, and honestly open:** a 1.40 head-of-distribution swing from re-batching alone is larger than expected. The
+expert-selection-flip explanation is the leading one and is consistent with every measurement here,
+but it has not been confirmed by instrumenting the router directly. That is worth doing before
+anyone leans on bit-reproducibility for anything.
+
+## F136 — the server's own tokenizer was deleting the markers the server parses
+
+Found by `scripts/smoke_server.sh`, which is the whole argument for testing over the socket rather
+than against linked internals: every unit gate passed while two headline features were silently off.
+
+`</think>` and the `｜DSML｜` tool markers are **added tokens**. The server decoded generated tokens
+with `decode_stream(..., skip_special=true)`, which strips added tokens — so it stripped precisely
+the markers the streaming splitter and the tool-call parser exist to find. Symptoms:
+
+* thinking mode returned the reasoning glued into `content`, with `reasoning_content` empty
+* tool calls came back as `<tool_calls><invoke name="get_weather">` — the DSML namespace gone, so
+  `parse_message_from_completion_text` never matched and no `tool_calls` were emitted
+
+One root cause, two features dead, nothing logged an error. `decode_stream` now takes the flag and
+the server passes `false`; the engine never delivers EOS to its callback, so keeping specials leaks
+no stop token. Pinned by a marker assertion in `tests/gate_tokenizer.cpp`.
+
+**After the fix, over the wire, 20/20:**
+
+```
+tool call parsed: get_weather {"city": "Beijing"}   finish_reason tool_calls
+thinking mode returns reasoning_content (95 bytes), content separate
+prefix cache hit on a repeated prompt (8 tokens)
+stream: SSE frames, chunk type, [DONE], finish_reason, final usage chunk
+malformed JSON -> 400, over-long request -> 400 (not a crash)
+```
+
+The smoke script also had a **false pass** worth recording: `/v1/models` compared the returned id to
+the id from `/health`, and with nothing listening both were empty, so `"" = ""` passed. It reported
+1/19 with no server running at all. Now requires non-empty.
