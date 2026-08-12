@@ -7582,3 +7582,46 @@ measurements that were never comparable.
 quantified at ~4 % (here), and the motivating gap itself now in question. What survives untouched is
 the *byte* argument, which does not depend on any of this: the dense path is 72 % of `B_tok` and
 halving its precision halves those bytes regardless of how efficiently they are moved.
+
+## Finding 127 — the NVFP4 dense overlay is wired end to end. **+5.5 % AR, +3.5 % spec**, both paths agreeing — and routing only M=1 was silently computing one layer two ways
+
+`tools/requant_dense_nvfp4.py` writes an NVFP4 overlay (E2M1 group-16 + e4m3 scales + fp32 global,
+the `NVFP4A16` scheme) for the dense/MLA weights; `kernels/nvfp4_dense.cu` serves it. A/B in ONE
+binary, same prompt, caches dropped, `DSV4_NVFP4_OFF=1` as the control:
+
+| | AR tok/s | spec tok/s | LOSSLESS | tokens |
+|---|---|---|---|---|
+| FP8 control (`OFF=1`) | 13.48 | 20.08 | PASS | `11111 16 455 6102 294 16603 344 29168` |
+| **NVFP4, M=1 + M=K** | **14.22** | **20.79** | **PASS** | **identical** |
+| | **+5.5 %** | **+3.5 %** | | |
+
+**THE REAL FINDING IS THE CONSISTENCY BUG.** The first wiring routed only `M == 1`. That leaves the
+engine computing a layer **two different ways**: NVFP4 during autoregressive decode, FP8 during the
+spec-decode verify. Not a rounding difference — two functions. It survived the gate on the first tier
+purely because the divergence did not reach the argmax inside the 8-token window; the moment `wo_a`
+was added it showed up immediately as `LOSSLESS GATE: diverges from base AR at token 5`.
+
+So `nvfp4_gemv_mk` (templated M=2..8, weight row read once and dotted against all M activation rows,
+matching `fp8_gemv_mkT_kernel`) is not an optimisation — it is what makes the M=1 routing *correct*.
+**Any future path routed at M=1 must be routed at M=K in the same change.**
+
+**What is NOT routed, and why.** `attn.wo_a` — 1.44 GB/token, the largest group in the overlay — has
+its own `ogroup_gemv_fp8_kernel` and is behind `DSV4_NVFP4_WOA=1`, default off. It failed twice:
+**slower** (14.23 -> 13.26; the FP8 ogroup reads `uint32` weights + `float4` activations while the
+NVFP4 version reads 8 scalar floats per 4 weight bytes, trading weight bandwidth for activation
+bandwidth and losing) and, before the M=K work, **LOSSLESS FAIL**. Enabling it now would still be
+inconsistent because the ogroup M=K path remains FP8.
+
+**A mistake worth recording.** The first NVFP4 GEMV consumed each load immediately -- ILP=1 -- and
+measured **13.55 tok/s, SLOWER than the FP8 path it replaced**, despite moving half the bytes. The
+FP8 kernel's own comment, three lines from where the dispatch was added, says exactly this: 110-132
+GB/s at ILP=1 against 224-237 at ILP>=2. Half the bytes at half the bandwidth is no gain. Unrolling
+to ILP=4 fixed it.
+
+**Accounting.** +5.5 % against ~+30 % projected from bytes. Only `wq_a/wq_b/wkv/wo_b` reach the
+dispatch; `wo_a` and the MTP blocks use their own kernels. The byte argument is intact — the routing
+is the work, and it is per-kernel, not global.
+
+**Originals preserved** in `original-fp8-path/` (sources, build script, pre-change binary). The
+feature is inert without `DSV4_NVFP4_OVERLAY`: nothing registered, nothing looked up, FP8 path
+byte-identical.

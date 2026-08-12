@@ -20,6 +20,7 @@
 #include <chrono>
 #include <deque>
 #include "weight_store.h"
+#include "nvfp4_dense.h"
 #include "deepseek_v4.h"
 #include "block.h"
 #include "suffix_draft.h"   // S6 counterfactual probe (DSV4_SUFFIXPROBE=1); gated by gate_suffix_draft
@@ -209,6 +210,19 @@ int main(int argc, char** argv){
     printf("[decode] loaded %.2f GiB, %zu tensors  (weights in %s memory)\n",
            W.loadedGiB(), W.count(), W.managed() ? "MANAGED device-preferred" : "mapped-host");
     const int half=ROPE_DIM/2, hc=HC_MULT, d=DIM;
+    // OPTIONAL NVFP4 DENSE OVERLAY (DSV4_NVFP4_OVERLAY=<dir>). Registers an NVFP4 replacement for
+    // each dense/MLA weight against the FP8 pointer the engine already holds, so the single dispatch
+    // in fp8_block_gemm picks it up at M=1. Unset -> nothing is registered, nothing is looked up, and
+    // the FP8 path is byte-identical to before. Untouched copies of every file this feature reaches
+    // live in original-fp8-path/.
+    if (const char* ov = getenv("DSV4_NVFP4_OVERLAY")) {
+        struct Ctx { st::WeightStore* w; };
+        Ctx cx{&W};
+        nvfp4_load_overlay(ov, [](const char* name, void* c) -> const uint8_t* {
+            auto* k = static_cast<Ctx*>(c);
+            try { return (const uint8_t*)k->w->get(name).dev; } catch (...) { return nullptr; }
+        }, &cx);
+    }
     extern bool g_tc_fp8; g_tc_fp8=true; extern bool g_tc_ogroup; g_tc_ogroup=true;
     extern bool g_moe_grouped; g_moe_grouped=true; extern void tc_moe_clear_cache();
     // MoE fp4 GEMV is now the DEFAULT (LOOP_LOG Finding 31). It was off because its scalar

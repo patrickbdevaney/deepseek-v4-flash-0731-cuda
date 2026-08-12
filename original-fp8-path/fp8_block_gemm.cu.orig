@@ -3,7 +3,6 @@
 // applying per-128-block activation and weight scales. Matches kernel.py fp8_gemm math (fp32 accumulate).
 // Optimization (mma.sync tiling) comes AFTER this passes its gate — never before (CONSTITUTION Art. I).
 #include "fp8_block_gemm.h"
-#include "nvfp4_dense.h"
 #include <cuda_fp8.h>
 
 #define BLK 128   // scale block along K (weight_block_size)
@@ -203,25 +202,6 @@ void tc_fp8_gemm(float*, const uint8_t*, const float*, const uint8_t*, const flo
 void fp8_block_gemm(float* C, const uint8_t* A_fp8, const float* a_s,
                     const uint8_t* B_fp8, const float* b_s,
                     int M, int N, int K, cudaStream_t stream) {
-    // NVFP4 DENSE OVERLAY, opt-in. If an NVFP4 replacement was registered for this weight pointer,
-    // serve M=1 from it: half the weight bytes for the same output shape. One dispatch here covers
-    // every dense linear in the engine (compressed_attn, compressed_decode, indexer, dspark_real)
-    // with no edits at the call sites. `nvfp4_lookup` returns null unless an overlay was loaded, so
-    // with no env set this is one predictable branch and the original path below is untouched.
-    // M>=2 (spec-decode verify) must use the SAME weights as M=1, or the engine computes one layer
-    // two ways. Routed before the fp8 M=K path for exactly that reason.
-    if (M >= 2 && M <= 8 && nvfp4_enabled()) {
-        if (const NvFp4Weight* w = nvfp4_lookup(B_fp8))
-            if (w->N == N && w->K == K && nvfp4_gemv_mk(C, A_fp8, a_s, *w, M, stream)) return;
-    }
-    if (M == 1 && nvfp4_enabled()) {
-        void nvfp4_note_hit(long long); void nvfp4_note_miss();
-        if (const NvFp4Weight* w = nvfp4_lookup(B_fp8)) {
-            if (w->N == N && w->K == K && nvfp4_gemv_m1(C, A_fp8, a_s, *w, stream)) {
-                nvfp4_note_hit((long long)N*K/2); return; }
-        }
-        nvfp4_note_miss();
-    }
     // M=1 decode: vectorized GEMV (bandwidth-bound, beats the mma-latency-bound TC at M=1). K%128==0 always here.
     if (g_tc_fp8 && M == 1 && (K % 128 == 0) && getenv("NO_GEMV")==nullptr) {
         int threads=256;

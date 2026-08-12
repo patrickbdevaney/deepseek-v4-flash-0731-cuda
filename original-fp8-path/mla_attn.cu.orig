@@ -4,7 +4,6 @@
 #include <cuda_fp16.h>
 #include "dscratch.h"
 #include "mla_attn.h"
-#include "nvfp4_dense.h"
 
 // ---------------- sparse_attn ----------------
 // One warp per (b, m, head): stream over the top-k gathered KV with online (running max/sum) softmax,
@@ -681,22 +680,6 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_smem_k
 // fp8-native TC ogroup: o(f32)->f16 + fused fp8 wo_a decode in the mma. No per-token wo16 conversion.
 void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const uint8_t* wo_sc,
                      int bs, int G, int R, int Kd, cudaStream_t stream){
-    // NVFP4 overlay for wo_a -- MEASURED AND DEFAULT OFF (DSV4_NVFP4_WOA=1 to re-enable).
-    //
-    // wo_a is 1.44 GB/token, the largest group in the overlay, and invisible to the fp8_block_gemm
-    // dispatch because this path has its own kernel. Routing it through NVFP4 failed twice:
-    //
-    //   1. SLOWER: 14.31 -> 13.26 tok/s. The fp8 ogroup kernel reads uint32 weights + float4
-    //      activations; the NVFP4 version reads 8 scalar floats per 4 weight bytes, so it trades
-    //      weight bandwidth for activation bandwidth and loses.
-    //   2. LOSSLESS GATE FAIL, which is the disqualifying one. Only bs==1 was routed, so AR (bs==1)
-    //      computed with NVFP4 while the spec VERIFY (bs>1) computed the same layer with FP8 --
-    //      two different functions inside one engine. The gate caught it at token 5.
-    //
-    // Fixing (2) means routing the M=K verify path too, so both sides agree. Until then this stays
-    // off: an engine whose AR and verify paths disagree is broken regardless of its speed.
-    if(bs==1 && nvfp4_enabled() && getenv("DSV4_NVFP4_WOA")!=nullptr
-       && nvfp4_ogroup_gemv(out, o, wo_fp8, G, R, Kd, stream)){ dsync(stream); return; }
     if(bs==1 && getenv("NO_OGGEMV")==nullptr){          // M=1 decode: bandwidth-bound GEMV (no mma waste). bs>1
         // uint32 weight / float4 activation loads need Kd%128==0 (already required by the e8m0
         // block-scale stride) plus real pointer alignment — `wo_fp8` is a mapped safetensors
