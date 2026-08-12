@@ -1,36 +1,47 @@
-# ARTIFACTS — where the draft heads live, and which one to upload
+# ARTIFACTS — where the draft heads live, and what to upload
 
 The engine is in git and therefore safe. **The weights are not** — they are the one product git
 cannot hold. This file says exactly where they are.
 
-## The one to upload
+## THE DIRECTORY TO UPLOAD
 
-    /home/patrickd/model-backups/releases/dspark-mtp-draft-head-v1.0-s3/
+    /home/patrickd/model-backups/releases/dspark-mtp-0731reap-bundle/
 
-**1035 MB, 8 files, checksum-verified** (`sha256sum -c SHA256SUMS` passes). This is the **`s3`
-head — the promoted, shipped speculator**, packaged for HuggingFace.
+**1.6 GB, 9 files, `sha256sum -c SHA256SUMS` passes.** One self-contained bundle: the optimised head
+as the default, the stock head preserved byte-exactly beside it, the rebuild tool, and a
+HuggingFace-ready model card. Copy this one directory to Google Drive and on to HF; combined with the
+engine repo on GitHub it is everything a user needs.
 
-| file | what it is |
-|---|---|
-| `mtp_trained.safetensors` | **the artifact** — 1035 MB of trained MTP draft-head tensors |
-| `README.md` | HuggingFace model card, YAML frontmatter declares `base_model` |
-| `provenance.json` | base model, engine git rev, measurement, rebuild recipe |
-| `SHA256SUMS` | checksum per shipped file |
-| `eval.log` | the raw measurement behind the numbers |
-| `train_metrics.json` | per-step loss history, all 1472 steps |
-| `head_card.json` | the archive record written at promotion |
-| `config.json` | the checkpoint's architecture config |
+    dspark-mtp-0731reap-bundle/
+      README.md                          HF model card (YAML frontmatter declares base_model)
+      provenance.json                    base model, engine git rev, measurement, contents
+      SHA256SUMS                         checksum for every file
+      default-s3/
+        mtp_trained.safetensors          THE ARTIFACT -- the promoted head, 25.53 tok/s
+        head_card.json  eval.log  train_metrics.json
+      base-stock/
+        mtp_base.safetensors             the checkpoint's ORIGINAL MTP: 72 weights + 25 block
+                                         scales, byte-exact, so the fine-tune is diffable
+        eval.log                         the stock head's own measurement, 22.66 tok/s
+      tools/
+        build_trained_head.py            self-contained rebuild, not a pointer
 
-**It ships the ~1 GB of trained tensors, not the 7 GB materialised head, deliberately.** Every build
-log reports `copied 2905 untouched (experts byte-for-byte)` — ~6 GB of any head is the base
-checkpoint's own weights copied verbatim, and redistributing those inside an artifact that adds
-nothing to them is the wrong shape. `tools/build_trained_head.py` rebuilds the loadable head
-deterministically in about a minute and refuses any tensor whose fp8 round-trip exceeds 0.10.
+**Both heads ship as ~1 GB of MTP tensors, not as 7 GB materialised heads.** Every build log reports
+`copied 2905 untouched (experts byte-for-byte)` — ~6 GB of a head is the base checkpoint's own
+weights copied verbatim, and redistributing those inside an artifact that adds nothing to them is the
+wrong shape. `build_trained_head.py` reconstitutes the loadable head deterministically in ~1 min and
+refuses any tensor whose fp8 round-trip exceeds 0.10 (worst observed for `s3`: **0.0014**).
+
+**Reverting to stock does not need `base-stock/`** — pass no head argument and the engine uses the
+checkpoint's own MTP blocks. That is how every paired control in this project was measured.
+`base-stock/` is there so you can *diff* what the fine-tune changed. It carries the E8M0 block scales
+alongside the fp8 weights: an fp8 weight without its scale is a table of codes, not a tensor.
 
 **Before uploading**, read `README.md`. It names `0xSero/DeepSeek-V4-Flash-0731-REAP` as the base
-model and quotes measured numbers. The numbers are checked against the logs; whether that
-attribution and the base model's license terms are presented the way you want is a human call, and
-`--repo-slug` still says `<your-org>`.
+model and quotes measured numbers. The numbers are checked against the logs; the attribution and the
+base model's license terms are a human call, and `--repo-slug` still says `<your-org>`.
+
+Rebuild the bundle any time with `python3 tools/make_bundle.py --out <dir> --repo-slug <org>/<repo>`.
 
 ## Every head ever built
 
