@@ -210,7 +210,11 @@ void fp8_block_gemm(float* C, const uint8_t* A_fp8, const float* a_s,
     // with no env set this is one predictable branch and the original path below is untouched.
     // M>=2 (spec-decode verify) must use the SAME weights as M=1, or the engine computes one layer
     // two ways. Routed before the fp8 M=K path for exactly that reason.
-    if (M >= 2 && M <= 8 && nvfp4_enabled()) {
+    // NVFP4_MK_OFF=1 -- diagnostic. At M>=2 the FP8 path is tc_fp8_gemm, a TENSOR-CORE tile, and
+    // this file already records that "against the smem-staged tile the GEMV loses at every M>=2 on
+    // every shape". nvfp4_gemv_mk is a warp-per-row GEMV, i.e. structurally the losing shape. This
+    // switch isolates how much of the suite regression is that choice.
+    if (M >= 2 && M <= 8 && nvfp4_enabled() && getenv("NVFP4_MK_OFF")==nullptr) {
         if (const NvFp4Weight* w = nvfp4_lookup(B_fp8))
             if (w->N == N && w->K == K && nvfp4_gemv_mk(C, A_fp8, a_s, *w, M, stream)) return;
     }

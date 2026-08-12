@@ -7663,3 +7663,41 @@ that ships. The cause is not the NVFP4 idea: the FP8 ogroup M=K path carries an 
 factor NR, smem staging, per-M lookup tables and register caps (Findings 40/55/79), and this NR=1
 kernel has none of it. Tuning it is the unlock, and it is now a performance problem on a
 gate-verified kernel instead of a correctness unknown.
+
+## Finding 129 — NVFP4 dense buys **nothing** on the shipping metric, and the reason invalidates the projection that motivated it: **speculative decoding already amortises the weight read, so `B_tok` overstates the gain**
+
+Frozen 8-prompt suite, `s3` head, NGEN0=200, one binary, caches dropped:
+
+| config | ms/tok | tok/s | tok/verify |
+|---|---|---|---|
+| FP8 control (`DSV4_NVFP4_OFF=1`) | 40.4 | **24.73** | 3.736 |
+| NVFP4 at M=1 only (M>=2 -> FP8 tensor core) | 41.0 | 24.40 | 3.736 |
+| NVFP4 at M=1 **and** M=K | 47.7 | **20.98** | 3.663 |
+
+**Two results, and the second is the one that matters.**
+
+**1. The M=K GEMV is the regression** (24.40 -> 20.98, -14 %), and it was predictable from this repo's
+own notes: at M>=2 the FP8 path is `tc_fp8_gemm`, a **tensor-core tile**, and `fp8_block_gemm.cu`
+already records that *"against the smem-staged tile the GEMV loses at every M>=2 on every shape"*.
+`nvfp4_gemv_mk` is a warp-per-row GEMV -- structurally the losing shape. Tuning NR does not fix a
+kernel that is the wrong kind; competing needs an NVFP4 **mma** path (cutlass has one).
+
+**2. Even at M=1 only, NVFP4 is 24.40 against 24.73 -- inside run-to-run noise, no gain.** That is
+the finding, and it invalidates the arithmetic this whole line was built on.
+
+`B_tok` = 12.26 GB/token is an **M=1** quantity: the bytes an autoregressive step moves per token.
+Every projection here (25.5 -> ~34 tok/s) scaled decode by it. But **a speculative engine does not
+pay `B_tok` per token** -- the verify reads each weight ONCE for M tokens, so the per-token weight
+cost is already divided by tau. At tau 3.7 the suite spends most of its time in a path where halving
+the weights saves ~1/3.7 as much as the M=1 arithmetic assumes, and that residue is inside the noise.
+
+**The byte argument survives for AR and dies for spec.** Measured directly: on the canonical prompt
+with no draft head (an AR-dominated trace) NVFP4 gave **+5.7 % AR / +4.0 %**. On the suite with the
+trained head (a verify-dominated trace) it gives **-1.3 %**. Both are true; only the second is the
+shipping condition, and I reported the first as the result before measuring the second.
+
+**Disposition: NVFP4 dense stays opt-in and OFF.** The overlay, the quantiser, the NaN-code fix, the
+M=1 kernels (`float4` on ogroup: 13.26 -> 14.81) and `tests/gate_nvfp4_ogroup_mk.cu` (0/40960 at
+NR=1/2/4) are all sound and kept. What is not sound is the premise that halving dense bytes buys
+proportional decode on **this** engine. It would buy it on an AR-only engine; speculation already
+took most of it.

@@ -256,62 +256,94 @@ bool nvfp4_ogroup_gemv(float* out, const float* o, const uint8_t* wo_fp8,
 // activation rows. It exists so that enabling wo_a does not leave AR on NVFP4 and verify on FP8,
 // which is the split that produced `diverges at token 5`. If it costs spec throughput it should be
 // tuned, not switched off -- an engine computing a layer two ways is broken at any speed.
-template<int MM>
+// NR = consecutive output rows served by one warp. They share the activation slice `og = o + g*Kd`,
+// so loading it once and reusing it across NR rows cuts activation traffic by NR.
+//
+// WHY THIS MATTERS MORE FOR NVFP4 THAN FOR FP8. The FP8 kernel's note prices activation traffic at
+// 4*M/NR times the weight traffic. NVFP4 halves the weight bytes and leaves the fp32 activation
+// alone, so the ratio becomes 8*M/NR -- halving the weight DOUBLES the activation dominance. At
+// NR=1, M=5 that is 40x, which is why the correct NR=1 kernel cost -24% on spec decode: it was
+// never weight-bound at all.
+//
+// NR consecutive rows stay inside one group iff R % NR == 0 (R=1024 here, so 2/4/8 all hold).
+// Per-row accumulation order is UNCHANGED -- four accumulators reduced (a0+a1)+(a2+a3), dot then
+// scale -- so tests/gate_nvfp4_ogroup_mk.cu still holds at 0/40960.
+template<int MM, int NR>
 __global__ void nvfp4_ogroup_mk_kernel(float* __restrict__ out, const float* __restrict__ o,
                                        const uint8_t* __restrict__ P, const uint8_t* __restrict__ S,
                                        float gs, int G, int R, int Kd){
-    int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int total=G*R; if(warp>=total) return;
-    int gr=warp, g=gr/R, lane=threadIdx.x&31;
-    const uint8_t* Prow=P+(size_t)gr*(Kd/2);
-    const uint8_t* Srow=S+(size_t)gr*(Kd/16);
+    int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int total=G*R;
+    int gr0=warp*NR; if(gr0>=total) return;
+    int g=gr0/R, lane=threadIdx.x&31;
     const float inv_gs=1.0f/gs;
-    // FOUR ACCUMULATORS PER m, REDUCED (a0+a1)+(a2+a3) -- the identical structure and order the M=1
-    // kernel uses. The unit gate (tests/gate_nvfp4_ogroup_mk.cu) showed the sequential form was
-    // numerically CORRECT (cosine 1.00000000, 5 of 40960 elements differing in the last bits of
-    // near-zero sums) and still broke LOSSLESS: this model turns 1 ulp into a different token, and
-    // the engine compares the M=1 path's tokens against the M=K path's. Matching the reduction tree
-    // is not cosmetic here, it is what makes the two paths agree.
-    float a0[MM],a1[MM],a2[MM],a3[MM];
+    float a0[NR][MM],a1[NR][MM],a2[NR][MM],a3[NR][MM];
     #pragma unroll
-    for(int m=0;m<MM;++m){ a0[m]=a1[m]=a2[m]=a3[m]=0.f; }
+    for(int r=0;r<NR;++r)
+        #pragma unroll
+        for(int m=0;m<MM;++m){ a0[r][m]=a1[r][m]=a2[r][m]=a3[r][m]=0.f; }
     for(int base=0; base<Kd; base+=1024){
         const int k[4]={base+lane*8, base+256+lane*8, base+512+lane*8, base+768+lane*8};
         #pragma unroll
         for(int u=0;u<4;++u){
-            const unsigned pv=*(const unsigned*)(Prow+(k[u]>>1));
-            const float sc=d_e4m3(Srow[k[u]>>4])*inv_gs;
+            // activation loaded ONCE per (u, m) and reused across all NR rows -- the whole point
+            float4 x0[MM], x1[MM];
             #pragma unroll
             for(int m=0;m<MM;++m){
-                // dotf8 THEN scale -- the same association the M=1 kernel uses. Folding `sc` into
-                // the weights first (b0=w0.x*sc, ...) is algebraically identical and rounds
-                // differently, and that difference alone left 4/40960 elements disagreeing.
-                const float t = dotf8(o+((size_t)m*G+g)*Kd+k[u], pv) * sc;
-                if(u==0) a0[m]+=t; else if(u==1) a1[m]+=t; else if(u==2) a2[m]+=t; else a3[m]+=t;
+                const float* a=o+((size_t)m*G+g)*Kd+k[u];
+                x0[m]=*(const float4*)(a); x1[m]=*(const float4*)(a+4);
+            }
+            #pragma unroll
+            for(int r=0;r<NR;++r){
+                const int gr=gr0+r; if(gr>=total) break;
+                const uint8_t* Prow=P+(size_t)gr*(Kd/2);
+                const uint8_t* Srow=S+(size_t)gr*(Kd/16);
+                const unsigned pv=*(const unsigned*)(Prow+(k[u]>>1));
+                const float sc=d_e4m3(Srow[k[u]>>4])*inv_gs;
+                float2 w0=d_e2m1x2((pv)&0xff), w1=d_e2m1x2((pv>>8)&0xff);
+                float2 w2=d_e2m1x2((pv>>16)&0xff), w3=d_e2m1x2((pv>>24)&0xff);
+                #pragma unroll
+                for(int m=0;m<MM;++m){
+                    float t=0.f;
+                    t=fmaf(x0[m].x,w0.x,t); t=fmaf(x0[m].y,w0.y,t);
+                    t=fmaf(x0[m].z,w1.x,t); t=fmaf(x0[m].w,w1.y,t);
+                    t=fmaf(x1[m].x,w2.x,t); t=fmaf(x1[m].y,w2.y,t);
+                    t=fmaf(x1[m].z,w3.x,t); t=fmaf(x1[m].w,w3.y,t);
+                    t*=sc;
+                    if(u==0) a0[r][m]+=t; else if(u==1) a1[r][m]+=t;
+                    else if(u==2) a2[r][m]+=t; else a3[r][m]+=t;
+                }
             }
         }
     }
     #pragma unroll
-    for(int m=0;m<MM;++m){ float a=(a0[m]+a1[m])+(a2[m]+a3[m]);
+    for(int r=0;r<NR;++r){ const int gr=gr0+r; if(gr>=total) break;
         #pragma unroll
-        for(int o2=16;o2>0;o2>>=1) a+=__shfl_down_sync(0xffffffff,a,o2);
-        if(lane==0) out[(size_t)m*G*R+gr]=a; }
+        for(int m=0;m<MM;++m){ float a=(a0[r][m]+a1[r][m])+(a2[r][m]+a3[r][m]);
+            #pragma unroll
+            for(int o2=16;o2>0;o2>>=1) a+=__shfl_down_sync(0xffffffff,a,o2);
+            if(lane==0) out[(size_t)m*total+gr]=a; }
+    }
 }
 
 bool nvfp4_ogroup_mk(float* out, const float* o, const uint8_t* wo_fp8,
                      int M, int G, int R, int Kd, cudaStream_t stream){
     const NvFp4Weight* w = nvfp4_lookup(wo_fp8);
     if (!w || w->N != G*R || w->K != Kd || (Kd % 1024) || M < 2 || M > 8) return false;
-    int threads=256; size_t nb=((size_t)G*R*32+threads-1)/threads;
-    switch(M){
-      case 2: nvfp4_ogroup_mk_kernel<2><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd); break;
-      case 3: nvfp4_ogroup_mk_kernel<3><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd); break;
-      case 4: nvfp4_ogroup_mk_kernel<4><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd); break;
-      case 5: nvfp4_ogroup_mk_kernel<5><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd); break;
-      case 6: nvfp4_ogroup_mk_kernel<6><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd); break;
-      case 7: nvfp4_ogroup_mk_kernel<7><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd); break;
-      case 8: nvfp4_ogroup_mk_kernel<8><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd); break;
-      default: return false;
-    }
+    // NR: 4*NR*M accumulators, so it trades activation reuse against occupancy. NVFP4_NR overrides
+    // for A/B. Default 2 -- at M=5 that is 40 accumulators, and the FP8 kernel's note records that
+    // NR=8 spills against the 64-register cap and loses badly.
+    int nr = 2; if(const char* e=getenv("NVFP4_NR")) nr=atoi(e);
+    if(nr!=1 && nr!=2 && nr!=4) nr=2;
+    if (R % nr) nr = 1;
+    int threads=256; size_t warps=((size_t)G*R + nr - 1)/nr;
+    size_t nb=(warps*32+threads-1)/threads;
+    #define LAUNCH(MMv,NRv) nvfp4_ogroup_mk_kernel<MMv,NRv><<<nb,threads,0,stream>>>(out,o,w->packed,w->scale,w->global,G,R,Kd)
+    #define BYM(NRv) switch(M){ case 2: LAUNCH(2,NRv); break; case 3: LAUNCH(3,NRv); break; \
+        case 4: LAUNCH(4,NRv); break; case 5: LAUNCH(5,NRv); break; case 6: LAUNCH(6,NRv); break; \
+        case 7: LAUNCH(7,NRv); break; case 8: LAUNCH(8,NRv); break; default: return false; }
+    if(nr==1){ BYM(1) } else if(nr==2){ BYM(2) } else { BYM(4) }
+    #undef BYM
+    #undef LAUNCH
     nvfp4_note_hit((long long)G*R*Kd/2);
     return true;
 }
