@@ -573,6 +573,8 @@ Two further rules, each bought with a cycle:
 | `DSV4_SUFFIXPROBE=1` | **prices LEVERS.md S6 without building it.** At every verify it runs `suffix_draft()` on the committed sequence and counts what the target would have accepted from a suffix/prompt-lookup draft, against what the MTP actually got — as a **counted integer**, which is the only way anything survives the ~1.5 % cross-run timing floor (trap 25). READ-ONLY: no device buffer, no engine state, so GATE and LOSSLESS GATE are unaffected. `DSV4_SUFFIX_MAXNG` caps the match length (32). Reports a **sound lower bound** and an optimistic estimate — `tam[i]` is only valid ground truth for `i <= acc` (F80) |
 | `tests/gate_suffix_draft` | is the S6 matcher right? 8 host checks, no CUDA, no checkpoint — so the probe cannot retire S6 on a bug |
 | `TCB_CPA=<stages>` | stage the fp8 tile's B rows with a `cp.async` ring `<stages>` deep, one K-block per stage, instead of the KC register array. **Bit-identical and 15–53 % SLOWER** (2–26 % even at cp-size 16) — default OFF, see §3 (F81). `TCB_CPA_UF` is the issue-loop unroll; **1 is required**, since unrolling keeps H addresses live and costs a block/SM (78 regs vs 48) |
+| `tools/moe_gemv_bench.cu` | **prices the MoE GEMV with NO checkpoint load.** Runs the shipped `tc_fp4_grouped_gemv_e8m0` at both real shapes and both real groupings (M=1, and the measured K=5 histogram), pointers at residue 8, over a pool sized past L2, with a streaming roofline taken in the same binary at the same clocks. Also benches the mma path head to head. **Use `ms`, not the GB/s column, when varying RB** — the byte model charges re-reads that hit L1/L2 and reports 284 GB/s at RB=1 (F137) |
+| `MOE_BN=<n>` (compile-time, `-DMOE_BN=`) | output columns per warp in the MoE GEMV. **Default 2 = the shipped kernel, SASS byte-identical.** F137 killed BN=1 on `ptxas -v` alone: at RB=4 it is 66 registers -> 7 blocks/SM against BN=2's 70 -> 7, so no occupancy step is crossed and the activation loads double for nothing |
 | `tests/gate_tc_fp8_kc` (extended, F81) | now also sweeps `TCB_CPA ∈ {2,4,8}` against KC=1 at every M and both B offsets, **including a depth larger than KB** so the empty-`commit_group` padding that holds `wait_group` at a compile-time depth is exercised. Without that padding the mma reads a stage that has not landed — a race, and trap 9 says a sweep that cannot express the regime confirms itself |
 
 ---
@@ -618,8 +620,34 @@ perfect acceptance is 40.6, asymptote 58.4, so today is ~61 % of the block-6 cei
 |---|---|---|---|---|
 | 1 | **adaptK 1.5 -> 2.0** | **+1.3 %** | **measured 3x independently** (F121, s1/s2/s3) | one decision + a registry re-baseline |
 | 2 | **s3 corpus at `a_ce 1.0`** | +0.37 tok/s (~1.5 %) | measured at t=4.17 (F124) | ~6 h: capture + train, `gen.txt` survives |
-| 3 | **m16 B-repack (M>=2)** | unquantified | — | kernel work |
+| ~~3~~ | ~~**m16 B-repack (M>=2)**~~ | **RETIRED, F137 — quantified at last, and it loses** | the mma path is 0.652 ms vs the GEMV's 0.442 at the **measured K=5 grouping**; fitted `GEMV 0.244+0.139R` vs `mma 0.504+0.087R` puts the crossover at **R = 5.05 rows per expert** and block 6 presents **1.67**. The dequant-once mechanism works (row cost 37 % lower) and is buried by 0.26 ms of intercept. Alive for **prefill** only (F85, +16.7 %) | — |
 | 4 | **prompt-lookup / n-gram** | workload-dependent | untried | moderate |
+
+> **F137 also retracts the premise of §8's lever #1 and of `wiki/moe-gemv-ceiling.md`.** The
+> "MoE GEMV at 155 GB/s = 67 % of achievable" divided the **routed** expert bytes by a window in
+> which the **shared** expert is concurrently streaming its own 1082.20 MB (forked `moe.cu:436`,
+> joined `:516` — the fork F55 itself priced). Counted correctly, the M=1 MoE window runs
+> **215.0 GB/s against a 202.5–214.9 GB/s streaming reference: at the roofline.** An isolated bench
+> of the shipped kernel agrees (200.7 vs an in-binary 208.7). **There is no base-AR headroom in the
+> MoE GEMV.** What is real is ~10 % at the K=5 *verify* grouping, attributed to the per-row inner
+> loop (issue-bound, linear in rows at 0.139 ms/row on a 0.244 ms intercept; `ncu` Compute 30 % ->
+> 48 %, occupancy 75 % -> 57 %) — ceiling **~+4 %** by two independent routes, and only if the row
+> arithmetic became free. Tile count, the early-exit `grid.y` blocks, RB and BN/occupancy are each
+> eliminated by their own control in `evidence/moe_gemv_bench.log`; BN died to `ptxas -v` alone
+> (BN=1 is 66 regs -> 7 blocks/SM, BN=2 is 70 -> 7, no step crossed).
+>
+> **Corrected base-AR budget** (K=1, 70.03 ms step, `evidence/kchunk.log`, vs 208.7 GB/s):
+>
+> | region | ms | % | bytes | GB/s | % roofline |
+> |---|---|---|---|---|---|
+> | **MoE** (routed + shared, concurrent) | 23.20 | 33 % | 4531 MB | **195** | **94 %** |
+> | **Attention** (MLA + compressor + indexer) | 31.40 | 45 % | 5400 MB | 172 | 82 % |
+> | `lm_head` | 5.80 | 8 % | 1059 MB | 183 | 88 % |
+> | HC / rmsnorm / router / glue | 8.53 | 12 % | 211 MB | 25 | latency |
+>
+> Whole step: 11.20 GB in 70.03 ms = **160 GB/s, 77 % of roofline**. The MoE is the best-optimised
+> region in the engine, so **all** of the remaining 23 % is outside it — in the attention block
+> (closed twice, F125/F126) and in 8.53 ms of glue moving 211 MB. Start here, not from `B_tok`.
 
 **THE REFRAME THAT MATTERS.** F129 established that the suite is **verify-dominated**: NVFP4 at M=1
 moved the number by -1.3 % while the same change at M=K moved it by -14 %. The M>=2 path is where the
@@ -628,8 +656,9 @@ has never been quantified, and every M=1 optimisation measured this session has 
 noise. It also means any future work should be A/B'd on the **suite with the trained head**, never on
 the canonical prompt: those two traces disagreed in *sign* on NVFP4.
 
-**Closed this session, each with the measurement that closed it:** MoE GEMV (at parity with a peer
-engine, 67 % vs 70 % of respective rooflines); dense MLA GEMV kernel (225-246 GB/s isolated, above
+**Closed this session, each with the measurement that closed it:** MoE GEMV (~~at parity with a peer
+engine, 67 % vs 70 % of respective rooflines~~ — **superseded by F137: it is at 94-100 % of the
+roofline at M=1, and the 67 % was mis-accounted**); dense MLA GEMV kernel (225-246 GB/s isolated, above
 the streaming reference -- not the limiter, F125); dependent layer sequence (~4 %, F126); activation
 sparsity (dead at `moe_intermediate` 1024 *and* 2048, F123); tree/multi-candidate (width priced at
 depth rates, F122); NVFP4 dense (no gain on the shipping metric, F129).

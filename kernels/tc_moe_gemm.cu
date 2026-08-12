@@ -44,6 +44,9 @@ __global__ void k_repack_s(__half* wsr, const float* bs, int N, int K){
     int g=idx&7; long r=idx>>3; int k_tile=r%kt, n_block=r/kt; int n=n_block*8+g;
     wsr[((long)n_block*kt + k_tile)*8 + g] = __float2half(bs[(long)n*(K/32) + k_tile/2]);
 }
+#ifndef MOE_BN
+#define MOE_BN 2
+#endif
 #ifndef TCM_WARPS
 #define TCM_WARPS 1
 #endif
@@ -326,7 +329,9 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
     // burns ~50 of them per 512 B of weight). At BN>=2 the activation registers are reused and the
     // instruction count per weight byte roughly halves.
     // Per-n accumulation order over kb is UNCHANGED -> bit-exact.
-    const int BN = 2;
+    // BN is a COMPILE-TIME knob so the register/occupancy trade can be A/B'd without editing the
+    // kernel (`-DMOE_BN=1`). Default 2 = shipped, byte-for-byte.
+    const int BN = MOE_BN;
     int warp=(blockIdx.x*blockDim.x+threadIdx.x)>>5; int nbase=warp*BN; if(nbase>=N) return; int lane=threadIdx.x&31;
     const int nact = (nbase+BN<=N) ? BN : (N-nbase);
     const uint8_t* Wn0 = wptr[e] + (size_t)nbase*(K/2);
@@ -442,7 +447,7 @@ void tc_fp4_grouped_gemv_e8m0(float* out, const uint8_t* Xq, const float* Xs, co
         int maxtiles, int N, int K, cudaStream_t s, int rows_hint, int align8){
     // BN=2 output columns per warp -> half the warps. 128 threads/block matched the measured
     // optimum (BN=2 @128 thr = 242-249 GB/s; 256 thr was consistently worse at every BN).
-    const int BN=2, warps_needed=(N+BN-1)/BN;
+    const int BN=MOE_BN, warps_needed=(N+BN-1)/BN;
     int threads=128; dim3 grid((warps_needed*32+threads-1)/threads, maxtiles);
     // RB = rows accumulated against ONE weight load (Finding 64). MOE_RB=1 restores the pre-Finding-64
     // kernel, which re-read each expert's weights once per row it served; it is kept reachable because

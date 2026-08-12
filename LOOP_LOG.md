@@ -7916,3 +7916,144 @@ malformed JSON -> 400, over-long request -> 400 (not a crash)
 The smoke script also had a **false pass** worth recording: `/v1/models` compared the returned id to
 the id from `/health`, and with nothing listening both were empty, so `"" = ""` passed. It reported
 1/19 with no server running at all. Now requires non-empty.
+
+---
+
+## F137 — the MoE GEMV is **at the roofline at M=1**, and the "67 % of achievable" that made it lever #1 for four cycles was an accounting error: the window it was measured over is also streaming the shared expert
+
+`wiki/moe-gemv-ceiling.md` has said **"155 GB/s = 67 % of roofline"** since F67, `LEVERS.md` §8 ranked
+MoE GEMV efficiency as **lever #1**, and task #13 still carries "the largest measured gap
+(~55 % of achievable)". All three descend from one number, and the number divides the **routed**
+expert bytes by a window in which the **shared** expert is concurrently streaming its own.
+
+`moe.cu:436` forks the shared expert onto `g_side` *before* the routed gather and `moe.cu:516` joins
+it *after* `moe:combine`. So its 1082.20 MB (`MODEL_INVENTORY.md`, B_tok table) is in flight for the
+whole of `moe:w1w3` + `moe:act` + `moe:w2` — which is exactly why `moe:shared` prints 0.24 ms rather
+than its real cost, a fact this repo already knew (F55 priced the fork) and never fed back into the
+rate. Re-scored on `evidence/kchunk.log`, unchanged marks, with the concurrent bytes counted:
+
+| K | window `w1w3+act+w2` | routed | +shared | **GB/s** | routed-only (the old number) |
+|---|---|---|---|---|---|
+| 1 | 21.08 ms | 3.368 GiB | 4.425 GiB | **215.0** | 163.6 |
+| 2 | 31.44 ms | 5.429 GiB | 6.486 GiB | **211.2** | 176.8 |
+| 5 | 60.31 ms | 10.363 GiB | 11.420 GiB | **193.9** | 176.0 |
+
+Streaming reference measured in the same binary as the bench below, clocks pinned, four runs:
+**202.5 / 208.7 / 209.6 / 214.9 GB/s**. **At M=1 the MoE region is at the roofline.** There is no
+base-AR headroom in this kernel, and there never was — lever #1 was ranked off a number that was
+~24 % too low because a third of the traffic was charged to nobody.
+
+### The isolated bench agrees, which is the reconciliation F126 said had to happen first
+
+`tools/moe_gemv_bench.cu` runs the **shipped entry point** `tc_fp4_grouped_gemv_e8m0` (not a
+rewrite, so the RB rule and grid geometry are the engine's) at both real shapes, both real
+groupings, weight pointers deliberately at residue 8 (F66), over a **32-set pool** so every rep
+starts cold — F125's L2 trap bit this bench too, and visibly: at pool=8 the 6-expert launch reported
+224 GB/s against the 18-expert launch's 199, and the entire difference vanished at pool=32. One
+launch of the M=1 grouping is 26.7 MB against a 33.6 MB L2. `evidence/moe_gemv_bench.log`:
+
+| grouping | bench | in situ (above) |
+|---|---|---|
+| M=1 decode, 6 experts x 1 row | **200.7 / 225.3 GB/s** (w1w3 / w2) | 215.0 |
+| K=5 verify, measured histogram | **180.8 / 183.0** | 193.9 |
+
+Two instruments that have never agreed on this kernel now agree to a few percent. F126 closed the
+dense line on the grounds that "the 20-30 % gap may be substantially an artefact of comparing a
+microbenchmark to dprof"; here the same suspicion is resolved rather than left open, and the answer
+is that the gap was in the byte count, not in either instrument.
+
+### What IS real: the verify grouping costs ~10 %, and it is the ROW LOOP, not bytes
+
+The decisive control holds DRAM traffic **constant** — 18 experts, `RB=8` so each is read exactly
+once at every point — and varies only how much arithmetic each weight byte feeds:
+
+| rows per expert | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| ms | 0.400 | 0.510 | 0.645 | 0.794 | 0.951 |
+
+**Linear: 0.139 ms per row on a 0.244 ms intercept.** At R=1 the launch is at 200 GB/s, i.e. at the
+roofline and memory-bound; every row after the first is pure arithmetic on bytes already paid for.
+`ncu` says the same thing from the other side, M=1/RB=1 vs K=5/RB=4: Compute (SM) throughput
+**30.2 % -> 47.8 %**, warp cycles per issued instruction **29.8 -> 15.5** (warps stalling less and
+issuing more, the compute-bound signature), achieved occupancy **74.8 % -> 56.9 %**,
+Block Limit Registers **9 -> 7**.
+
+**Four candidate causes eliminated, each by a measurement in the same run:**
+
+- **tile count** — 18 experts x 1 row is **0.401 ms = 200.1 GB/s**, at the roofline. 30 x 1 row is
+  197.1. More tiles cost nothing.
+- **the early-exit `grid.y` blocks** — the engine passes `maxtiles` = total rows (30) where only 18
+  tiles exist, so 40 % of the grid launches to `return`. Forcing the exact bound: **0.446 vs
+  0.447 ms**. A wash.
+- **RB** — on the measured histogram, RB=4 **0.441** beats RB=2 0.452, RB=1 0.479, RB=8 0.486. The
+  shipped rule is the optimum. (Note the GB/s column in the log is against a fixed DRAM figure on
+  purpose: scoring RB by `ceil(me/RB)` bytes reports **284 GB/s at RB=1**, above the roofline,
+  because a re-read inside the same block hits L1/L2 and is not DRAM traffic at all.)
+- **occupancy via BN** — killed by `ptxas -v` before any bench, which is what trap 19 asks for.
+  `MOE_BN` is now a compile-time knob (default 2, byte-for-byte the shipped kernel). At RB=4,
+  **BN=1 is 66 registers -> 7 blocks/SM and BN=2 is 70 -> 7**: no occupancy step is crossed, so
+  halving the weight registers buys nothing and would double the activation loads. BN=4 is 79 -> 6,
+  worse, reproducing F69's ranking from the register side.
+
+### LEVERS §9 lever #3 (m16 B-repack, M>=2) is now quantified, and it is dead for decode
+
+The mma kernel `k_grouped_w4a8_e8m0_kernel` is already in the tree, reachable via `MOE_MMA=1`, and is
+structurally the fix for a row loop — it dequantises each weight byte **once** for up to 16 rows.
+F85 scored it **-16 % decode** at engine level, an A/B dominated by M=1 where it loses badly, and
+nobody had ever put the two side by side at the grouping the **verify** presents. Head to head, same
+weights, same tiles, mma charged one `tc_a_to_fp16` per launch (pessimistic: in situ one convert
+serves both w1 and w3):
+
+| grouping | GEMV | mma |
+|---|---|---|
+| M=1, 6 x 1 row | **0.135 ms** | 0.220 |
+| K=5 histogram, 18 experts / 30 rows | **0.442** | 0.652 |
+| 18 x 2 rows | **0.512** | 0.678 |
+| 18 x 4 rows | **0.794** | 0.850 |
+| 18 x 8 rows | 1.428 | **1.201** |
+
+Fitted, `t = a + b*R`: **GEMV 0.244 + 0.139R, mma 0.504 + 0.087R**. The mma row is 37 % cheaper —
+the dequant-once mechanism works exactly as advertised — and it is bought with **0.26 ms more
+intercept**, so the crossover is at **R = 5.05 rows per expert**. Block 6 at acceptance 3.7 presents
+**1.67**. Lever #3 needs a block size around 40 to pay, which F122's slope arithmetic already
+forbids. It stays alive for **prefill** only, where F85 measured +16.7 % and rows per expert are in
+the hundreds.
+
+### The ceiling on what is left, by two routes
+
+**Route 1, in situ:** if the K=5 window ran at the K=1 window's 215.0 GB/s it would take 54.4 ms
+instead of 60.31 — **-5.9 ms of a 127.18 ms verify = -4.6 %**; the verify is 82.6 % of the spec cycle
+(F82), so **+4.0 % tok/s**.
+**Route 2, bench:** if rows beyond the first were free the K=5 launch would be 0.400 instead of
+0.442, **-9.5 %**; applied to `moe:w1w3` + `moe:w2` = 58.67 ms that is -5.6 ms, **-4.4 % verify,
++3.7 % tok/s**.
+
+**~+4 %, and it is the ceiling for making the row arithmetic vanish entirely, which it cannot.** Every
+instruction cut available costs registers against a 70-register kernel already at 7 blocks/SM — the
+weight dequant hoist is BN x 16 = 32 half2, the activation dequant hoist is 16 — and trap 21 prices a
+step at 25 % of occupancy. This engine has spent F76, F78, F79 and F81 on exactly that trade in the
+sibling fp8 tile and won none of them, with in-situ delivery running 1-6 % of the bench prediction.
+Discounted by trap 3, a partial cut lands near +2 %, at the edge of what trap 25 can resolve.
+
+**Disposition: task #13 closed — no base-AR headroom exists in the MoE GEMV, and the premise that
+said otherwise is retracted. Task #14 closed — lever #3 measured, dead below R=5.** `MOE_BN` and
+`tools/moe_gemv_bench.cu` are kept as instruments; the bench needs no checkpoint load, which is what
+made this whole finding cost minutes instead of a day.
+
+### Where the base-AR time actually is, now that the MoE is accounted for correctly
+
+Same marks (`evidence/kchunk.log` K=1, the 70.03 ms base step), bytes from `MODEL_INVENTORY.md`,
+scored against 208.7 GB/s:
+
+| region | ms | % of step | bytes | GB/s | % of roofline |
+|---|---|---|---|---|---|
+| **MoE** (routed + shared, concurrent) | 23.20 | 33 % | 4531 MB | **195** | **94 %** |
+| **Attention** (MLA + compressor + indexer) | 31.40 | 45 % | 5400 MB | 172 | 82 % |
+| `lm_head` | 5.80 | 8 % | 1059 MB | 183 | 88 % |
+| HC / rmsnorm / router / glue | 8.53 | 12 % | 211 MB | 25 | latency-bound |
+
+**The MoE is the best-optimised region in the engine.** Whole-step: 11.20 GB in 70.03 ms =
+**160 GB/s, 77 % of roofline** — so the entire remaining 23 % sits outside the MoE, in the attention
+block (worth ~5.5 ms if it reached the MoE's rate, and closed twice already by F125/F126) and in
+8.53 ms of glue that moves 211 MB and is pure launch latency. Any future "raise base AR" work starts
+from this table, not from `B_tok` shares.

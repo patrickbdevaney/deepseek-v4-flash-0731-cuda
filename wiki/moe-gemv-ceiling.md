@@ -1,5 +1,32 @@
 # MoE GEMV — where the 33 % goes
 
+> # ⛔ RETRACTED — F137, 2026-08-12. THE 155 GB/s IS AN ACCOUNTING ERROR.
+>
+> **Everything below is scored on a rate that divides the ROUTED expert bytes by a window in which
+> the SHARED expert is concurrently streaming its own 1082.20 MB.** `moe.cu:436` forks the shared
+> expert onto `g_side` before the routed gather and `moe.cu:516` joins it after `moe:combine`, which
+> is why `moe:shared` prints 0.24 ms instead of its real cost — a fork this repo priced in F55 and
+> then never fed back into the rate. Counting the concurrent bytes, on the same unchanged marks:
+>
+> | K | window | routed | +shared | GB/s | the number below |
+> |---|---|---|---|---|---|
+> | 1 | 21.08 ms | 3.368 GiB | 4.425 GiB | **215.0** | 163.6 |
+> | 5 | 60.31 ms | 10.363 GiB | 11.420 GiB | **193.9** | 176.0 |
+>
+> Streaming reference, same box, same binary, clocks pinned: **202.5–214.9 GB/s**. **At M=1 the MoE
+> GEMV is AT THE ROOFLINE.** `tools/moe_gemv_bench.cu` confirms it independently — the shipped kernel
+> at the real M=1 grouping measures 200.7 GB/s against a 208.7 GB/s in-binary roofline.
+>
+> **So "the MoE GEMV is 67 % of achievable" is false, "MoE GEMV efficiency" is not a lever, and
+> `LEVERS.md` §8 ranking it #1 was ranked off this page.** What is real is a ~10 % loss at the K=5
+> *verify* grouping, which is the per-row inner loop (issue-bound, linear at 0.139 ms/row on a
+> 0.244 ms intercept), not bandwidth — ceiling ~+4 % end-to-end and unreachable. See **F137** for the
+> controls, the `ncu` attribution, the GEMV-vs-mma crossover at R=5.05, and the corrected base-AR
+> budget table. The rest of this page is kept only as the record of how the number was arrived at.
+>
+> The alignment analysis below is unaffected and remains correct as description; it is just not worth
+> what this page priced it at.
+
 > **ANSWERED, and it redirects the lever.** Open question 3 below asked whether Laguna's 206 GB/s
 > advantage is kernel quality or mix. It is **mix**. Laguna's own MoE kernel `k_moe_gateup_rp` runs
 > at **177 GB/s = 70 % of its 254 ceiling**; ours runs at **155 GB/s = 67 % of our 233**. Those are

@@ -1,0 +1,44 @@
+# moe_gemv_bench, clocks pinned, pool=32 sets, 80 reps/point, 2026-08-12T23:43:27Z
+[roofline] streaming read 512 MB x20: 208.7 GB/s
+
+[shipped path]
+  M=1 decode (6 x 1 row)           w1/w3  rows=6   experts=6   gemv    0.133 ms    200.7 GB/s
+  M=1 decode (6 x 1 row)           w2     rows=6   experts=6   gemv    0.119 ms    225.3 GB/s
+  K=5 verify (measured hist)       w1/w3  rows=30  experts=18  gemv    0.444 ms    180.8 GB/s
+  K=5 verify (measured hist)       w2     rows=30  experts=18  gemv    0.438 ms    183.0 GB/s
+  -> K=5 / M=1 on w1w3 = 0.901x
+
+[control: is it the TILE COUNT or the ROWS PER TILE?]
+  18 experts x 1 row, RB=1         w1/w3  rows=18  experts=18  gemv    0.401 ms    200.1 GB/s
+  30 experts x 1 row, RB=1         w1/w3  rows=30  experts=30  gemv    0.678 ms    197.1 GB/s
+
+[control: RB sweep on the K=5 histogram]
+  K=5 hist, MOE_RB=1               w1/w3  rows=30  experts=18  gemv    0.479 ms    167.6 GB/s
+  K=5 hist, MOE_RB=2               w1/w3  rows=30  experts=18  gemv    0.452 ms    177.5 GB/s
+  K=5 hist, MOE_RB=4               w1/w3  rows=30  experts=18  gemv    0.441 ms    181.8 GB/s
+  K=5 hist, MOE_RB=8               w1/w3  rows=30  experts=18  gemv    0.486 ms    165.0 GB/s
+
+[control: what do the early-exit grid.y blocks cost?]
+  K=5 hist, maxtiles=30 (shipped)  w1/w3  rows=30  experts=18  gemv    0.446 ms    179.9 GB/s
+  K=5 hist, maxtiles=18 (exact)    w1/w3  rows=30  experts=18  gemv    0.447 ms    179.4 GB/s
+
+[control: DRAM bytes FIXED (18 experts, one read each), rows per expert varying]
+  18 experts x 1 rows, RB=8        w1/w3  rows=18  experts=18  gemv    0.400 ms    200.4 GB/s
+  18 experts x 2 rows, RB=8        w1/w3  rows=36  experts=18  gemv    0.510 ms    157.2 GB/s
+  18 experts x 3 rows, RB=8        w1/w3  rows=54  experts=18  gemv    0.645 ms    124.3 GB/s
+  18 experts x 4 rows, RB=8        w1/w3  rows=72  experts=18  gemv    0.794 ms    101.1 GB/s
+  18 experts x 5 rows, RB=8        w1/w3  rows=90  experts=18  gemv    0.951 ms     84.4 GB/s
+
+[GEMV vs mma, head to head, same weights, same grouping]
+  M=1 grouping                     w1/w3  rows=6   experts=6   gemv    0.135 ms    198.5 GB/s
+  M=1 grouping                     w1/w3  rows=6   experts=6   mma     0.220 ms    121.8 GB/s
+  K=5 grouping                     w1/w3  rows=30  experts=18  gemv    0.442 ms    181.5 GB/s
+  K=5 grouping                     w1/w3  rows=30  experts=18  mma     0.652 ms    123.0 GB/s
+
+[GEMV vs mma as rows per expert rises (18 experts, DRAM bytes fixed)]
+  18 experts x 2 rows              w1/w3  rows=36  experts=18  gemv    0.512 ms    156.7 GB/s
+  18 experts x 2 rows              w1/w3  rows=36  experts=18  mma     0.678 ms    118.4 GB/s
+  18 experts x 4 rows              w1/w3  rows=72  experts=18  gemv    0.794 ms    101.1 GB/s
+  18 experts x 4 rows              w1/w3  rows=72  experts=18  mma     0.850 ms     94.3 GB/s
+  18 experts x 8 rows              w1/w3  rows=144 experts=18  gemv    1.428 ms     56.2 GB/s
+  18 experts x 8 rows              w1/w3  rows=144 experts=18  mma     1.201 ms     66.8 GB/s
