@@ -124,34 +124,65 @@ unknown amount. Recovery is a **short re-tune from s3's weights on a fresh captu
 of an FP4 element path that is already correct and already partly built; and the corpus, the trained
 head, the measurement discipline and every negative result carry over unchanged.**
 
-## 6. SURVEYED — and the survey was scoped WRONG. Any candidate must be **0731**
+## 6. SURVEYED EXHAUSTIVELY — 2026-08-11 22:28 EDT, via the HuggingFace API
 
-Surveyed 2026-08-11 and initially concluded from `0xSero/DeepSeek-V4-Flash-180B` and
-`0xSero/DeepSeek-V4-Flash-162B`. **That conclusion is withdrawn: those are pre-0731 checkpoints.**
+Not a search engine — `https://huggingface.co/api/models`, enumerated and filtered by name.
 
-They date from when Flash first dropped. The **0731 update made the model substantially better**, and
-that is the whole reason this project targets `DeepSeek-V4-Flash-0731-REAP` specifically. Their
-backbone is architecturally identical to ours — which is why the kernels port wholesale, and which is
-what misled me — but *architecturally identical* is not *the same weights*. A quant of the older REAP
-is not a substitute for this checkpoint at any precision, and comparing their per-layer formats to
-ours as though they were the same lineage was a category error.
+**200 models matching `DeepSeek-V4-Flash-0731`:**
 
-**The requirement, stated so it is not lost again:**
+| set | count | result |
+|---|---|---|
+| 0731 **+ NVFP4** | 15 | none REAP-pruned |
+| 0731 **+ REAP** | 13 | none NVFP4 |
+| **0731 + REAP + NVFP4** | **0** | — |
 
-> Any NVFP4 candidate must be built from the **0731** checkpoint. Same architecture is not enough —
-> pre-0731 weights are a materially worse model, and no decode gain buys that back.
+The 13 0731 REAPs by format: **`0xSero/…-0731-REAP` (ours) is `mxfp4` + `fp8`**; `puwaer` 150b/200b
+are `fp8`; `BlivionIaG-…-216B` is `int4` + `fp8`; the remaining nine are GGUF or MLX — unusable by a
+CUDA engine.
 
-What survives from the survey is one architectural observation, and only as a hypothesis about how
-this family tends to be quantised — **not** as a measured claim about any 0731 artifact:
+**NVFP4 REAPs do exist, and every one is pre-0731.** `sleepyeldrazi/DeepSeek-v4-Flash-REAP-{K128,
+K150,K180}-NVFP4` all declare `base_model: deepseek-ai/DeepSeek-V4-Flash` and were **created
+2026-06-22** — before 0731 existed. The NVFP4+REAP work was done when Flash first dropped and has not
+been redone against 0731.
 
-- "NVFP4" in these cards generally denotes the **routed experts**. Ours are already MXFP4, and both
-  are 4 bits per weight plus a block scale, so expert-only NVFP4 is a scale-format change
-  (e4m3/group-16 vs E8M0/group-32), not a size change — `B_tok` would barely move.
-- The **dense/MLA path is 72 % of `B_tok`** and appears to be left at BF16 or FP8 in the variants
-  surveyed. If that pattern holds for any future 0731 NVFP4 release, such a release would **not**
-  change the decode picture, because it would not touch the term that dominates.
+**Conclusion, proven rather than inferred: as of 2026-08-11 there is no NVFP4 0731 REAP.**
 
-**Unresolved, and not to be assumed either way**: whether a 0731-based NVFP4 REAP exists, and if one
-appears, what its dense path actually is. That needs a safetensors-header check against the real
-files, not a model card — the same check `tools/` already performs on our own checkpoint. Sections
-1-5 remain valid as a plan for a requant of **our** 0731 checkpoint, done locally.
+## 7. The near-miss that is actually informative: REAM-104E
+
+`Baekpica/DeepSeek-V4-Flash-0731-120B-REAM-104E-NVFP4` is 0731, NVFP4, expert-reduced, safetensors
+with an index. It is **not** a REAP — its tags are `ream` / `expert-merging`: it *merges* experts
+rather than pruning them. Its config:
+
+```
+num_hidden_layers 43   hidden_size 4096   moe_intermediate_size 2048   head_dim 512
+n_routed_experts  104          (ours: 160)
+num_experts_per_tok 6          (ours: 6)   <-- IDENTICAL
+quantization: compressed-tensors
+  NVFP4A16 : 4-bit float, group 16, targets ['Linear']      <-- the DENSE path too
+  FP8_WO_A : 8-bit,               targets ['re:.*\.attn\.wo_a$']
+  ignored  : lm_head, embed_tokens, ffn.gate, mlp.gate
+```
+
+**Two things fall out, and they matter more than the model does.**
+
+**1. Expert count does not affect decode speed. At all.** `num_experts_per_tok` is 6 in both, so the
+per-token expert read is **identical** — 6 experts x 43 layers either way. Merging 256 -> 104 and
+pruning 256 -> 160 both change the *footprint*, not the *bytes per token*. This is the same lesson as
+"REAP bought capacity, not speed", now confirmed against a second compression method.
+
+**2. Its entire speed advantage is the NVFP4 dense path — and that is separable.** `targets:
+['Linear']` means the MLA/dense linears are 4-bit, which is exactly the 72 %-of-`B_tok` term this
+project has identified as the only lever with volume behind it. Estimated `B_tok` ~8.5 GB against our
+12.26, i.e. **~36-37 tok/s on this engine, not 50.**
+
+> **So the REAM checkpoint bundles a speed win with an unrelated quality loss.** The win (dense
+> NVFP4) has nothing to do with the merge; the cost (104 merged experts vs our 160 pruned) buys no
+> speed. **Quantising the dense path of OUR K160 checkpoint gets the same ~37 tok/s without accepting
+> a more-compressed expert set.** Redoing the draft-head work against REAM would be paying full price
+> for the separable half.
+
+**One detail worth stealing**: they left `attn.wo_a` at **FP8** while taking every other Linear to
+NVFP4. Someone found that tensor sensitive. If we do the local dense requant, start from that
+exclusion list — it is free information about where the quality cliffs are.
+
+Sections 1-5 stand as the plan for that local requant of **our** 0731 checkpoint.
