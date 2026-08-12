@@ -7460,3 +7460,46 @@ is a trained weight matrix.
 does not fail because these models are narrow; it fails because dormancy in these experts is not
 block-aligned, and block alignment is the only form a kernel can exploit. Cost to establish: one
 CPU-only script, no GPU time, run while session 3 held the device.
+
+## Finding 124 — the replicated head-off: `s3` and the pure-CE arm are **tied at the top**, and **F119 was wrong** — the CE/TV split *is* a real lever, it was measured underpowered
+
+Four heads, n=4 each, one shuffled seeded order, a discarded warm-up, run index fitted as a
+covariate (`scripts/head_off.sh` + `tools/sweep_analyze.py`). Residual sd **0.125 tok/s**, dof 11.
+
+| head | n | mean | sd |
+|---|---|---|---|
+| s1 (was shipped) | 4 | 24.51 | 0.10 |
+| s2 | 4 | 24.92 | 0.03 |
+| **s2-abl-ce1.0_tv0.0** | 4 | **25.29** | 0.14 |
+| **s3** (shipped) | 4 | **25.18** | 0.26 |
+
+Pairwise, drift-adjusted:
+
+| contrast | delta | t | |
+|---|---|---|---|
+| s2 vs s1 | +0.421 | 4.76 | distinguishable |
+| s3 vs s1 | +0.705 | 7.92 | distinguishable |
+| s2-abl-ce1.0 vs s1 | +0.788 | 8.93 | distinguishable |
+| **s2-abl-ce1.0 vs s2** | **+0.367** | **4.17** | **distinguishable** |
+| s3 vs s2 | +0.284 | 3.21 | distinguishable |
+| **s2-abl-ce1.0 vs s3** | +0.083 | 0.94 | **TIED** |
+
+**F119 is overturned.** It concluded *"the CE/TV split is not a lever at this scale"* from four arms
+measured **once each**, spread 1.7 %, judged against a 3.5 % band. At n=4 with the drift subtracted,
+**pure CE beats the shipped 0.1/0.9 by +0.367 tok/s at t=4.17** — on the same capture, same suite,
+same threshold. The effect was always there; the design could not see it.
+
+This is the **same error as the first adaptK sweep** (F120/F121), committed again two findings later:
+a confident negative from n=1 on a box whose replicates need n=4 to resolve a 1.5 % effect. F119's
+*mechanism* claim still stands — margins did not move monotonically and the full-width share fell, so
+whatever CE buys, it is not the margin→width→rate chain the ablation was built to test. But
+"not a lever" was wrong, and the disposition "do not carry this forward" was wrong with it.
+
+**What ships: `s3`, unchanged.** It is tied with the pure-CE arm (t=0.94), it is the incumbent, and
+ties go to the incumbent. Both are decisively ahead of s1 and s2.
+
+**What this implies next, and its cost.** s3 has 3.1x the data; the ablation arm has the better
+objective on 1/3 of it; they land in the same place. If the two effects are even partly additive,
+**s3's corpus trained at `a_ce 1.0 / a_tv 0.0`** is the best head this recipe can produce. The s3
+captures were deleted chunk-by-chunk as designed, so that experiment costs a re-capture — but
+`gen.txt` survives, so it is **capture + train (~6 h), not another 19 h session**.
