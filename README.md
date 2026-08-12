@@ -73,6 +73,8 @@ not 233. See `wiki/measurement-and-traps.md`.
 | **[`wiki/measurement-and-traps.md`](wiki/measurement-and-traps.md)** | how a number becomes trustworthy here, and the 30+ ways one has failed to |
 | **[`wiki/hardware-sm110a.md`](wiki/hardware-sm110a.md)** | Thor: measured bandwidth **and compute** peaks, and the `sm_110a` ISA facts already settled |
 | **[`wiki/cross-model-decode-comparison.md`](wiki/cross-model-decode-comparison.md)** | why this checkpoint decodes at half Qwen's rate on the same box — and why that is a quantisation ranking, not an engine ranking |
+| **[`wiki/nvfp4-migration.md`](wiki/nvfp4-migration.md)** | if an NVFP4 REAP existed: what transfers, why the kernel work is a translation not a rewrite, and why requant must come BEFORE the dense GEMV work |
+| **[`wiki/dense-mla-gemv.md`](wiki/dense-mla-gemv.md)** | the real lever — dense MLA GEMVs at 115–195 GB/s against a peer's 228–236 — and the bit-exactness invariant it collides with |
 
 ## Reference documents
 
