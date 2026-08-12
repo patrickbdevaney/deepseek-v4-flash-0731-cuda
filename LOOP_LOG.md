@@ -7503,3 +7503,48 @@ objective on 1/3 of it; they land in the same place. If the two effects are even
 **s3's corpus trained at `a_ce 1.0 / a_tv 0.0`** is the best head this recipe can produce. The s3
 captures were deleted chunk-by-chunk as designed, so that experiment costs a re-capture — but
 `gen.txt` survives, so it is **capture + train (~6 h), not another 19 h session**.
+
+## Finding 125 — the dense MLA GEMV **kernel is not the limiter**. In isolation it already runs at 225-246 GB/s, above the streaming reference and far above its 168-195 in situ. Lever #1 as scoped is dead
+
+`tools/gemv_accum_bench.cu`, on the real MLA shapes, weights cycled over a pool larger than L2 so
+every rep starts cold in DRAM:
+
+| shape | warps/SM | 1 acc | 4 acc | delta |
+|---|---|---|---|---|
+| `wq_b` [32768,1024] | 204.8 | **224.9** | 218.0 | -3.1 % |
+| `wo_a` [8192,4096] | 51.2 | **246.4** | 240.8 | -2.3 % |
+| `wo_b` [4096,8192] | 25.6 | **242.5** | 240.8 | -0.7 % |
+| `wq_a` [1024,4096] | 6.4 | **203.7** | 203.8 | +0.1 % |
+
+**Two results, and the second matters more than the first.**
+
+**1. The accumulator dependency chain is not the limiter.** Four independent accumulators are
+0.7-3.1 % *slower* than the shipped single-`acc` form at every shape. The hypothesis in
+`dense-mla-gemv.md` is dead — and it dies for free, before touching a shipped kernel and before
+trading away the bit-exact accumulation order the oracle gate depends on. That trade never had to be
+considered.
+
+**2. The kernel already achieves 225-246 GB/s, against 168-195 measured in situ.** It is at or above
+the 224-237 streaming reference for this box. **So the in-situ deficit is not kernel efficiency.**
+Whatever costs the dense path 20-30 %, it is not the code inside the GEMV.
+
+That redirects lever #1 for the third time. The chain of suspects for this engine's dense/verify cost
+now reads: MoE expert-union (refuted, F13) -> DSA per-position work (refuted, F14) -> M>=2 GEMM
+fallback (retracted, F15) -> M>=2 glue (taken, then recorded exhausted) -> **the GEMV kernel itself
+(refuted here)**. Five hypotheses, five refutations, and the pattern is consistent: the arithmetic is
+fine and the *context around it* is where the time goes.
+
+**The remaining candidate, stated as a hypothesis and not a finding**: in situ each weight is touched
+exactly once per token, inside a 43-layer chain of dependent kernel launches, with no opportunity to
+keep the memory pipeline saturated across boundaries. The benchmark runs the same kernel 30x
+back-to-back on different buffers, which lets DRAM stay saturated across kernel boundaries. If that is
+the difference, the lever is **occupancy of the memory system across the layer sequence** —
+overlap, graph capture, deeper prefetch — not any single kernel.
+
+**A trap worth recording, because it nearly produced a wrong answer.** The first run of this benchmark
+re-read ONE 33.6 MB weight buffer 30 times and reported 227-242 GB/s. **Thor's L2 is 33.6 MB** — the
+entire weight sat in cache after the first rep, so it measured L2, not DRAM. The corrected version
+cycles a pool of `R` copies with `R x 33.6 MB` well over L2. The numbers barely moved *in this case*,
+which is luck rather than vindication: any GEMV benchmark on this box that does not exceed 33.6 MB is
+measuring the wrong memory, and the coincidence that these weights are exactly L2-sized makes it easy
+to miss.
