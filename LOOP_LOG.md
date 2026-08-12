@@ -7732,3 +7732,34 @@ hyperparameter measured against one head, one instrument or one trace is a fact 
 configuration. adaptK on s1/s2 (+1.3 %), NVFP4 on the canonical prompt (+5.7 %), and the CE/TV
 ablation at n=1 (-1.7 %) were all real numbers that reversed sign or vanished under the shipping
 condition. **Measure the thing that ships.**
+
+## Finding 131 — task #11 closed: the REAP checkpoint scores **91.7 % on GSM8K**. The last inherited number is now measured, and REAP did not remove the reasoning
+
+`NORTH_STAR.md` §6 flagged it: *"The ~50 Artificial-Analysis-class capability figure is a claim about
+the BASE checkpoint."* REAP removed 37.5 % of the experts (256 -> 160) and nothing here had ever
+checked what survived. Measured with `tools/capability_eval.py`: 60 GSM8K **test**-split problems,
+zero-shot, greedy, through the shipping engine and the `s3` head, prompts tokenised by the
+checkpoint's own tokenizer (gate: canonical probe round-trips), scored by exact match on the integer
+after `####`.
+
+**55/60 = 91.7 %, 95 % CI [81.9, 96.4].**
+
+**Two of the five misses are the SCORER, not the model:**
+
+    #23  gold 8   pred "00"     "The candle will be 8 centimeters shorter..."  -> last number is from "5:00 PM"
+    #24  gold 26  pred "26.00"  "The original price of the book was $26.00."   -> correct, formatted differently
+
+Counting those, reasoning accuracy is **57/60 = 95 %**, and the 91.7 % is a floor set by a
+deliberately strict last-number parser. The remaining three are genuine failures, one of which (#0)
+ends mid-sentence -- a 320-token budget truncation, not a wrong answer.
+
+**What this does and does not settle.** It settles the question that mattered: **REAP pruning left
+the checkpoint able to reason.** A model that had lost its capability to 37.5 % expert removal does
+not score 91.7 % on held-out multi-step arithmetic. It does **not** produce an
+Artificial-Analysis-class composite -- GSM8K is one axis, it is saturated on frontier models, and the
+inherited ~50 is not comparable to it. Anyone quoting 91.7 % as "the capability number" would be
+repeating the substitution this task existed to end.
+
+**The honest form of the claim is now:** this box serves a checkpoint that scores 91.7 % on GSM8K at
+24.73 tok/s, and the broader capability figure remains inherited from the base model. That is a much
+smaller inherited surface than before, and it is the right size for what was actually measured.
