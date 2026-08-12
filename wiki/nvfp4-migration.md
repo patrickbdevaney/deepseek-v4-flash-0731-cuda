@@ -123,3 +123,48 @@ unknown amount. Recovery is a **short re-tune from s3's weights on a fresh captu
 **Requantise first if you are going to at all; the kernel work is a scale-format translation on top
 of an FP4 element path that is already correct and already partly built; and the corpus, the trained
 head, the measurement discipline and every negative result carry over unchanged.**
+
+## 6. SURVEYED: what is actually on HuggingFace, and why it does not change the picture
+
+Section 4 said this page was conditional on obtaining an NVFP4 REAP. Surveyed 2026-08-11, and the
+conditional **mostly fails** — for a reason that is worth stating precisely, because it is the
+opposite of the intuition:
+
+| candidate | pruning | experts | **dense / MLA** | note |
+|---|---|---|---|---|
+| **ours** (`0xSero/...-0731-REAP`) | K160 | **MXFP4** | **FP8 e4m3** | 107.8 GB |
+| `0xSero/DeepSeek-V4-Flash-180B` | K160 | NVFP4/MXFP4 | **BF16** | ~103 GB, FP8 KV |
+| `RedHatAI/DeepSeek-V4-Flash-NVFP4-FP8` | none (163 B full) | NVFP4 | unspecified | "noticeably lower accuracy recovery" |
+| `nvidia/DeepSeek-V4-Flash-NVFP4` | none (full) | NVFP4 | unspecified | too large for 122.8 GiB |
+
+**"NVFP4" in these cards means the ROUTED EXPERTS are NVFP4.** Ours are already MXFP4. Both are
+**4 bits per weight plus a block scale** — NVFP4 vs MXFP4 is a change of scale format (e4m3/group-16
+vs E8M0/group-32), **not a change of size**. Swapping them moves `B_tok` by approximately nothing.
+
+**And the bytes that actually matter are not quantised in any of them.** The dense/MLA path is
+**72 % of `B_tok`**, and it is BF16 or FP8 in every available variant — never NVFP4. The `0xSero`
+180 B is the closest lineage match to ours and its dense path is **BF16**, which is *worse* for
+decode than the FP8 we already have.
+
+So the honest conclusion is the inverse of the hope that motivated this page:
+
+> **This checkpoint — MXFP4 experts + FP8 dense — is already the most decode-favourable
+> quantisation publicly available for this model family.** There is no free swap. The variant that
+> would change the picture is one with the *attention* path in NVFP4, and that is exactly the
+> quantisation nobody ships, because it is where quality damage concentrates — the one card that
+> comes closest reports "noticeably lower accuracy recovery than the base model".
+
+Everything in sections 1-5 stays valid as a **plan for a requant we would have to do ourselves**
+(`llmcompressor` and an `nvfp4-quantize` venv are both on this box). It is no longer a plan for a
+download. And the sequencing rule survives intact: if that requant ever happens, it comes **before**
+the dense GEMV work, not after.
+
+Sources: [0xSero/DeepSeek-V4-Flash-180B](https://huggingface.co/0xSero/DeepSeek-V4-Flash-180B) ·
+[RedHatAI/DeepSeek-V4-Flash-NVFP4-FP8](https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-NVFP4-FP8) ·
+[nvidia/DeepSeek-V4-Flash-NVFP4](https://huggingface.co/nvidia/DeepSeek-V4-Flash-NVFP4)
+
+**Caveat on this survey**: the per-layer formats above come from model cards read via web fetch, and
+those cards are frequently vague about which components get which scheme (RedHat's explicitly is).
+The `0xSero` 180 B BF16-dense claim in particular is surprising given its 103 GB size and deserves a
+header-level check against the actual safetensors before anything is decided on it — the same check
+`tools/` already does for our own checkpoint.
