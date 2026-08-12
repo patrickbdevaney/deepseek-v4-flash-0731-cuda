@@ -602,3 +602,38 @@ the block-6 ceiling.
 new evidence about the slope. On a dense model extra tree nodes are nearly free in weight traffic,
 which is the premise of the whole family; on this engine every candidate position costs the same
 17.11 ms as a depth position while carrying lower marginal acceptance. F122 has the argument.
+
+---
+
+## 9. Post-NVFP4 ledger — what is actually left (supersedes §8)
+
+§8 ranked MoE GEMV as lever #1 and priced the byte levers off `B_tok`. Both are now wrong. F125/F126
+showed the GEMV kernels are not the limiter; F129 showed **`B_tok` overstates every byte lever on a
+speculative engine**, because the verify reads each weight once for M tokens. The corrected ledger:
+
+**Shipping: `s3` head, FP8, 24.73 tok/s suite.** Ceiling arithmetic unchanged (F122): block-6 with
+perfect acceptance is 40.6, asymptote 58.4, so today is ~61 % of the block-6 ceiling.
+
+| # | lever | expected | confidence | cost |
+|---|---|---|---|---|
+| 1 | **adaptK 1.5 -> 2.0** | **+1.3 %** | **measured 3x independently** (F121, s1/s2/s3) | one decision + a registry re-baseline |
+| 2 | **s3 corpus at `a_ce 1.0`** | +0.37 tok/s (~1.5 %) | measured at t=4.17 (F124) | ~6 h: capture + train, `gen.txt` survives |
+| 3 | **m16 B-repack (M>=2)** | unquantified | — | kernel work |
+| 4 | **prompt-lookup / n-gram** | workload-dependent | untried | moderate |
+
+**THE REFRAME THAT MATTERS.** F129 established that the suite is **verify-dominated**: NVFP4 at M=1
+moved the number by -1.3 % while the same change at M=K moved it by -14 %. The M>=2 path is where the
+time is. That makes **#3 the most under-explored item on this list** -- it targets exactly M>=2, it
+has never been quantified, and every M=1 optimisation measured this session has come back inside
+noise. It also means any future work should be A/B'd on the **suite with the trained head**, never on
+the canonical prompt: those two traces disagreed in *sign* on NVFP4.
+
+**Closed this session, each with the measurement that closed it:** MoE GEMV (at parity with a peer
+engine, 67 % vs 70 % of respective rooflines); dense MLA GEMV kernel (225-246 GB/s isolated, above
+the streaming reference -- not the limiter, F125); dependent layer sequence (~4 %, F126); activation
+sparsity (dead at `moe_intermediate` 1024 *and* 2048, F123); tree/multi-candidate (width priced at
+depth rates, F122); NVFP4 dense (no gain on the shipping metric, F129).
+
+**Not a kernel lever:** batching. 50+ tok/s aggregate is reachable at batch 4-8 because dense/MLA
+amortises fully across requests -- but it does not reduce per-request latency, and a coding agent's
+hot path is serial. It belongs to Phase 6 (the server), not here.
