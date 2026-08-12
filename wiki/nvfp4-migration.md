@@ -124,47 +124,34 @@ unknown amount. Recovery is a **short re-tune from s3's weights on a fresh captu
 of an FP4 element path that is already correct and already partly built; and the corpus, the trained
 head, the measurement discipline and every negative result carry over unchanged.**
 
-## 6. SURVEYED: what is actually on HuggingFace, and why it does not change the picture
+## 6. SURVEYED — and the survey was scoped WRONG. Any candidate must be **0731**
 
-Section 4 said this page was conditional on obtaining an NVFP4 REAP. Surveyed 2026-08-11, and the
-conditional **mostly fails** — for a reason that is worth stating precisely, because it is the
-opposite of the intuition:
+Surveyed 2026-08-11 and initially concluded from `0xSero/DeepSeek-V4-Flash-180B` and
+`0xSero/DeepSeek-V4-Flash-162B`. **That conclusion is withdrawn: those are pre-0731 checkpoints.**
 
-| candidate | pruning | experts | **dense / MLA** | note |
-|---|---|---|---|---|
-| **ours** (`0xSero/...-0731-REAP`) | K160 | **MXFP4** | **FP8 e4m3** | 107.8 GB |
-| `0xSero/DeepSeek-V4-Flash-180B` | K160 | NVFP4/MXFP4 | **BF16** | ~103 GB, FP8 KV |
-| `RedHatAI/DeepSeek-V4-Flash-NVFP4-FP8` | none (163 B full) | NVFP4 | unspecified | "noticeably lower accuracy recovery" |
-| `nvidia/DeepSeek-V4-Flash-NVFP4` | none (full) | NVFP4 | unspecified | too large for 122.8 GiB |
+They date from when Flash first dropped. The **0731 update made the model substantially better**, and
+that is the whole reason this project targets `DeepSeek-V4-Flash-0731-REAP` specifically. Their
+backbone is architecturally identical to ours — which is why the kernels port wholesale, and which is
+what misled me — but *architecturally identical* is not *the same weights*. A quant of the older REAP
+is not a substitute for this checkpoint at any precision, and comparing their per-layer formats to
+ours as though they were the same lineage was a category error.
 
-**"NVFP4" in these cards means the ROUTED EXPERTS are NVFP4.** Ours are already MXFP4. Both are
-**4 bits per weight plus a block scale** — NVFP4 vs MXFP4 is a change of scale format (e4m3/group-16
-vs E8M0/group-32), **not a change of size**. Swapping them moves `B_tok` by approximately nothing.
+**The requirement, stated so it is not lost again:**
 
-**And the bytes that actually matter are not quantised in any of them.** The dense/MLA path is
-**72 % of `B_tok`**, and it is BF16 or FP8 in every available variant — never NVFP4. The `0xSero`
-180 B is the closest lineage match to ours and its dense path is **BF16**, which is *worse* for
-decode than the FP8 we already have.
+> Any NVFP4 candidate must be built from the **0731** checkpoint. Same architecture is not enough —
+> pre-0731 weights are a materially worse model, and no decode gain buys that back.
 
-So the honest conclusion is the inverse of the hope that motivated this page:
+What survives from the survey is one architectural observation, and only as a hypothesis about how
+this family tends to be quantised — **not** as a measured claim about any 0731 artifact:
 
-> **This checkpoint — MXFP4 experts + FP8 dense — is already the most decode-favourable
-> quantisation publicly available for this model family.** There is no free swap. The variant that
-> would change the picture is one with the *attention* path in NVFP4, and that is exactly the
-> quantisation nobody ships, because it is where quality damage concentrates — the one card that
-> comes closest reports "noticeably lower accuracy recovery than the base model".
+- "NVFP4" in these cards generally denotes the **routed experts**. Ours are already MXFP4, and both
+  are 4 bits per weight plus a block scale, so expert-only NVFP4 is a scale-format change
+  (e4m3/group-16 vs E8M0/group-32), not a size change — `B_tok` would barely move.
+- The **dense/MLA path is 72 % of `B_tok`** and appears to be left at BF16 or FP8 in the variants
+  surveyed. If that pattern holds for any future 0731 NVFP4 release, such a release would **not**
+  change the decode picture, because it would not touch the term that dominates.
 
-Everything in sections 1-5 stays valid as a **plan for a requant we would have to do ourselves**
-(`llmcompressor` and an `nvfp4-quantize` venv are both on this box). It is no longer a plan for a
-download. And the sequencing rule survives intact: if that requant ever happens, it comes **before**
-the dense GEMV work, not after.
-
-Sources: [0xSero/DeepSeek-V4-Flash-180B](https://huggingface.co/0xSero/DeepSeek-V4-Flash-180B) ·
-[RedHatAI/DeepSeek-V4-Flash-NVFP4-FP8](https://huggingface.co/RedHatAI/DeepSeek-V4-Flash-NVFP4-FP8) ·
-[nvidia/DeepSeek-V4-Flash-NVFP4](https://huggingface.co/nvidia/DeepSeek-V4-Flash-NVFP4)
-
-**Caveat on this survey**: the per-layer formats above come from model cards read via web fetch, and
-those cards are frequently vague about which components get which scheme (RedHat's explicitly is).
-The `0xSero` 180 B BF16-dense claim in particular is surprising given its 103 GB size and deserves a
-header-level check against the actual safetensors before anything is decided on it — the same check
-`tools/` already does for our own checkpoint.
+**Unresolved, and not to be assumed either way**: whether a 0731-based NVFP4 REAP exists, and if one
+appears, what its dense path actually is. That needs a safetensors-header check against the real
+files, not a model card — the same check `tools/` already performs on our own checkpoint. Sections
+1-5 remain valid as a plan for a requant of **our** 0731 checkpoint, done locally.
