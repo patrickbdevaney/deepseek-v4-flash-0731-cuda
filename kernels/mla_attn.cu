@@ -695,6 +695,10 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
     //
     // Fixing (2) means routing the M=K verify path too, so both sides agree. Until then this stays
     // off: an engine whose AR and verify paths disagree is broken regardless of its speed.
+    // DEFAULT OFF on THROUGHPUT, not correctness: gate-verified and LOSSLESS-clean, best AR measured
+    // (14.83 vs 14.25), but -24% on spec decode (20.88 -> 15.86) because this NR=1 M=K kernel lacks
+    // the activation reuse / smem staging / per-M tuning the FP8 ogroup M=K path has. Spec is what
+    // ships, so it loses. Tuning the M=K kernel is the unlock.
     if(bs==1 && nvfp4_enabled() && getenv("DSV4_NVFP4_WOA")!=nullptr
        && nvfp4_ogroup_gemv(out, o, wo_fp8, G, R, Kd, stream)){ dsync(stream); return; }
     if(bs==1 && getenv("NO_OGGEMV")==nullptr){          // M=1 decode: bandwidth-bound GEMV (no mma waste). bs>1
@@ -714,6 +718,19 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
     // check anyway: a mapped weight that is merely 1-byte aligned would fault, and Finding 41 is
     // the reminder that "structurally aligned" is a claim about code that has since been rewritten.
     // Unaligned falls through to the f16 tensor-core path below, not to a wrong answer.
+    // wo_a verify side. Gated by tests/gate_nvfp4_ogroup_mk.cu, which compares it against M=1 run
+    // M times on the real [8x1024, 4096] shape: 0/40960 elements differ.
+    //
+    // Getting there took two corrections, and neither was a layout error -- the layouts were right
+    // from the start. The kernel was NUMERICALLY CORRECT (cosine 1.00000000) and still broke
+    // LOSSLESS, because this model turns 1 ulp into a different token and the engine compares the
+    // M=1 path's tokens against the M=K path's. Bit-agreement, not correctness, was the bar:
+    //   (a) reduce with four accumulators as (a0+a1)+(a2+a3), matching M=1   5 -> 4 elements differing
+    //   (b) dot THEN scale, rather than folding the scale into the weights   4 -> 0
+    // Both are algebraically identical and round differently. An end-to-end run cannot tell you
+    // which of them is wrong; the unit gate answered it in two iterations.
+    if(bs>1 && bs<=8 && nvfp4_enabled() && getenv("DSV4_NVFP4_WOA")!=nullptr
+       && nvfp4_ogroup_mk(out, o, wo_fp8, bs, G, R, Kd, stream)){ dsync(stream); return; }
     const int ogvec4 = ((Kd % 128)==0) && ((((uintptr_t)wo_fp8)&3)==0) && ((((uintptr_t)o)&15)==0)
                     && (getenv("NO_OGVEC4")==nullptr);
     if(bs>1 && bs<=16 && ogvec4 && getenv("NO_OGMK")==nullptr){

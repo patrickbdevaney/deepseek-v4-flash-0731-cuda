@@ -7625,3 +7625,41 @@ is the work, and it is per-kernel, not global.
 **Originals preserved** in `original-fp8-path/` (sources, build script, pre-change binary). The
 feature is inert without `DSV4_NVFP4_OVERLAY`: nothing registered, nothing looked up, FP8 path
 byte-identical.
+
+## Finding 128 — the ogroup M=K kernel was **numerically correct and still broke LOSSLESS**. Bit-agreement between the M=1 and M=K paths, not correctness, was the bar — and a unit gate found it in two iterations where end-to-end runs could not
+
+`wo_a` (1.44 GB/token) routed through NVFP4 failed end to end: tokens changed, `LOSSLESS: diverges
+at token 3`. Two end-to-end runs said only "it is wrong somewhere". `tests/gate_nvfp4_ogroup_mk.cu`
+compares the M=K kernel against the M=1 kernel run M times on the real `[8x1024, 4096]` shape --
+they are the same function, so they must agree -- and answered it immediately:
+
+    initial     cosine 1.00000000, 5 of 40960 elements differ   <- CORRECT, and still breaks LOSSLESS
+    + reduce as (a0+a1)+(a2+a3), matching M=1        5 -> 4
+    + dot THEN scale, not scale-folded-into-weights  4 -> 0     GATE PASS
+
+**Neither fix was a layout error.** The activation layout `o[m*G*Kd + g*Kd + k]` and output layout
+`out[m*G*R + gr]` matched `ogroup_gemv_mk_kernel` from the first version. Both corrections are
+*algebraically identical* rewrites that round differently. The bar was never "is it correct" -- at
+cosine 1.00000000 it already was -- it was **"does it agree bit-for-bit with the path the engine
+compares it against"**, because this model turns 1 ulp into a different token and `LOSSLESS` checks
+the M=1 path's tokens against the M=K path's.
+
+Also corrected: the earlier note blamed the token change on the M=K path "corrupting KV state during
+prefill (bs=5)". Wrong. Prefill *does* run at bs=5 and *does* take this path, but the tokens changed
+because prefill legitimately started computing `wo_a` in NVFP4 -- a real change to the model, not
+corruption.
+
+**End to end, fully routed and correct:**
+
+| config | AR | spec | LOSSLESS | tokens |
+|---|---|---|---|---|
+| FP8 control | 13.48 | 20.08 | PASS | reference |
+| NVFP4, `wo_a` OFF | 14.25 | **20.88** | PASS | identical |
+| NVFP4, `wo_a` ON (M=1+M=K) | **14.83** | 15.86 | PASS | identical |
+
+**So `wo_a` stays off by default, on a throughput argument rather than a correctness one.** It is the
+best AR number measured (+10.0 % over the control) and it costs **-24 % on spec**, which is the mode
+that ships. The cause is not the NVFP4 idea: the FP8 ogroup M=K path carries an activation-reuse
+factor NR, smem staging, per-M lookup tables and register caps (Findings 40/55/79), and this NR=1
+kernel has none of it. Tuning it is the unlock, and it is now a performance problem on a
+gate-verified kernel instead of a correctness unknown.

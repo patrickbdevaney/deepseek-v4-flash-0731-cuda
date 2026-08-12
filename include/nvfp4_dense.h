@@ -29,6 +29,7 @@ void nvfp4_register(const uint8_t* fp8_weight, const NvFp4Weight& w);
 const NvFp4Weight* nvfp4_lookup(const uint8_t* fp8_weight);
 bool  nvfp4_enabled();          // false unless an overlay was loaded and DSV4_NVFP4_OFF is unset
 int   nvfp4_count();
+void  nvfp4_force_enable(bool on);   // tests only: lookup is gated on the overlay having loaded
 
 // C[1,N] = A[1,K] (fp8 e4m3 x a_s per 128) @ dequant(B)^T. Returns false if the shape is unsupported.
 bool nvfp4_gemv_m1(float* C, const uint8_t* A_fp8, const float* a_s,
@@ -41,6 +42,9 @@ bool nvfp4_gemv_mk(float* C, const uint8_t* A_fp8, const float* a_s, const NvFp4
 // wo_a takes FLOAT activations and grouped rows, so it needs its own entry point.
 bool nvfp4_ogroup_gemv(float* out, const float* o, const uint8_t* wo_fp8,
                        int G, int R, int Kd, cudaStream_t stream);
+
+bool nvfp4_ogroup_mk(float* out, const float* o, const uint8_t* wo_fp8,
+                     int M, int G, int R, int Kd, cudaStream_t stream);
 
 // Load an overlay directory written by tools/requant_dense_nvfp4.py. `resolve` maps a checkpoint
 // tensor name to the FP8 device pointer the engine holds for it (null if absent).
