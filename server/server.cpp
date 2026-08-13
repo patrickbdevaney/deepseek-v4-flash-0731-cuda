@@ -273,18 +273,38 @@ int main(int argc, char** argv) {
         if (!cr.stream) {
             std::lock_guard<std::mutex> lk(g_lock);
             ++m_requests;
-            const RunResult r = run_generation(ids, gp, thinking, cr.sampling.stop, nullptr);
-            account(r.stats);
-            const json parsed = dsv4enc::parse_message_from_completion_text(
-                thinking ? std::string(dsv4enc::THINK_START) + r.raw : r.raw, cr.thinking_mode);
-            json out = dsv4api::chat_completion_response(id, cr.model, parsed,
-                                                        r.stats.prompt_tokens, r.stats.completion_tokens, created);
-            out["usage"]["prompt_tokens_details"] = json{{"cached_tokens", r.stats.cached_tokens}};
-            out["timings"] = json{{"prefill_ms", r.stats.prefill_ms},
-                                  {"decode_ms", r.stats.decode_ms},
-                                  {"tokens_per_second", r.stats.tok_per_s},
-                                  {"tokens_per_verify", r.stats.tok_per_verify}};
-            res.set_content(out.dump(), "application/json");
+            // THIS PATH HAD NO try/catch AND THE STREAMING ONE DID. Any throw out of
+            // run_generation or parse_message_from_completion_text therefore escaped the handler
+            // and httplib turned it into a bare 500 with an EMPTY BODY -- no message, no log line,
+            // nothing to debug from. GPQA-Diamond item 0 hit it reproducibly: not context (122
+            // prompt tokens), not concurrency (a parallel request succeeds), not the prompt (the
+            // same text at max_tokens=64 is fine), only at max_tokens >= 2000, i.e. once the
+            // generation is long enough to emit whatever construct the parser rejects. A whole
+            // 198-item benchmark was lost to it, and the empty body is why it took three sessions
+            // to find. Catch it, say what it was, and log it.
+            try {
+                const RunResult r = run_generation(ids, gp, thinking, cr.sampling.stop, nullptr);
+                account(r.stats);
+                const json parsed = dsv4enc::parse_message_from_completion_text(
+                    thinking ? std::string(dsv4enc::THINK_START) + r.raw : r.raw, cr.thinking_mode);
+                json out = dsv4api::chat_completion_response(id, cr.model, parsed,
+                                                            r.stats.prompt_tokens, r.stats.completion_tokens, created);
+                out["usage"]["prompt_tokens_details"] = json{{"cached_tokens", r.stats.cached_tokens}};
+                out["timings"] = json{{"prefill_ms", r.stats.prefill_ms},
+                                      {"decode_ms", r.stats.decode_ms},
+                                      {"tokens_per_second", r.stats.tok_per_s},
+                                      {"tokens_per_verify", r.stats.tok_per_verify}};
+                res.set_content(out.dump(), "application/json");
+            } catch (const std::exception& e) {
+                ++m_errors;
+                fprintf(stderr, "[server] generation failed (%zu prompt tokens, max_tokens %d): %s\n",
+                        ids.size(), gp.max_tokens, e.what());
+                fflush(stderr);
+                res.status = 500;
+                res.set_content(json{{"error", {{"message", e.what()},
+                                                {"type", "generation_error"}}}}.dump(),
+                                "application/json");
+            }
             return;
         }
 

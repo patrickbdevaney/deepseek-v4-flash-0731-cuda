@@ -15,3 +15,5 @@
   [8/200] mmlupro-323 gold=B got=B OK  run=6/8 stop 21.6 tok/s (19.1 min)
   [9/200] mmlupro-404 gold=E got=E OK  run=7/9 stop 11.8 tok/s (24.8 min)
   [10/200] mmlupro-456 gold=E got=E OK  run=8/10 stop 19.8 tok/s (27.5 min)
+  [11/200] mmlupro-472 gold=I got=I OK  run=9/11 stop 12.1 tok/s (36.1 min)
+  [12/200] mmlupro-497 gold=C got=C OK  run=10/12 stop 19.6 tok/s (36.6 min)
