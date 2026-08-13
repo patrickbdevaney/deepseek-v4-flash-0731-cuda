@@ -345,6 +345,13 @@ def main():
     ap.add_argument('--top-p', type=float, default=0.95)    # model card: top_p 0.95
     ap.add_argument('--max-tokens', type=int, default=0, help='0 = the per-task budget in MAXTOK')
     ap.add_argument('--timeout', type=int, default=1200)
+    ap.add_argument('--reps', type=int, default=1,
+                    help='independent samples per item (avg@k). Required for AIME-class benchmarks: '
+                         'at n=30 and temperature 1.0 a SINGLE pass has a 95%% CI of about +-16 '
+                         'points, so a point estimate from it is not a measurement. Published AIME '
+                         'numbers are avg@16 to avg@64 for exactly this reason. Each repetition is '
+                         'a separate record with id "<id>#r<k>", so reps resume like anything else '
+                         'and k can be raised later without rerunning what is already banked.')
     ap.add_argument('--report', action='store_true')
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
@@ -355,6 +362,12 @@ def main():
         sys.exit('--task or --report')
 
     items, snap, src, kind = TASKS[a.task](a.n)
+    n_unique = len(items)
+    if a.reps > 1:
+        # rep 0 keeps the BARE id, so raising k later is purely additive: records already banked at
+        # --reps 1 stay valid and only the new samples are generated.
+        items = [dict(it, id=it['id'] if k == 0 else f'{it["id"]}#r{k}')
+                 for k in range(a.reps) for it in items]
     maxtok = a.max_tokens or MAXTOK[a.task]
     path = os.path.join(OUT, f'{a.task}.jsonl')
     done = set()
@@ -369,6 +382,7 @@ def main():
           f'{len(done)} already done, {len(todo)} to go, max_tokens={maxtok}', flush=True)
 
     meta = dict(task=a.task, source=src, snapshot=snap, n_items=len(items), scoring=kind,
+                n_unique=n_unique, reps=a.reps,
                 effort=a.effort, temperature=a.temp, top_p=a.top_p, max_tokens=maxtok,
                 started=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
     with open(os.path.join(OUT, f'{a.task}.meta.json'), 'w') as f:
@@ -425,6 +439,7 @@ def report():
         toks = [(r.get('usage') or {}).get('completion_tokens', 0) for r in recs]
         tps = [t for t in ((r.get('timings') or {}).get('tokens_per_second', 0) for r in recs) if t]
         lines.append(dict(task=task, n=n, n_total=meta.get('n_items'), correct=k,
+                          n_unique=meta.get('n_unique'), reps=meta.get('reps', 1),
                           acc=round(100*k/n, 1), ci=[round(lo, 1), round(hi, 1)],
                           truncated=trunc, mean_completion_tokens=round(sum(toks)/n),
                           mean_tok_s=round(sum(tps)/len(tps), 2) if tps else None,

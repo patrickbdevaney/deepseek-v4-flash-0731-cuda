@@ -2,3 +2,14 @@
 [aime24] 30 items from Maxwell-Jia/AIME_2024 (30) (snapshot 8d88b2876a82), 0 already done, 30 to go, max_tokens=3400
   [1/30] aime2024-2024-II-4 gold=33 got=33 OK  run=1/1 stop 24.0 tok/s (1.5 min)
   [2/30] aime2024-2024-II-12 gold=23 got=23 OK  run=2/2 stop 13.5 tok/s (5.7 min)
+  [3/30] aime2024-2024-I-4 gold=116 got=116 OK  run=3/3 stop 21.0 tok/s (6.4 min)
+  [4/30] aime2024-2024-I-3 gold=809 got=809 OK  run=4/4 stop 20.8 tok/s (7.3 min)
+  [5/30] aime2024-2024-I-8 gold=197 got=None     run=4/5 stop 12.9 tok/s (11.7 min)
+  [6/30] aime2024-2024-I-12 gold=385 got=6     run=4/6 stop 16.1 tok/s (15.3 min)
+  [7/30] aime2024-2024-I-11 gold=371 got=234     run=4/7 stop 14.1 tok/s (19.3 min)
+  [8/30] aime2024-2024-II-11 gold=601 got=601 OK  run=5/8 stop 20.0 tok/s (20.9 min)
+  [9/30] aime2024-2024-I-2 gold=25 got=25 OK  run=6/9 stop 20.9 tok/s (21.5 min)
+  [10/30] aime2024-2024-II-6 gold=55 got=55 OK  run=7/10 stop 21.3 tok/s (22.2 min)
+  [11/30] aime2024-2024-I-7 gold=540 got=540 OK  run=8/11 stop 21.3 tok/s (22.5 min)
+=== 2026-08-12T22:32:48-04:00  gpqa_diamond  n=0 reps=1
+[gpqa_diamond] 198 items from fingertap/GPQA-Diamond (test, 198) (snapshot 68be75644976), 0 already done, 198 to go, max_tokens=3000

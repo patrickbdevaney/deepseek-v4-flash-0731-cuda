@@ -1,0 +1,14 @@
+{
+  "task": "gpqa_diamond",
+  "source": "fingertap/GPQA-Diamond (test, 198)",
+  "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3",
+  "n_items": 198,
+  "scoring": "letter",
+  "n_unique": 198,
+  "reps": 1,
+  "effort": "high",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 3000,
+  "started": "2026-08-13T02:32:48Z"
+}

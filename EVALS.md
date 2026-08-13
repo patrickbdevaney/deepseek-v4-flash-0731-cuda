@@ -82,7 +82,18 @@ runs at **4096 total** (prompt + completion). The reason is arithmetic, not pref
 | **reported at ready** | **120.1 / 122.8** |
 
 The scratch arena alone is sized `(512 + 2 x seqmax) MiB`, so seqmax=8192 asks for 16.9 GiB where
-4096 asks for 8.5 — an extra 8.4 GiB against 2.7 GiB of headroom. Two attempts to serve at a larger
+4096 asks for 8.5 — an extra 8.4 GiB against 2.7 GiB of headroom.
+
+**And that ceiling is an engine artefact, not an architectural one.** MLA + DSA make this model's
+real KV cache **99.4 KiB/token**, which is **3.3 %** of everything that scales with `seqmax`; 128K
+of context would be 12.4 GiB of KV, and there is ~22 GiB free. The other 96.7 % is scratch sized to
+the wrong quantity — the arena heuristic above (68 %) and `xin`, an attention-input history
+allocated at `seqmax` when `kernels/compressor.cu:500` proves no group emit reads further back than
+`2 x ratio` <= 128 positions (22 %). See
+**`wiki/context-ceiling-is-not-the-kv-cache.md`**: sizing the arena from the high-water mark it
+already tracks would reach seqmax ~12,800 in the same memory, and adding an `xin` ring buffer
+~40,000, both bit-exact. **The cheapest way to raise the scores in this file is to raise the
+context, and that is an allocation change.** Two attempts to serve at a larger
 context on 2026-08-12 did not fail gracefully: they took the **whole machine** down mid-load
 (reboots at 20:02 and 20:11, `last -x reboot`, no oom-kill line in `dmesg` either time).
 `scripts/memguard.sh` now watches MemAvailable and kills the server before the kernel has to decide.
@@ -111,6 +122,55 @@ pruning** — some unknown part of it is the context ceiling instead.
 - **Every generation is retained** in `evidence/evals/<task>.jsonl`, including the full reasoning
   trace, so any number here can be traced to the text that produced it.
 
+### Is this suite actually defensible? — the honest audit
+
+The benchmarks themselves are the genuine article: GPQA-Diamond, MMLU-Pro, AIME, MATH-500, HumanEval
+and GSM8K are what essentially every frontier model card reports, and they are exactly scorable. But
+"standard benchmark" and "defensible number" are different claims, and four things separate them.
+
+**1. Statistical power. This is where a naive run of this suite fails.** Wilson half-width at each
+planned n:
+
+| benchmark | n | assumed acc | 95 % CI | ± | verdict |
+|---|---:|---:|---|---:|---|
+| GPQA-Diamond | 198 | 85 % | [79.2, 89.2] | 5.0 | usable |
+| MMLU-Pro | 200 | 80 % | [73.9, 85.1] | 5.5 | usable |
+| HumanEval | 164 | 85 % | [78.5, 89.5] | 5.5 | usable |
+| MATH-500 | 120 | 90 % | [83.2, 94.3] | 5.4 | usable |
+| GSM8K | 120 | 92 % | [85.7, 95.8] | 4.9 | usable |
+| **AIME 24/25 @ reps=1** | **30** | **70 %** | **[52.1, 83.3]** | **15.6** | **NOT PUBLISHABLE** |
+
+Thirty problems sampled once at `temperature = 1.0` is not a measurement — the interval spans
+52-83 %, which cannot distinguish a good model from a mediocre one. This is precisely why published
+AIME numbers are avg@16 to avg@64. **AIME therefore runs at `--reps 4` here** (avg@4, ± 8.1), which
+is the least it can be run at and still be quoted, and the report states the rep count. Reps are
+additive — rep 0 keeps the bare item id — so k can be raised later without regenerating anything.
+
+**2. The gold keys are cross-validated, not trusted.** GPQA-Diamond is read from a mirror because
+the canonical `Idavidrein/gpqa` is gated (only its README is retrievable here). A mirror can have a
+different option order or a shifted answer key, and GPQA scores are sensitive to both. So the key
+was checked against a **second, independent mirror** (`hendrydong/gpqa_diamond`) that stores the
+answer as free text rather than as a letter: map each letter back to its option text and compare.
+
+> **196 / 198 = 99.0 % agreement between two independently produced mirrors.** The two
+> non-matches are fuzzy-matcher failures on stem collisions, not conflicting keys.
+
+**3. Prompt protocol differs from the published harnesses, and the sign of that is unknown.** These
+run zero-shot CoT with an explicit answer-format instruction. MMLU-Pro's published numbers are
+conventionally 5-shot CoT; the agentic numbers on the official card come from an unreleased harness.
+A prompt-format difference is worth several points in either direction on multiple-choice tasks and
+**cannot be calibrated away here**. It is a real limit on head-to-head precision, not a footnote.
+
+**4. Contamination is unmeasured.** AIME 2024, GSM8K and HumanEval all predate the checkpoint and
+may be in its training data. That inflates rather than deflates, i.e. it pushes the opposite way
+from the context ceiling. Neither effect is quantified, and no claim here is strong enough to
+require that they cancel.
+
+**What this suite can therefore support:** "the REAP K160 checkpoint, served by this engine at 4096
+tokens of context, scores X ± CI on benchmark B under the stated protocol." **What it cannot
+support:** "DeepSeek-V4-Flash-0731 scores X", or a precise claim about how many points the pruning
+cost, since the protocol gap and the context ceiling are confounded with the pruning.
+
 ### Harness self-gates (run before any model was scored)
 
 A scoring bug is indistinguishable from a capability result, so the scorers were gated first:
@@ -122,6 +182,7 @@ A scoring bug is indistinguishable from a capability result, so the scorers were
 | **M2** — 10 realistic LaTeX renderings of a gold score correct | 10/10 |
 | **X** — extraction from realistic completions (boxed, "Answer: X", A-J) | 8/8 |
 | **ID** — item ids stable across `--n` | 4/4 tasks |
+| **G** — GPQA gold key vs a second independent mirror | **196/198 = 99.0 %** |
 
 Extraction fallbacks are deliberately one-directional: each can only ever make a score **higher**,
 so a low number cannot be dismissed as strict parsing.
