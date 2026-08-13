@@ -41,7 +41,8 @@ scored as attempted and wrong rather than dropped, which makes every number here
   python3 tools/eval_suite.py --task humaneval
   python3 tools/eval_suite.py --report            # summarise everything already run
 """
-import argparse, glob, json, math, os, random, re, subprocess, sys, tempfile, time
+import argparse, glob, json, math, os, random, re, socket, subprocess, sys, tempfile, time
+import urllib.error
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -404,6 +405,18 @@ class Fatal(Exception):
     """The server is gone or refusing everything -- stop, do not burn the rest of the battery."""
 
 
+def budget_timeout(max_tokens, floor_tok_s=4.0, prefill_s=180):
+    """A client timeout derived from the token budget, not picked.
+
+    A fixed 1800 s was fine at max_tokens=4000 and silently wrong at 16000: decode slows as context
+    grows, so a long generation can exceed a timeout that was generous for a short one. The preflight
+    caught it as three consecutive TimeoutErrors on GPQA's longest item -- and because a timeout is
+    retried, it cost 90 minutes to find out. Sized off a pessimistic floor rate so the timeout fires
+    only when something is genuinely wrong, never merely because the model is thinking.
+    """
+    return int(prefill_s + max_tokens / floor_tok_s)
+
+
 def ask(host, prompt, effort, temp, top_p, max_tokens, timeout, retries=3):
     """One item, with bounded retries.
 
@@ -435,8 +448,14 @@ def ask(host, prompt, effort, temp, top_p, max_tokens, timeout, retries=3):
             if 400 <= e.code < 500:
                 raise Fatal(f'server rejected the request ({last}) — this is a protocol or context '
                             f'error, not a blip; fix it rather than retrying') from None
+        except socket.timeout:
+            raise Fatal(f'request exceeded the {timeout}s timeout for max_tokens={max_tokens}. '
+                        f'That is a budget/throughput problem, not a blip -- retrying it would just '
+                        f'cost {retries}x as long to learn the same thing.') from None
         except Exception as e:
             last = f'{type(e).__name__}: {e}'
+            if isinstance(e, urllib.error.URLError) and isinstance(getattr(e, 'reason', None), socket.timeout):
+                raise Fatal(f'request exceeded the {timeout}s timeout for max_tokens={max_tokens}') from None
         if attempt + 1 < retries:
             time.sleep(5 * (attempt + 1))
     raise Fatal(f'{retries} consecutive failures, last was {last}')
@@ -451,7 +470,7 @@ def main():
     ap.add_argument('--temp', type=float, default=1.0)      # model card: temperature 1.0
     ap.add_argument('--top-p', type=float, default=0.95)    # model card: top_p 0.95
     ap.add_argument('--max-tokens', type=int, default=0, help='0 = the per-task budget in MAXTOK')
-    ap.add_argument('--timeout', type=int, default=1200)
+    ap.add_argument('--timeout', type=int, default=0, help='0 = derived from max_tokens')
     ap.add_argument('--reps', type=int, default=1,
                     help='independent samples per item (avg@k). Required for AIME-class benchmarks: '
                          'at n=30 and temperature 1.0 a SINGLE pass has a 95%% CI of about +-16 '
@@ -476,6 +495,7 @@ def main():
         items = [dict(it, id=it['id'] if k == 0 else f'{it["id"]}#r{k}')
                  for k in range(a.reps) for it in items]
     maxtok = a.max_tokens or MAXTOK[a.task]
+    timeout = a.timeout or budget_timeout(maxtok)
     path = os.path.join(OUT, f'{a.task}.jsonl')
     done = set()
     if os.path.exists(path):
@@ -486,7 +506,7 @@ def main():
                 pass
     todo = [it for it in items if it['id'] not in done]
     print(f'[{a.task}] {len(items)} items from {src} (snapshot {snap[:12]}), '
-          f'{len(done)} already done, {len(todo)} to go, max_tokens={maxtok}', flush=True)
+          f'{len(done)} already done, {len(todo)} to go, max_tokens={maxtok}, timeout={timeout}s', flush=True)
 
     meta = dict(task=a.task, source=src, snapshot=snap, n_items=len(items), scoring=kind,
                 n_unique=n_unique, reps=a.reps,
@@ -498,7 +518,7 @@ def main():
     t0, nok, nerr = time.time(), 0, 0
     for i, it in enumerate(todo):
         try:
-            r = ask(a.host, it['prompt'], a.effort, a.temp, a.top_p, maxtok, a.timeout)
+            r = ask(a.host, it['prompt'], a.effort, a.temp, a.top_p, maxtok, timeout)
         except Fatal as e:
             # An item the engine cannot answer is a failure OF THE SYSTEM UNDER TEST, so it is
             # recorded as incorrect and the benchmark continues. Aborting instead -- which is what

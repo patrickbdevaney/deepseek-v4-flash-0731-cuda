@@ -4,122 +4,14 @@
   preflight gate_stream ok
 [server] tokenizer /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP/tokenizer.json
 [server] tokenizer ok (vocab 128000, 1283 added)
-[engine] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP (seqmax=8192, blk=6, adaptK=1.50)...
+[engine] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP (seqmax=32768, blk=6, adaptK=1.50)...
 [engine] loaded 100.40 GiB, 45821 tensors (MANAGED device-preferred)
 [engine] building 43 layer structs (persistent)...
 [engine] DSpark head: NSTAGE=3 experts=160
-[engine] ready. mem 119.8/122.8 GiB  (seqmax 8192, batch 64, arena 640 MiB)
+[engine] ready. mem 120.2/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
 
 [server] listening on http://0.0.0.0:8080   (web UI at /)
-[server] model deepseek-v4-flash-0731-reap, context 8192, block 6, adaptK 1.50
-[engine] prefill 204 tok, arena high-water 73 MiB of 640 MiB
-[engine] prefill 83 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 2625 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 648 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 497 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 434 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 83 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 334 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 2625 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 872 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 648 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 251 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 497 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 83 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 434 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 2625 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 334 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 648 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 872 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 83 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 2625 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 648 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 497 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 434 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 334 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 872 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 251 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 204 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 205 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 288 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 302 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 333 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 288 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 553 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 264 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 286 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 320 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 384 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 186 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 258 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 207 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 192 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 269 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 244 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 179 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 223 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 228 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 354 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 233 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 391 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 280 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 373 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 281 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 182 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 227 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 260 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 298 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 232 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 325 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 236 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 322 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 211 tok, arena high-water 215 MiB of 640 MiB
+[server] model deepseek-v4-flash-0731-reap, context 32768, block 6, adaptK 1.50
+[engine] prefill 165 tok, arena high-water 72 MiB of 640 MiB
 [engine] prefill 225 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 516 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 238 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 268 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 362 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 514 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 440 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 255 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 192 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 235 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 205 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 197 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 257 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 144 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 176 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 249 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 351 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 264 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 215 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 185 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 819 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 265 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 145 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 286 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 419 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 205 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 214 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 341 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 633 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 264 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 163 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 220 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 418 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 311 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 469 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 318 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 2625 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 236 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 262 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 244 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 204 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 300 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 365 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 267 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 543 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 312 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 302 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 273 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 388 tok, arena high-water 215 MiB of 640 MiB
+[engine] prefill 279 tok, arena high-water 215 MiB of 640 MiB

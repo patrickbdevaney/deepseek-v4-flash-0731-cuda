@@ -1,0 +1,2 @@
+[calibrate] gpqa_diamond: 16 of 198 items, budget 16000, timeout 4180s
+  [1/16] gpqa-0000          1166 tok     71s       got=D gold=D (1 min)
