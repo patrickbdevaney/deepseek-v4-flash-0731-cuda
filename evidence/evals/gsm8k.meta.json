@@ -1,0 +1,12 @@
+{
+  "task": "gsm8k",
+  "source": "openai/gsm8k (main, test, 1319)",
+  "snapshot": "740312add88f781978c0658806c59bc2815b9866",
+  "n_items": 2,
+  "scoring": "integer",
+  "effort": "high",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 1600,
+  "started": "2026-08-13T02:04:21Z"
+}

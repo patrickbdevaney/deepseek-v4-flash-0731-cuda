@@ -1,0 +1,4 @@
+=== 2026-08-12T22:09:33-04:00  aime24  n=0
+[aime24] 30 items from Maxwell-Jia/AIME_2024 (30) (snapshot 8d88b2876a82), 0 already done, 30 to go, max_tokens=3400
+  [1/30] aime2024-2024-II-4 gold=33 got=33 OK  run=1/1 stop 24.0 tok/s (1.5 min)
+  [2/30] aime2024-2024-II-12 gold=23 got=23 OK  run=2/2 stop 13.5 tok/s (5.7 min)

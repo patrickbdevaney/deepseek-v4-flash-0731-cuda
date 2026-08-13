@@ -1,0 +1,27 @@
+{
+  "TIGER-Lab/MMLU-Pro": {
+    "sha": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+    "local": "/home/patrickd/.cache/huggingface/hub/datasets--TIGER-Lab--MMLU-Pro/snapshots/b189ec765aa7ed75c8acfea42df31fdae71f97be",
+    "files": 1
+  },
+  "HuggingFaceH4/MATH-500": {
+    "sha": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+    "local": "/home/patrickd/.cache/huggingface/hub/datasets--HuggingFaceH4--MATH-500/snapshots/6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+    "files": 1
+  },
+  "google/IFEval": {
+    "sha": "966cd89545d6b6acfd7638bc708b98261ca58e84",
+    "local": "/home/patrickd/.cache/huggingface/hub/datasets--google--IFEval/snapshots/966cd89545d6b6acfd7638bc708b98261ca58e84",
+    "files": 1
+  },
+  "openai/openai_humaneval": {
+    "sha": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+    "local": "/home/patrickd/.cache/huggingface/hub/datasets--openai--openai_humaneval/snapshots/7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+    "files": 1
+  },
+  "livecodebench/code_generation_lite": {
+    "sha": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+    "local": "/home/patrickd/.cache/huggingface/hub/datasets--livecodebench--code_generation_lite/snapshots/0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+    "files": 0
+  }
+}

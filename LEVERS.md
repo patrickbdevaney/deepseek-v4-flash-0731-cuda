@@ -225,8 +225,25 @@ to 64 GiB, both allocators. Streaming out of the 111 GiB managed pool is free.
 
 ## 4. Open — base AR decode (12.56 tok/s, 79.6 ms/tok)
 
-Base AR reads the whole 12.26 GB weight set per token. At 233 GB/s the floor is **52.6 ms/tok =
-19.0 tok/s**; graphed we are at 79.9 ms, so ~34 % of the base step is not bytes.
+> **START FROM `wiki/roofline-why-the-needle-wont-move.md`, NOT FROM THIS SECTION'S ARITHMETIC.**
+> F137 corrected the MoE rate (155 → 195 GB/s, **94 % of roofline**, the old figure having divided
+> routed bytes by a window that was also streaming the forked shared expert) and F138 took apart the
+> last unexamined region. The whole K=1 step is **160 GB/s = 77 % of a measured 208.7**, and the
+> remaining 23 % is four regions at 82-94 % plus 8.53 ms that is not bandwidth at all:
+>
+> | region | ms | % step | GB/s | % roofline |
+> |---|---|---|---|---|
+> | MoE (routed + shared, concurrent) | 23.20 | 33 % | **195** | **94 %** |
+> | Attention (MLA + compressor + indexer) | 31.40 | 45 % | 172 | 82 % |
+> | `lm_head` | 5.80 | 8 % | 183 | 88 % |
+> | HC / rmsnorm / router / glue | 8.53 | 12 % | 25 | latency |
+>
+> **B7/B7' below are retired by F137** — the MoE GEMV is at the roofline at M=1 and 155 GB/s was
+> never its rate. **B4 is confirmed and sized by F138**: the glue is 6.2 µs/call of a launch floor
+> that is *flat in grid size* (2.07 µs at both `<<<1,32>>>` and `<<<24,256>>>`) plus 14.5 µs of a
+> 20-iteration serial Sinkhorn on a 4x4 matrix. It is also **near-flat in K** — 12.1 % of the step at
+> K=1, 8.2 % at K=5 — so at tau = 3.736 speculation has *already* removed 67 % of it. The one
+> bit-exact move left is fusing `hc_pre`'s three launches cooperatively: **+0.5 %, untried**.
 
 > **19.0 IS A NORMALISATION CONSTANT, NOT A TARGET — computed 2026-08-08, `tools/byte_floor.py`.**
 > It assumes every kernel moves bytes at full DRAM bandwidth AND that the non-byte part of the step

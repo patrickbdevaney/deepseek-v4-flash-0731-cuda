@@ -1,0 +1,12 @@
+{
+  "task": "math500",
+  "source": "HuggingFaceH4/MATH-500 (500)",
+  "snapshot": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+  "n_items": 2,
+  "scoring": "math",
+  "effort": "high",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 3000,
+  "started": "2026-08-13T02:04:45Z"
+}

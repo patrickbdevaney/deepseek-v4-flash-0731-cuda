@@ -8057,3 +8057,92 @@ scored against 208.7 GB/s:
 block (worth ~5.5 ms if it reached the MoE's rate, and closed twice already by F125/F126) and in
 8.53 ms of glue that moves 211 MB and is pure launch latency. Any future "raise base AR" work starts
 from this table, not from `B_tok` shares.
+
+## F138 — the 8.53 ms of glue is 6.2 µs of launch floor plus a 20-iteration serial Sinkhorn, it is *near-flat in K* so speculation has already removed 67 % of it, and the one bit-exact fusion left is worth 0.5 %
+
+F137's corrected budget left exactly one region unexamined: **8.53 ms of the 70.03 ms K=1 step
+(12 %) moving 211 MB — about 25 GB/s against a 208.7 GB/s roofline.** `LEVERS.md` §4 has dismissed
+it as "latency-bound, not bytes" for several cycles without ever taking it apart. Taking it apart
+turns out to change the disposition, but not in the direction the size of the number suggests.
+
+### The instrument
+
+`tools/hc_glue_bench.cu` runs `hc_pre` standalone at the decode shape (bs=1, hc=4, d=4096 ->
+hcd=16384, mix_hc=(2+hc)*hc=24, iters=20) and splits it into its three launches, externing
+`k_mixes`, `hc_sinkhorn` and `k_combine`. **No checkpoint load** — same property that made F137 cost
+minutes, and the reason this finding is cheap enough to have been worth doing at all.
+
+| launch | µs | share |
+|---|---|---|
+| `k_mixes` (24 blk x 256) | 6.31 | 23.3 % |
+| `hc_sinkhorn` | **16.57** | **61.2 %** |
+| `k_combine` (16 blk x 256) | 4.19 | 15.5 % |
+| **`hc_pre` total** | **27.08** | sum of parts = 27.07 |
+
+**The sum of the parts equals the whole to 0.01 µs, so the three back-to-back launches do not
+overlap at all** — this is a serial chain, not a pipeline, which is what makes the launch floor
+chargeable rather than hidden.
+
+### Against the measured launch floor, 6.2 µs is launches and 14.5 µs is one 4x4 matrix
+
+The empty-kernel launch floor on this box measures **2.07 µs**, and — this is the part that decides
+the lever — it measures 2.07 µs at both `<<<1,32>>>` and `<<<24,256>>>`. **The floor is not a
+function of grid size**, so none of these three launches can be made cheaper by shrinking it. Three
+launches = 6.2 µs of the 27.08.
+
+That leaves **14.5 µs inside `hc_sinkhorn` alone**, and the shape of that kernel says why it cannot
+be attacked: it is a doubly-stochastic (Sinkhorn) normalisation of a **4x4** matrix, **20
+iterations**, each iteration a row-normalise then a column-normalise that depends on the previous
+one. One warp, one SM, 19 of 20 SMs idle. At ~1140 cycles per iteration against a dependency floor
+of ~200, the only real lever is replacing the IEEE divide in the normalise with a reciprocal
+multiply — **which is not bit-exact and would break the LOSSLESS gate.** Priced and refused.
+
+### The result that actually settles it: the glue is near-flat in K
+
+The reason this region looked worth 12 % is that it was only ever read at K=1. On the same
+unchanged marks (`evidence/kchunk.log`):
+
+| mark | K=1 | K=2 | K=3 | K=4 | K=5 | K5/K1 |
+|---|---|---|---|---|---|---|
+| hc_pre (attn) | 1.59 | 1.84 | 2.10 | 2.34 | 2.66 | 1.67x |
+| rmsnorm (attn) | 0.78 | 0.75 | 0.77 | 0.77 | 0.74 | 0.95x |
+| hc_post (attn) | 0.26 | 0.31 | 0.33 | 0.38 | 0.41 | 1.58x |
+| hc_pre (ffn) | 2.77 | 2.86 | 2.99 | 3.12 | 3.28 | 1.18x |
+| rmsnorm (ffn) | 0.77 | 0.75 | 0.75 | 0.75 | 0.78 | 1.01x |
+| hc_post (ffn) | 0.28 | 0.30 | 0.36 | 0.35 | 0.44 | 1.57x |
+| kv xin copy | 0.23 | 0.22 | 0.25 | 0.26 | 0.23 | 1.00x |
+| moe:router | 1.82 | 1.84 | 1.82 | 1.82 | 1.83 | 1.01x |
+| **GLUE TOTAL** | **8.50** | 8.87 | 9.37 | 9.79 | **10.37** | **1.22x** |
+| step TOTAL | 70.03 | 85.75 | 104.25 | 115.04 | 127.18 | 1.82x |
+| **glue % of step** | **12.1 %** | 10.3 % | 9.0 % | 8.5 % | **8.2 %** | |
+
+Five rows are flat to within noise (`rmsnorm` x2, `kv xin copy`, `moe:router`: 0.95-1.01x across a
+5x change in work). That is the signature of a fixed per-launch cost, and it is the whole point:
+**glue is paid per STEP, not per token.** So speculation dilutes it for free. At the shipping
+tau = 3.736 tokens per verify, the 8.50 ms of base-AR glue becomes **2.78 ms per emitted token —
+speculative decoding has already removed 67 % of this region**, without anyone aiming at it.
+
+### What is left, priced
+
+`hc_pre` is called 86 times per step (43 layers x attn+ffn) and spends 2 x 2.07 µs of its 27.08 in
+the two *internal* launch boundaries. Fusing its three launches into one cooperative kernel is
+**bit-exact** — same arithmetic, same order, only the grid-wide barriers change — and saves
+2 x 2.07 x 86 = **~356 µs/step = 0.5 %**. That is the honest size of the only remaining safe lever
+here. **Untried, and recorded as untried**; at 0.5 % it sits below what trap 25 can resolve, so it
+would need the tau-suite rather than a single mark to confirm, which costs more than the lever is
+worth. Filed, not scheduled.
+
+### One thing this did not explain
+
+`hc_pre (ffn)` costs **64.4 µs/layer** against `hc_pre (attn)`'s **37.0** at K=1 — the same function,
+the same shapes, the same 1.57 MB `hc_fn` weight, **1.74x** — and they converge by K=5 (1.23x).
+Standalone the kernel is 27.08 µs, i.e. *below both*. Neither the source nor this bench accounts for
+it; the likeliest candidate is that one mark is charging for a neighbour's tail through the
+`g_side` fork, exactly the mis-attribution F137 caught in `moe:shared`. **Recorded as open.** It is
+worth at most the 0.5 % above even if fully explained, so it is a correctness-of-marks question and
+not a performance lever.
+
+**Disposition: the glue region is closed as a lever.** It is 12 % of the base-AR step, 8.2 % of the
+K=5 step, and 2.78 ms of the 26.8 ms per emitted token that ships. The 8.53 ms is real and it is
+mostly irreducible: 6.2 µs/call of a launch floor that does not scale with grid size, and a
+20-iteration serial normalisation of a 4x4 matrix whose only speed-up is not bit-exact.

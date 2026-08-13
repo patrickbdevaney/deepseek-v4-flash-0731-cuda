@@ -1,0 +1,82 @@
+[
+  {
+    "task": "gsm8k",
+    "n": 2,
+    "n_total": 2,
+    "correct": 2,
+    "acc": 100.0,
+    "ci": [
+      34.2,
+      100
+    ],
+    "truncated": 0,
+    "mean_completion_tokens": 188,
+    "mean_tok_s": 20.63,
+    "effort": "high",
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1600,
+    "source": "openai/gsm8k (main, test, 1319)",
+    "snapshot": "740312add88f781978c0658806c59bc2815b9866"
+  },
+  {
+    "task": "aime24",
+    "n": 1,
+    "n_total": 30,
+    "correct": 1,
+    "acc": 100.0,
+    "ci": [
+      20.7,
+      100
+    ],
+    "truncated": 0,
+    "mean_completion_tokens": 634,
+    "mean_tok_s": 24.02,
+    "effort": "high",
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 3400,
+    "source": "Maxwell-Jia/AIME_2024 (30)",
+    "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792"
+  },
+  {
+    "task": "math500",
+    "n": 1,
+    "n_total": 2,
+    "correct": 1,
+    "acc": 100.0,
+    "ci": [
+      20.7,
+      100
+    ],
+    "truncated": 0,
+    "mean_completion_tokens": 93,
+    "mean_tok_s": 17.24,
+    "effort": "high",
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 3000,
+    "source": "HuggingFaceH4/MATH-500 (500)",
+    "snapshot": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be"
+  },
+  {
+    "task": "humaneval",
+    "n": 1,
+    "n_total": 164,
+    "correct": 1,
+    "acc": 100.0,
+    "ci": [
+      20.7,
+      100
+    ],
+    "truncated": 0,
+    "mean_completion_tokens": 591,
+    "mean_tok_s": 18.98,
+    "effort": "high",
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1600,
+    "source": "openai/openai_humaneval (164)",
+    "snapshot": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544"
+  }
+]

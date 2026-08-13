@@ -1,0 +1,4 @@
+[memguard] floor=3500 MB poll=2s pat=dsv4-server started 2026-08-12T21:55:18-04:00
+[memguard] !!! MemAvailable 2860 MB < floor 3500 MB — KILLING pid 51561 2026-08-12T21:56:25-04:00
+[memguard] killed. MemAvailable now 63280 MB
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-12T21:57:43-04:00

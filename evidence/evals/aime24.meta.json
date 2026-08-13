@@ -1,0 +1,12 @@
+{
+  "task": "aime24",
+  "source": "Maxwell-Jia/AIME_2024 (30)",
+  "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792",
+  "n_items": 30,
+  "scoring": "integer",
+  "effort": "high",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 3400,
+  "started": "2026-08-13T02:09:33Z"
+}
