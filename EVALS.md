@@ -215,6 +215,47 @@ Per-task provenance (dataset and pinned snapshot):
 | HumanEval | openai/openai_humaneval (164) | `7dce6050a7d6` | 1600 |
 <!-- /RESULTS -->
 
+## Evidence, and how to check these numbers without trusting this repo
+
+Every result is landed the moment its benchmark finishes -- verified, committed and pushed as its
+own commit -- rather than assembled at the end. A battery interrupted after four of seven tasks
+leaves four complete, independently re-derived results in `main` and no half-written table.
+
+**Nothing is published that has not been re-derived from the raw text.** `tools/eval_verify.py`
+ignores the process that produced the number and rebuilds it:
+
+1. re-reads every stored generation from `evidence/evals/<task>.jsonl`;
+2. re-extracts the answer from that text, ignoring the `got` field on the record;
+3. re-derives the gold **from the pinned dataset by item id**, not from the `gold` field on the
+   record, so a corrupted or hand-edited gold cannot survive;
+4. re-scores and requires the recomputed accuracy to equal what the table publishes.
+
+It also fails on duplicate ids, ids that are not in the benchmark, records with neither generated
+text nor a recorded engine error, and `correct` flags that disagree with a fresh scoring of the same
+text. `scripts/eval_land.sh` refuses to commit if any of that fails.
+
+Run it on a clone. **No GPU, no model, no network:**
+
+```bash
+python3 tools/eval_verify.py                 # re-derive every published number
+python3 tools/eval_provenance.py             # re-check the published facts about each dataset
+```
+
+### What is in the repo for each benchmark
+
+| file | what it proves |
+|---|---|
+| `evidence/evals/<task>.jsonl` | one record per item: the **full** generation and reasoning trace, the extracted answer, the gold, `finish_reason`, truncation, token usage and the engine's own timings. Every number traces to the text that produced it. |
+| `evidence/evals/<task>.meta.json` | dataset, **pinned snapshot sha**, sampling parameters, `max_tokens`, reps, start time |
+| `evidence/evals/datasets.json` | the commit sha of every benchmark repo, so the exact rows can be re-fetched |
+| `evidence/evals/provenance.json` | each published structural fact about each dataset, checked against the bytes on disk, with its source cited |
+| `evidence/evals/preflight.log` | the go/no-go that permitted the battery to start |
+| `evidence/evals/verification.json` | the independent re-derivation of the published table |
+| `evidence/evals/run.log` | the live run, item by item, with per-item throughput |
+
+A benchmark that aborted appears as **absent**, never as complete: `eval_land.sh` will not land a
+task with no records, which is why a failed GPQA run leaves a visible hole rather than a zero.
+
 ## What was excluded, and why
 
 Exclusions are part of the report. Nothing below was skipped because it was expected to score badly.

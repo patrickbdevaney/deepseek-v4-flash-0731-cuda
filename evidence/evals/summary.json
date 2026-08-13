@@ -1,112 +1,25 @@
 [
   {
-    "task": "gsm8k",
-    "n": 2,
-    "n_total": 2,
-    "correct": 2,
-    "n_unique": null,
-    "reps": 1,
-    "acc": 100.0,
-    "ci": [
-      34.2,
-      100
-    ],
-    "truncated": 0,
-    "mean_completion_tokens": 188,
-    "mean_tok_s": 20.63,
-    "effort": "high",
-    "temperature": 1.0,
-    "top_p": 0.95,
-    "max_tokens": 1600,
-    "source": "openai/gsm8k (main, test, 1319)",
-    "snapshot": "740312add88f781978c0658806c59bc2815b9866"
-  },
-  {
-    "task": "aime24",
-    "n": 11,
-    "n_total": 30,
-    "correct": 8,
-    "n_unique": null,
-    "reps": 1,
-    "acc": 72.7,
-    "ci": [
-      43.4,
-      90.3
-    ],
-    "truncated": 0,
-    "mean_completion_tokens": 1810,
-    "mean_tok_s": 18.72,
-    "effort": "high",
-    "temperature": 1.0,
-    "top_p": 0.95,
-    "max_tokens": 3400,
-    "source": "Maxwell-Jia/AIME_2024 (30)",
-    "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792"
-  },
-  {
     "task": "mmlu_pro",
-    "n": 1,
+    "n": 10,
     "n_total": 200,
-    "correct": 1,
+    "correct": 8,
     "n_unique": 200,
     "reps": 1,
-    "acc": 100.0,
+    "acc": 80.0,
     "ci": [
-      20.7,
-      100
+      49.0,
+      94.3
     ],
-    "truncated": 0,
-    "mean_completion_tokens": 304,
-    "mean_tok_s": 21.41,
+    "truncated": 2,
+    "errors": 0,
+    "mean_completion_tokens": 1532,
+    "mean_tok_s": 18.5,
     "effort": "high",
     "temperature": 1.0,
     "top_p": 0.95,
-    "max_tokens": 2600,
+    "max_tokens": 4500,
     "source": "TIGER-Lab/MMLU-Pro (test, 12032)",
     "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be"
-  },
-  {
-    "task": "math500",
-    "n": 1,
-    "n_total": 2,
-    "correct": 1,
-    "n_unique": null,
-    "reps": 1,
-    "acc": 100.0,
-    "ci": [
-      20.7,
-      100
-    ],
-    "truncated": 0,
-    "mean_completion_tokens": 93,
-    "mean_tok_s": 17.24,
-    "effort": "high",
-    "temperature": 1.0,
-    "top_p": 0.95,
-    "max_tokens": 3000,
-    "source": "HuggingFaceH4/MATH-500 (500)",
-    "snapshot": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be"
-  },
-  {
-    "task": "humaneval",
-    "n": 1,
-    "n_total": 164,
-    "correct": 1,
-    "n_unique": null,
-    "reps": 1,
-    "acc": 100.0,
-    "ci": [
-      20.7,
-      100
-    ],
-    "truncated": 0,
-    "mean_completion_tokens": 591,
-    "mean_tok_s": 18.98,
-    "effort": "high",
-    "temperature": 1.0,
-    "top_p": 0.95,
-    "max_tokens": 1600,
-    "source": "openai/openai_humaneval (164)",
-    "snapshot": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544"
   }
 ]

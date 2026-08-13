@@ -1,0 +1,4 @@
+[watch] started 2026-08-13T01:28:24-04:00, polling evidence/evals/run.log every 60s
+[watch] 2026-08-13T01:28:24-04:00 gpqa_diamond finished — landing
+[land] gpqa_diamond: no records at evidence/evals/gpqa_diamond.jsonl — nothing to land
+[watch] gpqa_diamond did not land (see above)
