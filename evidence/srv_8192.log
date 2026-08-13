@@ -12,8 +12,5 @@
 
 [server] listening on http://0.0.0.0:8080   (web UI at /)
 [server] model deepseek-v4-flash-0731-reap, context 8192, block 6, adaptK 1.50
-[engine] prefill 83 tok, arena high-water 72 MiB of 640 MiB
-[engine] prefill 2625 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 648 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 497 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 434 tok, arena high-water 215 MiB of 640 MiB
+[engine] prefill 20 tok, arena high-water 23 MiB of 640 MiB
+[engine] prefill 4173 tok, arena high-water 215 MiB of 640 MiB

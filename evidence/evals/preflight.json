@@ -1,0 +1,11 @@
+{
+  "checks": [
+    {
+      "section": "SERVER",
+      "check": "reachable and model loaded",
+      "ok": true,
+      "detail": "seqmax=None"
+    }
+  ],
+  "failed": 0
+}

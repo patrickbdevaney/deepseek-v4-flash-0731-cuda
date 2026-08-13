@@ -4,6 +4,8 @@
     "n": 2,
     "n_total": 2,
     "correct": 2,
+    "n_unique": null,
+    "reps": 1,
     "acc": 100.0,
     "ci": [
       34.2,
@@ -21,17 +23,19 @@
   },
   {
     "task": "aime24",
-    "n": 1,
+    "n": 11,
     "n_total": 30,
-    "correct": 1,
-    "acc": 100.0,
+    "correct": 8,
+    "n_unique": null,
+    "reps": 1,
+    "acc": 72.7,
     "ci": [
-      20.7,
-      100
+      43.4,
+      90.3
     ],
     "truncated": 0,
-    "mean_completion_tokens": 634,
-    "mean_tok_s": 24.02,
+    "mean_completion_tokens": 1810,
+    "mean_tok_s": 18.72,
     "effort": "high",
     "temperature": 1.0,
     "top_p": 0.95,
@@ -40,10 +44,34 @@
     "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792"
   },
   {
+    "task": "mmlu_pro",
+    "n": 1,
+    "n_total": 200,
+    "correct": 1,
+    "n_unique": 200,
+    "reps": 1,
+    "acc": 100.0,
+    "ci": [
+      20.7,
+      100
+    ],
+    "truncated": 0,
+    "mean_completion_tokens": 304,
+    "mean_tok_s": 21.41,
+    "effort": "high",
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 2600,
+    "source": "TIGER-Lab/MMLU-Pro (test, 12032)",
+    "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be"
+  },
+  {
     "task": "math500",
     "n": 1,
     "n_total": 2,
     "correct": 1,
+    "n_unique": null,
+    "reps": 1,
     "acc": 100.0,
     "ci": [
       20.7,
@@ -64,6 +92,8 @@
     "n": 1,
     "n_total": 164,
     "correct": 1,
+    "n_unique": null,
+    "reps": 1,
     "acc": 100.0,
     "ci": [
       20.7,

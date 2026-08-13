@@ -1,0 +1,43 @@
+[engine] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP (seqmax=2048, blk=6, adaptK=1.50)...
+[engine] loaded 100.40 GiB, 45821 tensors (MANAGED device-preferred)
+[engine] building 43 layer structs (persistent)...
+[engine] DSpark head: NSTAGE=3 experts=160
+[engine] ready. mem 119.4/122.8 GiB
+        greedy: 11111 16 455 6102 294 16603 344 29168
+        decoded: " Paris. The capital of Spain is Madrid"
+  [PASS] canonical prompt -> token 11111 (" Paris"), decode.cu's gate
+        14.8 tok/s, 2.00 tok/verify, prefill 168 ms
+  [PASS] two greedy runs from a fresh context are identical
+        next-token logits after a 40-token prompt (cold reference):
+          cold argmax   9544, top1-top2 margin 0.2122
+          reassociation floor (chunk 64 vs 7, same cache): head|d| 1.39963, top5 kept 4/5
+  [PASS] extension batch shape does not change the next token
+          shared K= 9 (K%4=1): argmax   9544 ==, margin 0.8837, head|d| 2.47297, top5 kept 5/5
+          shared K=10 (K%4=2): argmax   9544 ==, margin 0.8602, head|d| 2.02658, top5 kept 4/5
+          shared K=11 (K%4=3): argmax   9544 ==, margin 0.1628, head|d| 1.50408, top5 kept 5/5
+          shared K=12 (K%4=0): argmax   9544 ==, margin 0.2162, head|d| 1.45028, top5 kept 4/5
+          shared K=13 (K%4=1): argmax   9544 ==, margin 0.5316, head|d| 1.32927, top5 kept 5/5
+          shared K=14 (K%4=2): argmax   9544 ==, margin 0.9086, head|d| 1.50031, top5 kept 4/5
+          shared K=15 (K%4=3): argmax   9544 ==, margin 0.5200, head|d| 1.46321, top5 kept 5/5
+          shared K=16 (K%4=0): argmax   9544 ==, margin 1.2750, head|d| 1.48926, top5 kept 5/5
+          shared K=17 (K%4=1): argmax   9544 ==, margin 0.2122, head|d| 0.00000, top5 kept 5/5
+          shared K=18 (K%4=2): argmax   9544 ==, margin 0.2122, head|d| 0.00000, top5 kept 5/5
+          shared K=19 (K%4=3): argmax   9544 ==, margin 0.2122, head|d| 0.00000, top5 kept 5/5
+          shared K=20 (K%4=0): argmax   9544 ==, margin 0.2122, head|d| 0.00000, top5 kept 5/5
+  [PASS] every shared-prefix length reproduces the cold state, including mid-compression-group
+          worst cold-vs-cached 2.47297 over K=9..20; floor 1.39963
+        prompt 40 tokens; cold cached 0, warm cached 32
+  [PASS] the prefix cache actually engaged on turn 2
+  [PASS] the cold control really did re-prefill from scratch
+        agreement: cold~warm64 20, cold~warm7 20, warm64~warm7 24 (of 20/24/24 tokens)
+        cold  : 9544 477 2038 850 39930 979 15 2619 25 666 2143 15 ...(20)
+        warm64: 9544 477 2038 850 39930 979 15 2619 25 666 2143 15 ...(24)
+        warm7 : 9544 477 2038 850 39930 979 15 2619 25 666 2143 15 ...(24)
+        cold and cached agree for 20 tokens, then diverge -- at a decision margin
+        smaller than the amount the floor probe above moves the head of the
+        distribution by with no cache involved at all.
+  [PASS] prefix-cached turn tracks a full re-prefill well past where a wrong KV would show (>=8 tokens)
+        prefill 702 ms cold -> 144 ms warm (4.9x)
+  [PASS] re-issuing the identical prompt reuses the cache and repeats the output
+
+Gate ENGINE: 8 passed, 0 failed -> PASS

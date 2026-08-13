@@ -7,6 +7,7 @@ CKPT="${CKPT:-/home/patrickd/models/DeepSeek-V4-Flash-0731-REAP}"
 PORT="${PORT:-8080}"
 HOST="${HOST:-0.0.0.0}"
 SEQMAX="${SEQMAX:-8192}"
+EXT_CHUNK="${EXT_CHUNK:-64}"
 
 [ -x build/dsv4-server ] || { echo "build/dsv4-server missing — run scripts/build_server.sh"; exit 1; }
 
@@ -18,4 +19,5 @@ for g in gate_tokenizer gate_encoding gate_api gate_stream; do
   echo "  preflight $g ok"
 done
 
-exec ./build/dsv4-server --ckpt "$CKPT" --host "$HOST" --port "$PORT" --seqmax "$SEQMAX" "$@"
+exec ./build/dsv4-server --ckpt "$CKPT" --host "$HOST" --port "$PORT" --seqmax "$SEQMAX" \
+     --ext-chunk "$EXT_CHUNK" "$@"

@@ -108,7 +108,7 @@ struct Engine::Impl {
     std::vector<CompressedBlockWeights> CW;
 
     int *d_ids = nullptr;
-    float *h0 = nullptr, *hbuf = nullptr, *hbuf2 = nullptr, *collapsed = nullptr, *logits = nullptr;
+    float *h0 = nullptr, *collapsed = nullptr, *logits = nullptr;
     const void* head_bf = nullptr;
     const float *norm_w = nullptr, *hc_fn = nullptr, *hc_sc = nullptr, *hc_bs = nullptr;
     const __nv_bfloat16* emb = nullptr;
@@ -127,7 +127,7 @@ struct Engine::Impl {
     const float *hh_fn = nullptr, *hh_sc = nullptr, *hh_ba = nullptr, *hnorm = nullptr;
     const void *mw1 = nullptr, *mw2 = nullptr;
 
-    float *main_x = nullptr, *mh_pre = nullptr;
+    float *main_x = nullptr;
     int *dbid = nullptr, *dfid = nullptr, *dout = nullptr;
     float *dmarg = nullptr, *xemb = nullptr, *xa = nullptr, *xb = nullptr;
     float *hv = nullptr, *hv2 = nullptr, *collK = nullptr, *logK = nullptr, *mh_v = nullptr;
@@ -140,8 +140,8 @@ struct Engine::Impl {
         for (void* p : keep) cudaFree(p);
         for (auto& k : KV) { cudaFree(k.win_kv); cudaFree(k.comp_kv); cudaFree(k.idx_ckv); cudaFree(k.xin); }
         for (float* p : mkv) cudaFree(p);
-        for (void* p : { (void*)d_ids, (void*)h0, (void*)hbuf, (void*)hbuf2, (void*)collapsed, (void*)logits,
-                         (void*)main_x, (void*)mh_pre, (void*)dbid, (void*)dfid, (void*)dout, (void*)dmarg,
+        for (void* p : { (void*)d_ids, (void*)h0, (void*)collapsed, (void*)logits,
+                         (void*)main_x, (void*)dbid, (void*)dfid, (void*)dout, (void*)dmarg,
                          (void*)xemb, (void*)xa, (void*)xb, (void*)hv, (void*)hv2, (void*)collK,
                          (void*)logK, (void*)mh_v })
             cudaFree(p);
@@ -289,9 +289,11 @@ void Engine::Impl::load() {
         }
     }
     CU(cudaMalloc(&d_ids, (size_t)seqmax * 4));
-    CU(cudaMalloc(&h0, (size_t)seqmax * d * 4));
-    CU(cudaMalloc(&hbuf, (size_t)seqmax * hc * d * 4));
-    CU(cudaMalloc(&hbuf2, (size_t)seqmax * hc * d * 4));
+    // h0 is per-BATCH, not per-context: both prefill and extend embed at most one chunk at a time.
+    // It is allocated below, with the other batch-width buffers, once MAXB is known. `hbuf`/`hbuf2`
+    // are gone entirely -- they were the seqmax-wide activation pair that only the one-shot prefill
+    // used, and prefill now runs through the same chunked path everything else does. At 4 x d x fp32
+    // per token they were 128 KiB/token of context, for a buffer whose live extent is one chunk.
     CU(cudaMalloc(&collapsed, (size_t)d * 4));
     CU(cudaMalloc(&logits, (size_t)VOCAB * 4));
 
@@ -364,7 +366,6 @@ void Engine::Impl::load() {
     mw2 = (const void*)W.get(LS + "markov_head.markov_w2.weight").dev;
 
     CU(cudaMalloc(&main_x, (size_t)seqmax * d * 4));
-    CU(cudaMalloc(&mh_pre, (size_t)seqmax * 3 * d * 4));
     CU(cudaMalloc(&dbid, (size_t)BLK * 4));
     CU(cudaMalloc(&dfid, 4));
     CU(cudaMalloc(&dout, (size_t)(BLK + 1) * 4));
@@ -383,41 +384,50 @@ void Engine::Impl::load() {
     CU(cudaMalloc(&collK, (size_t)MB * d * 4));
     CU(cudaMalloc(&logK, (size_t)MB * VOCAB * 4));
     CU(cudaMalloc(&mh_v, (size_t)MB * 3 * d * 4));
+    CU(cudaMalloc(&h0, (size_t)MB * d * 4));            // batch-width, see the note above
 
-    size_t arena_bytes = (size_t)512 << 20;
-    if (seqmax > 512) arena_bytes = (size_t)(512 + (size_t)seqmax * 2) << 20;
+    // THE ARENA IS SIZED BY THE BATCH, NOT BY THE CONTEXT.
+    //
+    // It used to be `(512 + 2 * seqmax) MiB`, which contains no model constant and reserved 2 MiB of
+    // scratch per token of CONTEXT. What the arena actually has to cover is the widest M ever pushed
+    // through a layer -- the GEMM and activation scratch for one batch -- and since prefill now goes
+    // through the same chunked path as everything else, that M is MAXB, never seqmax. Scaling it by
+    // seqmax was the single largest consumer of memory in this engine: 68 % of everything that grew
+    // with context, and it is what held the server at 4096 tokens on a 122.8 GiB box while the MLA +
+    // DSA KV cache it was nominally there to support costs 99.4 KiB/token.
+    //
+    // 2 MiB per batch row is kept as the slope because it is the slope the old line used and it has
+    // never overflowed; it is now multiplied by 64 instead of by 8192. Undersizing is SAFE to probe:
+    // `dmalloc` aborts with "[dscratch] arena overflow N>M" rather than corrupting, so a bad constant
+    // is a loud crash on the first prefill, not a wrong answer later. `arena_hwm()` reports what was
+    // actually touched, so this number can be checked against a measurement instead of trusted.
+    size_t arena_bytes = (size_t)(512 + (size_t)MB * 2) << 20;
     arena_init(arena_bytes);
     dprof_init();
 
     { size_t fb, tb; cudaMemGetInfo(&fb, &tb);
-      say("[engine] ready. mem %.1f/%.1f GiB\n", (tb - fb) / 1073741824.0, tb / 1073741824.0); }
+      say("[engine] ready. mem %.1f/%.1f GiB  (seqmax %d, batch %d, arena %zu MiB)\n",
+          (tb - fb) / 1073741824.0, tb / 1073741824.0, seqmax, MB, arena_bytes >> 20); }
     is_loaded = true;
 }
 
-// Batched prefill over [0..n-1] from an empty cache, with the layer-40/41/42 taps the DSpark head
-// consumes. This is decode.cu's prefill, call for call.
+// Prefill over [0..n-1] from an empty cache.
+//
+// This used to be a one-shot pass at M = n over `hbuf`/`hbuf2`, which is why those buffers were
+// [seqmax, hc, d] and why the arena was scaled by seqmax: a 4096-token prompt really did push M=4096
+// through every layer at once. `extend` has always been the same forward at an offset -- it is the
+// batched-forward-at-a-position the accept path runs every round, and F135's prefix-cache gate
+// already asserts that a turn served through it emits the SAME tokens as a full re-prefill. So the
+// one-shot path was not buying correctness; it was buying GEMM efficiency at M=n, and charging
+// 2.2 MiB/token of context for it.
+//
+// Prefill is therefore just `extend` from zero. The reset that used to be implicit in starting from
+// scratch has to be explicit here: compressed layers carry a row count, and `main_x` is read at
+// positions the DSpark head will visit, so both are cleared before the first chunk.
 void Engine::Impl::prefill_full(const std::vector<int>& ids) {
-    const int n = (int)ids.size();
     for (int L = 0; L < N_LAYERS; ++L) KV[L].T = 0;
     CU(cudaMemset(main_x, 0, (size_t)cfg.seqmax * d * 4));
-    CU(cudaMemcpy(d_ids, ids.data(), (size_t)n * 4, cudaMemcpyHostToDevice));
-    k_embed<<<((size_t)n * d + 255) / 256, 256>>>(h0, emb, d_ids, n, d);
-    k_hc_expand<<<((size_t)n * hc * d + 255) / 256, 256>>>(hbuf, h0, n, hc, d);
-    CU(cudaDeviceSynchronize());
-    float *x = hbuf, *y = hbuf2;
-    for (int L = 0; L < N_LAYERS; ++L) {
-        arena_reset();
-        if (compress_ratio(L) == 0) block_prefill_cache(y, x, d_ids, BW[L], n, HC_SINKHORN_ITERS, EPS, KV[L]);
-        else                       cblock_prefill_cache(y, x, d_ids, CW[L], n, HC_SINKHORN_ITERS, EPS, KV[L]);
-        std::swap(x, y);
-        if (L == 40) dspark_tap_pool(mh_pre, x, n, hc, d, 0, 3);
-        else if (L == 41) dspark_tap_pool(mh_pre, x, n, hc, d, 1, 3);
-        else if (L == 42) dspark_tap_pool(mh_pre, x, n, hc, d, 2, 3);
-    }
-    dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, n, d, EPS);
-    CU(cudaDeviceSynchronize());
-    cpos = n;
-    ctx = ids;
+    extend(ids, 0);
 }
 
 // Extend a cache that already covers [0..from-1] with ids[from..]. Uses the M=K verify kernel at an
@@ -447,6 +457,11 @@ void Engine::Impl::extend(const std::vector<int>& ids, int from) {
     }
     cpos = n;
     ctx = ids;
+    // The arena is now sized from MAXB rather than from seqmax, so what it actually touches is worth
+    // reporting rather than assuming. `g_arena_hwm` is the deepest the bump allocator ever got; if
+    // this ever approaches the cap, the sizing constant is wrong and the next prefill aborts loudly.
+    say("[engine] prefill %d tok, arena high-water %.0f MiB of %.0f MiB\n",
+        n, g_arena_hwm / 1048576.0, g_arena_cap / 1048576.0);
 }
 
 // Drop the cache back to n committed positions. Sliding-window and xin caches are position-indexed,

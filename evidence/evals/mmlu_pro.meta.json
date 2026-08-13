@@ -1,0 +1,14 @@
+{
+  "task": "mmlu_pro",
+  "source": "TIGER-Lab/MMLU-Pro (test, 12032)",
+  "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+  "n_items": 200,
+  "scoring": "letter",
+  "n_unique": 200,
+  "reps": 1,
+  "effort": "high",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 2600,
+  "started": "2026-08-13T02:38:07Z"
+}

@@ -137,9 +137,15 @@ int main(int argc, char** argv) {
         else if (a == "--seqmax") ec.seqmax = atoi(next().c_str());
         else if (a == "--blk")    ec.blk = atoi(next().c_str());
         else if (a == "--adaptk") ec.adaptK = (float)atof(next().c_str());
+        // Prefill now runs through the same chunked forward as a cache extension, so this is the
+        // batch width of a PREFILL as well as of an extension. It has to be settable before load:
+        // it sizes hv/hv2/collK/logK/mh_v and the arena, and set_ext_chunk() can only ever clamp
+        // DOWN to what those were allocated for.
+        else if (a == "--ext-chunk") ec.ext_chunk = atoi(next().c_str());
         else if (a == "--model")  g_model_name = next();
         else if (a == "--help") {
-            printf("usage: %s [--ckpt DIR] [--host H] [--port P] [--seqmax N] [--blk N] [--adaptk F]\n", argv[0]);
+            printf("usage: %s [--ckpt DIR] [--host H] [--port P] [--seqmax N] [--blk N] [--adaptk F]"
+                   " [--ext-chunk N]\n", argv[0]);
             return 0;
         }
     }

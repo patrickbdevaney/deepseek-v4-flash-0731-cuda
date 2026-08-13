@@ -13,3 +13,22 @@
   [11/30] aime2024-2024-I-7 gold=540 got=540 OK  run=8/11 stop 21.3 tok/s (22.5 min)
 === 2026-08-12T22:32:48-04:00  gpqa_diamond  n=0 reps=1
 [gpqa_diamond] 198 items from fingertap/GPQA-Diamond (test, 198) (snapshot 68be75644976), 0 already done, 198 to go, max_tokens=3000
+  [gpqa-0000] REQUEST FAILED: HTTP Error 500: Internal Server Error — stopping, rerun to resume
+
+task                scored   acc %          95% CI  trunc  mean tok   tok/s
+gsm8k                  2/2   100.0   [34.2, 100.0]      0       188    20.6
+aime24               11/30    72.7    [43.4, 90.3]      0      1810    18.7
+math500                1/2   100.0   [20.7, 100.0]      0        93    17.2
+humaneval            1/164   100.0   [20.7, 100.0]      0       591    19.0
+=== 2026-08-12T22:38:07-04:00  gpqa_diamond done
+=== 2026-08-12T22:38:07-04:00  mmlu_pro  n=200 reps=1
+[mmlu_pro] 200 items from TIGER-Lab/MMLU-Pro (test, 12032) (snapshot b189ec765aa7), 0 already done, 200 to go, max_tokens=2600
+  [1/200] mmlupro-99 gold=C got=C OK  run=1/1 stop 21.4 tok/s (0.3 min)
+  [mmlupro-106] REQUEST FAILED: Remote end closed connection without response — stopping, rerun to resume
+
+task                scored   acc %          95% CI  trunc  mean tok   tok/s
+gsm8k                  2/2   100.0   [34.2, 100.0]      0       188    20.6
+aime24               11/30    72.7    [43.4, 90.3]      0      1810    18.7
+mmlu_pro             1/200   100.0   [20.7, 100.0]      0       304    21.4
+math500                1/2   100.0   [20.7, 100.0]      0        93    17.2
+humaneval            1/164   100.0   [20.7, 100.0]      0       591    19.0

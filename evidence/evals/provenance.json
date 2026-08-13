@@ -1,0 +1,173 @@
+{
+  "checks": [
+    {
+      "benchmark": "GPQA-Diamond",
+      "property": "item count",
+      "published": "198",
+      "observed": "198",
+      "ok": true,
+      "source": "epoch.ai/benchmarks/gpqa-diamond; canonical Idavidrein/gpqa"
+    },
+    {
+      "benchmark": "GPQA-Diamond",
+      "property": "distinct answer options",
+      "published": "4",
+      "observed": "4",
+      "ok": true,
+      "source": "epoch.ai/benchmarks/gpqa-diamond; canonical Idavidrein/gpqa"
+    },
+    {
+      "benchmark": "GPQA-Diamond",
+      "property": "answer labels",
+      "published": "ABCD",
+      "observed": "ABCD",
+      "ok": true,
+      "source": "epoch.ai/benchmarks/gpqa-diamond; canonical Idavidrein/gpqa"
+    },
+    {
+      "benchmark": "GPQA-Diamond",
+      "property": "gold agrees w/ 2nd mirror (>=97%)",
+      "published": "True",
+      "observed": "True",
+      "ok": true,
+      "source": "cross-check vs hendrydong/gpqa_diamond (196/198)"
+    },
+    {
+      "benchmark": "MMLU-Pro",
+      "property": "test item count",
+      "published": "12032",
+      "observed": "12032",
+      "ok": true,
+      "source": "github.com/TIGER-AI-Lab/MMLU-Pro (NeurIPS 2024)"
+    },
+    {
+      "benchmark": "MMLU-Pro",
+      "property": "subject count",
+      "published": "14",
+      "observed": "14",
+      "ok": true,
+      "source": "github.com/TIGER-AI-Lab/MMLU-Pro (NeurIPS 2024)"
+    },
+    {
+      "benchmark": "MMLU-Pro",
+      "property": "max options (A-J)",
+      "published": "J",
+      "observed": "J",
+      "ok": true,
+      "source": "github.com/TIGER-AI-Lab/MMLU-Pro (NeurIPS 2024)"
+    },
+    {
+      "benchmark": "AIME 2024",
+      "property": "problem count",
+      "published": "30",
+      "observed": "30",
+      "ok": true,
+      "source": "llm-stats.com/benchmarks/aime; AIME I+II = 30 problems, answers in [0,999]"
+    },
+    {
+      "benchmark": "AIME 2024",
+      "property": "all golds integer",
+      "published": "True",
+      "observed": "True",
+      "ok": true,
+      "source": "llm-stats.com/benchmarks/aime; AIME I+II = 30 problems, answers in [0,999]"
+    },
+    {
+      "benchmark": "AIME 2024",
+      "property": "all golds in [0,999]",
+      "published": "True",
+      "observed": "True",
+      "ok": true,
+      "source": "llm-stats.com/benchmarks/aime; AIME I+II = 30 problems, answers in [0,999]"
+    },
+    {
+      "benchmark": "AIME 2025",
+      "property": "problem count",
+      "published": "30",
+      "observed": "30",
+      "ok": true,
+      "source": "llm-stats.com/benchmarks/aime; AIME I+II = 30 problems, answers in [0,999]"
+    },
+    {
+      "benchmark": "AIME 2025",
+      "property": "all golds integer",
+      "published": "True",
+      "observed": "True",
+      "ok": true,
+      "source": "llm-stats.com/benchmarks/aime; AIME I+II = 30 problems, answers in [0,999]"
+    },
+    {
+      "benchmark": "AIME 2025",
+      "property": "all golds in [0,999]",
+      "published": "True",
+      "observed": "True",
+      "ok": true,
+      "source": "llm-stats.com/benchmarks/aime; AIME I+II = 30 problems, answers in [0,999]"
+    },
+    {
+      "benchmark": "MATH-500",
+      "property": "problem count",
+      "published": "500",
+      "observed": "500",
+      "ok": true,
+      "source": "HuggingFaceH4/MATH-500; Lightman et al. arXiv:2305.20050, openai/prm800k"
+    },
+    {
+      "benchmark": "MATH-500",
+      "property": "MATH subject count",
+      "published": "7",
+      "observed": "7",
+      "ok": true,
+      "source": "HuggingFaceH4/MATH-500; Lightman et al. arXiv:2305.20050, openai/prm800k"
+    },
+    {
+      "benchmark": "MATH-500",
+      "property": "difficulty levels 1-5",
+      "published": "[1, 2, 3, 4, 5]",
+      "observed": "[1, 2, 3, 4, 5]",
+      "ok": true,
+      "source": "HuggingFaceH4/MATH-500; Lightman et al. arXiv:2305.20050, openai/prm800k"
+    },
+    {
+      "benchmark": "HumanEval",
+      "property": "problem count",
+      "published": "164",
+      "observed": "164",
+      "ok": true,
+      "source": "openai/openai_humaneval; Chen et al. arXiv:2107.03374, 164 problems, pass@1"
+    },
+    {
+      "benchmark": "HumanEval",
+      "property": "every item has a test",
+      "published": "True",
+      "observed": "True",
+      "ok": true,
+      "source": "openai/openai_humaneval; Chen et al. arXiv:2107.03374, 164 problems, pass@1"
+    },
+    {
+      "benchmark": "GSM8K",
+      "property": "test item count",
+      "published": "1319",
+      "observed": "1319",
+      "ok": true,
+      "source": "openai/gsm8k main/test; Cobbe et al. arXiv:2110.14168"
+    },
+    {
+      "benchmark": "GSM8K",
+      "property": "all golds integer",
+      "published": "True",
+      "observed": "True",
+      "ok": true,
+      "source": "openai/gsm8k main/test; Cobbe et al. arXiv:2110.14168"
+    }
+  ],
+  "passed": 20,
+  "failed": 0,
+  "pinned_datasets": {
+    "TIGER-Lab/MMLU-Pro": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+    "HuggingFaceH4/MATH-500": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+    "google/IFEval": "966cd89545d6b6acfd7638bc708b98261ca58e84",
+    "openai/openai_humaneval": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+    "livecodebench/code_generation_lite": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505"
+  }
+}

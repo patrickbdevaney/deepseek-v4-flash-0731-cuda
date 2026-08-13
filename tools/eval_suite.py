@@ -28,8 +28,8 @@ DESIGN RULES, each of which exists because the alternative would let the number 
    prints n actually scored against n in the benchmark, so a partial run can never be mistaken for
    a complete one.
 
-CONTEXT. The server runs at seqmax=4096 because that is what fits in 122.8 GiB alongside 100.4 GiB
-of weights -- see EVALS.md. Reasoning traces are therefore capped well below what the model would
+CONTEXT. The server runs at seqmax=8192 -- see EVALS.md and
+wiki/context-ceiling-is-not-the-kv-cache.md for why it was 4096 and what changed. Reasoning traces are therefore capped well below what the model would
 emit unbounded, and `truncated` in the report counts the items that hit the ceiling. Those items are
 scored as attempted and wrong rather than dropped, which makes every number here a floor.
 
@@ -128,8 +128,16 @@ def task_aime(year):
     items = []
     for i, r in enumerate(rows):
         rid, prob, ans = get(r)
+        # AIME answers are integers in [0,999] BY CONSTRUCTION -- it is a fill-in-the-integer-grid
+        # exam. The mirrors do not always store them that way: opencompass/AIME2025 problem 19 carries
+        # the gold as "336^\\circ". Left alone, a model answering 336 is marked wrong, and one item of
+        # thirty is 3.3 points of a benchmark lost to a stray LaTeX suffix rather than to the model.
+        # So the gold is reduced to its integer, and `eval_provenance.py` asserts that every gold
+        # survives that reduction as an integer in [0,999] -- if a mirror ever stores something that
+        # is NOT an integer answer, the assertion fails rather than this line quietly inventing one.
+        g = re.search(r'-?\d+', str(ans))
         items.append(dict(id=f'aime{year}-{rid or i:04}', prompt=prob + '\n\n' + BOXED,
-                          gold=str(ans).strip()))
+                          gold=g.group(0) if g else str(ans).strip()))
     return items, snap, src, 'integer'
 
 
@@ -188,11 +196,15 @@ TASKS = {
     'humaneval':    task_humaneval,
 }
 
-# Per-task completion ceiling. The server's context is 4096 total, so these are budgets rather than
-# preferences: prompt + completion has to fit. Maths gets the most because that is where the trace
-# runs long; multiple-choice and code need far less.
-MAXTOK = dict(gsm8k=1600, aime24=3400, aime25=3400, gpqa_diamond=3000,
-              mmlu_pro=2600, math500=3000, humaneval=1600)
+# Per-task completion ceiling. prompt + completion + template overhead has to fit inside seqmax, and
+# `eval_preflight.py` verifies that for EVERY item of every task before the battery starts -- the
+# first attempt at this suite lost all of GPQA-Diamond to exactly that constraint going unchecked.
+#
+# These were raised once the engine's context went from 4096 to 8192 (the arena is no longer scaled
+# by seqmax). That is not cosmetic: a truncated item is scored WRONG, so every token of headroom here
+# removes a way for the harness to understate the model rather than measure it.
+MAXTOK = dict(gsm8k=2000, aime24=5000, aime25=5000, gpqa_diamond=4000,
+              mmlu_pro=3500, math500=4000, humaneval=2000)
 
 
 # ----------------------------------------------------------------------------- answer extraction
@@ -325,14 +337,46 @@ def wilson(k, n, z=1.96):
 
 
 # ----------------------------------------------------------------------------- the server
-def ask(host, prompt, effort, temp, top_p, max_tokens, timeout):
+class Fatal(Exception):
+    """The server is gone or refusing everything -- stop, do not burn the rest of the battery."""
+
+
+def ask(host, prompt, effort, temp, top_p, max_tokens, timeout, retries=3):
+    """One item, with bounded retries.
+
+    The first version of this raised on any failure and the caller broke out of the loop, which
+    meant a SINGLE transient error abandoned an entire benchmark and reported it as "done" with zero
+    items scored. That is exactly the shape of failure that produces a confident, wrong table: the
+    run log says the task completed. So a request now retries, and a request that keeps failing
+    raises Fatal, which stops the battery loudly rather than silently truncating it.
+    """
     body = json.dumps(dict(model='dsv4', messages=[dict(role='user', content=prompt)],
                            thinking_mode='thinking', reasoning_effort=effort,
                            temperature=temp, top_p=top_p, max_tokens=max_tokens)).encode()
-    req = urllib.request.Request(f'http://{host}/v1/chat/completions', data=body,
-                                 headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+    last = None
+    for attempt in range(retries):
+        req = urllib.request.Request(f'http://{host}/v1/chat/completions', data=body,
+                                     headers={'Content-Type': 'application/json'})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            detail = ''
+            try:
+                detail = e.read().decode()[:200]
+            except Exception:
+                pass
+            last = f'HTTP {e.code}: {detail}'
+            # 4xx is the request itself -- over context, malformed. Retrying is pointless and would
+            # hide a systematic problem behind a retry count.
+            if 400 <= e.code < 500:
+                raise Fatal(f'server rejected the request ({last}) — this is a protocol or context '
+                            f'error, not a blip; fix it rather than retrying') from None
+        except Exception as e:
+            last = f'{type(e).__name__}: {e}'
+        if attempt + 1 < retries:
+            time.sleep(5 * (attempt + 1))
+    raise Fatal(f'{retries} consecutive failures, last was {last}')
 
 
 def main():
@@ -392,9 +436,10 @@ def main():
     for i, it in enumerate(todo):
         try:
             r = ask(a.host, it['prompt'], a.effort, a.temp, a.top_p, maxtok, a.timeout)
-        except Exception as e:
-            print(f'  [{it["id"]}] REQUEST FAILED: {e} — stopping, rerun to resume', flush=True)
-            break
+        except Fatal as e:
+            print(f'  [{it["id"]}] FATAL: {e}\n  stopping this task with {i} of {len(todo)} done; '
+                  f'rerun to resume once the cause is fixed', flush=True)
+            sys.exit(2)
         ch = r['choices'][0]
         content = ch['message'].get('content') or ''
         reasoning = ch['message'].get('reasoning_content') or ''
