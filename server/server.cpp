@@ -120,6 +120,22 @@ static void account(const dsv4srv::GenStats& s) {
     m_prefill_us += (long long)(s.prefill_ms * 1000);
 }
 
+// Dump a response that carries MODEL-GENERATED TEXT.
+//
+// nlohmann's default dump() THROWS type_error.316 on invalid UTF-8, and this model can produce it:
+// the tokenizer is byte-level BPE, so a generation can contain byte sequences that are not valid
+// UTF-8 on their own. Reproduced on GPQA-Diamond item 0 --
+// "[json.exception.type_error.316] invalid UTF-8 byte at index 7053: 0x70" -- which surfaced as a
+// bare 500 and destroyed two whole benchmarks before the handler was made to catch and report.
+//
+// `error_handler_t::replace` substitutes U+FFFD for the offending bytes instead of throwing. A
+// response is not the place to be strict: the alternative to a replacement character is no answer
+// at all. Valid output is byte-for-byte unaffected, since the handler only fires on bytes that
+// could not have been serialised anyway.
+static inline std::string dump_lossy(const json& j) {
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
+}
+
 int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     std::string ckpt = "/home/patrickd/models/DeepSeek-V4-Flash-0731-REAP";
@@ -294,7 +310,7 @@ int main(int argc, char** argv) {
                                       {"decode_ms", r.stats.decode_ms},
                                       {"tokens_per_second", r.stats.tok_per_s},
                                       {"tokens_per_verify", r.stats.tok_per_verify}};
-                res.set_content(out.dump(), "application/json");
+                res.set_content(dump_lossy(out), "application/json");
             } catch (const std::exception& e) {
                 ++m_errors;
                 fprintf(stderr, "[server] generation failed (%zu prompt tokens, max_tokens %d): %s\n",
@@ -327,7 +343,7 @@ int main(int argc, char** argv) {
                   json ch{{"index", 0}, {"delta", d}, {"finish_reason", nullptr}};
                   json o{{"id", "chatcmpl-" + id}, {"object", "chat.completion.chunk"},
                          {"created", created}, {"model", cr.model}, {"choices", json::array({ch})}};
-                  send("data: " + o.dump() + "\n\n"); }
+                  send("data: " + dump_lossy(o) + "\n\n"); }
 
                 RunResult r;
                 try {
@@ -363,7 +379,7 @@ int main(int argc, char** argv) {
                     json ch{{"index", 0}, {"delta", json{{"tool_calls", tcs}}}, {"finish_reason", nullptr}};
                     json o{{"id", "chatcmpl-" + id}, {"object", "chat.completion.chunk"},
                            {"created", created}, {"model", cr.model}, {"choices", json::array({ch})}};
-                    send("data: " + o.dump() + "\n\n");
+                    send("data: " + dump_lossy(o) + "\n\n");
                 }
                 send(dsv4api::sse_chunk(id, cr.model, created, "", "", has_tc ? "tool_calls" : "stop"));
 
@@ -379,7 +395,7 @@ int main(int argc, char** argv) {
                                           {"decode_ms", r.stats.decode_ms},
                                           {"tokens_per_second", r.stats.tok_per_s},
                                           {"tokens_per_verify", r.stats.tok_per_verify}}}};
-                  send("data: " + o.dump() + "\n\n"); }
+                  send("data: " + dump_lossy(o) + "\n\n"); }
                 send("data: [DONE]\n\n");
                 sink.done();
                 return true;
@@ -423,7 +439,7 @@ int main(int argc, char** argv) {
                  {"usage", json{{"prompt_tokens", r.stats.prompt_tokens},
                                 {"completion_tokens", r.stats.completion_tokens},
                                 {"total_tokens", r.stats.prompt_tokens + r.stats.completion_tokens}}}};
-        res.set_content(out.dump(), "application/json");
+        res.set_content(dump_lossy(out), "application/json");
     });
 
     srv.set_pre_routing_handler([](const httplib::Request&, httplib::Response&) {

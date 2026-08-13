@@ -78,3 +78,4 @@
 === 2026-08-13T04:45:25-04:00  mmlu_pro done
 === 2026-08-13T04:45:25-04:00  humaneval  n=0 reps=1
 [humaneval] 164 items from openai/openai_humaneval (164) (snapshot 7dce6050a7d6), 0 already done, 164 to go, max_tokens=2000
+  [1/164] HumanEval-0 gold=pass got=pass OK  run=1/1 stop 19.0 tok/s (0.6 min)

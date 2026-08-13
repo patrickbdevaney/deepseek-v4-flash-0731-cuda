@@ -153,7 +153,10 @@ inline std::string sse_chunk(const std::string& id, const std::string& model, lo
     o["created"] = created;
     o["model"] = model;
     o["choices"] = json::array({choice});
-    return "data: " + o.dump() + "\n\n";
+    // dump with the replace handler, not the throwing default: deltas carry model-generated text
+    // and this model's byte-level BPE can emit sequences that are not valid UTF-8 on their own.
+    // See dump_lossy() in server.cpp for the incident this comes from.
+    return "data: " + o.dump(-1, ' ', false, json::error_handler_t::replace) + "\n\n";
 }
 
 inline json models_response(const std::string& model, long created) {
