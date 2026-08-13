@@ -9,6 +9,6 @@
   "effort": "high",
   "temperature": 1.0,
   "top_p": 0.95,
-  "max_tokens": 3000,
-  "started": "2026-08-13T02:32:48Z"
+  "max_tokens": 4000,
+  "started": "2026-08-13T04:43:29Z"
 }

@@ -204,7 +204,7 @@ TASKS = {
 # by seqmax). That is not cosmetic: a truncated item is scored WRONG, so every token of headroom here
 # removes a way for the harness to understate the model rather than measure it.
 MAXTOK = dict(gsm8k=2000, aime24=5000, aime25=5000, gpqa_diamond=4000,
-              mmlu_pro=3500, math500=4000, humaneval=2000)
+              mmlu_pro=4500, math500=4000, humaneval=2000)
 
 
 # ----------------------------------------------------------------------------- answer extraction
@@ -432,22 +432,44 @@ def main():
     with open(os.path.join(OUT, f'{a.task}.meta.json'), 'w') as f:
         json.dump(meta, f, indent=2)
 
-    t0, nok = time.time(), 0
+    t0, nok, nerr = time.time(), 0, 0
     for i, it in enumerate(todo):
         try:
             r = ask(a.host, it['prompt'], a.effort, a.temp, a.top_p, maxtok, a.timeout)
         except Fatal as e:
-            print(f'  [{it["id"]}] FATAL: {e}\n  stopping this task with {i} of {len(todo)} done; '
-                  f'rerun to resume once the cause is fixed', flush=True)
-            sys.exit(2)
+            # An item the engine cannot answer is a failure OF THE SYSTEM UNDER TEST, so it is
+            # recorded as incorrect and the benchmark continues. Aborting instead -- which is what
+            # this did first -- threw away 198 GPQA items because one of them made the server throw,
+            # and printed "done". Scoring it wrong is both honest and conservative: it can only
+            # lower the published number, and `errors` is reported separately so the reader can see
+            # how much of the score is engine failure rather than model failure.
+            print(f'  [{it["id"]}] ERROR (scored incorrect): {e}', flush=True)
+            with open(path, 'a') as f:
+                f.write(json.dumps(dict(id=it['id'], gold=it['gold'], got=None, correct=False,
+                                        error=str(e)[:300], finish_reason='error',
+                                        truncated=False, usage={}, timings={})) + '\n')
+            nerr += 1
+            if nerr >= max(10, len(todo) // 10):
+                print(f'  {nerr} errors — that is too many to call this a measurement of the '
+                      f'model. Stopping so the cause gets fixed.', flush=True)
+                sys.exit(2)
+            continue
         ch = r['choices'][0]
         content = ch['message'].get('content') or ''
         reasoning = ch['message'].get('reasoning_content') or ''
         got = extract(kind, content) or extract(kind, reasoning)   # fall back into the CoT
         ok = bool(correct(kind, got, it['gold'], it))
         nok += ok
+        # TRUNCATION IS DETECTED BY TOKEN COUNT, NOT BY finish_reason. The server reports
+        # finish_reason "stop" even when a generation stopped because it hit max_tokens -- verified
+        # on an MMLU-Pro item that emitted exactly 3500 of 3500 tokens mid-sentence and was labelled
+        # "stop". Trusting that field would print `trunc 0` in the published table while items were
+        # in fact being cut off and scored wrong, which is the single most misleading thing this
+        # report could do.
+        used = (r.get('usage') or {}).get('completion_tokens', 0)
+        truncated = ch.get('finish_reason') == 'length' or used >= maxtok
         rec = dict(id=it['id'], gold=it['gold'], got=(got if kind != 'code' else None),
-                   correct=ok, finish_reason=ch.get('finish_reason'),
+                   correct=ok, finish_reason=ch.get('finish_reason'), truncated=bool(truncated),
                    category=it.get('category'), subject=it.get('subject'), level=it.get('level'),
                    usage=r.get('usage'), timings=r.get('timings'),
                    reasoning_chars=len(reasoning), content=content, reasoning=reasoning)
@@ -480,13 +502,17 @@ def report():
         meta = json.load(open(mpath)) if os.path.exists(mpath) else {}
         k, n = sum(r['correct'] for r in recs), len(recs)
         lo, hi = wilson(k, n)
-        trunc = sum(1 for r in recs if r.get('finish_reason') == 'length')
+        nerr = sum(1 for r in recs if r.get('error'))
+        trunc = sum(1 for r in recs
+                    if r.get('truncated') or r.get('finish_reason') == 'length'
+                    or (r.get('usage') or {}).get('completion_tokens', 0) >= (meta.get('max_tokens') or 10**9))
         toks = [(r.get('usage') or {}).get('completion_tokens', 0) for r in recs]
         tps = [t for t in ((r.get('timings') or {}).get('tokens_per_second', 0) for r in recs) if t]
         lines.append(dict(task=task, n=n, n_total=meta.get('n_items'), correct=k,
                           n_unique=meta.get('n_unique'), reps=meta.get('reps', 1),
                           acc=round(100*k/n, 1), ci=[round(lo, 1), round(hi, 1)],
-                          truncated=trunc, mean_completion_tokens=round(sum(toks)/n),
+                          truncated=trunc, errors=nerr,
+                          mean_completion_tokens=round(sum(toks)/n),
                           mean_tok_s=round(sum(tps)/len(tps), 2) if tps else None,
                           effort=meta.get('effort'), temperature=meta.get('temperature'),
                           top_p=meta.get('top_p'), max_tokens=meta.get('max_tokens'),

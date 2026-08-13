@@ -174,9 +174,16 @@ def main():
                 ch = r['choices'][0]
                 txt = (ch['message'].get('content') or '') + (ch['message'].get('reasoning_content') or '')
                 got = E.extract(kind, ch['message'].get('content') or '') or E.extract(kind, txt)
-                ck('LIVE', f'{task}: longest item round-trips', bool(txt),
-                   f'{r["usage"]["prompt_tokens"]}+{r["usage"]["completion_tokens"]} tok, '
-                   f'finish={ch.get("finish_reason")}, extracted={"yes" if got is not None else "NO"}')
+                used = r['usage']['completion_tokens']
+                trunc = used >= E.MAXTOK[task]          # finish_reason lies; see eval_suite
+                # A missing answer is only a HARNESS fault if the model actually finished. If it ran
+                # out of tokens mid-thought there is nothing to extract and that is a (correctly
+                # scored) miss, not a broken extractor. Failing this check on a truncation would
+                # make the preflight unpassable for reasons that are not defects.
+                ok = bool(txt) and (got is not None or trunc)
+                ck('LIVE', f'{task}: longest item round-trips', ok,
+                   f'{r["usage"]["prompt_tokens"]}+{used} tok, finish={ch.get("finish_reason")}, '
+                   f'{"TRUNCATED, " if trunc else ""}extracted={"yes" if got is not None else "no"}')
             except Exception as e:
                 ck('LIVE', f'{task}: longest item round-trips', False, str(e)[:100])
 

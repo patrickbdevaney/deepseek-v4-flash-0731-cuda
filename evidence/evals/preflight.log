@@ -1,0 +1,31 @@
+  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=8192 context_len=4148
+  [PASS] PROVENANCE  published dataset facts verified locally     20 checks; see evidence/evals/provenance.json
+  [PASS] SCORERS     HumanEval canonical solutions pass           164/164
+  [PASS] SCORERS     MATH-500 gold matches itself                 500/500
+  [PASS] SCORERS     answer extraction cases                      4/4
+  [PASS] CONTEXT     chat-template overhead measured              83 tokens
+  [PASS] CONTEXT     gpqa_diamond: every item fits                longest prompt 2543 + max_tokens 4000 + 91 = 6634 vs seqmax 8192
+  [PASS] CONTEXT     mmlu_pro: every item fits                    longest prompt 566 + max_tokens 4500 + 91 = 5157 vs seqmax 8192
+  [PASS] CONTEXT     humaneval: every item fits                   longest prompt 415 + max_tokens 2000 + 91 = 2506 vs seqmax 8192
+  [PASS] CONTEXT     aime24: every item fits                      longest prompt 352 + max_tokens 5000 + 91 = 5443 vs seqmax 8192
+  [PASS] CONTEXT     aime25: every item fits                      longest prompt 252 + max_tokens 5000 + 91 = 5343 vs seqmax 8192
+  [PASS] CONTEXT     math500: every item fits                     longest prompt 790 + max_tokens 4000 + 91 = 4881 vs seqmax 8192
+  [PASS] CONTEXT     gsm8k: every item fits                       longest prompt 169 + max_tokens 2000 + 91 = 2260 vs seqmax 8192
+  [PASS] POWER       gpqa_diamond: interval quotable              n=198 (reps=1) -> +-5.6 points at p=0.8
+  [PASS] POWER       mmlu_pro: interval quotable                  n=200 (reps=1) -> +-5.5 points at p=0.8
+  [PASS] POWER       humaneval: interval quotable                 n=164 (reps=1) -> +-6.1 points at p=0.8
+  [PASS] POWER       aime24: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
+  [PASS] POWER       aime25: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
+  [PASS] POWER       math500: interval quotable                   n=120 (reps=1) -> +-7.1 points at p=0.8
+  [PASS] POWER       gsm8k: interval quotable                     n=120 (reps=1) -> +-7.1 points at p=0.8
+  [PASS] MEMORY      headroom above the guard floor               MemAvailable 3043 MB
+  [PASS] MEMORY      memguard running                             kills the server before the kernel takes the box down
+  [PASS] LIVE        gpqa_diamond: longest item round-trips       2626+4000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        mmlu_pro: longest item round-trips           649+4500 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        humaneval: longest item round-trips          498+2000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        aime24: longest item round-trips             435+5000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        aime25: longest item round-trips             335+5000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        math500: longest item round-trips            873+468 tok, finish=stop, extracted=yes
+  [PASS] LIVE        gsm8k: longest item round-trips              252+65 tok, finish=stop, extracted=yes
+
+PREFLIGHT: 29 passed, 0 failed -> GO

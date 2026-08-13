@@ -35,6 +35,16 @@ HOST="${HOST:-localhost:8080}"
 # task:n:reps  (n=0 = whole benchmark, reps = independent samples per item for avg@k)
 PLAN="${PLAN:-gpqa_diamond:0:1 mmlu_pro:200:1 humaneval:0:1 aime24:0:4 aime25:0:4 math500:120:1 gsm8k:120:1}"
 
+# The battery does not start unless the preflight says GO. Its checks are not advisory: the first
+# run of this suite lost an entire benchmark, mis-scored another, and quoted a third from a sample
+# too small to mean anything -- and printed a clean table for all three.
+if [ "${SKIP_PREFLIGHT:-0}" != "1" ]; then
+  echo "=== preflight $(date -Is)"
+  if ! python3 -u tools/eval_preflight.py --host "$HOST"; then
+    echo "=== PREFLIGHT NO-GO — not running the battery. Fix the failures above and rerun."; exit 1
+  fi
+fi
+
 for spec in $PLAN; do
   IFS=: read -r task n reps <<< "$spec"; reps="${reps:-1}"
   # A dead server turns the rest of the plan into hundreds of instant failures that look like a

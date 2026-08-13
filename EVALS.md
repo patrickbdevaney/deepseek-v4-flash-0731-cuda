@@ -1,6 +1,6 @@
 # Capability of the REAP K160 checkpoint, as served by this engine
 
-**Status: RUNNING.** Results below are regenerated from `evidence/evals/summary.json`; the "scored"
+**Status: RUNNING at seqmax 8192.** Results below are regenerated from `evidence/evals/summary.json`; the "scored"
 column always shows how many items of the benchmark were actually completed. Tasks still in flight
 are marked. Nothing in this file is a projection.
 
@@ -67,42 +67,48 @@ comparison that ignores it is meaningless:
 Note also that the aggregator lists the model as 284B-total/13B-active while the official card says
 304B total. The discrepancy is theirs; it is recorded rather than resolved.
 
-## The binding constraint: 4096 tokens of context
-
-This is the single most important caveat and it is not a small one.
+## The context constraint, and what was done about it
 
 DeepSeek recommends **384K output tokens** for the `high` and `max` reasoning levels. This server
-runs at **4096 total** (prompt + completion). The reason is arithmetic, not preference:
-
-| | GiB |
-|---|---|
-| box unified memory | 122.8 |
-| checkpoint resident | 100.4 |
-| KV + activations + arena at seqmax=4096 | ~19.7 |
-| **reported at ready** | **120.1 / 122.8** |
-
-The scratch arena alone is sized `(512 + 2 x seqmax) MiB`, so seqmax=8192 asks for 16.9 GiB where
-4096 asks for 8.5 — an extra 8.4 GiB against 2.7 GiB of headroom.
-
-**And that ceiling is an engine artefact, not an architectural one.** MLA + DSA make this model's
-real KV cache **99.4 KiB/token**, which is **3.3 %** of everything that scales with `seqmax`; 128K
-of context would be 12.4 GiB of KV, and there is ~22 GiB free. The other 96.7 % is scratch sized to
-the wrong quantity — the arena heuristic above (68 %) and `xin`, an attention-input history
-allocated at `seqmax` when `kernels/compressor.cu:500` proves no group emit reads further back than
-`2 x ratio` <= 128 positions (22 %). See
-**`wiki/context-ceiling-is-not-the-kv-cache.md`**: sizing the arena from the high-water mark it
-already tracks would reach seqmax ~12,800 in the same memory, and adding an `xin` ring buffer
-~40,000, both bit-exact. **The cheapest way to raise the scores in this file is to raise the
-context, and that is an allocation change.** Two attempts to serve at a larger
-context on 2026-08-12 did not fail gracefully: they took the **whole machine** down mid-load
+originally ran at **4096 total** (prompt + completion), and that was not a tuning choice -- two
+attempts to serve at a larger context on 2026-08-12 took the **whole machine** down mid-load
 (reboots at 20:02 and 20:11, `last -x reboot`, no oom-kill line in `dmesg` either time).
-`scripts/memguard.sh` now watches MemAvailable and kills the server before the kernel has to decide.
 
-**Consequence for every number below:** a reasoning model that would emit tens of thousands of
-tokens of deliberation is capped at a few thousand. Items that hit the cap are counted as attempted
-and **wrong**, never dropped. The `trunc` column reports exactly how many. **Every score here is
-therefore a floor, and the gap to the reference column is an upper bound on the damage from
-pruning** — some unknown part of it is the context ceiling instead.
+That ceiling was corrupting the measurement, not merely limiting it. GPQA-Diamond's longest prompt
+is **2543 tokens** by the checkpoint's own tokenizer; at seqmax 4096 with any usable completion
+budget, `server.cpp`'s `prompt + max_tokens + 8 > seqmax` check rejects it outright. The first run
+of this battery lost **all 198 GPQA items** to that, and reported the task as "done".
+
+**The ceiling turned out to be an engine artefact, not an architectural one.** MLA + DSA make this
+model's real KV cache **99.4 KiB/token** -- only **3.3 %** of everything that scaled with `seqmax`.
+The rest was scratch sized by the wrong quantity, dominated by an arena reserved as
+`(512 + 2 x seqmax) MiB` when what it must cover is the widest *batch*, never the context. Measured:
+a 4173-token prefill touches **215 MiB** of arena, identical to what a 39-token prefill touches. The
+old formula reserved 8704 MiB for it.
+
+Prefill now runs through the same chunked path as a cache extension, the arena is sized by the
+batch, and the change is **bit-identical** -- `gate_engine` passes 8/8 before and after with every
+generated token, every margin and every `head|d|` unchanged. See
+**`wiki/context-ceiling-is-not-the-kv-cache.md`**.
+
+| | before | now |
+|---|---:|---:|
+| seqmax | 4096 | **8192** |
+| arena | 8704 MiB | **640 MiB** (215 used) |
+| memory at ready | 120.1 / 122.8 GiB | 119.6 / 122.8 GiB |
+| GPQA items that fit | **0** | **198** |
+| decode | 20.4 tok/s | 20.5 tok/s |
+
+The recovered memory was spent on **reducing truncation** rather than on a larger context number,
+because a truncated item is scored *wrong*: AIME 3400 -> 5000 max tokens, GPQA 3000 -> 4000,
+MMLU-Pro 2600 -> 4500, MATH-500 3000 -> 4000, GSM8K/HumanEval 1600 -> 2000.
+
+**Truncation is still real and is counted honestly.** It is detected by token count, not by
+`finish_reason` -- the server reports `"stop"` even when a generation ended because it exhausted
+`max_tokens`, verified on an MMLU-Pro item that emitted exactly 3500 of 3500 tokens mid-sentence and
+was labelled `stop`. Trusting that field would have printed `trunc 0` while items were being cut off.
+Truncated items are scored as attempted and **wrong**, never dropped, so **every number here remains
+a floor**.
 
 ## Method
 
@@ -226,11 +232,22 @@ Exclusions are part of the report. Nothing below was skipped because it was expe
 
 ```bash
 python3 tools/eval_fetch.py                      # pin datasets, writes their commit shas
-bash scripts/memguard.sh &                       # kill the server before the kernel kills the box
-SEQMAX=4096 bash scripts/serve.sh &               # anything larger has taken this machine down
+python3 tools/eval_provenance.py                 # assert the published facts about each dataset
+nohup setsid bash scripts/memguard.sh &          # kill the server before the kernel kills the box
+SEQMAX=8192 EXT_CHUNK=64 bash scripts/serve.sh & # see the context section for why 8192 and not more
+python3 tools/eval_preflight.py                  # MUST print GO before anything below is run
 bash scripts/run_evals.sh                        # resumable; skips ids already scored
-python3 tools/eval_suite.py --report             # regenerate summary.json
+python3 tools/eval_suite.py --report && python3 tools/eval_publish.py
 ```
+
+`eval_preflight.py` is not a formality. The first attempt at this battery failed in three ways that
+a run log reported as **success** -- GPQA-Diamond abandoned on item 0 and printed "done" with zero
+items scored; AIME 2025 problem 19 carrying its gold as `336^\circ` so every model answering `336`
+was marked wrong; and AIME quoted from a single sample per problem, an interval of +-15.6 points.
+None of the three raised an error and all three would have produced a clean table to publish. The
+preflight now checks SERVER / PROVENANCE / SCORERS / CONTEXT / POWER / MEMORY / LIVE, with CONTEXT
+verifying **every item of every task** against exact token counts from the checkpoint's own
+tokenizer plus the chat-template overhead measured off the running server.
 
 Hardware: Jetson AGX Thor, `sm_110a`, 20 SMs, 122.8 GiB unified LPDDR5X, clocks pinned with
 `jetson_clocks`. Serving throughput during these runs is reported per task in the `tok/s` column and

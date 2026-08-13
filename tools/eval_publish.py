@@ -31,17 +31,17 @@ def main():
     if not rows:
         sys.exit('summary.json is empty')
 
-    out = ['| benchmark | scored | **acc %** | 95 % CI (Wilson) | trunc | mean out tok | tok/s | '
-           'unpruned 0731 @ high |',
-           '|---|---:|---:|---|---:|---:|---:|---:|']
+    out = ['| benchmark | scored | **acc %** | 95 % CI (Wilson) | trunc | err | mean out tok | '
+           'tok/s | unpruned 0731 @ high |',
+           '|---|---:|---:|---|---:|---:|---:|---:|---:|']
     for r in rows:
         ref = REF_HIGH.get(r['task'])
         complete = r['n_total'] and r['n'] >= r['n_total']
-        out.append('| {lbl}{star} | {n}/{tot} | **{acc:.1f}** | [{lo:.1f}, {hi:.1f}] | {tr} | '
+        out.append('| {lbl}{star} | {n}/{tot} | **{acc:.1f}** | [{lo:.1f}, {hi:.1f}] | {tr} | {er} | '
                    '{mt} | {tps:.1f} | {ref} |'.format(
                        lbl=LABEL.get(r['task'], r['task']), star='' if complete else ' *(partial)*',
                        n=r['n'], tot=r['n_total'] or '?', acc=r['acc'],
-                       lo=r['ci'][0], hi=r['ci'][1], tr=r['truncated'],
+                       lo=r['ci'][0], hi=r['ci'][1], tr=r['truncated'], er=r.get('errors', 0),
                        mt=r['mean_completion_tokens'], tps=r['mean_tok_s'] or 0,
                        ref=f'{ref:.2f}' if ref else '— *(none published)*'))
 
