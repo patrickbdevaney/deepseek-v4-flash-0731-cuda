@@ -508,7 +508,23 @@ def report():
                     or (r.get('usage') or {}).get('completion_tokens', 0) >= (meta.get('max_tokens') or 10**9))
         toks = [(r.get('usage') or {}).get('completion_tokens', 0) for r in recs]
         tps = [t for t in ((r.get('timings') or {}).get('tokens_per_second', 0) for r in recs) if t]
+        # STRATUM COVERAGE. A partial run is not simply a smaller run. MMLU-Pro's rows are ordered
+        # by category, so an interrupted task leaves a PREFIX -- and a prefix of a category-ordered
+        # benchmark is a different benchmark. The MMLU-Pro run cut short by the UTF-8 server bug
+        # covered 5 of 14 categories, with zero math and zero physics in 68 items, and would have
+        # been published as "54.4 % (partial)" as though partial only meant noisier. It does not: it
+        # also means biased, in a direction the CI cannot express. Coverage is computed here and a
+        # task that has not touched every stratum is marked NOT QUOTABLE by the publisher.
+        strata_field = 'category' if any(r.get('category') for r in recs) else (
+            'subject' if any(r.get('subject') for r in recs) else None)
+        strata_total = strata_seen = None
+        if strata_field:
+            allitems, _, _, _ = TASKS[task](0)
+            strata_total = len({i.get(strata_field) for i in allitems if i.get(strata_field)})
+            strata_seen = len({r.get(strata_field) for r in recs if r.get(strata_field)})
         lines.append(dict(task=task, n=n, n_total=meta.get('n_items'), correct=k,
+                          strata_field=strata_field, strata_seen=strata_seen,
+                          strata_total=strata_total,
                           n_unique=meta.get('n_unique'), reps=meta.get('reps', 1),
                           acc=round(100*k/n, 1), ci=[round(lo, 1), round(hi, 1)],
                           truncated=trunc, errors=nerr,

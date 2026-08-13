@@ -1,4 +1,4 @@
-  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=8192 context_len=4148
+  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=8192 context_len=81
   [PASS] PROVENANCE  published dataset facts verified locally     20 checks; see evidence/evals/provenance.json
   [PASS] SCORERS     HumanEval canonical solutions pass           164/164
   [PASS] SCORERS     MATH-500 gold matches itself                 500/500
@@ -18,7 +18,7 @@
   [PASS] POWER       aime25: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
   [PASS] POWER       math500: interval quotable                   n=120 (reps=1) -> +-7.1 points at p=0.8
   [PASS] POWER       gsm8k: interval quotable                     n=120 (reps=1) -> +-7.1 points at p=0.8
-  [PASS] MEMORY      headroom above the guard floor               MemAvailable 3043 MB
+  [PASS] MEMORY      headroom above the guard floor               MemAvailable 3007 MB
   [PASS] MEMORY      memguard running                             kills the server before the kernel takes the box down
   [PASS] LIVE        gpqa_diamond: longest item round-trips       2626+4000 tok, finish=stop, TRUNCATED, extracted=yes
   [PASS] LIVE        mmlu_pro: longest item round-trips           649+4500 tok, finish=stop, TRUNCATED, extracted=yes

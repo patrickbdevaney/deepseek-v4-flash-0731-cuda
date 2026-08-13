@@ -4,7 +4,7 @@
       "section": "SERVER",
       "check": "reachable and model loaded",
       "ok": true,
-      "detail": "model=deepseek-v4-flash-0731-reap seqmax=8192 context_len=4148"
+      "detail": "model=deepseek-v4-flash-0731-reap seqmax=8192 context_len=81"
     },
     {
       "section": "PROVENANCE",
@@ -124,7 +124,7 @@
       "section": "MEMORY",
       "check": "headroom above the guard floor",
       "ok": true,
-      "detail": "MemAvailable 3043 MB"
+      "detail": "MemAvailable 3007 MB"
     },
     {
       "section": "MEMORY",

@@ -198,16 +198,44 @@ so a low number cannot be dismissed as strict parsing.
 <!-- RESULTS -->
 | benchmark | scored | **acc %** | 95 % CI (Wilson) | trunc | err | mean out tok | tok/s | unpruned 0731 @ high |
 |---|---:|---:|---|---:|---:|---:|---:|---:|
-| MMLU-Pro *(partial)* | 68/200 | **54.4** | [42.7, 65.7] | 25 | 0 | 2221 | 15.4 | 86.40 |
+| GPQA-Diamond *(partial)* | 18/198 | **61.1** | [38.6, 79.7] | 9 | 0 | 2962 | 14.8 | 87.40 |
+| MMLU-Pro *(partial)* **— NOT QUOTABLE, 5 of 14 category strata** | 68/200 | **54.4** | [42.7, 65.7] | 25 | 0 | 2221 | 15.4 | 86.40 |
+| HumanEval *(partial)* | 1/164 | **100.0** | [20.7, 100.0] | 0 | 0 | 591 | 19.0 | — *(none published)* |
 
-68 items scored, 151,028 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`, `reasoning_effort = high` throughout.
+87 items scored, 204,935 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`, `reasoning_effort = high` throughout.
 
 Per-task provenance (dataset and pinned snapshot):
 
 | benchmark | dataset | snapshot | max_tokens |
 |---|---|---|---:|
+| GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 4000 |
 | MMLU-Pro | TIGER-Lab/MMLU-Pro (test, 12032) | `b189ec765aa7` | 4500 |
+| HumanEval | openai/openai_humaneval (164) | `7dce6050a7d6` | 2000 |
 <!-- /RESULTS -->
+
+### A partial run is not just a noisier run — it can be a biased one
+
+The MMLU-Pro run that the UTF-8 server bug cut short at 68 of 200 items is the worked example, and
+it is why the table carries a **NOT QUOTABLE** flag rather than only "(partial)".
+
+MMLU-Pro's rows are ordered by category. The harness draws a *random* subset precisely so that a
+prefix cannot be mistaken for the benchmark — but an interrupted run turns that random subset back
+into a prefix, and the 68 items that scored covered **5 of 14 categories**:
+
+| covered | count | missing entirely |
+|---|---:|---|
+| law | 26 | math, physics, engineering, computer science, |
+| business | 17 | economics, health, history, philosophy, other |
+| biology | 15 | |
+| psychology | 9 | |
+| chemistry | 1 | |
+
+67 of 68 items are law / business / biology / psychology. **There is no math and no physics in it.**
+The 54.4 % is a true statement about those 68 items — it re-derives from the stored generations —
+but it is not an estimate of MMLU-Pro, and the direction of its bias is not something a confidence
+interval can express. `tools/eval_suite.py` now computes stratum coverage for every task and
+`tools/eval_publish.py` marks any task that has not touched every stratum as NOT QUOTABLE, so this
+cannot be published as a capability number by inattention.
 
 ## Evidence, and how to check these numbers without trusting this repo
 

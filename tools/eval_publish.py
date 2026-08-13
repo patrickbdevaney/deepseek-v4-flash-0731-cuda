@@ -37,9 +37,17 @@ def main():
     for r in rows:
         ref = REF_HIGH.get(r['task'])
         complete = r['n_total'] and r['n'] >= r['n_total']
+        # A partial run that has not covered every stratum is not merely noisier, it is BIASED --
+        # see the coverage note in eval_suite.report(). Say so in the table instead of letting
+        # "(partial)" imply the only cost was sample size.
+        st, sn = r.get('strata_total'), r.get('strata_seen')
+        if not complete and st and sn is not None and sn < st:
+            complete = False
+            r = dict(r, _flag=f' **— NOT QUOTABLE, {sn} of {st} {r.get("strata_field","strata")} strata**')
         out.append('| {lbl}{star} | {n}/{tot} | **{acc:.1f}** | [{lo:.1f}, {hi:.1f}] | {tr} | {er} | '
                    '{mt} | {tps:.1f} | {ref} |'.format(
-                       lbl=LABEL.get(r['task'], r['task']), star='' if complete else ' *(partial)*',
+                       lbl=LABEL.get(r['task'], r['task']),
+                       star=('' if complete else ' *(partial)*') + r.get('_flag', ''),
                        n=r['n'], tot=r['n_total'] or '?', acc=r['acc'],
                        lo=r['ci'][0], hi=r['ci'][1], tr=r['truncated'], er=r.get('errors', 0),
                        mt=r['mean_completion_tokens'], tps=r['mean_tok_s'] or 0,
