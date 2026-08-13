@@ -33,6 +33,32 @@ void compressor_forward(float* out, const float* x, const float* wkv, const floa
 
 // Incremental: emit ONE compressed row (= compressor_forward's out[g]) from just group g's tokens (decode
 // append-only KV). Non-overlap pools x[g*ratio..]; overlap (ratio==4) pools [(g-1)*ratio .. g*ratio+ratio-1].
+// Rows in the xin ring (0 = xin holds the full history). See compressor.cu for the invariant.
+extern int g_xin_ring;      // rows for the current layer (0 = full history)
+extern bool g_xin_ring_on;
+extern int  g_xin_ring_batch;  // widest batch the ring must survive
+
+// XIN RING GEOMETRY -- defined once, here, because two places depend on it and they must agree:
+// src/engine.cu ALLOCATES the buffer and kernels/block_decode.cu INDEXES into it. If those ever
+// disagreed the result would be silently wrong rows rather than a crash.
+//
+//   R (rows)  = batch + 2*ratio, rounded up to a multiple of ratio
+//               -- a step writes its whole batch before emitting any group, so the live window is
+//                  the batch PLUS the compressor's 2*ratio lookback, not the lookback alone.
+//   alloc     = R + ratio
+//               -- tok0 % R is at most R - ratio and a group window is at most 2*ratio long, so it
+//                  reaches R + ratio - 1; the first `ratio` rows are mirrored there to keep the
+//                  window contiguous for the GEMM.
+static inline int xin_ring_rows(int ratio) {
+    if (!g_xin_ring_on || ratio <= 0) return 0;
+    const int need = g_xin_ring_batch + 2 * ratio;
+    return ((need + ratio - 1) / ratio) * ratio;
+}
+static inline int xin_ring_alloc_rows(int ratio) {
+    const int R = xin_ring_rows(ratio);
+    return R ? R + ratio : 0;
+}
+
 void compressor_emit_group(float* out_row, const float* x, int g, int ratio, const float* wkv,
                            const float* wgate, const float* ape, const float* norm_w,
                            const float* cc_cos, const float* cc_sin, int dim, int d, bool overlap,

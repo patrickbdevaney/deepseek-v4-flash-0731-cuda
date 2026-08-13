@@ -279,11 +279,30 @@ void Engine::Impl::load() {
     const float *cc128s = up_f(stride_rows(cqs_h, seqmax, half, 128), keep);
 
     KV.assign(N_LAYERS, LayerKV());
+    // The engine owns the xin allocation, so the engine is what enables the ring (compressor.cu
+    // keeps it off by default because decode.cu and the unit gates share these kernels and allocate
+    // the full history). Set before the loop below, which sizes xin from it.
+    g_xin_ring_on = getenv("DSV4_XIN_RING") ? (atoi(getenv("DSV4_XIN_RING")) != 0) : true;
+    // The ring has to survive the widest batch that will ever be written into it in one go, which is
+    // MAXB (prefill and extend both move in EXT_CHUNK-sized blocks). MAXB is computed further down
+    // from cfg.ext_chunk, so recompute it here rather than reordering the load.
+    { const int ec = cfg.ext_chunk > 0 ? cfg.ext_chunk : 64;
+      g_xin_ring_batch = ec > VBMAX ? ec : VBMAX; }
     for (int Lyr = 0; Lyr < N_LAYERS; ++Lyr) {
         const int ratio = compress_ratio(Lyr);
         CU(cudaMalloc(&KV[Lyr].win_kv, (size_t)seqmax * HEAD_DIM * 4));
         if (ratio) {
-            CU(cudaMalloc(&KV[Lyr].xin, (size_t)seqmax * DIM * 4));
+            // xin is the compressor's attention-input history. After the x_cur/x_full split its
+            // only reader is compressor_emit_group, which never looks back further than 2*ratio
+            // positions, so a ring of 2*ratio rows plus a `ratio`-row mirrored margin holds
+            // everything that is ever read. At [seqmax, DIM] fp32 across 41 compressed layers this
+            // was 656 KiB per token of CONTEXT -- 6.6x the entire MLA+DSA KV cache, and the largest
+            // remaining term that scaled with seqmax. As a ring it is a fixed ~124 MiB in total.
+            // R + ratio rows: R holds the batch plus the compressor's lookback, the extra `ratio`
+            // is the mirrored margin that keeps a group window contiguous. See block_decode.cu.
+            const int ring_alloc = xin_ring_alloc_rows(ratio);
+            const size_t xin_rows = ring_alloc ? (size_t)ring_alloc : (size_t)seqmax;
+            CU(cudaMalloc(&KV[Lyr].xin, xin_rows * DIM * 4));
             CU(cudaMalloc(&KV[Lyr].comp_kv, (size_t)(seqmax / ratio + 2) * HEAD_DIM * 4));
             if (ratio == 4) CU(cudaMalloc(&KV[Lyr].idx_ckv, (size_t)(seqmax / ratio + 2) * INDEX_HEAD_DIM * 4));
         }

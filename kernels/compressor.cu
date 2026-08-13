@@ -1,6 +1,17 @@
 // compressor.cu — KV Compressor gated-pooling core, correctness-first (Gate K: ref/gen_units gen_compressor).
+#include <cstdlib>
 #include "compressor.h"
 // When true, `wkv`/`wgate` pointers are BF16 storage, not f32. Set once at engine init.
+int g_xin_ring = 0;   // rows in the xin ring for the CURRENT layer; 0 = full history
+// Master switch. DEFAULT OFF, and deliberately so: these kernels are shared with src/decode.cu and
+// the unit gates, which allocate xin as the full [seqmax, DIM] history. A global default-on would
+// make the emit index modulo a ring those callers never built, and read the wrong rows silently.
+// The switch is therefore owned by whoever OWNS THE ALLOCATION -- src/engine.cu turns it on right
+// before sizing xin as a ring, and nobody else touches it. DSV4_XIN_RING=0 there restores the full
+// layout for an A/B, which is how this was validated.
+bool g_xin_ring_on = false;
+// Widest batch the ring must survive (MAXB). Set by whoever owns the allocation.
+int  g_xin_ring_batch = 0;
 bool g_compressor_bf16 = false;
 #include <cuda_bf16.h>
 #include <stdint.h>
@@ -505,7 +516,15 @@ void compressor_emit_group(float* out_row, const float* x, int g, int ratio, con
     int ntok, tok0, localg;
     if(overlap){ tok0 = (g>=1) ? (g-1)*ratio : 0; ntok = (g>=1) ? 2*ratio : ratio; localg = (g>=1) ? 1 : 0; }
     else       { tok0 = g*ratio; ntok = ratio; localg = 0; }
-    const float* xg = x + (size_t)tok0*dim;
+    // XIN RING. `x` is the attention-input history, and the ONLY thing this function ever reads of
+    // it is [tok0, tok0+ntok) with ntok <= 2*ratio -- which is why that history does not have to be
+    // kept for the whole context. When g_xin_ring is set, the history is a ring of that many rows
+    // and the group's window is mapped into it. tok0 is always a multiple of ratio and the ring is
+    // a multiple of ratio, so tok0 % ring is too, and the caller mirrors the first `ratio` rows past
+    // the end of the ring -- so the window is CONTIGUOUS at either of the two offsets it can land
+    // on, and this stays a single pointer with no wrap handling in the GEMM below.
+    const int tok0r = g_xin_ring ? (tok0 % g_xin_ring) : tok0;
+    const float* xg = x + (size_t)tok0r*dim;
     float *kv,*score,*pooled;
     kv=(decltype(kv))dmalloc((size_t)ntok*od*4); score=(decltype(score))dmalloc((size_t)ntok*od*4);
     pooled=(decltype(pooled))dmalloc((size_t)(localg+1)*d*4);

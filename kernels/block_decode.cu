@@ -3,6 +3,9 @@
 // attention-input x1 (redundant recompute, one-time, small s). Decode-step is the block at bs=1 with the
 // attention swapped to the gated decode step. HC scratch is alloc'd per call for now (Step 2 pre-allocates).
 #include "block_decode.h"
+#include "compressor.h"
+#include <cstdio>
+#include <cstdlib>
 #include "dprof.h"
 #include "hc.h"
 #include "mla_attn.h"        // rmsnorm
@@ -58,6 +61,39 @@ void block_decode_step(float* out, const float* x, const int* input_ids, const B
 // Copy the s attention-input rows x1 into the layer's xin history (for future compressor group emits).
 __global__ void k_copy(float* dst, const float* src, size_t n){ size_t i=blockIdx.x*(size_t)blockDim.x+threadIdx.x; if(i<n) dst[i]=src[i]; }
 
+// XIN RING WRITE.
+//
+// `xin` is the attention-input history, and after the x_cur/x_full split the ONLY reader of it is
+// compressor_emit_group, which never looks further back than 2*ratio positions (compressor.cu:500).
+// So it does not have to be [seqmax, DIM] -- at fp32 x 4096 x 41 compressed layers that was
+// 656 KiB per token of context, 6.6x the entire MLA+DSA KV cache and the largest remaining thing
+// that scaled with context.
+//
+// The ring is R = 2*ratio rows with the first `ratio` rows MIRRORED at [R, R+ratio). A group window
+// starts at a multiple of ratio and is at most 2*ratio long, so modulo R it lands at either 0 or
+// ratio; the mirror makes the second case contiguous instead of wrapping, which keeps the reader a
+// plain pointer and leaves the GEMM untouched. The duplicate write is one extra row for half the
+// positions -- against a buffer that shrank from seqmax rows to 3*ratio.
+static inline void xin_ring_check(int n, int R, int ratio){
+    if (R && n > R - 2*ratio) {
+        fprintf(stderr, "[xin_ring] batch %d exceeds ring %d - 2*%d; history would be clobbered\n",
+                n, R, ratio);
+        abort();
+    }
+}
+__global__ void k_copy_xin_ring(float* xin, const float* src, int pos, int n, int d, int R, int mir){
+    size_t i = blockIdx.x*(size_t)blockDim.x + threadIdx.x;
+    if (i >= (size_t)n*d) return;
+    const int j = (int)(i / d), c = (int)(i % d);
+    const int r = (pos + j) % R;
+    const float v = src[i];
+    xin[(size_t)r*d + c] = v;
+    if (r < mir) xin[(size_t)(r + R)*d + c] = v;   // mirrored margin
+}
+
+// Ring geometry lives in include/compressor.h -- shared with the allocator in engine.cu.
+static inline void set_xin_ring(int ratio){ g_xin_ring = xin_ring_rows(ratio); }
+
 void cblock_prefill_cache(float* out, const float* x, const int* input_ids, const CompressedBlockWeights& w,
                           int s, int iters, float eps, LayerKV& kv, cudaStream_t stream){
     const int bs=s, d=w.dim, hc=w.hc;
@@ -72,7 +108,10 @@ void cblock_prefill_cache(float* out, const float* x, const int* input_ids, cons
     dprof_begin(DP_RMSNORM_ATTN,stream); rmsnorm(x1,x1,w.attn_norm,bs,d,eps,true,stream);                                             dprof_end(DP_RMSNORM_ATTN,stream);
     // retain attention-input history + populate KV caches from x1
     dprof_begin(DP_KV_XIN,stream);
-    k_copy<<<((size_t)s*d+255)/256,256,0,stream>>>(kv.xin, x1, (size_t)s*d);
+    set_xin_ring(w.ratio);
+    xin_ring_check(s, g_xin_ring, w.ratio);
+    if (g_xin_ring) k_copy_xin_ring<<<((size_t)s*d+255)/256,256,0,stream>>>(kv.xin, x1, 0, s, d, g_xin_ring, w.ratio);
+    else            k_copy<<<((size_t)s*d+255)/256,256,0,stream>>>(kv.xin, x1, (size_t)s*d);
     dprof_end(DP_KV_XIN,stream);
     // Cache population has no decode analogue (decode appends one position); DP_C_COMPRESS is the
     // honest id for it — this IS the compressor, run over the whole prompt.
@@ -97,9 +136,11 @@ void cblock_decode_step(float* out, const float* x, const int* input_ids, const 
     sub=(decltype(sub))dmalloc((size_t)d*4); res2=(decltype(res2))dmalloc((size_t)hc*d*4);
     hc_pre(x1,post,comb,x,w.hc_attn_fn,w.hc_attn_scale,w.hc_attn_base,1,hc,d,iters,eps,stream);
     rmsnorm(x1,x1,w.attn_norm,1,d,eps,true,stream);
-    k_copy<<<((size_t)d+255)/256,256,0,stream>>>(kv.xin + (size_t)pos*d, x1, (size_t)d);   // store this position's attn input
-    if(w.ratio==4) compressed_decode_step_indexer(sub, kv.xin, pos, w.attn, kv.win_kv, kv.comp_kv, kv.idx_ckv, &kv.T, w.ratio, eps, stream);
-    else           compressed_decode_step_strided(sub, kv.xin, pos, w.attn, kv.win_kv, kv.comp_kv,             &kv.T, w.ratio, eps, stream);
+    set_xin_ring(w.ratio);   // store this position's attn input (ring-mapped when enabled)
+    if (g_xin_ring) k_copy_xin_ring<<<((size_t)d+255)/256,256,0,stream>>>(kv.xin, x1, pos, 1, d, g_xin_ring, w.ratio);
+    else            k_copy<<<((size_t)d+255)/256,256,0,stream>>>(kv.xin + (size_t)pos*d, x1, (size_t)d);
+    if(w.ratio==4) compressed_decode_step_indexer(sub, x1, kv.xin, pos, w.attn, kv.win_kv, kv.comp_kv, kv.idx_ckv, &kv.T, w.ratio, eps, stream);
+    else           compressed_decode_step_strided(sub, x1, kv.xin, pos, w.attn, kv.win_kv, kv.comp_kv,             &kv.T, w.ratio, eps, stream);
     hc_post(res2,sub,x,post,comb,1,hc,d,stream);
     hc_pre(x1,post,comb,res2,w.hc_ffn_fn,w.hc_ffn_scale,w.hc_ffn_base,1,hc,d,iters,eps,stream);
     rmsnorm(x1,x1,w.ffn_norm,1,d,eps,true,stream);
@@ -135,11 +176,14 @@ void cblock_verify_step(float* out, const float* x, const int* input_ids, const 
     dprof_begin(DP_HC_PRE_ATTN,stream);  hc_pre(x1,post,comb,x,w.hc_attn_fn,w.hc_attn_scale,w.hc_attn_base,K,hc,d,iters,eps,stream);  dprof_end(DP_HC_PRE_ATTN,stream);
     dprof_begin(DP_RMSNORM_ATTN,stream); rmsnorm(x1,x1,w.attn_norm,K,d,eps,true,stream);                                              dprof_end(DP_RMSNORM_ATTN,stream);
     dprof_begin(DP_KV_XIN,stream);
-    k_copy<<<((size_t)K*d+255)/256,256,0,stream>>>(kv.xin+(size_t)pos*d, x1, (size_t)K*d);   // store attn-input history
+    set_xin_ring(w.ratio);   // store attn-input history (ring-mapped when enabled)
+    xin_ring_check(K, g_xin_ring, w.ratio);
+    if (g_xin_ring) k_copy_xin_ring<<<((size_t)K*d+255)/256,256,0,stream>>>(kv.xin, x1, pos, K, d, g_xin_ring, w.ratio);
+    else            k_copy<<<((size_t)K*d+255)/256,256,0,stream>>>(kv.xin+(size_t)pos*d, x1, (size_t)K*d);
     dprof_end(DP_KV_XIN,stream);
     dprof_begin(DP_ATTN,stream);
-    if(w.ratio==4) compressed_verify_step_indexer(sub, kv.xin, pos, K, w.attn, kv.win_kv, kv.comp_kv, kv.idx_ckv, &kv.T, w.ratio, eps, stream);
-    else           compressed_verify_step_strided(sub, kv.xin, pos, K, w.attn, kv.win_kv, kv.comp_kv,             &kv.T, w.ratio, eps, stream);
+    if(w.ratio==4) compressed_verify_step_indexer(sub, x1, kv.xin, pos, K, w.attn, kv.win_kv, kv.comp_kv, kv.idx_ckv, &kv.T, w.ratio, eps, stream);
+    else           compressed_verify_step_strided(sub, x1, kv.xin, pos, K, w.attn, kv.win_kv, kv.comp_kv,             &kv.T, w.ratio, eps, stream);
     dprof_end(DP_ATTN,stream);
     dprof_begin(DP_HC_POST_ATTN,stream); hc_post(res2,sub,x,post,comb,K,hc,d,stream);                                                  dprof_end(DP_HC_POST_ATTN,stream);
     dprof_begin(DP_HC_PRE_FFN,stream);   hc_pre(x1,post,comb,res2,w.hc_ffn_fn,w.hc_ffn_scale,w.hc_ffn_base,K,hc,d,iters,eps,stream);   dprof_end(DP_HC_PRE_FFN,stream);

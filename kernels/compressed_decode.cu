@@ -69,13 +69,13 @@ void compressed_attn_cache(float* win_kv, float* comp_kv, int* T, const float* x
 }
 
 // ---- decode step (strided) ----
-void compressed_decode_step_strided(float* out, const float* x_full, int pos, const CompressedAttnWeights& w,
+void compressed_decode_step_strided(float* out, const float* x_cur, const float* x_full, int pos, const CompressedAttnWeights& w,
                                     float* win_kv, float* comp_kv, int* T, int ratio, float eps, cudaStream_t stream){
     const auto& a = w.attn;
     const int half=ROPE_DIM/2, Kd=N_HEADS*HEAD_DIM, GKd=Kd/O_GROUPS, OB=O_GROUPS*O_LORA;
     const float scale = 1.f/sqrtf((float)HEAD_DIM);
     const float *cosP = a.cosT + (size_t)pos*half, *sinP = a.sinT + (size_t)pos*half;
-    const float* xt = x_full + (size_t)pos*DIM;
+    const float* xt = x_cur;
 
     uint8_t *xq,*qrq,*ogq; float *xs,*qrs,*ogs,*qr,*q,*o,*og;
     xq=(decltype(xq))dmalloc(DIM); xs=(decltype(xs))dmalloc((DIM/128)*4);
@@ -155,7 +155,7 @@ void compressed_attn_cache_r4(float* win_kv, float* comp_kv, float* idx_ckv, int
     *T = Tc;
 }
 
-void compressed_decode_step_indexer(float* out, const float* x_full, int pos, const CompressedAttnWeights& w,
+void compressed_decode_step_indexer(float* out, const float* x_cur, const float* x_full, int pos, const CompressedAttnWeights& w,
                                     float* win_kv, float* comp_kv, float* idx_ckv, int* T, int ratio,
                                     float eps, cudaStream_t stream){
     const auto& a = w.attn;
@@ -164,7 +164,7 @@ void compressed_decode_step_indexer(float* out, const float* x_full, int pos, co
     const float scale = 1.f/sqrtf((float)HEAD_DIM);
     const float wscale = rsqrtf((float)idx_hd) * rsqrtf((float)nH);
     const float *cosP = a.cosT + (size_t)pos*half, *sinP = a.sinT + (size_t)pos*half;
-    const float* xt = x_full + (size_t)pos*DIM;
+    const float* xt = x_cur;
 
     uint8_t *xq,*qrq,*ogq; float *xs,*qrs,*ogs,*qr,*q,*o,*og,*qidx,*qtmp,*iw,*iscore;
     xq=(decltype(xq))dmalloc(DIM); xs=(decltype(xs))dmalloc((DIM/128)*4);
@@ -331,11 +331,11 @@ static void finish_attn(const CompressedAttnWeights& w, const float* q, const fl
     dfree(o);dfree(og);dfree(ogq);dfree(ogs);
 }
 
-void compressed_verify_step_strided(float* out, const float* x_full, int pos, int K, const CompressedAttnWeights& w,
+void compressed_verify_step_strided(float* out, const float* x_cur, const float* x_full, int pos, int K, const CompressedAttnWeights& w,
                                     float* win_kv, float* comp_kv, int* T, int ratio, float eps, cudaStream_t stream){
     const int Kd=N_HEADS*HEAD_DIM;
     float* q; q=(float*)dmalloc((size_t)K*Kd*4);
-    build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, nullptr, nullptr, eps, stream);
+    build_qKV(w, x_cur, K, pos, q, win_kv, nullptr, nullptr, eps, stream);
     dprof_begin(DP_C_COMPRESS,stream);
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){                         // emit groups completing in the block
         compressor_emit_group(comp_kv+(size_t)(*T)*HEAD_DIM, x_full, j/ratio, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,
@@ -356,7 +356,7 @@ void compressed_verify_step_strided(float* out, const float* x_full, int pos, in
     dsync(stream); dfree(q);dfree(kv_all);dfree(dcomb);
 }
 
-void compressed_verify_step_indexer(float* out, const float* x_full, int pos, int K, const CompressedAttnWeights& w,
+void compressed_verify_step_indexer(float* out, const float* x_cur, const float* x_full, int pos, int K, const CompressedAttnWeights& w,
                                     float* win_kv, float* comp_kv, float* idx_ckv, int* T, int ratio, float eps, cudaStream_t stream){
     const auto& a=w.attn; const int half=ROPE_DIM/2, Kd=N_HEADS*HEAD_DIM, nH=w.index_n_heads, ihd=w.index_head_dim, QD=nH*ihd, rd=ROPE_DIM;
     const float wscale=rsqrtf((float)ihd)*rsqrtf((float)nH); const float *cosP=a.cosT+(size_t)pos*half, *sinP=a.sinT+(size_t)pos*half;
@@ -380,7 +380,7 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     const bool asplit = g_side && !getenv("NO_ATTN_SPLIT");
     cudaStream_t cs = asplit ? g_side : stream;
     if(asplit){ cudaEventRecord(g_side_fork,stream); cudaStreamWaitEvent(cs,g_side_fork,0); }
-    build_qKV(w, x_full+(size_t)pos*DIM, K, pos, q, win_kv, &iqrq, &iqrs, eps, stream);
+    build_qKV(w, x_cur, K, pos, q, win_kv, &iqrq, &iqrs, eps, stream);
     dprof_begin(DP_C_COMPRESS,stream);
     // emit main + indexer compressed rows for groups completing in the block
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){ int g=j/ratio; int t=*T;
@@ -399,7 +399,7 @@ void compressed_verify_step_indexer(float* out, const float* x_full, int pos, in
     hadamard(qtmp,qidx,K*nH,ihd,stream); act_quant_fp4sim(qtmp,K*nH,ihd,32,ihd,stream);
     dprof_end(DP_I_QIDX,stream);
     dprof_begin(DP_I_IW,stream);
-    gemm_fp32(iw,x_full+(size_t)pos*DIM,w.idx_weights_proj,K,nH,DIM,stream);
+    gemm_fp32(iw,x_cur,w.idx_weights_proj,K,nH,DIM,stream);
     k_iw_scale<<<((size_t)K*nH+63)/64,64,0,stream>>>(iw,wscale,K*nH);
     dprof_end(DP_I_IW,stream);
     iscore=(float*)dmalloc((size_t)K*Tf*4);

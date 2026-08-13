@@ -1,0 +1,21 @@
+TRUNCATION IMPACT — measured on the live battery, 2026-08-13
+Truncated items are scored WRONG (the model never emits an answer), so this is the
+single largest threat to publishability. Random-guess baselines: GPQA 25%, MMLU-Pro 10%.
+
+task              n  trunc  trunc%  acc|truncated  acc|completed    gap
+gpqa_diamond     82     40     49%           25.0           95.2   70.2
+mmlu_pro         68     25     37%            8.0           81.4   73.4
+
+Truncated items score AT CHANCE (23.1 vs 25 random; 8.0 vs 10 random) — they are not
+wrong answers, they are absent answers. The published score is therefore a weighted
+average of the model's real accuracy and a coin flip, with the weight set by max_tokens.
+
+gpqa_diamond: completed n=42 median 1138 p75 1980 p90 2787 max 3964 cap 4000
+mmlu_pro: completed n=43 median 524 p75 1165 p90 3108 max 3955 cap 4500
+
+The distribution is BIMODAL: the model either answers in ~1100 tokens or enters a long
+trajectory that blows past the cap. The completed half is censored at the cap, so this
+data cannot say how large a budget would capture the other half -- only that 4000 does not.
+
+DeepSeek recommends a 384K output budget at `high` reasoning effort. This run gives 4000,
+about 1% of it. That is the gap to close before any of these numbers is a capability claim.

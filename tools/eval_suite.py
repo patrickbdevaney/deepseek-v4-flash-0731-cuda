@@ -144,8 +144,10 @@ def task_aime(year):
 def task_gpqa():
     rows, snap = _arrow('fingertap___gpqa-diamond/**/*.arrow')
     items = [dict(id=f'gpqa-{i:04d}', gold=r['answer'].strip().upper(),
-                  prompt=r['question'] + '\n\nThink step by step, then end with "Answer: X" where '
-                                         'X is the letter of the correct option.')
+                  prompt='Answer the following multiple choice question. The last line of your '
+                         "response should be of the following format: 'Answer: $LETTER' (without "
+                         'quotes) where LETTER is one of ABCD. Think step by step before '
+                         'answering.\n\n' + r['question'])
              for i, r in enumerate(rows)]
     return items, snap, 'fingertap/GPQA-Diamond (test, 198)', 'letter'
 
@@ -162,8 +164,10 @@ def task_mmlu_pro(n):
         opts = '\n'.join(f'{LETTERS[i]}. {o}' for i, o in enumerate(r['options']))
         items.append(dict(id=f'mmlupro-{r["question_id"]}', gold=r['answer'].strip().upper(),
                           category=r['category'],
-                          prompt=f'{r["question"]}\n\n{opts}\n\nThink step by step, then end with '
-                                 f'"Answer: X" where X is the letter of the correct option.'))
+                          prompt='Answer the following multiple choice question. The last line of '
+                                 "your response should be of the following format: 'Answer: $LETTER' "
+                                 '(without quotes) where LETTER is one of ABCDEFGHIJ. Think step by '
+                                 f'step before answering.\n\n{r["question"]}\n\n{opts}'))
     return items, snap, 'TIGER-Lab/MMLU-Pro (test, 12032)', 'letter'
 
 
@@ -203,8 +207,8 @@ TASKS = {
 # These were raised once the engine's context went from 4096 to 8192 (the arena is no longer scaled
 # by seqmax). That is not cosmetic: a truncated item is scored WRONG, so every token of headroom here
 # removes a way for the harness to understate the model rather than measure it.
-MAXTOK = dict(gsm8k=2000, aime24=5000, aime25=5000, gpqa_diamond=4000,
-              mmlu_pro=4500, math500=4000, humaneval=2000)
+MAXTOK = dict(gsm8k=8000, aime24=16000, aime25=16000, gpqa_diamond=16000,
+              mmlu_pro=12000, math500=16000, humaneval=8000)
 
 
 # ----------------------------------------------------------------------------- answer extraction
@@ -268,7 +272,11 @@ def extract(kind, text):
             return m.group(1).replace(',', '')
         return _last_int(tail) if kind == 'integer' else None
     if kind == 'letter':
-        for pat in (r'\\boxed\{\s*([A-J])\s*\}',
+        # First pattern is openai/simple-evals' ANSWER_PATTERN_MULTICHOICE verbatim, widened to
+        # A-J for MMLU-Pro. The looser ones after it are additive fallbacks: they can only ever turn
+        # a miss into a hit, so they cannot inflate relative to the reference protocol.
+        for pat in (r'(?i)Answer[ \t]*:[ \t]*\$?([A-J])\$?',
+                    r'\\boxed\{\s*([A-J])\s*\}',
                     r'\banswer\s*(?:is)?\s*[:=]?\s*\(?\*{0,2}([A-J])\b'):
             ms = re.findall(pat, text, re.I)
             if ms:
@@ -303,6 +311,67 @@ def run_code(code, item, timeout=20):
         os.unlink(p)
 
 
+
+def _sympy_equal(a, b):
+    r"""Symbolic equivalence, the third tier. Returns None if it cannot decide.
+
+    This exists because the reference implementations do NOT compare MATH answers as strings. The
+    Minerva/lm-evaluation-harness lineage checks equivalence with sympy, and the newer math_verify
+    lineage does string -> numeric-tolerance -> symbolic. A string-only comparison is therefore
+    STRICTER than the published protocol, and strictness here does not make a number conservative in
+    an interesting way -- it just marks correct answers wrong. \frac{1}{2} vs 0.5, 2\sqrt{2} vs
+    \sqrt{8}, and (3, \pi/2) written with different spacing are all the same answer.
+    """
+    try:
+        from sympy import simplify, sympify
+        from sympy.parsing.latex import parse_latex
+    except Exception:
+        return None
+    def prep(t):
+        # sympify has no implicit multiplication: "2sqrt(2)" is a parse error, not 2*sqrt(2). The
+        # normaliser produces exactly that shape, so restore the operator before parsing.
+        t = re.sub(r'(\d)\s*([A-Za-z\\(])', r'\1*\2', t)
+        return t.replace('^', '**')
+
+    def parse(x):
+        for f in (lambda t: parse_latex(t), lambda t: sympify(prep(t))):
+            try:
+                v = f(x)
+                if v is not None:
+                    return v
+            except Exception:
+                continue
+        return None
+    try:
+        pa, pb = parse(a), parse(b)
+        if pa is None or pb is None:
+            return None
+        d = simplify(pa - pb)
+        return bool(d == 0)
+    except Exception:
+        return None
+
+
+def math_equal(got, gold):
+    """Tiered equivalence, mirroring the reference pipelines: exact string after normalisation,
+    then numeric within tolerance, then symbolic. Each tier can only ever turn a MISS into a HIT, so
+    none of them can inflate a wrong answer into a right one."""
+    if got is None:
+        return False
+    a, b = norm_math(got), norm_math(gold)
+    if a == b:
+        return True
+    try:                                            # numeric, with tolerance
+        if abs(float(a) - float(b)) < 1e-6:
+            return True
+    except (TypeError, ValueError):
+        pass
+    sym = _sympy_equal(a, b)
+    if sym is None:
+        sym = _sympy_equal(str(got), str(gold))     # retry on the raw text; the normaliser may have
+    return bool(sym)                                # mangled LaTeX that sympy could have parsed
+
+
 def correct(kind, got, gold, item=None):
     if got is None:
         return False
@@ -311,13 +380,7 @@ def correct(kind, got, gold, item=None):
     if kind == 'letter':
         return got == gold
     if kind == 'math':
-        a, b = norm_math(got), norm_math(gold)
-        if a == b:
-            return True
-        try:
-            return abs(float(a) - float(b)) < 1e-9
-        except (TypeError, ValueError):
-            return False
+        return math_equal(got, gold)
     try:
         return abs(float(got) - float(gold)) < 1e-9
     except ValueError:
