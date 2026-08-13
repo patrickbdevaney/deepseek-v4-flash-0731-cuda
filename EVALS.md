@@ -196,23 +196,17 @@ so a low number cannot be dismissed as strict parsing.
 ## Results
 
 <!-- RESULTS -->
-| benchmark | scored | **acc %** | 95 % CI (Wilson) | trunc | mean out tok | tok/s | unpruned 0731 @ high |
-|---|---:|---:|---|---:|---:|---:|---:|
-| GSM8K | 2/2 | **100.0** | [34.2, 100.0] | 0 | 188 | 20.6 | — *(none published)* |
-| AIME 2024 *(partial)* | 1/30 | **100.0** | [20.7, 100.0] | 0 | 634 | 24.0 | — *(none published)* |
-| MATH-500 *(partial)* | 1/2 | **100.0** | [20.7, 100.0] | 0 | 93 | 17.2 | — *(none published)* |
-| HumanEval *(partial)* | 1/164 | **100.0** | [20.7, 100.0] | 0 | 591 | 19.0 | — *(none published)* |
+| benchmark | scored | **acc %** | 95 % CI (Wilson) | trunc | err | mean out tok | tok/s | unpruned 0731 @ high |
+|---|---:|---:|---|---:|---:|---:|---:|---:|
+| MMLU-Pro *(partial)* | 68/200 | **54.4** | [42.7, 65.7] | 25 | 0 | 2221 | 15.4 | 86.40 |
 
-5 items scored, 1,694 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`, `reasoning_effort = high` throughout.
+68 items scored, 151,028 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`, `reasoning_effort = high` throughout.
 
 Per-task provenance (dataset and pinned snapshot):
 
 | benchmark | dataset | snapshot | max_tokens |
 |---|---|---|---:|
-| GSM8K | openai/gsm8k (main, test, 1319) | `740312add88f` | 1600 |
-| AIME 2024 | Maxwell-Jia/AIME_2024 (30) | `8d88b2876a82` | 3400 |
-| MATH-500 | HuggingFaceH4/MATH-500 (500) | `6e4ed1a2a79a` | 3000 |
-| HumanEval | openai/openai_humaneval (164) | `7dce6050a7d6` | 1600 |
+| MMLU-Pro | TIGER-Lab/MMLU-Pro (test, 12032) | `b189ec765aa7` | 4500 |
 <!-- /RESULTS -->
 
 ## Evidence, and how to check these numbers without trusting this repo

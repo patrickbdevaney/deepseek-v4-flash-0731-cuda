@@ -2,9 +2,9 @@
   "tasks": [
     {
       "task": "mmlu_pro",
-      "records": 10,
-      "recomputed_acc": 80.0,
-      "published_acc": 80.0,
+      "records": 68,
+      "recomputed_acc": 54.41,
+      "published_acc": 54.4,
       "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
       "source": "TIGER-Lab/MMLU-Pro (test, 12032)"
     }

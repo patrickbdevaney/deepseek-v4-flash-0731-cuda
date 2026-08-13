@@ -4,9 +4,11 @@
   "snapshot": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
   "n_items": 164,
   "scoring": "code",
+  "n_unique": 164,
+  "reps": 1,
   "effort": "high",
   "temperature": 1.0,
   "top_p": 0.95,
-  "max_tokens": 1600,
-  "started": "2026-08-13T02:06:51Z"
+  "max_tokens": 2000,
+  "started": "2026-08-13T08:45:26Z"
 }

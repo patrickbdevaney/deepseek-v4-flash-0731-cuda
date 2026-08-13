@@ -2,3 +2,13 @@
 [watch] 2026-08-13T01:28:24-04:00 gpqa_diamond finished — landing
 [land] gpqa_diamond: no records at evidence/evals/gpqa_diamond.jsonl — nothing to land
 [watch] gpqa_diamond did not land (see above)
+[watch] 2026-08-13T04:45:29-04:00 mmlu_pro finished — landing
+  [PASS] mmlu_pro       no duplicate records                     68 records, 68 unique
+  [PASS] mmlu_pro       every id exists in the benchmark         0 unknown
+  [PASS] mmlu_pro       gold matches the pinned dataset          0 mismatched
+  [PASS] mmlu_pro       no silent empty generations              0 empty
+  [PASS] mmlu_pro       stored correct flags reproduce           0 disagree
+  [PASS] mmlu_pro       published accuracy is reproducible       recomputed 54.4 % vs published 54.4 % over 68 records
+  [PASS] mmlu_pro       snapshot matches the published one       b189ec765aa7 vs b189ec765aa7
+
+VERIFY: 0 failed -> PASS

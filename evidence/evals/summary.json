@@ -1,20 +1,20 @@
 [
   {
     "task": "mmlu_pro",
-    "n": 10,
+    "n": 68,
     "n_total": 200,
-    "correct": 8,
+    "correct": 37,
     "n_unique": 200,
     "reps": 1,
-    "acc": 80.0,
+    "acc": 54.4,
     "ci": [
-      49.0,
-      94.3
+      42.7,
+      65.7
     ],
-    "truncated": 2,
+    "truncated": 25,
     "errors": 0,
-    "mean_completion_tokens": 1532,
-    "mean_tok_s": 18.5,
+    "mean_completion_tokens": 2221,
+    "mean_tok_s": 15.4,
     "effort": "high",
     "temperature": 1.0,
     "top_p": 0.95,
