@@ -41,6 +41,7 @@ extern bool g_tc_ogroup;
 extern bool g_moe_grouped;
 extern bool g_moe_gemv;
 extern bool g_compressor_bf16;
+extern int  g_kv_winmax;
 
 namespace dsv4srv {
 
@@ -138,7 +139,10 @@ struct Engine::Impl {
 
     ~Impl() {
         for (void* p : keep) cudaFree(p);
-        for (auto& k : KV) { cudaFree(k.win_kv); cudaFree(k.comp_kv); cudaFree(k.idx_ckv); cudaFree(k.xin); }
+        // comp_kv is a VIEW into win_kv when the combined cache is on -- freeing it then is a
+        // double free. It is a real allocation only on the DSV4_KV_COMBINED=0 A/B path.
+        for (auto& k : KV) { cudaFree(k.win_kv); cudaFree(k.idx_ckv); cudaFree(k.xin);
+                             if (!g_kv_winmax) cudaFree(k.comp_kv); }
         for (float* p : mkv) cudaFree(p);
         for (void* p : { (void*)d_ids, (void*)h0, (void*)collapsed, (void*)logits,
                          (void*)main_x, (void*)dbid, (void*)dfid, (void*)dout, (void*)dmarg,
@@ -288,10 +292,46 @@ void Engine::Impl::load() {
     // from cfg.ext_chunk, so recompute it here rather than reordering the load.
     { const int ec = cfg.ext_chunk > 0 ? cfg.ext_chunk : 64;
       g_xin_ring_batch = ec > VBMAX ? ec : VBMAX; }
+    // COMBINED KV CACHE. sparse_attn is O(topk) -- it gathers ~640 rows by index and uses `n` only
+    // as a stride -- but the decode path used to dmalloc a (pos+T) x HEAD_DIM buffer and memcpy
+    // win_kv and comp_kv into it EVERY STEP, PER LAYER, purely to make those rows contiguous. At 16K
+    // context that is 1.76 GB copied per token to serve 1.3 MB of reads, and it is why decode
+    // degraded with context on an architecture whose whole point is that it should not.
+    //
+    // Allocating the two as ONE buffer with comp_kv at a fixed stride removes the copy for free:
+    // same bytes, same layout the copy was producing, just produced once instead of every step.
+    // g_kv_winmax tells the kernels the stride; 0 leaves the old copy path for decode.cu and the
+    // unit gates, which still allocate separately.
+    // DEFAULT OFF -- the combined cache LOST its A/B and the hypothesis behind it was wrong.
+    //
+    // The reasoning was: sparse_attn is O(topk), so the per-step memcpy that makes (pos+T) rows
+    // contiguous for it is pure waste, and removing it should flatten decode against context. It
+    // does remove the copy. It does not make anything faster. Same server, same session, same
+    // thermal state, temperature 0 (evidence/kv_combined_ab.log):
+    //
+    //     ms/token      500 ctx    4000 ctx    4963 ctx     slope (ms per token-of-context)
+    //     copy path      54.68       68.12       74.54      0.00445
+    //     combined       53.17       69.44       77.10      0.00536   <- WORSE
+    //
+    // Memory at ready is the same to 0.2 GiB, so there is no second reason to keep it either. The
+    // likely mechanism for the regression is locality: comp_kv used to be its own compact allocation
+    // that stayed hot, and folding it behind seqmax window rows puts it a long way from the rows
+    // touched next.
+    //
+    // What this rules OUT is worth as much as a win: the context-dependent cost is NOT the copy. It
+    // is the DSA index path, which scores every compressed row to select top-k -- O(context/ratio)
+    // by construction -- with a `<<<1,32>>>` top-k on one warp on top of it. That is where the next
+    // measurement goes. Kept behind DSV4_KV_COMBINED=1 so the experiment is repeatable.
+    g_kv_winmax = (getenv("DSV4_KV_COMBINED") && atoi(getenv("DSV4_KV_COMBINED")) == 1) ? seqmax : 0;
+    const size_t comp_rows = (size_t)(seqmax / 4 + 2);   // widest compressed cache (ratio 4)
     for (int Lyr = 0; Lyr < N_LAYERS; ++Lyr) {
         const int ratio = compress_ratio(Lyr);
-        CU(cudaMalloc(&KV[Lyr].win_kv, (size_t)seqmax * HEAD_DIM * 4));
+        // One allocation: [seqmax window rows][comp_rows compressed rows]. comp_kv is a VIEW.
+        CU(cudaMalloc(&KV[Lyr].win_kv,
+                      ((size_t)seqmax + ((ratio && g_kv_winmax) ? comp_rows : 0)) * HEAD_DIM * 4));
         if (ratio) {
+            if (g_kv_winmax) KV[Lyr].comp_kv = KV[Lyr].win_kv + (size_t)seqmax * HEAD_DIM;
+            else CU(cudaMalloc(&KV[Lyr].comp_kv, comp_rows * HEAD_DIM * 4));
             // xin is the compressor's attention-input history. After the x_cur/x_full split its
             // only reader is compressor_emit_group, which never looks back further than 2*ratio
             // positions, so a ring of 2*ratio rows plus a `ratio`-row mirrored margin holds
@@ -303,7 +343,6 @@ void Engine::Impl::load() {
             const int ring_alloc = xin_ring_alloc_rows(ratio);
             const size_t xin_rows = ring_alloc ? (size_t)ring_alloc : (size_t)seqmax;
             CU(cudaMalloc(&KV[Lyr].xin, xin_rows * DIM * 4));
-            CU(cudaMalloc(&KV[Lyr].comp_kv, (size_t)(seqmax / ratio + 2) * HEAD_DIM * 4));
             if (ratio == 4) CU(cudaMalloc(&KV[Lyr].idx_ckv, (size_t)(seqmax / ratio + 2) * INDEX_HEAD_DIM * 4));
         }
     }

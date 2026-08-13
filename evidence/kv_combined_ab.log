@@ -1,0 +1,8 @@
+=== DSV4_KV_COMBINED=0  mem 114.4/122.8 GiB
+    budget    500 ->    500 tok in   27.3s =  18.29 tok/s  ( 54.68 ms/tok)
+    budget   4000 ->   4000 tok in  272.5s =  14.68 tok/s  ( 68.12 ms/tok)
+    budget  10000 ->   4963 tok in  370.0s =  13.41 tok/s  ( 74.54 ms/tok)
+=== DSV4_KV_COMBINED=1  mem 114.2/122.8 GiB
+    budget    500 ->    500 tok in   26.6s =  18.81 tok/s  ( 53.17 ms/tok)
+    budget   4000 ->   4000 tok in  277.8s =  14.40 tok/s  ( 69.44 ms/tok)
+    budget  10000 ->   4963 tok in  382.7s =  12.97 tok/s  ( 77.10 ms/tok)

@@ -8,16 +8,8 @@
 [engine] loaded 100.40 GiB, 45821 tensors (MANAGED device-preferred)
 [engine] building 43 layer structs (persistent)...
 [engine] DSpark head: NSTAGE=3 experts=160
-[engine] ready. mem 120.2/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
+[engine] ready. mem 114.2/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
 
 [server] listening on http://0.0.0.0:8080   (web UI at /)
 [server] model deepseek-v4-flash-0731-reap, context 32768, block 6, adaptK 1.50
-[engine] prefill 165 tok, arena high-water 72 MiB of 640 MiB
-[engine] prefill 225 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 279 tok, arena high-water 215 MiB of 640 MiB
-[engine] prefill 394 tok, arena high-water 244 MiB of 640 MiB
-[engine] prefill 538 tok, arena high-water 244 MiB of 640 MiB
-[engine] prefill 165 tok, arena high-water 244 MiB of 640 MiB
-[engine] prefill 226 tok, arena high-water 244 MiB of 640 MiB
-[engine] prefill 257 tok, arena high-water 244 MiB of 640 MiB
-[engine] prefill 442 tok, arena high-water 244 MiB of 640 MiB
+[engine] prefill 19 tok, arena high-water 21 MiB of 640 MiB

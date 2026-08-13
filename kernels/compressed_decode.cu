@@ -1,4 +1,23 @@
 // compressed_decode.cu — M=1 KV-cache decode for a compressed (strided, ratio!=4) MLA layer. See header.
+// COMBINED KV CACHE.
+//
+// Attention here is sparse_attn, whose kernel loops `for (t = 0; t < topk; ++t)` -- it is O(topk),
+// about 640 rows, and NOT O(context). `n` is only the row stride. Yet every decode step used to
+// dmalloc a (pos + T) x HEAD_DIM buffer and memcpy win_kv and comp_kv into it, per layer, purely to
+// make those 640 rows contiguous: 1.76 GB copied per token at 16K context, for an attention that
+// reads 1.3 MB of it. That is why decode degraded with context on an architecture (MLA + DSA) whose
+// whole point is that it should not.
+//
+// When the caller allocates win_kv and comp_kv as ONE buffer -- comp_kv == win_kv + winmax*HEAD_DIM
+// -- it sets g_kv_winmax to that stride and the copy disappears: kv_all is win_kv, and the
+// compressed rows are already where the index arrays say they are. LayerKV documented this layout
+// from the start ("so attention needs no per-step copy"); the graph path used it and the serving
+// path never did.
+//
+// 0 means the buffers are separate and the old copy path runs, which is what src/decode.cu and the
+// unit gates rely on. Set by whoever owns the allocation.
+int g_kv_winmax = 0;
+
 #include "compressed_decode.h"
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"
@@ -104,17 +123,23 @@ void compressed_decode_step_strided(float* out, const float* x_cur, const float*
                               w.mc_norm, w.cc_cos, w.cc_sin, DIM, HEAD_DIM, false, ROPE_DIM, eps, false, stream);
         ++(*T);
     }
-    int Tn = *T, nwin = pos+1, ntot = nwin + Tn;
-    // kv_all = [win_kv[0..pos] ; comp_kv[0..Tn-1]]  (contiguous for sparse_attn)
-    float* kv_all; kv_all=(decltype(kv_all))dmalloc((size_t)ntot*HEAD_DIM*4);
-    CU(cudaMemcpyAsync(kv_all, win_kv, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
-    CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, comp_kv, (size_t)Tn*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+    int Tn = *T, nwin = pos+1;
+    // kv_all = [win_kv ; comp_kv] -- already contiguous when g_kv_winmax is set, else copied.
+    const int coff = g_kv_winmax ? g_kv_winmax : nwin;      // row where compressed rows begin
+    int ntot = coff + Tn;
+    float* kv_all;
+    if (g_kv_winmax) { kv_all = win_kv; }
+    else {
+        kv_all=(decltype(kv_all))dmalloc((size_t)ntot*HEAD_DIM*4);
+        CU(cudaMemcpyAsync(kv_all, win_kv, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+        CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, comp_kv, (size_t)Tn*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+    }
     // combined idxs: window [base..pos] ⊕ compressed [nwin + t] for t<Tn (strided: all t<(pos+1)/ratio == Tn)
     int base = pos - WINDOW + 1; if(base<0) base=0; int wwidth = pos+1-base;
     int tot = wwidth + Tn;
     int* comb = comb_pinned((size_t)tot);
     for(int k=0;k<wwidth;++k) comb[k]=base+k;
-    for(int t=0;t<Tn;++t) comb[wwidth+t]=nwin+t;
+    for(int t=0;t<Tn;++t) comb[wwidth+t]=coff+t;
     int* dcomb; dcomb=(decltype(dcomb))dmalloc((size_t)tot*4);
     CU(cudaMemcpyAsync(dcomb, comb, (size_t)tot*4, cudaMemcpyHostToDevice, stream));
     sparse_attn(o, q, kv_all, a.attn_sink, dcomb, 1, 1, N_HEADS, HEAD_DIM, ntot, tot, scale, stream);
@@ -210,12 +235,17 @@ void compressed_decode_step_indexer(float* out, const float* x_cur, const float*
     index_score(iscore, qtmp, idx_ckv, iw, 1, Tn, nH, idx_hd, stream);
     int topk = w.index_topk < Tn ? w.index_topk : Tn;
     int* dtop; dtop=(decltype(dtop))dmalloc((size_t)topk*4);
-    k_topk_decode<<<1,32,topk_scan_smem(Tn),stream>>>(dtop, iscore, Tn, topk, nwin);
-    // --- kv_all = [win_kv[0..pos] ; comp_kv[0..Tn-1]] ---
-    int ntot = nwin + Tn;
-    float* kv_all; kv_all=(decltype(kv_all))dmalloc((size_t)ntot*HEAD_DIM*4);
-    CU(cudaMemcpyAsync(kv_all, win_kv, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
-    CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, comp_kv, (size_t)Tn*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+    const int coff = g_kv_winmax ? g_kv_winmax : nwin;      // row where compressed rows begin
+    k_topk_decode<<<1,32,topk_scan_smem(Tn),stream>>>(dtop, iscore, Tn, topk, coff);
+    // --- kv_all = [win_kv ; comp_kv] -- contiguous already when g_kv_winmax is set ---
+    int ntot = coff + Tn;
+    float* kv_all;
+    if (g_kv_winmax) { kv_all = win_kv; }
+    else {
+        kv_all=(decltype(kv_all))dmalloc((size_t)ntot*HEAD_DIM*4);
+        CU(cudaMemcpyAsync(kv_all, win_kv, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+        CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, comp_kv, (size_t)Tn*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+    }
     // --- combined idxs: window [base..pos] ⊕ indexer topk ---
     int base = pos - WINDOW + 1; if(base<0) base=0; int wwidth = pos+1-base;
     int tot = wwidth + topk;
@@ -341,16 +371,22 @@ void compressed_verify_step_strided(float* out, const float* x_cur, const float*
         compressor_emit_group(comp_kv+(size_t)(*T)*HEAD_DIM, x_full, j/ratio, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,
                               w.mc_norm,w.cc_cos,w.cc_sin, DIM,HEAD_DIM,false,ROPE_DIM,eps,false,stream); ++(*T); }
     dprof_end(DP_C_COMPRESS,stream);
-    int Tf=*T, nwin=pos+K, ntot=nwin+Tf;
-    float* kv_all; kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
-    CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
-    CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+    int Tf=*T, nwin=pos+K;
+    const int coff = g_kv_winmax ? g_kv_winmax : nwin;
+    int ntot = coff + Tf;
+    float* kv_all;
+    if (g_kv_winmax) { kv_all = win_kv; }
+    else {
+        kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
+        CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+        CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+    }
     int wmax=0,tmax=0; for(int i=0;i<K;++i){int ig=pos+i,b=ig-WINDOW+1;if(b<0)b=0;int wid=ig+1-b;if(wid>wmax)wmax=wid;int Ti=(ig+1)/ratio;if(Ti>tmax)tmax=Ti;}
     int topk=wmax+tmax; int* comb = comb_pinned((size_t)K*topk);
     for(size_t z=0; z<(size_t)K*topk; ++z) comb[z]=-1;
     for(int i=0;i<K;++i){int ig=pos+i,b=ig-WINDOW+1;if(b<0)b=0;int wid=ig+1-b;int Ti=(ig+1)/ratio;
         for(int k=0;k<wid;++k) comb[(size_t)i*topk+k]=b+k;
-        for(int t=0;t<Ti;++t) comb[(size_t)i*topk+wmax+t]=nwin+t; }
+        for(int t=0;t<Ti;++t) comb[(size_t)i*topk+wmax+t]=coff+t; }
     int* dcomb; dcomb=(int*)dmalloc((size_t)K*topk*4); CU(cudaMemcpyAsync(dcomb,comb,(size_t)K*topk*4,cudaMemcpyHostToDevice,stream));
     finish_attn(w, q, kv_all, dcomb, K, pos, ntot, topk, out, eps, stream);
     dsync(stream); dfree(q);dfree(kv_all);dfree(dcomb);
@@ -414,12 +450,18 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     int topkc = (w.index_topk<Tf)?w.index_topk:Tf;
     int* dtop; dtop=(int*)dmalloc((size_t)K*topkc*4);
     dprof_begin(DP_I_TOPK,stream);
-    k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, nwin);   // device top-k (no D2H sync)
+    const int coff = g_kv_winmax ? g_kv_winmax : nwin;
+    k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);   // device top-k (no D2H sync)
     dprof_end(DP_I_TOPK,stream);
     dprof_end(DP_C_INDEXER,stream);
-    int ntot=nwin+Tf; float* kv_all; kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
-    CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
-    CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+    int ntot = coff + Tf;
+    float* kv_all;
+    if (g_kv_winmax) { kv_all = win_kv; }
+    else {
+        kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
+        CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+        CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+    }
     int wmax=0; for(int i=0;i<K;++i){int ig=pos+i,b=ig-WINDOW+1;if(b<0)b=0;int wid=ig+1-b;if(wid>wmax)wmax=wid;}
     int topk=wmax+topkc;
     int* dcomb; dcomb=(int*)dmalloc((size_t)K*topk*4);

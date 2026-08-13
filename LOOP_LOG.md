@@ -8146,3 +8146,64 @@ not a performance lever.
 K=5 step, and 2.78 ms of the 26.8 ms per emitted token that ships. The 8.53 ms is real and it is
 mostly irreducible: 6.2 µs/call of a launch floor that does not scale with grid size, and a
 20-iteration serial normalisation of a 4x4 matrix whose only speed-up is not bit-exact.
+
+## F139 — the O(context) KV memcpy is NOT why decode slows with context: the combined cache removed it and measured SLOWER
+
+Decode on this engine falls from ~19.5 tok/s at short context to ~6.8 at 16 K — a 2.9x slowdown on
+an architecture (MLA latent KV + DSA top-k selection) whose entire premise is that decode should be
+close to flat in context. That is worth chasing: it is the difference between a benchmark battery
+that costs hours and one that costs days.
+
+### The hypothesis, which was wrong
+
+`sparse_attn_kernel` loops `for (t = 0; t < topk; ++t)` — **O(topk), about 640 rows, and `n` is only
+a row stride**. Yet every decode step, in every compressed layer, did:
+
+```c
+int Tn = *T, nwin = pos+1, ntot = nwin + Tn;
+kv_all = dmalloc(ntot*HEAD_DIM*4);
+memcpy(kv_all, win_kv, nwin*HEAD_DIM*4);
+memcpy(kv_all + nwin*HEAD_DIM, comp_kv, Tn*HEAD_DIM*4);
+```
+
+At 16 K context that is ~1.76 GB copied per token to serve ~1.3 MB of reads. `LayerKV` even
+documents the alternative in its own comment — a combined cache "so attention needs no per-step
+copy" — which the graph path used and the serving path never did. It looked obvious.
+
+### The measurement, same session, same thermal state, temperature 0
+
+`win_kv` and `comp_kv` allocated as one buffer, `comp_kv` a view at a fixed stride, `g_kv_winmax`
+carrying it, `DSV4_KV_COMBINED` selecting. **Bit-identical** — `gate_engine` 8/8 and a diff of every
+token, margin and `head|d|` against the copy path is empty. Then (`evidence/kv_combined_ab.log`):
+
+| ms/token | 500 ctx | 4000 ctx | 4963 ctx | slope (ms per token-of-context) |
+|---|---:|---:|---:|---:|
+| copy path | 54.68 | 68.12 | 74.54 | **0.00445** |
+| combined cache | 53.17 | 69.44 | **77.10** | **0.00536** |
+
+**Removing 1.76 GB/token of copies made it 3.4 % SLOWER at 5 K, and the slope worse.** Memory at
+ready is the same to 0.2 GiB, so there is no second reason to keep it. Defaulted OFF.
+
+The likely mechanism for the regression is locality: `comp_kv` was a compact allocation that stayed
+hot, and folding it behind `seqmax` window rows moves it far from the rows touched next. The likely
+reason the copy never cost what it "should" is that a device-to-device `cudaMemcpyAsync` on a
+unified-memory part is not a 200 GB/s DRAM round trip.
+
+### What this rules out, and where the cost actually is
+
+The context-dependent term is **not** the copy. What remains, and what the next measurement should
+target, is the DSA index path:
+
+- `index_score(iscore, qtmp, idx_ckv, iw, 1, Tn, nH, idx_hd, ...)` scores **every** compressed row to
+  select the top-k. That is O(context/ratio) *by construction* — DSA makes attention sublinear, not
+  selection — and at 21 ratio-4 layers it is ~172 M MACs per token at 4 K context.
+- `k_topk_decode<<<1,32,...>>>(dtop, iscore, Tn, topk, coff)` then reduces that on **one warp**,
+  which is the thread-per-output-at-decode-shape class this repo's B0 lever was about, and is the
+  part that is an implementation artefact rather than the architecture.
+
+So the honest split is: some of the slope is inherent to DSA selection, and some is a single-warp
+reduction over a growing array. Only the second is recoverable, and it has not been priced yet.
+
+**Trap for the next person: a large removed memory movement is not automatically a win.** 1.76 GB
+per token sounds decisive and measured as nothing. The cheap A/B that settles it — one binary, one
+env var, one session — cost far less than the reasoning that predicted the win.

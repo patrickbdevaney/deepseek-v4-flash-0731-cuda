@@ -12,3 +12,7 @@
 [memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-13T12:23:33-04:00
 [memguard] victim gone, exiting. low-water was 2875 MB 2026-08-13T14:51:48-04:00
 [memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-13T14:53:05-04:00
+[memguard] !!! MemAvailable 411 MB < floor 1500 MB x3 — KILLING pid 784304 2026-08-13T17:57:07-04:00
+[memguard] killed. MemAvailable now 457 MB
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-13T18:06:53-04:00
+[memguard] victim gone, exiting. low-water was 10293 MB 2026-08-13T18:22:31-04:00
