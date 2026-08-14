@@ -41,7 +41,7 @@ scored as attempted and wrong rather than dropped, which makes every number here
   python3 tools/eval_suite.py --task humaneval
   python3 tools/eval_suite.py --report            # summarise everything already run
 """
-import argparse, glob, json, math, os, random, re, socket, subprocess, sys, tempfile, time
+import argparse, glob, hashlib, json, math, os, random, re, socket, subprocess, sys, tempfile, time
 import urllib.error
 import urllib.request
 
@@ -526,9 +526,24 @@ def main():
     print(f'[{a.task}] {len(items)} items from {src} (snapshot {snap[:12]}), '
           f'{len(done)} already done, {len(todo)} to go, max_tokens={maxtok}, timeout={timeout}s', flush=True)
 
+    # WHAT PRODUCED THESE TOKENS, recorded rather than assumed. The dataset sha says which
+    # questions; these say which code built the prompts and which binary answered them. Without
+    # them a result is reproducible only against "whatever the repo looks like now".
+    def _sh(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT).stdout.strip() or None
+        except Exception:
+            return None
+    binp = os.path.join(ROOT, 'build', 'dsv4-server')
     meta = dict(task=a.task, source=src, snapshot=snap, n_items=len(items), scoring=kind,
                 n_unique=n_unique, reps=a.reps,
                 effort=a.effort, temperature=a.temp, top_p=a.top_p, max_tokens=maxtok,
+                code_commit=_sh(['git', 'rev-parse', 'HEAD']),
+                code_dirty=bool(_sh(['git', 'status', '--porcelain'])),
+                server_sha256=(hashlib.sha256(open(binp, 'rb').read()).hexdigest()[:16]
+                               if os.path.exists(binp) else None),
+                server_mtime=(time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(os.path.getmtime(binp)))
+                              if os.path.exists(binp) else None),
                 started=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
     with open(os.path.join(OUT, f'{tag}.meta.json'), 'w') as f:
         json.dump(meta, f, indent=2)
@@ -569,7 +584,14 @@ def main():
         # report could do.
         used = (r.get('usage') or {}).get('completion_tokens', 0)
         truncated = ch.get('finish_reason') == 'length' or used >= maxtok
+        # PROMPT HASH. The prompt is not stored (it is large and derivable), it is re-derived from
+        # the pinned dataset plus this file. That derivation is only trustworthy if it can be
+        # CHECKED: without a hash, editing a prompt template after a run would silently re-pair old
+        # generations with a new prompt and eval_verify would still pass, because it re-derives the
+        # gold but never the question. The hash closes that -- verify recomputes the prompt and
+        # requires it to match what was actually sent.
         rec = dict(id=it['id'], gold=it['gold'], got=(got if kind != 'code' else None),
+                   prompt_sha256=hashlib.sha256(it['prompt'].encode()).hexdigest(),
                    correct=ok, finish_reason=ch.get('finish_reason'), truncated=bool(truncated),
                    category=it.get('category'), subject=it.get('subject'), level=it.get('level'),
                    usage=r.get('usage'), timings=r.get('timings'),

@@ -20,7 +20,7 @@ Anyone can run this on a clone of the repo with no GPU and no model:
   python3 tools/eval_verify.py                # every task that has results
   python3 tools/eval_verify.py --task gpqa_diamond
 """
-import argparse, json, os, sys
+import argparse, hashlib, json, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import eval_suite as E
@@ -64,6 +64,21 @@ def verify(task, eff, published):
     ck(task, 'gold matches the pinned dataset', not badgold,
        f'{len(badgold)} mismatched' + (f' e.g. {badgold[:2]}' if badgold else ''))
 
+    # THE PROMPT ACTUALLY SENT must be the one this code re-derives. Without this, a later edit to a
+    # prompt template would silently re-pair old generations with a new question and every other
+    # check here would still pass.
+    have = [r for r in recs if r.get('prompt_sha256')]
+    if have:
+        badp = [r['id'] for r in have
+                if r['id'].split('#r')[0] in by_id
+                and hashlib.sha256(by_id[r['id'].split('#r')[0]]['prompt'].encode()).hexdigest()
+                    != r['prompt_sha256']]
+        ck(task, 'prompt matches the one that was sent', not badp,
+           f'{len(have)}/{len(recs)} records carry a hash; {len(badp)} mismatched')
+    else:
+        print(f'  [ .. ] {task:<14} {"prompt hash not recorded":<40} '
+              f'run predates the hash; prompt is re-derived and UNCHECKED', flush=True)
+
     # every record either has generated text or a recorded engine error
     empty = [r['id'] for r in recs
              if not (r.get('content') or r.get('reasoning')) and not r.get('error')]
@@ -89,9 +104,18 @@ def verify(task, eff, published):
        f'{len(disagree)} disagree' + (f' e.g. {disagree[:2]}' if disagree else ''))
 
     acc = 100.0 * redone / len(recs) if recs else 0.0
-    if published is not None:
+    if published is not None and published.get('n') not in (None, len(recs)):
+        # Not a discrepancy -- a RACE. summary.json was written over published['n'] records and the
+        # run has appended since. eval_land.sh orders report -> publish -> verify so this cannot
+        # happen at landing time; standalone mid-flight it is expected, and calling it a failure
+        # would train the reader to ignore a check that is supposed to mean something.
+        print(f'  [ .. ] {task:<14} {"summary is stale (run in flight)":<40} '
+              f'summary over {published["n"]} records, file now has {len(recs)}; '
+              f'recomputed {acc:.1f} %', flush=True)
+    elif published is not None:
         ck(f'{task}/{eff}', 'published accuracy is reproducible', abs(acc - published['acc']) < 0.05,
            f'recomputed {acc:.1f} % vs published {published["acc"]:.1f} % over {len(recs)} records')
+    if published is not None:
         ck(task, 'snapshot matches the published one',
            (published.get('snapshot') or '').startswith(snap[:12]) or snap.startswith(
                (published.get('snapshot') or '')[:12]),

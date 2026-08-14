@@ -3,8 +3,8 @@
     {
       "task": "gpqa_diamond",
       "effort": "low",
-      "records": 30,
-      "recomputed_acc": 76.67,
+      "records": 32,
+      "recomputed_acc": 78.12,
       "published_acc": 76.7,
       "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3",
       "source": "fingertap/GPQA-Diamond (test, 198)"
