@@ -39,7 +39,7 @@ EFFORT="${EFFORT:-low}"
 # be quoted at, and costs 4x. Last because it is the only benchmark here with NO published
 # reference number -- so if the run is cut short AIME is simply ABSENT rather than present and
 # unquotable, and the benchmarks carrying the head-to-head have already landed.
-PLAN="${PLAN:-gpqa_diamond:0:1 mmlu_pro:150:1 math500:100:1 humaneval:0:1 aime24:0:4 aime25:0:4}"
+PLAN="${PLAN:-gpqa_diamond:0:1 bfcl:0:1 mmlu_pro:150:1 humaneval:0:1 lcb:0:1 math500:100:1 aime24:0:4 aime25:0:4}"
 
 # The battery does not start unless the preflight says GO. Its checks are not advisory: the first
 # run of this suite lost an entire benchmark, mis-scored another, and quoted a third from a sample

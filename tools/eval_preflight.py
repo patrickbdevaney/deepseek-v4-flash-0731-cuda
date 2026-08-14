@@ -40,8 +40,8 @@ ROOT = E.ROOT
 CKPT = os.environ.get('CKPT', '/home/patrickd/models/DeepSeek-V4-Flash-0731-REAP')
 
 # Mirrors the PLAN in scripts/run_evals.sh: task -> (n, reps)
-PLAN = [('gpqa_diamond', 0, 1), ('mmlu_pro', 150, 1), ('math500', 100, 1),
-        ('humaneval', 0, 1), ('aime24', 0, 4), ('aime25', 0, 4)]
+PLAN = [('gpqa_diamond', 0, 1), ('bfcl', 0, 1), ('mmlu_pro', 150, 1), ('humaneval', 0, 1),
+        ('lcb', 0, 1), ('math500', 100, 1), ('aime24', 0, 4), ('aime25', 0, 4)]
 EFFORT = os.environ.get('EFFORT', 'low')
 
 results, nfail = [], 0

@@ -235,6 +235,60 @@ def task_bfcl(n):
     return items, ','.join(sorted(snaps)), 'gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240)', 'call'
 
 
+def task_lcb(n):
+    """LiveCodeBench (code_generation_lite), the most recent release window.
+
+    WHY test6 AND NOT test.jsonl. LiveCodeBench exists to be date-windowed: its whole design is that
+    you evaluate on problems published AFTER a model's training cutoff, because competitive-programming
+    problems and their editorials are exactly the kind of thing that leaks. `test.jsonl` covers
+    2023-05 to 2024-03, which a 2026 checkpoint has almost certainly seen -- scoring on it would
+    measure recall as much as capability. `test6.jsonl` is 2025-01 to 2025-04, the latest window
+    published, and is what is used here.
+
+    THAT IS STILL NOT A CLEAN WINDOW and the report says so: this checkpoint is `0731`, i.e. later
+    than every problem in it. Contamination is REDUCED, not eliminated, and it biases the score UP.
+
+    Two execution modes, both from the benchmark's own test cases:
+      * `functional` (LeetCode): the row carries `starter_code` defining a `Solution` class; the test
+        input is a JSON argument list and the expected output a JSON return value.
+      * `stdin` (AtCoder, Codeforces): the program reads stdin and its stdout is compared.
+    Private tests are zlib+base64 and are used alongside the public ones, as the benchmark intends.
+    """
+    import base64 as _b64, glob as _g, pickle as _pk, zlib as _z
+    fs = sorted(_g.glob(os.path.expanduser(
+        '~/.cache/huggingface/hub/datasets--livecodebench--code_generation_lite/'
+        'snapshots/*/test6.jsonl')))
+    if not fs:
+        sys.exit('LiveCodeBench test6.jsonl not found — run tools/eval_fetch.py')
+    snap = os.path.basename(os.path.dirname(fs[0]))
+    rows = [json.loads(l) for l in open(fs[0]) if l.strip()]
+
+    def _tests(r):
+        out = json.loads(r['public_test_cases'])
+        try:
+            priv = _z.decompress(_b64.b64decode(r['private_test_cases']))
+            try:
+                priv = _pk.loads(priv)
+            except Exception:
+                priv = priv.decode()
+            out = out + (json.loads(priv) if isinstance(priv, str) else priv)
+        except Exception:
+            pass                      # public tests alone; still a real (weaker) check
+        return out
+
+    items = []
+    for i, r in _sample(rows, n):
+        fn = r['starter_code'].strip()
+        instr = ('Write a complete Python solution. Reply with ONLY one ```python code block.\n\n'
+                 + ('Complete this class:\n```python\n' + r['starter_code'] + '```\n'
+                    if fn else 'Read from standard input and write to standard output.\n'))
+        items.append(dict(id=f'lcb-{r["question_id"]}', gold='pass',
+                          subject=r['platform'], level=r['difficulty'],
+                          starter=r['starter_code'], tests=_tests(r),
+                          prompt=instr + '\n' + r['question_content']))
+    return items, snap, 'livecodebench/code_generation_lite test6 (2025-01..2025-04, 175)', 'lcb'
+
+
 TASKS = {
     'gsm8k':        task_gsm8k,
     'aime24':       lambda n: task_aime(2024),
@@ -244,6 +298,7 @@ TASKS = {
     'math500':      task_math500,
     'humaneval':    task_humaneval,
     'bfcl':         task_bfcl,
+    'lcb':          task_lcb,
 }
 
 # Per-task completion ceiling. prompt + completion + template overhead has to fit inside seqmax, and
@@ -266,7 +321,7 @@ TASKS = {
 # them buys nothing and costs ~90 % of the wall clock, so the cap is set to protect real answers and
 # to stop runaways early, not to chase them.
 MAXTOK = dict(gsm8k=8000, aime24=8000, aime25=8000, gpqa_diamond=8000,
-              mmlu_pro=8000, math500=8000, humaneval=8000, bfcl=2000)
+              mmlu_pro=8000, math500=8000, humaneval=8000, bfcl=2000, lcb=8000)
 
 
 # ----------------------------------------------------------------------------- answer extraction
@@ -346,6 +401,9 @@ def extract(kind, text):
         return blocks[-1] if blocks else text
     if kind == 'call':
         return text          # scored structurally by call_correct; no extraction step
+    if kind == 'lcb':
+        blocks = re.findall(r'```(?:python|py)?\s*\n(.*?)```', text, re.S)
+        return blocks[-1] if blocks else text
     return None
 
 
@@ -535,6 +593,65 @@ def call_correct(text, gold_json):
     return True
 
 
+
+def run_lcb(code, item, per_test_timeout=8, max_tests=25):
+    """Run a LiveCodeBench solution against the benchmark's own tests. All must pass.
+
+    `max_tests` bounds the wall clock: some rows carry hundreds of private tests and this engine has
+    a whole battery to get through. It is a REAL limitation and it can only make the score higher
+    (a solution failing test 30 of 200 is counted correct), so it is recorded in the report rather
+    than left implicit.
+    """
+    if not code:
+        return False
+    tests = (item.get('tests') or [])[:max_tests]
+    if not tests:
+        return False
+    functional = bool(item.get('starter') or '').__and__(True) if False else bool(str(item.get('starter') or '').strip())
+    with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR', '/tmp')) as d:
+        src = os.path.join(d, 'sol.py')
+        for t in tests:
+            ttype = t.get('testtype', 'functional' if functional else 'stdin')
+            if ttype == 'functional':
+                # Call Solution().<method>(*args); the input is a JSON argument list, one per line.
+                m = re.search(r'def\s+(\w+)\s*\(self', item.get('starter') or '')
+                if not m:
+                    return False
+                args = t['input']
+                prog = (code + '\n\nimport json,sys\n'
+                        '_a=[json.loads(x) for x in ' + repr(args) + '.split(chr(10)) if x.strip()]\n'
+                        '_r=Solution().' + m.group(1) + '(*_a)\n'
+                        'print(json.dumps(_r))\n')
+                open(src, 'w').write(prog)
+                try:
+                    p = subprocess.run([sys.executable, src], capture_output=True,
+                                       timeout=per_test_timeout, text=True)
+                except subprocess.TimeoutExpired:
+                    return False
+                if p.returncode != 0:
+                    return False
+                try:
+                    if json.loads(p.stdout.strip()) != json.loads(t['output'].strip()):
+                        return False
+                except Exception:
+                    if p.stdout.strip() != t['output'].strip():
+                        return False
+            else:
+                open(src, 'w').write(code)
+                try:
+                    p = subprocess.run([sys.executable, src], input=t['input'],
+                                       capture_output=True, timeout=per_test_timeout, text=True)
+                except subprocess.TimeoutExpired:
+                    return False
+                if p.returncode != 0:
+                    return False
+                got = [l.rstrip() for l in p.stdout.strip().splitlines()]
+                exp = [l.rstrip() for l in t['output'].strip().splitlines()]
+                if got != exp:
+                    return False
+    return True
+
+
 def correct(kind, got, gold, item=None):
     if got is None:
         return False
@@ -542,6 +659,8 @@ def correct(kind, got, gold, item=None):
         return run_code(got, item)
     if kind == 'call':
         return call_correct(got, gold)
+    if kind == 'lcb':
+        return run_lcb(got, item)
     if kind == 'letter':
         return got == gold
     if kind == 'math':
