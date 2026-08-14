@@ -671,6 +671,61 @@ def correct(kind, got, gold, item=None):
         return got == gold
 
 
+def accuracy_ci(recs, seed=20260814):
+    """Accuracy and a 95 % interval that respects how many PROBLEMS there are, not how many
+    generations were drawn from them.
+
+    avg@k re-samples the SAME problems k times. Feeding the resulting k*m records to a Wilson
+    interval treats four samples of one AIME problem as four independent problems, which is
+    pseudo-replication: AIME 2024 is thirty problems whether you sample it once or sixty-four times.
+    Simulated over 30 problems at reps=4, the Wilson-over-120 interval comes out at +-8.8 points in
+    every scenario, while the true interval ranges from +-8.9 (every problem a genuine coin flip) to
+    +-18.2 (every problem deterministic) -- understated by up to 2.07x, and understated MOST exactly
+    when the extra reps bought the least.
+
+    So: group by problem, and bootstrap over PROBLEMS. The estimator is the mean of the per-problem
+    success rates, which is also what avg@k means. Single-sample tasks have one record per problem,
+    the grouping is a no-op, and they keep the exact Wilson interval -- the normal approximation is
+    wrong at 30 items near the ends, which is why Wilson is there in the first place.
+    """
+    groups = {}
+    for r in recs:
+        groups.setdefault(r['id'].split('#r')[0], []).append(bool(r.get('correct')))
+    m = len(groups)
+    if m == 0:
+        return 0.0, 0.0, 0.0, 'none', 0
+    reps_max = max(len(v) for v in groups.values())
+    if reps_max <= 1:
+        k, n = sum(sum(v) for v in groups.values()), sum(len(v) for v in groups.values())
+        lo, hi = wilson(k, n)
+        return 100.0 * k / n, lo, hi, 'wilson', m
+
+    # mean of per-problem rates: with unequal group sizes (a partial avg@k run) this is the
+    # estimand, whereas pooled k/n would silently weight by how many samples each problem got
+    vals = list(groups.values())
+    ph = [sum(v) / len(v) for v in vals]
+    acc = 100.0 * sum(ph) / m
+    rng = random.Random(seed)          # seeded so the published interval is reproducible
+
+    # NESTED bootstrap: resample problems, then resample draws WITHIN each chosen problem. Both
+    # variance components are real -- which problems you got, and how the sampler happened to go on
+    # them -- and resampling problems alone reuses the observed per-problem rates as if they were
+    # exact. That is not a corner case: with every problem at 2 of 4 correct, the observed rates are
+    # all identical, the outer-only bootstrap reports +-0.0, and a 50 % score comes out with a zero-
+    # width interval. The inner draw is what stops the interval from collapsing.
+    boot = []
+    for _ in range(10000):
+        tot = 0.0
+        for _ in range(m):
+            v = vals[rng.randrange(m)]
+            L = len(v)
+            tot += sum(v[rng.randrange(L)] for _ in range(L)) / L
+        boot.append(tot / m)
+    boot.sort()
+    return (acc, 100.0 * boot[249], 100.0 * boot[9749],
+            f'cluster-bootstrap over {m} problems (avg@{reps_max})', m)
+
+
 def wilson(k, n, z=1.96):
     """Wilson score interval. Reported instead of k/n +- 1.96*sqrt(p(1-p)/n) because several of
     these tasks are 30 items, where the normal approximation is simply wrong near the ends."""
@@ -918,7 +973,7 @@ def _report_one(task, eff, lines):
         mpath = os.path.join(OUT, f'{task}.{eff}.meta.json')
         meta = json.load(open(mpath)) if os.path.exists(mpath) else {}
         k, n = sum(r['correct'] for r in recs), len(recs)
-        lo, hi = wilson(k, n)
+        acc, lo, hi, ci_method, n_problems = accuracy_ci(recs)
         nerr = sum(1 for r in recs if r.get('error'))
         trunc = sum(1 for r in recs
                     if r.get('truncated') or r.get('finish_reason') == 'length'
@@ -943,7 +998,8 @@ def _report_one(task, eff, lines):
                           strata_field=strata_field, strata_seen=strata_seen,
                           strata_total=strata_total,
                           n_unique=meta.get('n_unique'), reps=meta.get('reps', 1),
-                          acc=round(100*k/n, 1), ci=[round(lo, 1), round(hi, 1)],
+                          acc=round(acc, 1), ci=[round(lo, 1), round(hi, 1)],
+                          ci_method=ci_method, n_problems=n_problems,
                           truncated=trunc, errors=nerr,
                           mean_completion_tokens=round(sum(toks)/n),
                           mean_tok_s=round(sum(tps)/len(tps), 2) if tps else None,
