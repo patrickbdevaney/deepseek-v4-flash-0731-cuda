@@ -878,10 +878,26 @@ def main():
     report()
 
 
+def efforts_on_disk(task):
+    """Effort tags are DISCOVERED, not enumerated.
+
+    They used to be the literal tuple ('low','high','max'), which silently dropped any result whose
+    tag was not in that list -- and budget-extended runs carry a tag like `low24k` (see
+    tools/eval_extend.py). A finished benchmark that simply never appears in the table is the worst
+    kind of failure here, because nothing errors: the number is just missing.
+    """
+    out = set()
+    for fn in os.listdir(OUT) if os.path.isdir(OUT) else []:
+        parts = fn.split('.')
+        if len(parts) == 3 and parts[0] == task and parts[2] == 'jsonl':
+            out.add(parts[1])
+    return sorted(out)
+
+
 def report():
     lines = []
     for task in TASKS:
-        for eff in ('low', 'high', 'max'):
+        for eff in efforts_on_disk(task):
             _report_one(task, eff, lines)
     _write(lines)
     return lines

@@ -413,6 +413,13 @@ int main(int argc, char** argv) {
                             "application/json");
             return;
         }
+        // EVERYTHING past this point is wrapped. The non-streaming chat handler learned this the
+        // expensive way: an exception escaping the lambda closes the connection with an empty body,
+        // the client sees an unexplained HTTP 500, and a benchmark scores every remaining item
+        // wrong -- that bug cost an entire 198-item GPQA run. This path had never been given the
+        // same treatment, and the budget-extension runs (tools/eval_extend.py) drive their whole
+        // ~20-hour workload through it.
+        try {
         std::string prompt = body.value("prompt", "");
         dsv4srv::GenParams gp;
         gp.temperature = body.contains("temperature") && body["temperature"].is_number()
@@ -440,6 +447,17 @@ int main(int argc, char** argv) {
                                 {"completion_tokens", r.stats.completion_tokens},
                                 {"total_tokens", r.stats.prompt_tokens + r.stats.completion_tokens}}}};
         res.set_content(dump_lossy(out), "application/json");
+        } catch (const std::exception& e) {
+            ++m_errors;
+            res.status = 500;
+            res.set_content(json{{"error", {{"message", std::string("completion failed: ") + e.what()},
+                                            {"type", "server_error"}}}}.dump(), "application/json");
+        } catch (...) {
+            ++m_errors;
+            res.status = 500;
+            res.set_content(json{{"error", {{"message", "completion failed: unknown exception"},
+                                            {"type", "server_error"}}}}.dump(), "application/json");
+        }
     });
 
     srv.set_pre_routing_handler([](const httplib::Request&, httplib::Response&) {

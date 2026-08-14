@@ -75,7 +75,24 @@ def verify(task, eff, published):
                     != r['prompt_sha256']]
         ck(task, 'prompt matches the one that was sent', not badp,
            f'{len(have)}/{len(recs)} records carry a hash; {len(badp)} mismatched')
-    else:
+    # A file can be MIXED: a run that began before per-record hashing and continued after it has
+    # records of both kinds. Checking only the hashed ones and reporting PASS would leave the rest
+    # with no prompt provenance at all, silently. Whatever is not covered per-record must be covered
+    # by the set-level pin, or it is called out as unchecked.
+    if have and len(have) < len(recs):
+        pinf = os.path.join(OUT, 'prompt_provenance.json')
+        pin = (json.load(open(pinf)).get(f'{task}.{eff}') if os.path.exists(pinf) else None)
+        n_un = len(recs) - len(have)
+        if pin:
+            cur = hashlib.sha256(''.join(by_id[k]['prompt'] for k in sorted(by_id)).encode()).hexdigest()
+            ck(task, 'unhashed records covered by the set pin', cur == pin['prompts_sha256'],
+               f'{n_un} records predate the hash; set proven identical to run-start '
+               f'{pin["run_start_commit"][:12]} (set-level, not per-record)')
+        else:
+            ck(task, 'unhashed records covered by the set pin', False,
+               f'{n_un} of {len(recs)} records predate the hash and NO set-level pin exists; '
+               f'run tools/eval_pin_prompts.py --task {task} --effort {eff} --since <run-start>')
+    if not have:
         # No per-record hash. Fall back to the SET-level proof if one was pinned: the prompts
         # rebuilt from the harness at the run-start commit were byte-identical to the ones HEAD
         # rebuilds, so HEAD re-derives exactly what was sent. Weaker than a per-record hash --
@@ -152,7 +169,9 @@ def main():
     for task in E.TASKS:
         if a.task and task != a.task:
             continue
-        for eff in ('low', 'high', 'max'):
+        # Discovered, not enumerated -- a budget-extended run carries a tag like `low24k` and a
+        # hardcoded tuple would skip it without failing. See eval_suite.efforts_on_disk.
+        for eff in E.efforts_on_disk(task):
             if a.effort and eff != a.effort:
                 continue
             r = verify(task, eff, pub.get((task, eff)))
