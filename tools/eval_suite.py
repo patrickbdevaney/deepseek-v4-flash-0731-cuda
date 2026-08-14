@@ -407,6 +407,49 @@ def extract(kind, text):
     return None
 
 
+def _guarded_run(argv, stdin_text=None, timeout=20, mem_bytes=2 << 30):
+    """Run model-generated code with limits, and leave nothing behind.
+
+    HumanEval and LiveCodeBench execute code this model wrote, unreviewed, on the same box that is
+    holding ~113 GiB of weights resident. `subprocess.run(timeout=...)` is not enough for that:
+
+      * it applies NO memory limit, so one `[0]*10**10` in a wrong solution takes the machine into
+        swap. On this box the visible consequence would be memguard firing and killing the SERVER --
+        the battery would die and the log would blame the engine, not the solution that did it.
+      * it kills only the direct child. Code that forks or spawns a thread pool leaves orphans that
+        survive the timeout and keep consuming the box for the rest of the night.
+
+    So: an address-space cap, no core dumps, a file-size cap, and its own session so the whole
+    process group can be killed as a unit. Returns (returncode, stdout, stderr) with returncode None
+    meaning it timed out.
+    """
+    import resource, signal
+
+    def limits():
+        resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (64 << 20, 64 << 20))
+        os.setsid()                      # own process group, so killpg reaps grandchildren too
+
+    p = subprocess.Popen(argv,
+                         stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, preexec_fn=limits)
+    try:
+        out, err = p.communicate(input=stdin_text, timeout=timeout)
+        return p.returncode, out, err
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except Exception:
+            pass
+        try:
+            p.communicate(timeout=5)
+        except Exception:
+            pass
+        return None, '', ''
+
+
 def run_code(code, item, timeout=20):
     """HumanEval pass@1: the extracted block plus the benchmark's own test, in a fresh interpreter.
 
@@ -422,9 +465,8 @@ def run_code(code, item, timeout=20):
         f.write(src)
         p = f.name
     try:
-        return subprocess.run([sys.executable, p], capture_output=True, timeout=timeout).returncode == 0
-    except subprocess.TimeoutExpired:
-        return False
+        rc, _, _ = _guarded_run([sys.executable, p], timeout=timeout)
+        return rc == 0
     finally:
         os.unlink(p)
 
@@ -623,29 +665,22 @@ def run_lcb(code, item, per_test_timeout=8, max_tests=25):
                         '_r=Solution().' + m.group(1) + '(*_a)\n'
                         'print(json.dumps(_r))\n')
                 open(src, 'w').write(prog)
-                try:
-                    p = subprocess.run([sys.executable, src], capture_output=True,
-                                       timeout=per_test_timeout, text=True)
-                except subprocess.TimeoutExpired:
-                    return False
-                if p.returncode != 0:
+                rc, out, _ = _guarded_run([sys.executable, src], timeout=per_test_timeout)
+                if rc != 0:                      # None (timeout) or a non-zero exit both fail
                     return False
                 try:
-                    if json.loads(p.stdout.strip()) != json.loads(t['output'].strip()):
+                    if json.loads(out.strip()) != json.loads(t['output'].strip()):
                         return False
                 except Exception:
-                    if p.stdout.strip() != t['output'].strip():
+                    if out.strip() != t['output'].strip():
                         return False
             else:
                 open(src, 'w').write(code)
-                try:
-                    p = subprocess.run([sys.executable, src], input=t['input'],
-                                       capture_output=True, timeout=per_test_timeout, text=True)
-                except subprocess.TimeoutExpired:
+                rc, out, _ = _guarded_run([sys.executable, src], stdin_text=t['input'],
+                                          timeout=per_test_timeout)
+                if rc != 0:                      # None (timeout) or a non-zero exit both fail
                     return False
-                if p.returncode != 0:
-                    return False
-                got = [l.rstrip() for l in p.stdout.strip().splitlines()]
+                got = [l.rstrip() for l in out.strip().splitlines()]
                 exp = [l.rstrip() for l in t['output'].strip().splitlines()]
                 if got != exp:
                     return False

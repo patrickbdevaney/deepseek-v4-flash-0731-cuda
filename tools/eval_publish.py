@@ -38,7 +38,7 @@ def main():
     if not rows:
         sys.exit('summary.json is empty')
 
-    out = ['| benchmark | effort | scored | **acc %** | 95 % CI (Wilson) | trunc | err | '
+    out = ['| benchmark | effort | scored | **acc %** | 95 % CI | trunc | err | '
            'mean out tok | tok/s | unpruned 0731 @ same effort |',
            '|---|---|---:|---:|---|---:|---:|---:|---:|---:|']
     for r in rows:
@@ -52,6 +52,16 @@ def main():
         if not complete and st and sn is not None and sn < st:
             complete = False
             r = dict(r, _flag=f' **— NOT QUOTABLE, {sn} of {st} {r.get("strata_field","strata")} strata**')
+        # A TRUNCATED ITEM IS SCORED WRONG, so past a few percent the row stops being a measurement
+        # of the model and becomes a measurement of max_tokens. GPQA at an 8000-token cap truncated
+        # 31.7 % and scored 65.8 % pooled against 91.5 % on the traces that terminated -- a 26-point
+        # gap that no reader could infer from a "trunc" count sitting in a column. Say it in the row.
+        rate = (r.get('truncated', 0) / r['n']) if r.get('n') else 0.0
+        if rate > 0.05:
+            complete = False
+            r = dict(r, _flag=r.get('_flag', '') +
+                     f' **— NOT QUOTABLE, {rate:.0%} truncated at max_tokens={r.get("max_tokens")}; '
+                     f'this measures the budget, not the model. Extend with tools/eval_extend.py**')
         out.append('| {lbl}{star} | **{eff}** | {n}/{tot} | **{acc:.1f}** | [{lo:.1f}, {hi:.1f}] | '
                    '{tr} | {er} | {mt} | {tps:.1f} | {ref} |'.format(
                        eff=eff,
@@ -68,6 +78,13 @@ def main():
             f'{tot_items} items scored, {tot_tok:,} completion tokens generated. Sampling held at '
             '`temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at '
             'the SAME reasoning effort as the row.',
+            '',
+            'Interval method per row: ' + ', '.join(
+                sorted({f'{LABEL.get(r["task"], r["task"])} — {r.get("ci_method", "wilson")}'
+                        for r in rows})) + '. Single-sample tasks use a Wilson score interval; '
+            'avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are '
+            'not k problems and pooling them into a Wilson interval understates the width by up to '
+            '2x — most severely when the extra samples bought the least.',
             '',
             'Per-task provenance (dataset and pinned snapshot):', '',
             '| benchmark | dataset | snapshot | max_tokens |', '|---|---|---|---:|']
