@@ -191,6 +191,50 @@ def task_humaneval(n):
     return items, snap, 'openai/openai_humaneval (164)', 'code'
 
 
+def task_bfcl(n):
+    """BFCL v3 (executable subsets) — function calling and parallel tool invocation.
+
+    WHY THIS ONE. Nothing else in this suite touches tool use, which is the axis this model's own
+    card leads on (Toolathlon 70.3, Terminal Bench 82.7). BFCL is the standard measure for it, it is
+    exactly scorable, and its outputs are SHORT -- so it is among the cheapest signal per GPU-hour
+    here, where everything else is dominated by reasoning-trace length.
+
+    SCORED BY AST MATCH, not by execution. The subsets are named `exec_*` because BFCL can run them
+    against live APIs; that needs network and keys and would make the score depend on whether a
+    weather endpoint was up. Every row ships `ground_truth` as a call string, so the comparison is
+    structural: same function, same argument names, same values. That is BFCL's own AST metric and
+    it is deterministic offline. Recorded as AST-mode in the report so it is never read as exec-mode.
+
+    Prompt mode rather than the native tool-call API: the model emits calls as text and they are
+    parsed. This is how BFCL evaluates models without a tool-calling endpoint, and it keeps the
+    measurement independent of this server's DSML tool-call plumbing -- which is engine behaviour,
+    not model capability.
+    """
+    import glob as _g
+    base = os.path.expanduser('~/.cache/huggingface/hub/'
+                              'datasets--gorilla-llm--Berkeley-Function-Calling-Leaderboard/snapshots')
+    subs = ['exec_simple', 'exec_multiple', 'exec_parallel', 'exec_parallel_multiple']
+    items, snaps = [], set()
+    for sub in subs:
+        fs = sorted(_g.glob(os.path.join(base, '*', f'BFCL_v3_{sub}.json')))
+        if not fs:
+            sys.exit(f'BFCL subset {sub} not found under {base} — this harness never downloads')
+        snaps.add(os.path.basename(os.path.dirname(fs[0])))
+        rows = [json.loads(l) for l in open(fs[0]) if l.strip()]
+        for i, r in _sample(rows, 0):
+            q = r['question'][0][0]['content']
+            fns = json.dumps(r['function'], indent=1)
+            gt = r['ground_truth']
+            items.append(dict(
+                id=f'bfcl-{sub}-{i:04d}', gold=json.dumps(gt), subject=sub,
+                prompt=('You have access to the following functions:\n\n' + fns +
+                        '\n\nUser request: ' + q +
+                        '\n\nRespond with ONLY the function call(s) needed, one per line, in '
+                        'Python call syntax, e.g. func_name(arg1=value1, arg2=value2). '
+                        'Emit exactly ' + str(len(gt)) + ' call(s). No explanation, no code fences.')))
+    return items, ','.join(sorted(snaps)), 'gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240)', 'call'
+
+
 TASKS = {
     'gsm8k':        task_gsm8k,
     'aime24':       lambda n: task_aime(2024),
@@ -199,6 +243,7 @@ TASKS = {
     'mmlu_pro':     task_mmlu_pro,
     'math500':      task_math500,
     'humaneval':    task_humaneval,
+    'bfcl':         task_bfcl,
 }
 
 # Per-task completion ceiling. prompt + completion + template overhead has to fit inside seqmax, and
@@ -221,7 +266,7 @@ TASKS = {
 # them buys nothing and costs ~90 % of the wall clock, so the cap is set to protect real answers and
 # to stop runaways early, not to chase them.
 MAXTOK = dict(gsm8k=8000, aime24=8000, aime25=8000, gpqa_diamond=8000,
-              mmlu_pro=8000, math500=8000, humaneval=8000)
+              mmlu_pro=8000, math500=8000, humaneval=8000, bfcl=2000)
 
 
 # ----------------------------------------------------------------------------- answer extraction
@@ -299,6 +344,8 @@ def extract(kind, text):
     if kind == 'code':
         blocks = re.findall(r'```(?:python|py)?\s*\n(.*?)```', text, re.S)
         return blocks[-1] if blocks else text
+    if kind == 'call':
+        return text          # scored structurally by call_correct; no extraction step
     return None
 
 
@@ -385,11 +432,116 @@ def math_equal(got, gold):
     return bool(sym)                                # mangled LaTeX that sympy could have parsed
 
 
+
+
+def _safe_val(node):
+    """Literal, or simple arithmetic over literals.
+
+    `ast.literal_eval` alone is not enough: BFCL's own ground truth writes argument values as
+    EXPRESSIONS -- `p=1/6` in exec_multiple-0000 and `amount=500*500` in exec_parallel_multiple-0011.
+    With literal_eval those two rows fail against their own gold, which is a scorer bug that would
+    have quietly cost 2 items. Arithmetic over numeric literals is evaluated; anything involving a
+    name, call or attribute still raises, so this cannot execute model-supplied code.
+    """
+    import ast as _ast
+    if isinstance(node, _ast.Constant):
+        return node.value
+    if isinstance(node, _ast.UnaryOp) and isinstance(node.op, (_ast.UAdd, _ast.USub)):
+        v = _safe_val(node.operand)
+        return +v if isinstance(node.op, _ast.UAdd) else -v
+    if isinstance(node, _ast.BinOp):
+        a, b = _safe_val(node.left), _safe_val(node.right)
+        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+            raise ValueError('non-numeric operands')
+        op = node.op
+        if isinstance(op, _ast.Add):   return a + b
+        if isinstance(op, _ast.Sub):   return a - b
+        if isinstance(op, _ast.Mult):  return a * b
+        if isinstance(op, _ast.Div):   return a / b
+        if isinstance(op, _ast.Pow):   return a ** b
+        raise ValueError('unsupported operator')
+    if isinstance(node, (_ast.List, _ast.Tuple)):
+        return [_safe_val(e) for e in node.elts]
+    if isinstance(node, _ast.Dict):
+        return {_safe_val(k): _safe_val(v) for k, v in zip(node.keys, node.values)}
+    raise ValueError('not a literal expression')
+
+
+def _parse_calls(text):
+    """Every `name(...)` call in the text, as (name, {arg: literal}). Unparseable ones are dropped."""
+    import ast as _ast
+    out = []
+    for m in re.finditer(r'([A-Za-z_][A-Za-z0-9_.]*)\s*\(', text or ''):
+        start = m.start()
+        depth, i = 0, m.end() - 1
+        while i < len(text):                       # walk to the matching close paren
+            depth += (text[i] == '(') - (text[i] == ')')
+            i += 1
+            if depth == 0:
+                break
+        snippet = text[start:i]
+        try:
+            node = _ast.parse(snippet.strip(), mode='eval').body
+            if not isinstance(node, _ast.Call):
+                continue
+            name = snippet[:snippet.index('(')].strip().split('.')[-1]
+            kw = {}
+            for k in node.keywords:
+                if k.arg is None:
+                    continue
+                kw[k.arg] = _safe_val(k.value)
+            out.append((name, kw))
+        except Exception:
+            continue
+    return out
+
+
+def _val_eq(a, b):
+    """Argument equality with the tolerances BFCL's own checker allows: numeric closeness, and
+    list/tuple equivalence. Everything else is exact."""
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return abs(float(a) - float(b)) <= 1e-6 * max(1.0, abs(float(b)))
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(_val_eq(x, y) for x, y in zip(a, b))
+    return a == b
+
+
+def call_correct(text, gold_json):
+    """AST match: for each expected call there must be a generated call with the same function name
+    and the same arguments. Order-insensitive, and extra generated calls are a FAILURE -- emitting
+    every plausible call and hoping one lands is not a correct answer."""
+    gold = json.loads(gold_json)
+    want = []
+    for g in gold:
+        p = _parse_calls(g)
+        if not p:
+            return False
+        want.append(p[0])
+    got = _parse_calls(text)
+    if len(got) != len(want):
+        return False
+    used = [False] * len(got)
+    for wname, wargs in want:
+        hit = False
+        for j, (gname, gargs) in enumerate(got):
+            if used[j] or gname != wname or set(gargs) != set(wargs):
+                continue
+            if all(_val_eq(gargs[k], wargs[k]) for k in wargs):
+                used[j] = True
+                hit = True
+                break
+        if not hit:
+            return False
+    return True
+
+
 def correct(kind, got, gold, item=None):
     if got is None:
         return False
     if kind == 'code':
         return run_code(got, item)
+    if kind == 'call':
+        return call_correct(got, gold)
     if kind == 'letter':
         return got == gold
     if kind == 'math':

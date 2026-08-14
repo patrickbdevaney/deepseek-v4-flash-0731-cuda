@@ -38,3 +38,5 @@
   [36/198] gpqa-0035 gold=C got=C OK  run=29/36 stop 15.3 tok/s (178.2 min)
   [37/198] gpqa-0036 gold=A got=None     run=29/37 stop 19.7 tok/s (185.0 min)
   [38/198] gpqa-0037 gold=C got=C OK  run=30/38 stop 17.6 tok/s (185.2 min)
+  [39/198] gpqa-0038 gold=B got=B OK  run=31/39 stop 13.1 tok/s (190.8 min)
+  [40/198] gpqa-0039 gold=B got=B OK  run=32/40 stop 14.2 tok/s (192.7 min)
