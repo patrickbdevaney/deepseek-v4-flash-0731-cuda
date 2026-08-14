@@ -30,6 +30,7 @@ def main():
     ap.add_argument('--budget', type=int, default=16000)
     ap.add_argument('--host', default='localhost:8080')
     ap.add_argument('--target-trunc', type=float, default=0.05, help='acceptable truncation rate')
+    ap.add_argument('--effort', default='high', choices=['low','high','max'])
     a = ap.parse_args()
 
     items, snap, src, kind = E.TASKS[a.task](0)
@@ -37,7 +38,7 @@ def main():
     # the distribution, and the first n items of a category-ordered set are not a sample of it.
     step = max(1, len(items) // a.n)
     sample = items[::step][:a.n]
-    print(f'[calibrate] {a.task}: {len(sample)} of {len(items)} items, budget {a.budget}, '
+    print(f'[calibrate] {a.task} @ effort={a.effort}: {len(sample)} of {len(items)} items, budget {a.budget}, '
           f'timeout {E.budget_timeout(a.budget)}s', flush=True)
 
     toks, secs, done, trunc = [], [], 0, 0
@@ -45,7 +46,7 @@ def main():
     for i, it in enumerate(sample):
         t = time.time()
         try:
-            r = E.ask(a.host, it['prompt'], 'high', 1.0, 0.95, a.budget, E.budget_timeout(a.budget))
+            r = E.ask(a.host, it['prompt'], a.effort, 1.0, 0.95, a.budget, E.budget_timeout(a.budget))
         except Exception as e:
             print(f'  [{i+1}/{len(sample)}] {it["id"]} FAILED {str(e)[:80]}', flush=True)
             continue
@@ -65,7 +66,7 @@ def main():
     toks_s = sorted(toks)
     def pct(p): return toks_s[min(len(toks_s) - 1, int(p * len(toks_s)))]
     rate = sum(toks) / sum(secs)
-    out = dict(task=a.task, sampled=done, budget=a.budget,
+    out = dict(task=a.task, effort=a.effort, sampled=done, budget=a.budget,
                truncated=trunc, trunc_rate=round(trunc / done, 3),
                median=st.median(toks_s), p75=pct(.75), p90=pct(.90), p95=pct(.95), max=toks_s[-1],
                mean_tok_s=round(rate, 2), mean_s_per_item=round(sum(secs) / done, 1),
@@ -82,7 +83,7 @@ def main():
         print(f'  -> budget {a.budget} does NOT meet it. The distribution is censored here, so the '
               f'honest options are a larger budget, or publishing at a lower reasoning effort '
               f'whose traces fit, with the truncation rate disclosed.')
-    p = os.path.join(E.OUT, f'calibration_{a.task}.json')
+    p = os.path.join(E.OUT, f'calibration_{a.task}.{a.effort}.json')
     os.makedirs(E.OUT, exist_ok=True)
     json.dump(out, open(p, 'w'), indent=2)
     print(f'  wrote {p}')

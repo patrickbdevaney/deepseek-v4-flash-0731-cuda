@@ -40,8 +40,9 @@ ROOT = E.ROOT
 CKPT = os.environ.get('CKPT', '/home/patrickd/models/DeepSeek-V4-Flash-0731-REAP')
 
 # Mirrors the PLAN in scripts/run_evals.sh: task -> (n, reps)
-PLAN = [('gpqa_diamond', 0, 1), ('mmlu_pro', 200, 1), ('humaneval', 0, 1),
-        ('aime24', 0, 4), ('aime25', 0, 4), ('math500', 120, 1), ('gsm8k', 120, 1)]
+PLAN = [('gpqa_diamond', 0, 1), ('mmlu_pro', 150, 1), ('math500', 100, 1),
+        ('humaneval', 0, 1), ('aime24', 0, 4), ('aime25', 0, 4)]
+EFFORT = os.environ.get('EFFORT', 'low')
 
 results, nfail = [], 0
 
@@ -126,7 +127,7 @@ def main():
     if not a.skip_live:
         probe = 'x'
         try:
-            r = E.ask(a.host, probe, 'high', 1.0, 0.95, 4, 120)
+            r = E.ask(a.host, probe, EFFORT, 1.0, 0.95, 4, 120)
             overhead = r['usage']['prompt_tokens'] - len(tk.encode(probe).ids)
         except Exception:
             overhead = 16
@@ -170,7 +171,7 @@ def main():
             items, _, _, kind = E.TASKS[task](n)
             it = max(items, key=lambda x: len(x['prompt']))   # the LONGEST item, not a friendly one
             try:
-                r = E.ask(a.host, it['prompt'], 'high', 1.0, 0.95, E.MAXTOK[task], 1800)
+                r = E.ask(a.host, it['prompt'], EFFORT, 1.0, 0.95, E.MAXTOK[task], E.budget_timeout(E.MAXTOK[task]))
                 ch = r['choices'][0]
                 txt = (ch['message'].get('content') or '') + (ch['message'].get('reasoning_content') or '')
                 got = E.extract(kind, ch['message'].get('content') or '') or E.extract(kind, txt)

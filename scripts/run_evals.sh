@@ -33,7 +33,13 @@ export TMPDIR="${TMPDIR:-/tmp}"
 HOST="${HOST:-localhost:8080}"
 
 # task:n:reps  (n=0 = whole benchmark, reps = independent samples per item for avg@k)
-PLAN="${PLAN:-gpqa_diamond:0:1 mmlu_pro:200:1 humaneval:0:1 aime24:0:4 aime25:0:4 math500:120:1 gsm8k:120:1}"
+EFFORT="${EFFORT:-low}"
+# AIME runs at reps=4 and LAST, on the preflight's insistence. At reps=1 its 30 items give a
+# +-13.9 point interval, which is not a measurement; avg@4 brings it to +-7.1, the least it can
+# be quoted at, and costs 4x. Last because it is the only benchmark here with NO published
+# reference number -- so if the run is cut short AIME is simply ABSENT rather than present and
+# unquotable, and the benchmarks carrying the head-to-head have already landed.
+PLAN="${PLAN:-gpqa_diamond:0:1 mmlu_pro:150:1 math500:100:1 humaneval:0:1 aime24:0:4 aime25:0:4}"
 
 # The battery does not start unless the preflight says GO. Its checks are not advisory: the first
 # run of this suite lost an entire benchmark, mis-scored another, and quoted a third from a sample
@@ -53,8 +59,8 @@ for spec in $PLAN; do
      ! curl -s -m 10 -o /dev/null "http://${HOST}/"; then
     echo "=== SERVER DOWN before $task — stopping. Restart it and rerun to resume." ; exit 1
   fi
-  echo "=== $(date -Is)  $task  n=$n reps=$reps"
-  python3 tools/eval_suite.py --task "$task" --n "$n" --reps "$reps" --host "$HOST"
+  echo "=== $(date -Is)  $task  n=$n reps=$reps effort=$EFFORT"
+  python3 tools/eval_suite.py --task "$task" --n "$n" --reps "$reps" --effort "$EFFORT" --host "$HOST"
   echo "=== $(date -Is)  $task done"
 done
 

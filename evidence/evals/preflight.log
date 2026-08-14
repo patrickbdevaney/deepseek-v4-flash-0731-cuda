@@ -1,23 +1,28 @@
-  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=2267
+  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=10567
   [PASS] PROVENANCE  published dataset facts verified locally     19 checks; see evidence/evals/provenance.json
   [PASS] SCORERS     HumanEval canonical solutions pass           164/164
   [PASS] SCORERS     MATH-500 gold matches itself                 500/500
   [PASS] SCORERS     answer extraction cases                      4/4
-  [PASS] CONTEXT     chat-template overhead measured              83 tokens
-  [PASS] CONTEXT     gpqa_diamond: every item fits                longest prompt 2564 + max_tokens 16000 + 91 = 18655 vs seqmax 32768
-  [PASS] CONTEXT     mmlu_pro: every item fits                    longest prompt 590 + max_tokens 12000 + 91 = 12681 vs seqmax 32768
-  [PASS] CONTEXT     humaneval: every item fits                   longest prompt 415 + max_tokens 8000 + 91 = 8506 vs seqmax 32768
-  [PASS] CONTEXT     aime24: every item fits                      longest prompt 352 + max_tokens 16000 + 91 = 16443 vs seqmax 32768
-  [PASS] CONTEXT     aime25: every item fits                      longest prompt 252 + max_tokens 16000 + 91 = 16343 vs seqmax 32768
-  [PASS] CONTEXT     math500: every item fits                     longest prompt 790 + max_tokens 16000 + 91 = 16881 vs seqmax 32768
-  [PASS] CONTEXT     gsm8k: every item fits                       longest prompt 169 + max_tokens 8000 + 91 = 8260 vs seqmax 32768
+  [PASS] CONTEXT     chat-template overhead measured              4 tokens
+  [PASS] CONTEXT     gpqa_diamond: every item fits                longest prompt 2564 + max_tokens 8000 + 12 = 10576 vs seqmax 32768
+  [PASS] CONTEXT     mmlu_pro: every item fits                    longest prompt 535 + max_tokens 8000 + 12 = 8547 vs seqmax 32768
+  [PASS] CONTEXT     math500: every item fits                     longest prompt 790 + max_tokens 8000 + 12 = 8802 vs seqmax 32768
+  [PASS] CONTEXT     humaneval: every item fits                   longest prompt 415 + max_tokens 8000 + 12 = 8427 vs seqmax 32768
+  [PASS] CONTEXT     aime24: every item fits                      longest prompt 352 + max_tokens 8000 + 12 = 8364 vs seqmax 32768
+  [PASS] CONTEXT     aime25: every item fits                      longest prompt 252 + max_tokens 8000 + 12 = 8264 vs seqmax 32768
   [PASS] POWER       gpqa_diamond: interval quotable              n=198 (reps=1) -> +-5.6 points at p=0.8
-  [PASS] POWER       mmlu_pro: interval quotable                  n=200 (reps=1) -> +-5.5 points at p=0.8
+  [PASS] POWER       mmlu_pro: interval quotable                  n=150 (reps=1) -> +-6.4 points at p=0.8
+  [PASS] POWER       math500: interval quotable                   n=100 (reps=1) -> +-7.8 points at p=0.8
   [PASS] POWER       humaneval: interval quotable                 n=164 (reps=1) -> +-6.1 points at p=0.8
   [PASS] POWER       aime24: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
   [PASS] POWER       aime25: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
-  [PASS] POWER       math500: interval quotable                   n=120 (reps=1) -> +-7.1 points at p=0.8
-  [PASS] POWER       gsm8k: interval quotable                     n=120 (reps=1) -> +-7.1 points at p=0.8
-  [PASS] MEMORY      headroom above the guard floor               MemAvailable 2876 MB
+  [PASS] MEMORY      headroom above the guard floor               MemAvailable 9676 MB
   [PASS] MEMORY      memguard running                             kills the server before the kernel takes the box down
-  [FAIL] LIVE        gpqa_diamond: longest item round-trips       3 consecutive failures, last was TimeoutError: timed out
+  [PASS] LIVE        gpqa_diamond: longest item round-trips       2568+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        mmlu_pro: longest item round-trips           503+435 tok, finish=stop, extracted=yes
+  [PASS] LIVE        math500: longest item round-trips            794+487 tok, finish=stop, extracted=yes
+  [PASS] LIVE        humaneval: longest item round-trips          419+3103 tok, finish=stop, extracted=yes
+  [PASS] LIVE        aime24: longest item round-trips             356+6631 tok, finish=stop, extracted=yes
+  [PASS] LIVE        aime25: longest item round-trips             256+8000 tok, finish=stop, TRUNCATED, extracted=yes
+
+PREFLIGHT: 26 passed, 0 failed -> GO

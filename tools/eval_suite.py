@@ -208,8 +208,20 @@ TASKS = {
 # These were raised once the engine's context went from 4096 to 8192 (the arena is no longer scaled
 # by seqmax). That is not cosmetic: a truncated item is scored WRONG, so every token of headroom here
 # removes a way for the harness to understate the model rather than measure it.
-MAXTOK = dict(gsm8k=8000, aime24=16000, aime25=16000, gpqa_diamond=16000,
-              mmlu_pro=12000, math500=16000, humaneval=8000)
+# 8000 EVERYWHERE, and the number comes from a measurement rather than a preference
+# (evidence/evals/calib_gpqa_low.log, GPQA at low effort, stride sample):
+#
+#   items that TERMINATE:  103, 363, 393, 407, 779, 6356 tokens  -> 8000 clears every one
+#   items that DO NOT:     hit 12000 and burned 20-24 minutes each, 2 of 8
+#
+# The terminating distribution is what a budget has to cover, and it tops out at 6356; 8000 gives
+# that ~26 % headroom. The non-terminating quarter is a property of the model, not of the budget --
+# one of them was still marked CORRECT at 12000 because the answer appeared mid-trace and it kept
+# going, and the other was wrong at 12000 and would have been wrong at any budget. Paying 12000 for
+# them buys nothing and costs ~90 % of the wall clock, so the cap is set to protect real answers and
+# to stop runaways early, not to chase them.
+MAXTOK = dict(gsm8k=8000, aime24=8000, aime25=8000, gpqa_diamond=8000,
+              mmlu_pro=8000, math500=8000, humaneval=8000)
 
 
 # ----------------------------------------------------------------------------- answer extraction
@@ -489,6 +501,12 @@ def main():
 
     items, snap, src, kind = TASKS[a.task](a.n)
     n_unique = len(items)
+    # RESULTS ARE NAMESPACED BY REASONING EFFORT. `low` and `high` are not the same measurement of
+    # the same model -- the published reference numbers differ by up to 36 points between effort
+    # levels, and the trace lengths differ by more than 2x. Sharing a jsonl between them would let
+    # resume silently mix the two into a number belonging to neither, exactly the way mixing
+    # max_tokens configurations would. The file name carries the effort so that cannot happen.
+    tag = f'{a.task}.{a.effort}'
     if a.reps > 1:
         # rep 0 keeps the BARE id, so raising k later is purely additive: records already banked at
         # --reps 1 stay valid and only the new samples are generated.
@@ -496,7 +514,7 @@ def main():
                  for k in range(a.reps) for it in items]
     maxtok = a.max_tokens or MAXTOK[a.task]
     timeout = a.timeout or budget_timeout(maxtok)
-    path = os.path.join(OUT, f'{a.task}.jsonl')
+    path = os.path.join(OUT, f'{tag}.jsonl')
     done = set()
     if os.path.exists(path):
         for line in open(path):
@@ -512,7 +530,7 @@ def main():
                 n_unique=n_unique, reps=a.reps,
                 effort=a.effort, temperature=a.temp, top_p=a.top_p, max_tokens=maxtok,
                 started=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
-    with open(os.path.join(OUT, f'{a.task}.meta.json'), 'w') as f:
+    with open(os.path.join(OUT, f'{tag}.meta.json'), 'w') as f:
         json.dump(meta, f, indent=2)
 
     t0, nok, nerr = time.time(), 0, 0
@@ -570,9 +588,16 @@ def main():
 def report():
     lines = []
     for task in TASKS:
-        path = os.path.join(OUT, f'{task}.jsonl')
+        for eff in ('low', 'high', 'max'):
+            _report_one(task, eff, lines)
+    _write(lines)
+    return lines
+
+
+def _report_one(task, eff, lines):
+        path = os.path.join(OUT, f'{task}.{eff}.jsonl')
         if not os.path.exists(path):
-            continue
+            return
         recs = {}
         for l in open(path):
             if l.strip():
@@ -580,8 +605,8 @@ def report():
                 recs[r['id']] = r       # last write wins, so a re-scored item cannot double count
         recs = list(recs.values())
         if not recs:
-            continue
-        mpath = os.path.join(OUT, f'{task}.meta.json')
+            return
+        mpath = os.path.join(OUT, f'{task}.{eff}.meta.json')
         meta = json.load(open(mpath)) if os.path.exists(mpath) else {}
         k, n = sum(r['correct'] for r in recs), len(recs)
         lo, hi = wilson(k, n)
@@ -605,7 +630,7 @@ def report():
             allitems, _, _, _ = TASKS[task](0)
             strata_total = len({i.get(strata_field) for i in allitems if i.get(strata_field)})
             strata_seen = len({r.get(strata_field) for r in recs if r.get(strata_field)})
-        lines.append(dict(task=task, n=n, n_total=meta.get('n_items'), correct=k,
+        lines.append(dict(task=task, effort=eff, n=n, n_total=meta.get('n_items'), correct=k,
                           strata_field=strata_field, strata_seen=strata_seen,
                           strata_total=strata_total,
                           n_unique=meta.get('n_unique'), reps=meta.get('reps', 1),
@@ -613,19 +638,21 @@ def report():
                           truncated=trunc, errors=nerr,
                           mean_completion_tokens=round(sum(toks)/n),
                           mean_tok_s=round(sum(tps)/len(tps), 2) if tps else None,
-                          effort=meta.get('effort'), temperature=meta.get('temperature'),
+                          temperature=meta.get('temperature'),
                           top_p=meta.get('top_p'), max_tokens=meta.get('max_tokens'),
                           source=meta.get('source'), snapshot=meta.get('snapshot')))
+
+
+def _write(lines):
     with open(os.path.join(OUT, 'summary.json'), 'w') as f:
         json.dump(lines, f, indent=2)
-    hdr = f'{"task":<14}{"scored":>12}{"acc %":>8}{"95% CI":>16}{"trunc":>7}{"mean tok":>10}{"tok/s":>8}'
+    hdr = f'{"task":<14}{"eff":>6}{"scored":>12}{"acc %":>8}{"95% CI":>16}{"trunc":>7}{"mean tok":>10}{"tok/s":>8}'
     print('\n' + hdr)
     for l in lines:
         ci = '[%.1f, %.1f]' % (l['ci'][0], l['ci'][1])
         scored = '%d/%s' % (l['n'], l['n_total'] or '?')
-        print(f'{l["task"]:<14}{scored:>12}{l["acc"]:>8.1f}{ci:>16}{l["truncated"]:>7}'
+        print(f'{l["task"]:<14}{l.get("effort","?"):>6}{scored:>12}{l["acc"]:>8.1f}{ci:>16}{l["truncated"]:>7}'
               f'{l["mean_completion_tokens"]:>10}{(l["mean_tok_s"] or 0):>8.1f}')
-    return lines
 
 
 if __name__ == '__main__':

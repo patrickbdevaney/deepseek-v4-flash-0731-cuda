@@ -1,0 +1,9 @@
+[calibrate] gpqa_diamond @ effort=low: 12 of 198 items, budget 12000, timeout 3180s
+  [1/12] gpqa-0000           779 tok     47s       got=D gold=D (1 min)
+  [2/12] gpqa-0016           363 tok     22s       got=B gold=B (1 min)
+  [3/12] gpqa-0032           407 tok     21s       got=A gold=A (1 min)
+  [4/12] gpqa-0048           103 tok      6s       got=C gold=C (2 min)
+  [5/12] gpqa-0064         12000 tok   1234s TRUNC got=A gold=D (22 min)
+  [6/12] gpqa-0080           393 tok     23s       got=B gold=B (23 min)
+  [7/12] gpqa-0096          6356 tok    617s       got=B gold=B (33 min)
+  [8/12] gpqa-0112         12000 tok   1434s TRUNC got=C gold=C (57 min)
