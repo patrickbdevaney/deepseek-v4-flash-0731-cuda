@@ -1,12 +1,13 @@
 {
   "tasks": [
     {
-      "task": "mmlu_pro",
-      "records": 68,
-      "recomputed_acc": 54.41,
-      "published_acc": 54.4,
-      "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
-      "source": "TIGER-Lab/MMLU-Pro (test, 12032)"
+      "task": "gpqa_diamond",
+      "effort": "low",
+      "records": 30,
+      "recomputed_acc": 76.67,
+      "published_acc": 76.7,
+      "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3",
+      "source": "fingertap/GPQA-Diamond (test, 198)"
     }
   ],
   "failed": 0

@@ -14,6 +14,7 @@
 set -u
 cd "$(dirname "$0")/.."
 LOG="${LOG:-evidence/evals/run.log}"
+EFFORT="${EFFORT:-low}"
 POLL="${POLL:-60}"
 declare -A landed
 
@@ -25,7 +26,7 @@ while true; do
       [ -n "${landed[$task]:-}" ] && continue
       landed[$task]=1
       echo "[watch] $(date -Is) $task finished — landing"
-      bash scripts/eval_land.sh "$task" || echo "[watch] $task did not land (see above)"
+      bash scripts/eval_land.sh "$task" "${EFFORT:-low}" || echo "[watch] $task did not land (see above)"
     done < <(grep -oP '^===\s+\S+\s+\K\w+(?=\s+done)' "$LOG" 2>/dev/null | sort -u)
   fi
   # Stop once the battery is finished AND everything it produced has been landed.

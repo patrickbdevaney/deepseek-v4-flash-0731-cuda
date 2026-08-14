@@ -14,45 +14,48 @@
 #   bash scripts/eval_land.sh gpqa_diamond
 set -u
 cd "$(dirname "$0")/.."
-TASK="${1:?usage: eval_land.sh <task>}"
-JSONL="evidence/evals/${TASK}.jsonl"
+TASK="${1:?usage: eval_land.sh <task> [effort]}"
+# Results are namespaced by reasoning effort. Getting this wrong is silent: the file simply is not
+# found, the task "does not land", and a finished benchmark never reaches main.
+EFF="${2:-${EFFORT:-low}}"
+JSONL="evidence/evals/${TASK}.${EFF}.jsonl"
 
-[ -s "$JSONL" ] || { echo "[land] $TASK: no records at $JSONL — nothing to land"; exit 1; }
+[ -s "$JSONL" ] || { echo "[land] $TASK@$EFF: no records at $JSONL — nothing to land"; exit 1; }
 
 python3 tools/eval_suite.py --report > /dev/null || exit 1
 python3 tools/eval_publish.py  > /dev/null || exit 1
 
 # Verify AFTER publishing, so the check compares against the number that is actually in the file.
-if ! python3 tools/eval_verify.py --task "$TASK"; then
-  echo "[land] $TASK: VERIFICATION FAILED — refusing to commit a number that does not reproduce"
+if ! python3 tools/eval_verify.py --task "$TASK" --effort "$EFF"; then
+  echo "[land] $TASK@$EFF: VERIFICATION FAILED — refusing to commit a number that does not reproduce"
   exit 1
 fi
 
 N=$(wc -l < "$JSONL")
 ACC=$(python3 -c "
 import json,sys
-rows={r['task']:r for r in json.load(open('evidence/evals/summary.json'))}
-r=rows.get('$TASK')
+rows={(r['task'],r.get('effort')):r for r in json.load(open('evidence/evals/summary.json'))}
+r=next((x for x in rows.values() if x['task']=='$TASK' and x.get('effort')=='$EFF'), None)
 print(f\"{r['acc']:.1f}% [{r['ci'][0]}, {r['ci'][1]}] n={r['n']}/{r['n_total']} trunc={r['truncated']} err={r.get('errors',0)}\" if r else 'n/a')")
 
 git add -A
 git commit -q -F - <<MSG
-eval: ${TASK} = ${ACC}
+eval: ${TASK} @ effort=${EFF} = ${ACC}
 
 Landed from a completed run of tools/eval_suite.py against the shipping CUDA server at
 seqmax 8192, temperature 1.0, top_p 0.95, reasoning_effort high.
 
 Evidence, all in this commit:
-  evidence/evals/${TASK}.jsonl        ${N} records — the full generation, reasoning trace,
+  evidence/evals/${TASK}.${EFF}.jsonl   ${N} records — the full generation, reasoning trace,
                                       extracted answer, gold, timings and usage for every item
-  evidence/evals/${TASK}.meta.json    dataset, pinned snapshot sha, sampling params, max_tokens
+  evidence/evals/${TASK}.${EFF}.meta.json  dataset, pinned snapshot sha, sampling params, max_tokens
   evidence/evals/summary.json         the scored table
   evidence/evals/verification.json    the independent re-derivation of that table
   evidence/evals/provenance.json      the published facts about the dataset, checked on disk
   evidence/evals/preflight.log        the go/no-go run that permitted this battery
 
 Reproducible with no GPU and no model:
-  python3 tools/eval_verify.py --task ${TASK}
+  python3 tools/eval_verify.py --task ${TASK} --effort ${EFF}
 re-extracts every answer from the raw stored text, re-derives every gold from the pinned
 dataset rather than from the record, re-scores, and requires the published number to match.
 
@@ -60,7 +63,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 MSG
 
 if git push -q origin main 2>&1; then
-  echo "[land] $TASK: ${ACC} — verified, committed, pushed"
+  echo "[land] $TASK@$EFF: ${ACC} — verified, committed, pushed"
 else
-  echo "[land] $TASK: ${ACC} — verified and committed, PUSH FAILED (commit is safe locally)"
+  echo "[land] $TASK@$EFF: ${ACC} — verified and committed, PUSH FAILED (commit is safe locally)"
 fi

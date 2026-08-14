@@ -35,8 +35,10 @@ def ck(task, what, ok, detail=''):
     print(f'  [{"PASS" if ok else "FAIL"}] {task:<14} {what:<40} {detail}', flush=True)
 
 
-def verify(task, published):
-    path = os.path.join(OUT, f'{task}.jsonl')
+def verify(task, eff, published):
+    # Results are namespaced by reasoning effort -- low and high are different measurements of the
+    # same benchmark and must never be pooled. See eval_suite's `tag`.
+    path = os.path.join(OUT, f'{task}.{eff}.jsonl')
     if not os.path.exists(path):
         return None
     recs = [json.loads(l) for l in open(path) if l.strip()]
@@ -88,7 +90,7 @@ def verify(task, published):
 
     acc = 100.0 * redone / len(recs) if recs else 0.0
     if published is not None:
-        ck(task, 'published accuracy is reproducible', abs(acc - published['acc']) < 0.05,
+        ck(f'{task}/{eff}', 'published accuracy is reproducible', abs(acc - published['acc']) < 0.05,
            f'recomputed {acc:.1f} % vs published {published["acc"]:.1f} % over {len(recs)} records')
         ck(task, 'snapshot matches the published one',
            (published.get('snapshot') or '').startswith(snap[:12]) or snap.startswith(
@@ -96,24 +98,29 @@ def verify(task, published):
            f'{snap[:12]} vs {(published.get("snapshot") or "?")[:12]}')
     else:
         print(f'  [ .. ] {task:<14} recomputed {acc:.1f} % over {len(recs)} records (not yet published)')
-    return dict(task=task, records=len(recs), recomputed_acc=round(acc, 2),
+    return dict(task=task, effort=eff, records=len(recs), recomputed_acc=round(acc, 2),
                 published_acc=(published or {}).get('acc'), snapshot=snap, source=src)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--task', default=None)
+    ap.add_argument('--effort', default=None)
     a = ap.parse_args()
     spath = os.path.join(OUT, 'summary.json')
-    pub = {r['task']: r for r in json.load(open(spath))} if os.path.exists(spath) else {}
+    pub = {(r['task'], r.get('effort', 'high')): r
+           for r in json.load(open(spath))} if os.path.exists(spath) else {}
 
     rows = []
     for task in E.TASKS:
         if a.task and task != a.task:
             continue
-        r = verify(task, pub.get(task))
-        if r:
-            rows.append(r)
+        for eff in ('low', 'high', 'max'):
+            if a.effort and eff != a.effort:
+                continue
+            r = verify(task, eff, pub.get((task, eff)))
+            if r:
+                rows.append(r)
     with open(os.path.join(OUT, 'verification.json'), 'w') as f:
         json.dump(dict(tasks=rows, failed=nfail), f, indent=2)
     print(f'\nVERIFY: {nfail} failed -> {"PASS" if not nfail else "FAIL"}')
