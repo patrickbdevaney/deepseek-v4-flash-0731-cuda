@@ -76,8 +76,21 @@ def verify(task, eff, published):
         ck(task, 'prompt matches the one that was sent', not badp,
            f'{len(have)}/{len(recs)} records carry a hash; {len(badp)} mismatched')
     else:
-        print(f'  [ .. ] {task:<14} {"prompt hash not recorded":<40} '
-              f'run predates the hash; prompt is re-derived and UNCHECKED', flush=True)
+        # No per-record hash. Fall back to the SET-level proof if one was pinned: the prompts
+        # rebuilt from the harness at the run-start commit were byte-identical to the ones HEAD
+        # rebuilds, so HEAD re-derives exactly what was sent. Weaker than a per-record hash --
+        # it pins the set, not the pairing -- and is reported as exactly that, never as equivalent.
+        pinf = os.path.join(OUT, 'prompt_provenance.json')
+        pin = (json.load(open(pinf)).get(f'{task}.{eff}') if os.path.exists(pinf) else None)
+        if pin:
+            cur = hashlib.sha256(''.join(by_id[k]['prompt'] for k in sorted(by_id)).encode()).hexdigest()
+            ck(task, 'prompt SET matches the pinned proof', cur == pin['prompts_sha256'],
+               f'{pin["n_prompts"]} prompts, proven identical to run-start {pin["run_start_commit"][:12]} '
+               f'(set-level, not per-record)')
+        else:
+            print(f'  [ .. ] {task:<14} {"prompt hash not recorded":<40} '
+                  f'run predates the hash and no set-level pin; prompt re-derived and UNCHECKED',
+                  flush=True)
 
     # every record either has generated text or a recorded engine error
     empty = [r['id'] for r in recs
