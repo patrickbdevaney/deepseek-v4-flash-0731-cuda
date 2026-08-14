@@ -148,6 +148,27 @@ def check_jsonl(fix):
             note('FAULT', f'{name}: {dup} duplicate ids',
                  'report counts distinct ids, but a duplicate means an item ran twice')
 
+        # An item that failed for an INFRASTRUCTURE reason is banked as correct:false, resume skips
+        # it, and a timeout becomes a permanent wrong answer that understates the model. gpqa-0153
+        # was the first: it blew its 2180 s client timeout only because a calibration probe held the
+        # engine lock. Never auto-dropped -- an item that genuinely always times out would re-run
+        # forever -- so it is reported with the exact command to clear it.
+        errs = []
+        for l in raw.split(b'\n'):
+            if l.strip():
+                try:
+                    r = json.loads(l.decode('utf-8', 'replace'))
+                    if r.get('error'):
+                        errs.append(r['id'])
+                except Exception:
+                    pass
+        if errs:
+            task = name.split('.')[0]
+            eff = name.split('.')[1]
+            note('FAULT', f'{name}: {len(errs)} item(s) scored wrong by ERROR',
+                 f'{errs[:3]} — infrastructure, not capability. Clear with: python3 '
+                 f'tools/eval_drop_record.py --task {task} --effort {eff} --errors')
+
 
 # --------------------------------------------------------------------------------- live processes
 def check_processes(fix):
@@ -200,6 +221,26 @@ def check_processes(fix):
         if len(pids) > 1:
             note('ESCALATE', f'{len(pids)} runners on {t}', f'pids {",".join(pids)} — records will '
                  f'interleave; kill all but one BY PID')
+
+    # ANYTHING ELSE DRIVING THE ENGINE WHILE THE BATTERY SCORES IS A SCORING FAULT, not merely
+    # slower. The engine serialises on one lock, so a probe running at a 16000-token budget can hold
+    # it for ~25 minutes while a battery item waits -- and the battery item is then scored WRONG for
+    # exceeding a client timeout it would otherwise have met. That is exactly how gpqa-0153 was
+    # lost. Foreign load is therefore a fault to clear, not background noise to tolerate.
+    if tasks:
+        foreign = pgrep('python3 tools/eval_calibrate.py') + pgrep('bash scripts/calibrate_remaining.sh')
+        if foreign:
+            if not fix:
+                note('FAULT', 'foreign engine load during scoring', f'pids {foreign} (--check mode)')
+            else:
+                for pid in foreign:
+                    try:
+                        os.kill(pid, 15)
+                    except Exception:
+                        pass
+                note('REPAIRED', 'stopped foreign engine load during scoring',
+                     f'pids {foreign} were queueing ahead of battery items and pushing them past '
+                     f'their client timeout')
 
 
 # ------------------------------------------------------------------------------------ forward progress
