@@ -235,6 +235,128 @@ def task_bfcl(n):
     return items, ','.join(sorted(snaps)), 'gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240)', 'call'
 
 
+def task_scicode(n):
+    """SciCode — 65 research problems from 16 science subfields, decomposed into 291 subproblems.
+
+    WHY THIS ONE, AND WHY IT IS THE KEYSTONE OF THIS SUITE. Everything else here measures one leg at
+    a time: GPQA and MMLU-Pro ask what the model KNOWS, HumanEval and LiveCodeBench ask whether it
+    can CODE, BFCL asks whether it can drive a tool. SciCode is the only benchmark in the set where
+    a single item requires all of it at once -- recall a scientific fact, reason about it, and turn
+    it into numerically correct code. That is the actual claim being tested about this checkpoint:
+    not that it codes, but that it codes ACROSS DOMAINS. A model that has been pruned into knowing
+    less physics fails here in a way it cannot fail on HumanEval.
+
+    Hard by construction rather than by trickery: the reported best on main problems is single
+    digits, so there is no saturation ceiling to bump into.
+
+    Scored per SUBPROBLEM against the benchmark's own numeric tests. Main-problem accuracy (all
+    subproblems of a problem correct) is derivable from the same records and is reported alongside,
+    but subproblem accuracy is the primary because at 65 problems the main metric has an interval
+    too wide to say anything.
+    """
+    fs = sorted(glob.glob(os.path.expanduser(
+        '~/.cache/huggingface/hub/datasets--SciCode1--SciCode/snapshots/*/problems_test.jsonl')))
+    if not fs:
+        sys.exit('SciCode problems_test.jsonl not found — run tools/eval_fetch.py')
+    snap = os.path.basename(os.path.dirname(fs[0]))
+    rows = [json.loads(l) for l in open(fs[0]) if l.strip()]
+
+    items = []
+    for _, r in _sample(rows, n):
+        pid = str(r['problem_id'])
+        steps = r['sub_steps']
+        for si, s in enumerate(steps):
+            step_no = int(str(s['step_number']).split('.')[-1])
+            # Earlier steps are named so the model knows what it may call; their bodies are not
+            # given, because no gold solutions exist and its own earlier code is what will actually
+            # be in scope at execution time.
+            prev = '\n'.join(f'  {steps[j]["function_header"].strip().splitlines()[0]}'
+                             for j in range(si))
+            prompt = (
+                'You are writing one function of a larger scientific computing problem.\n\n'
+                f'PROBLEM: {r["problem_name"]}\n{r["problem_description_main"]}\n\n'
+                + (f'BACKGROUND\n{s.get("step_background") or ""}\n\n'
+                   if s.get('step_background') else '')
+                + f'These dependencies are already imported:\n```python\n{r["required_dependencies"]}\n```\n\n'
+                + (f'Functions from earlier steps are already defined and may be called:\n{prev}\n\n'
+                   if prev else '')
+                + f'STEP {step_no}: {s["step_description_prompt"]}\n\n'
+                + f'Implement exactly this signature:\n```python\n{s["function_header"]}\n```\n'
+                + (f'It must return: {s["return_line"].strip()}\n' if s.get('return_line') else '')
+                + '\nReply with ONLY one ```python code block containing the complete function. '
+                  'Do not restate the imports and do not redefine earlier functions.')
+            items.append(dict(
+                id=f'scicode-{pid}-{step_no}', gold='pass',
+                subject=r['problem_name'], problem_id=pid, step_number=step_no,
+                step_id=f'{pid}.{step_no}', dependencies=r['required_dependencies'],
+                tests=s['test_cases'], prompt=prompt))
+    return (items, snap, f'SciCode1/SciCode (test, {len(rows)} problems, {len(items)} subproblems)',
+            'scicode')
+
+
+def task_bfcl_live(n):
+    """BFCL v3 `live_*` — user-contributed real-world function calls, including when NOT to call.
+
+    The `exec_*` categories this suite already runs are synthetic and single-intent. The `live_*`
+    categories are contributed from real usage, carry messier schemas, and -- the part that matters
+    for an agent -- include `live_relevance` and `live_irrelevance`, where the correct behaviour is
+    to decline to call anything. Restraint is a real agentic capability and nothing else in this
+    suite measures it: a model that fires a plausible-looking tool call at every prompt scores fine
+    on exec_* and would be dangerous driving a terminal.
+
+    Ground truth for the callable categories comes from BFCL's own `possible_answer/` files, matched
+    by index, and is scored with the same AST comparison. The two relevance categories have no call
+    to match, so they are scored on whether a call was emitted at all.
+    """
+    base = os.path.expanduser('~/.cache/huggingface/hub/'
+                              'datasets--gorilla-llm--Berkeley-Function-Calling-Leaderboard/snapshots')
+    subs = ['live_simple', 'live_multiple', 'live_parallel', 'live_parallel_multiple',
+            'live_relevance', 'live_irrelevance']
+    items, snaps = [], set()
+    for sub in subs:
+        fs = sorted(glob.glob(os.path.join(base, '*', f'BFCL_v3_{sub}.json')))
+        if not fs:
+            sys.exit(f'BFCL subset {sub} not found under {base} — run tools/eval_fetch.py')
+        snaps.add(os.path.basename(os.path.dirname(fs[0])))
+        rows = [json.loads(l) for l in open(fs[0]) if l.strip()]
+        ans = {}
+        af = os.path.join(os.path.dirname(fs[0]), 'possible_answer', f'BFCL_v3_{sub}.json')
+        if os.path.exists(af):
+            for l in open(af):
+                if l.strip():
+                    a = json.loads(l)
+                    ans[a['id']] = a.get('ground_truth')
+        relevance = sub in ('live_relevance', 'live_irrelevance')
+        # Capped PER CATEGORY, seeded, and recorded. The live_* sets are wildly unbalanced --
+        # live_multiple has 1052 rows and live_irrelevance 882, against 16 for live_parallel -- so
+        # taking everything would spend the whole budget re-measuring two categories and let
+        # irrelevance alone move the headline. The cap is a stratified draw, not a prefix.
+        for i, r in _sample(rows, n or 150):
+            gt = ans.get(r['id'])
+            if not relevance and not gt:
+                continue                      # no ground truth shipped for this row; skip, not guess
+            q = r['question'][0][0]['content']
+            fns = json.dumps(r['function'], indent=1)
+            # live_irrelevance: no function fits, the right move is to say so.
+            # live_relevance: a function does fit and one should be called.
+            tail = ('\n\nIf NONE of the functions can satisfy the request, reply with exactly '
+                    'NO_CALL and nothing else. Otherwise respond with ONLY the function call(s), '
+                    'one per line, in Python call syntax. No explanation, no code fences.'
+                    if relevance else
+                    '\n\nRespond with ONLY the function call(s) needed, one per line, in Python '
+                    f'call syntax, e.g. func_name(arg1=value1). Emit exactly {len(gt)} call(s). '
+                    'If NONE of the functions can satisfy the request, reply with exactly NO_CALL. '
+                    'No explanation, no code fences.')
+            items.append(dict(
+                id=f'bfcl-{sub}-{i:04d}', subject=sub,
+                gold=('NO_CALL' if sub == 'live_irrelevance' else
+                      ('ANY_CALL' if sub == 'live_relevance' else json.dumps(gt))),
+                prompt='You have access to the following functions:\n\n' + fns +
+                       '\n\nUser request: ' + q + tail))
+    return (items, ','.join(sorted(snaps)),
+            f'gorilla-llm/BFCL v3 (live_* subsets, AST-scored, {len(items)})', 'call')
+
+
 def task_lcb(n):
     """LiveCodeBench (code_generation_lite), the most recent release window.
 
@@ -298,7 +420,9 @@ TASKS = {
     'math500':      task_math500,
     'humaneval':    task_humaneval,
     'bfcl':         task_bfcl,
+    'bfcl_live':    task_bfcl_live,
     'lcb':          task_lcb,
+    'scicode':      task_scicode,
 }
 
 # Per-task completion ceiling. prompt + completion + template overhead has to fit inside seqmax, and
@@ -321,7 +445,8 @@ TASKS = {
 # them buys nothing and costs ~90 % of the wall clock, so the cap is set to protect real answers and
 # to stop runaways early, not to chase them.
 MAXTOK = dict(gsm8k=8000, aime24=8000, aime25=8000, gpqa_diamond=8000,
-              mmlu_pro=8000, math500=8000, humaneval=8000, bfcl=2000, lcb=8000)
+              mmlu_pro=8000, math500=8000, humaneval=8000, bfcl=2000, lcb=8000,
+              bfcl_live=2000, scicode=8000)
 
 
 # ----------------------------------------------------------------------------- answer extraction
@@ -401,10 +526,132 @@ def extract(kind, text):
         return blocks[-1] if blocks else text
     if kind == 'call':
         return text          # scored structurally by call_correct; no extraction step
-    if kind == 'lcb':
+    if kind in ('lcb', 'scicode'):
         blocks = re.findall(r'```(?:python|py)?\s*\n(.*?)```', text, re.S)
         return blocks[-1] if blocks else text
     return None
+
+
+SCICODE_H5 = None            # resolved lazily; see _scicode_h5()
+_scicode_acc = {}            # problem_id -> {step_number: code the model produced for that step}
+
+
+def _scicode_h5():
+    """Locate SciCode's numeric test data.
+
+    SciCode's test cases assert against a bare name `target`, e.g.
+    `assert np.allclose(wrap(pos, L), target)`. Those targets live in a 1 GB `test_data.h5` that the
+    HF dataset does NOT ship -- the official source is an unpinnable Google Drive folder, which is
+    not something a reproducible eval can depend on. Two independent HF mirrors carry it; both were
+    downloaded at a pinned revision and are BYTE-IDENTICAL (sha256 48b0272a88b17dbd...), which is
+    the integrity check the Drive link cannot provide. The sha is recorded in datasets.json.
+    """
+    global SCICODE_H5
+    if SCICODE_H5 is None:
+        hits = glob.glob(os.path.expanduser(
+            '~/.cache/huggingface/hub/datasets--*Scicode-test-data*/snapshots/*/test_data.h5')) + \
+            glob.glob(os.path.expanduser(
+                '~/.cache/huggingface/hub/datasets--*scicode_h5py*/snapshots/*/test_data.h5'))
+        if not hits:
+            sys.exit('SciCode test_data.h5 not found — run tools/eval_fetch.py')
+        SCICODE_H5 = hits[0]
+    return SCICODE_H5
+
+
+def _h5_node(obj):
+    """One stored value: dataset, list, sparse matrix, or dict — SciCode stores all four."""
+    import h5py
+    if isinstance(obj, h5py.Dataset):
+        v = obj[()]
+        return v.decode('utf-8') if isinstance(v, bytes) else v
+    keys = list(obj.keys())
+    if keys == ['list']:
+        return [_h5_node(obj['list'][k]) for k in obj['list'].keys()]
+    if keys == ['sparse_matrix']:
+        from scipy.sparse import coo_matrix, csr_matrix, bsr_matrix
+        g = obj['sparse_matrix']
+        data, shape = g['data'][()], tuple(g['shape'][()])
+        if 'row' in g and 'col' in g:
+            return coo_matrix((data, (g['row'][()], g['col'][()])), shape=shape)
+        if 'blocksize' in g:
+            return bsr_matrix((data, g['indices'][()], g['indptr'][()]), shape=shape,
+                              blocksize=tuple(g['blocksize'][()]))
+        return csr_matrix((data, g['indices'][()], g['indptr'][()]), shape=shape)
+    out = {}
+    for k in keys:
+        v = _h5_node(obj[k])
+        try:
+            out[float(k)] = v
+        except ValueError:
+            out[k] = v
+    return out
+
+
+def scicode_targets(step_id, n_tests):
+    """The expected value for each test of one subproblem, in test order.
+
+    A group with a single member is that value; with several it is the tuple of them, which is how
+    SciCode encodes a function returning more than one thing.
+    """
+    import h5py
+    out = []
+    with h5py.File(_scicode_h5(), 'r') as f:
+        for i in range(n_tests):
+            g = f[f'{step_id}/test{i + 1}']
+            ks = list(g.keys())
+            out.append(_h5_node(g[ks[0]]) if len(ks) == 1 else tuple(_h5_node(g[k]) for k in ks))
+    return out
+
+
+def run_scicode(code, item, timeout=90):
+    """Execute one SciCode subproblem against its own numeric tests.
+
+    STEPS ARE NOT INDEPENDENT. A SciCode problem is decomposed into subproblems where later steps
+    call earlier ones, so step 5 cannot run without steps 1-4 present. No gold solutions ship with
+    the dataset, so the only context available is the model's OWN earlier steps -- which is also
+    SciCode's standard multistep protocol, and the honest one: a model that got step 2 wrong should
+    not be handed a correct step 2 to build step 3 on.
+
+    Accumulated code is keyed by problem so a resumed run rebuilds it from the records already on
+    disk rather than silently scoring step 5 with no steps 1-4 (see run_task's rebuild).
+
+    The whole file -- dependencies, prior steps, this step, then the tests -- goes to one sandboxed
+    interpreter with the targets pickled in beside it. Timeout is 90 s rather than the 20 s used for
+    HumanEval because these are numerical simulations, not string exercises.
+    """
+    if not code:
+        return False
+    pid, step = item['problem_id'], item['step_number']
+    prior = _scicode_acc.get(pid, {})
+    try:
+        targets = scicode_targets(item['step_id'], len(item['tests']))
+    except Exception:
+        return False
+
+    import pickle
+    with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR', '/tmp')) as d:
+        tp = os.path.join(d, 't.pkl')
+        try:
+            with open(tp, 'wb') as fh:
+                pickle.dump(targets, fh)
+        except Exception:
+            return False                      # a target that will not pickle cannot be checked
+        body = [item['dependencies'], '']
+        for k in sorted(prior):
+            if k < step:
+                body.append(prior[k])
+        body += [code, '', 'import pickle',
+                 f'_T = pickle.load(open({tp!r}, "rb"))']
+        for i, t in enumerate(item['tests']):
+            body += [f'target = _T[{i}]', t, '']
+        src = os.path.join(d, 'run.py')
+        open(src, 'w').write('\n'.join(body))
+        rc, _, _ = _guarded_run([sys.executable, src], timeout=timeout, mem_bytes=4 << 30)
+        ok = rc == 0
+    # Remember what the model produced whether or not it passed: later steps must build on the
+    # model's actual work, and dropping a failed step would hand it a cleaner slate than it earned.
+    _scicode_acc.setdefault(pid, {})[step] = code
+    return ok
 
 
 def _guarded_run(argv, stdin_text=None, timeout=20, mem_bytes=2 << 30):
@@ -606,11 +853,67 @@ def _val_eq(a, b):
     return a == b
 
 
+def _call_correct_possible(text, gold):
+    """BFCL's possible-answer AST check: {func: {param: [acceptable values]}} per expected call.
+
+    A parameter is satisfied by ANY value in its list -- BFCL enumerates acceptable phrasings and
+    unit choices rather than a single gold value. An empty string in the list marks the parameter
+    optional, so omitting it is fine; supplying a parameter absent from the ground truth is not.
+    """
+    got = _parse_calls(text)
+    if len(got) != len(gold):
+        return False
+    used = [False] * len(got)
+    for expected in gold:
+        (fname, params), = expected.items()
+        hit = False
+        for j, (gname, gargs) in enumerate(got):
+            if used[j] or gname.split('.')[-1] != fname.split('.')[-1]:
+                continue
+            if any(k not in params for k in gargs):
+                continue                                   # invented a parameter
+            ok = True
+            for pname, accepted in params.items():
+                acc = accepted if isinstance(accepted, list) else [accepted]
+                if not acc:
+                    # An EMPTY acceptable list means the parameter must not be supplied at all --
+                    # BFCL uses it for calls whose optional arguments should be left at default.
+                    # Read as "nothing is acceptable" it would fail a correct call; caught by the
+                    # ground-truth self-gate, which sat at 339/340 until this case was handled.
+                    ok = pname not in gargs
+                elif pname not in gargs:
+                    ok = '' in acc or None in acc          # genuinely optional
+                else:
+                    ok = any(_val_eq(gargs[pname], a) for a in acc)
+                if not ok:
+                    break
+            if ok:
+                used[j] = hit = True
+                break
+        if not hit:
+            return False
+    return True
+
+
 def call_correct(text, gold_json):
     """AST match: for each expected call there must be a generated call with the same function name
     and the same arguments. Order-insensitive, and extra generated calls are a FAILURE -- emitting
     every plausible call and hoping one lands is not a correct answer."""
+    # The two `live_*` relevance categories have no call to match -- what is being scored is whether
+    # the model called ANYTHING. Declining correctly is a capability, and a model that always fires
+    # a plausible call scores well on every other BFCL category while being unsafe in a terminal.
+    if gold_json == 'NO_CALL':
+        return (text or '').strip().upper().startswith('NO_CALL') or not _parse_calls(text)
+    if gold_json == 'ANY_CALL':
+        return bool(_parse_calls(text)) and not (text or '').strip().upper().startswith('NO_CALL')
     gold = json.loads(gold_json)
+    # BFCL ships ground truth in TWO shapes and they are not interchangeable. The exec_* categories
+    # give a call STRING. The live_* categories give the possible-answer dict
+    # {func: {param: [acceptable values]}}, where a parameter is satisfied by ANY value in its list
+    # and an empty string in that list marks the parameter optional. That is BFCL's own AST checker
+    # semantics; scoring it as though it were a call string would fail every live_* item.
+    if gold and isinstance(gold[0], dict):
+        return _call_correct_possible(text, gold)
     want = []
     for g in gold:
         p = _parse_calls(g)
@@ -696,6 +999,8 @@ def correct(kind, got, gold, item=None):
         return call_correct(got, gold)
     if kind == 'lcb':
         return run_lcb(got, item)
+    if kind == 'scicode':
+        return run_scicode(got, item)
     if kind == 'letter':
         return got == gold
     if kind == 'math':
@@ -880,9 +1185,21 @@ def main():
     if os.path.exists(path):
         for line in open(path):
             try:
-                done.add(json.loads(line)['id'])
+                r = json.loads(line)
+                done.add(r['id'])
+                # SciCode steps are NOT independent: step 5 calls the functions from steps 1-4, so a
+                # resumed run has to put the model's own earlier code back in scope. Without this,
+                # every step after a restart is executed against a file that is missing its
+                # prerequisites and fails for a reason that has nothing to do with the model --
+                # scoring a resumed run far below a fresh one, silently.
+                if a.task == 'scicode' and r.get('got'):
+                    p = r['id'].split('-')
+                    _scicode_acc.setdefault(p[1], {})[int(p[2])] = r['got']
             except Exception:
                 pass
+    if a.task == 'scicode' and done:
+        print(f'[scicode] rebuilt prior-step code for {len(_scicode_acc)} problems from {len(done)} '
+              f'existing records', flush=True)
     todo = [it for it in items if it['id'] not in done]
     print(f'[{a.task}] {len(items)} items from {src} (snapshot {snap[:12]}), '
           f'{len(done)} already done, {len(todo)} to go, max_tokens={maxtok}, timeout={timeout}s', flush=True)

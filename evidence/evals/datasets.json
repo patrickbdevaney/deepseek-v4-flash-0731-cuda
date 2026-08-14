@@ -22,6 +22,16 @@
   "livecodebench/code_generation_lite": {
     "sha": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
     "local": "/home/patrickd/.cache/huggingface/hub/datasets--livecodebench--code_generation_lite/snapshots/0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
-    "files": 0
+    "files": 3
+  },
+  "SciCode1/SciCode": {
+    "sha": "4510f6a6aa27c43fad7b43da2c59602a86e88480",
+    "local": "/home/patrickd/.cache/huggingface/hub/datasets--SciCode1--SciCode/snapshots/4510f6a6aa27c43fad7b43da2c59602a86e88480",
+    "files": 2
+  },
+  "gorilla-llm/Berkeley-Function-Calling-Leaderboard": {
+    "sha": "61fc0608cfd831fcfbbaa676ebdfef0ed963eeda",
+    "local": "/home/patrickd/.cache/huggingface/hub/datasets--gorilla-llm--Berkeley-Function-Calling-Leaderboard/snapshots/61fc0608cfd831fcfbbaa676ebdfef0ed963eeda",
+    "files": 35
   }
 }

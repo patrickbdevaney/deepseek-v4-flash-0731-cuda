@@ -33,7 +33,9 @@ LABEL = {'gpqa_diamond': 'GPQA-Diamond', 'mmlu_pro': 'MMLU-Pro', 'aime24': 'AIME
          'aime25': 'AIME 2025', 'math500': 'MATH-500', 'humaneval': 'HumanEval',
          'gsm8k': 'GSM8K',
          'bfcl': 'BFCL v3 — 4 `exec_*` categories, AST †',
-         'lcb': 'LiveCodeBench — `test6` window †'}
+         'bfcl_live': 'BFCL v3 — `live_*` categories, AST †',
+         'lcb': 'LiveCodeBench — `test6` window †',
+         'scicode': 'SciCode — subproblem pass rate'}
 
 # The full protocol, per benchmark. LiveCodeBench states the comparability condition for all of
 # these: scores are comparable only when the release, date window, scenario, metric, sampling count,
@@ -60,6 +62,16 @@ PROTOCOL = {
                      'Python call expressions, one per line',
                      "BFCL's own AST metric: same function, argument names and values",
                      'none — AST comparison, not execution'),
+    'scicode':      ('test split, 65 research problems → 291 subproblems, 16 science subfields',
+                     '0-shot per subproblem; the model\'s OWN earlier steps are in scope, no gold '
+                     'solutions exist', 'first ```python block',
+                     "the benchmark's own numeric tests, all must pass",
+                     'sandboxed subprocess, 90 s, 4 GiB address space'),
+    'bfcl_live':    ('6 `live_*` categories, seeded cap of 150 per category',
+                     'prompt mode — calls emitted as text',
+                     'Python call expressions, or the literal NO_CALL',
+                     "BFCL possible-answer AST match; relevance categories scored on whether a call "
+                     'was emitted at all', 'none — AST comparison, not execution'),
     'lcb':          ('`code_generation_lite` `test6`, window 2025-01 → 2025-04',
                      '0-shot, complete program', 'first ```python block',
                      'all tests pass (public + private)',
@@ -79,6 +91,17 @@ DEVIATIONS = {
             'single sample per problem, not the official multi-sample pass@1 average',
             'the `0731` checkpoint postdates every problem in the window, so contamination is '
             'reduced but **not** eliminated (biases **up**)'],
+    'bfcl_live': ['a seeded cap of 150 items per category, because the `live_*` sets run from 1052 '
+                  'rows (`live_multiple`) to 16 (`live_parallel`) and taking all of them would let '
+                  'two categories set the headline',
+                  'category-balanced rather than BFCL\'s own weighting, so this is **not** the BFCL '
+                  'leaderboard aggregate'],
+    'scicode': ['subproblem pass rate is the headline; main-problem accuracy (every subproblem of a '
+                'problem correct) is the harder published metric and is derived from the same '
+                'records rather than reported in its place',
+                'later steps run against the model\'s OWN earlier code, since no gold solutions '
+                'ship — a wrong early step propagates, which is the intended behaviour and biases '
+                '**down** relative to a gold-context setting'],
     'mmlu_pro': ['a seeded random subset, not the full split — unbiased in expectation, but wider '
                  'than the published interval on the full set'],
     'math500': ['a seeded random subset, not the full 500'],

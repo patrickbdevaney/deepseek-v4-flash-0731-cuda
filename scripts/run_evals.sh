@@ -39,7 +39,15 @@ EFFORT="${EFFORT:-low}"
 # be quoted at, and costs 4x. Last because it is the only benchmark here with NO published
 # reference number -- so if the run is cut short AIME is simply ABSENT rather than present and
 # unquotable, and the benchmarks carrying the head-to-head have already landed.
-PLAN="${PLAN:-gpqa_diamond:0:1 bfcl:0:1 mmlu_pro:150:1 humaneval:0:1 lcb:0:1 math500:100:1 aime24:0:4 aime25:0:4}"
+# Ordered cheapest-and-most-informative first, so an interrupted battery still leaves the widest
+# coverage on disk. bfcl and bfcl_live together cost 0.17 of a day; scicode is the keystone (the
+# only task needing knowledge, reasoning and code in one item) and is placed before the long
+# single-axis coding tasks. AIME sits last at reps=2, not 4: tools/eval_budget.py puts the full plan
+# at exactly the 7-day ceiling with most rows still ASSUMED, and the nested bootstrap shows extra
+# reps narrow the interval only when the model is genuinely stochastic on those problems -- so reps
+# 4 spends a day of wall clock on a width improvement that may be zero. Raising k later is purely
+# additive (rep 0 keeps the bare id), so this is reversible once the variance split is measured.
+PLAN="${PLAN:-gpqa_diamond:0:1 bfcl:0:1 bfcl_live:0:1 scicode:0:1 mmlu_pro:150:1 humaneval:0:1 math500:100:1 lcb:0:1 aime24:0:2 aime25:0:2}"
 
 # The battery does not start unless the preflight says GO. Its checks are not advisory: the first
 # run of this suite lost an entire benchmark, mis-scored another, and quoted a third from a sample

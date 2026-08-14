@@ -26,6 +26,16 @@ REPOS = [
     ('google/IFEval',                   ['**/*.parquet', '*.jsonl']),
     ('openai/openai_humaneval',         ['**/*.parquet']),
     ('livecodebench/code_generation_lite', ['**/*.jsonl*']),
+    # Knowledge x code: 338 subproblems from 80 research problems across 16 science subfields, each
+    # needing recall, reasoning AND synthesis. The one benchmark here that tests the claim that
+    # domain breadth is what makes a coding model useful, rather than testing the two separately.
+    ('SciCode1/SciCode',                ['*.jsonl']),
+    # BFCL beyond the exec_* categories: the `live_*` sets are user-contributed real-world calls and
+    # include relevance/irrelevance, i.e. whether the model knows when NOT to call a tool. The
+    # multi_turn sets and their possible_answer ground truths come along for the same reason.
+    ('gorilla-llm/Berkeley-Function-Calling-Leaderboard',
+     ['BFCL_v3_live_*.json', 'BFCL_v3_multi_turn_*.json', 'possible_answer/*.json',
+      'multi_turn_func_doc/*.json']),
 ]
 
 
