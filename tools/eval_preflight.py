@@ -40,8 +40,13 @@ ROOT = E.ROOT
 CKPT = os.environ.get('CKPT', '/home/patrickd/models/DeepSeek-V4-Flash-0731-REAP')
 
 # Mirrors the PLAN in scripts/run_evals.sh: task -> (n, reps)
-PLAN = [('gpqa_diamond', 0, 1), ('bfcl', 0, 1), ('mmlu_pro', 150, 1), ('humaneval', 0, 1),
-        ('lcb', 0, 1), ('math500', 100, 1), ('aime24', 0, 4), ('aime25', 0, 4)]
+# MUST MATCH scripts/run_evals.sh. This list is what the context, power and memory checks iterate
+# over, so a task in the battery but missing here is a task whose items were never verified to FIT
+# -- which is the exact failure that cost the whole first GPQA run. Kept in the same order as the
+# battery so the two can be diffed by eye.
+PLAN = [('gpqa_diamond', 0, 1), ('bfcl', 0, 1), ('bfcl_live', 0, 1), ('scicode', 0, 1),
+        ('mmlu_pro', 150, 1), ('humaneval', 0, 1), ('math500', 100, 1), ('lcb', 0, 1),
+        ('aime24', 0, 2), ('aime25', 0, 2)]
 EFFORT = os.environ.get('EFFORT', 'low')
 
 results, nfail = [], 0
