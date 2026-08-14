@@ -196,21 +196,19 @@ so a low number cannot be dismissed as strict parsing.
 ## Results
 
 <!-- RESULTS -->
-| benchmark | scored | **acc %** | 95 % CI (Wilson) | trunc | err | mean out tok | tok/s | unpruned 0731 @ high |
-|---|---:|---:|---|---:|---:|---:|---:|---:|
-| GPQA-Diamond *(partial)* | 18/198 | **61.1** | [38.6, 79.7] | 9 | 0 | 2962 | 14.8 | 87.40 |
-| MMLU-Pro *(partial)* **— NOT QUOTABLE, 5 of 14 category strata** | 68/200 | **54.4** | [42.7, 65.7] | 25 | 0 | 2221 | 15.4 | 86.40 |
-| HumanEval *(partial)* | 1/164 | **100.0** | [20.7, 100.0] | 0 | 0 | 591 | 19.0 | — *(none published)* |
+| benchmark | effort | scored | **acc %** | 95 % CI | trunc | err | mean out tok | tok/s | unpruned 0731 @ same effort |
+|---|---|---:|---:|---|---:|---:|---:|---:|---:|
+| GPQA-Diamond *(partial)* **— NOT QUOTABLE, 32% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 123/198 | **65.9** | [57.1, 73.6] | 39 | 0 | 4200 | 14.2 | 71.20 |
 
-87 items scored, 204,935 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`, `reasoning_effort = high` throughout.
+123 items scored, 516,600 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+
+Interval method per row: GPQA-Diamond — wilson. Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
 Per-task provenance (dataset and pinned snapshot):
 
 | benchmark | dataset | snapshot | max_tokens |
 |---|---|---|---:|
-| GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 4000 |
-| MMLU-Pro | TIGER-Lab/MMLU-Pro (test, 12032) | `b189ec765aa7` | 4500 |
-| HumanEval | openai/openai_humaneval (164) | `7dce6050a7d6` | 2000 |
+| GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 8000 |
 <!-- /RESULTS -->
 
 ### A partial run is not just a noisier run — it can be a biased one
@@ -236,6 +234,23 @@ but it is not an estimate of MMLU-Pro, and the direction of its bias is not some
 interval can express. `tools/eval_suite.py` now computes stratum coverage for every task and
 `tools/eval_publish.py` marks any task that has not touched every stratum as NOT QUOTABLE, so this
 cannot be published as a capability number by inattention.
+
+## Protocol
+
+Published in full rather than by reference to a harness, because comparability is set by
+the protocol and not by the harness name.
+
+<!-- PROTOCOL -->
+| benchmark | split / subset | scenario | answer extraction | scoring | execution | budget | samples |
+|---|---|---|---|---|---|---:|---:|
+| GPQA-Diamond | test, all 198 | 0-shot generative CoT | final letter A–D | exact letter match | none | 8000 | 1 |
+
+**Decoding.** `low` reasoning effort at temperature 1.0, top_p 0.95. Sampling is stochastic rather than greedy, which is why interval width and avg@k are reported rather than a bare point estimate. Per-benchmark token budget and sample count are in the table above; each budget was set from an uncensored length calibration, not chosen.
+
+**Intervals.** Single-sample tasks use a Wilson score interval. avg@k tasks use a nested bootstrap over problems: k samples of one problem are not k independent problems, and pooling them into a Wilson interval understates the width by up to 2x here — most severely when the extra samples bought the least. This is the clustering correction of Miller, *Adding Error Bars to Evals* (arXiv:2411.00640), which reports cluster-adjusted standard errors up to 3x the naive ones.
+
+**What this protocol does and does not license.** Every number here is re-derivable from the stored generations by `tools/eval_verify.py` with no GPU and no model, against a sha-pinned dataset. That makes the numbers *reproducible*. It does not make them *leaderboard-rankable*: the reference column is third-party aggregation whose harness, token budget and sampling count are not ours and are not stated, so a gap of a few points between a row and its reference is not interpretable in either direction. The comparison this evidence genuinely supports is a paired one — REAP against unpruned, same harness, same decoding, only the weights different — and that baseline has not been run here.
+<!-- /PROTOCOL -->
 
 ## Evidence, and how to check these numbers without trusting this repo
 

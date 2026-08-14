@@ -26,9 +26,63 @@ REF = {
     'max':  {'gpqa_diamond': 88.10, 'mmlu_pro': 86.20},
 }
 
+# Labels carry the SUBSET in the name where the row is not the whole benchmark. A cell reading
+# "BFCL v3" next to a leaderboard number would be read as the leaderboard's quantity; it is not, and
+# the qualifier has to travel with the number rather than live in a footnote the reader may skip.
 LABEL = {'gpqa_diamond': 'GPQA-Diamond', 'mmlu_pro': 'MMLU-Pro', 'aime24': 'AIME 2024',
          'aime25': 'AIME 2025', 'math500': 'MATH-500', 'humaneval': 'HumanEval',
-         'gsm8k': 'GSM8K'}
+         'gsm8k': 'GSM8K',
+         'bfcl': 'BFCL v3 — 4 `exec_*` categories, AST †',
+         'lcb': 'LiveCodeBench — `test6` window †'}
+
+# The full protocol, per benchmark. LiveCodeBench states the comparability condition for all of
+# these: scores are comparable only when the release, date window, scenario, metric, sampling count,
+# temperature and execution policy match. Harness IDENTITY is not on that list -- protocol is -- so
+# the protocol is published in full rather than named by reference to a harness.
+#
+# (split, scenario, extraction, scoring, execution)
+PROTOCOL = {
+    'gpqa_diamond': ('test, all 198', '0-shot generative CoT', 'final letter A–D',
+                     'exact letter match', 'none'),
+    'mmlu_pro':     ('test, seeded random subset of 12 032', '0-shot generative CoT',
+                     'final letter A–J', 'exact letter match', 'none'),
+    'math500':      ('test, seeded random subset of 500', '0-shot generative CoT',
+                     'last brace-balanced \\boxed{}', 'string → numeric → sympy equivalence', 'none'),
+    'aime24':       ('all 30', '0-shot generative CoT', 'final integer 0–999',
+                     'exact integer match', 'none'),
+    'aime25':       ('all 30', '0-shot generative CoT', 'final integer 0–999',
+                     'exact integer match', 'none'),
+    'humaneval':    ('all 164', '0-shot', 'first ```python block',
+                     "pass@1 — the benchmark's own check(entry_point)",
+                     'sandboxed subprocess, 20 s, 2 GiB address space'),
+    'bfcl':         ('4 of BFCL v3\'s `exec_*` categories, 240 items',
+                     'prompt mode — calls emitted as text, not via a tool-call API',
+                     'Python call expressions, one per line',
+                     "BFCL's own AST metric: same function, argument names and values",
+                     'none — AST comparison, not execution'),
+    'lcb':          ('`code_generation_lite` `test6`, window 2025-01 → 2025-04',
+                     '0-shot, complete program', 'first ```python block',
+                     'all tests pass (public + private)',
+                     'sandboxed subprocess, 8 s per test, 2 GiB address space'),
+}
+
+# Deviations from the canonical protocol, stated rather than discovered by a reader. Each says which
+# DIRECTION it biases the score, because a limitation whose sign is unknown is not disclosed.
+DEVIATIONS = {
+    'bfcl': ['runs 4 `exec_*` categories (240 items), **not** the BFCL v3 aggregate, which also '
+             'spans multi-turn, relevance/irrelevance detection and non-Python languages — '
+             '**this row is not the BFCL leaderboard quantity**',
+             'scored by AST match rather than live execution, so a call that is structurally right '
+             'but fails against a real API counts correct (biases **up**)'],
+    'lcb': ['at most 25 tests per problem, so a solution failing test 30 of 200 counts correct '
+            '(biases **up**)',
+            'single sample per problem, not the official multi-sample pass@1 average',
+            'the `0731` checkpoint postdates every problem in the window, so contamination is '
+            'reduced but **not** eliminated (biases **up**)'],
+    'mmlu_pro': ['a seeded random subset, not the full split — unbiased in expectation, but wider '
+                 'than the published interval on the full set'],
+    'math500': ['a seeded random subset, not the full 500'],
+}
 
 
 def main():
@@ -91,13 +145,75 @@ def main():
     for r in rows:
         out.append(f'| {LABEL.get(r["task"], r["task"])} | {r["source"]} | '
                    f'`{(r["snapshot"] or "")[:12]}` | {r["max_tokens"]} |')
+    if any(r['task'] in DEVIATIONS for r in rows):
+        out += ['', '† This row is **not** the full benchmark — see the protocol block below.']
+
+    proto = protocol_block(rows)
 
     doc = open(DOC).read()
     a, b = doc.index('<!-- RESULTS -->'), doc.index('<!-- /RESULTS -->')
     doc = doc[:a] + '<!-- RESULTS -->\n' + '\n'.join(out) + '\n' + doc[b:]
+    a, b = doc.index('<!-- PROTOCOL -->'), doc.index('<!-- /PROTOCOL -->')
+    doc = doc[:a] + '<!-- PROTOCOL -->\n' + '\n'.join(proto) + '\n' + doc[b:]
     open(DOC, 'w').write(doc)
     print('\n'.join(out))
-    print(f'\nwrote {DOC}')
+    print(f'\nwrote {DOC} (results + protocol)')
+
+
+def protocol_block(rows):
+    """The full evaluation protocol, emitted so comparability can be judged rather than assumed.
+
+    LiveCodeBench states the condition plainly: scores are comparable only when the release, date
+    window, scenario, metric, sampling count, temperature and execution policy all match. None of
+    those are implied by naming a harness -- and naming one would not settle it anyway, since
+    lm-evaluation-harness itself ships GPQA in both a loglikelihood and a generative-CoT variant
+    that disagree on the same model. So the protocol is published in full, and every deviation is
+    listed WITH THE DIRECTION IT BIASES THE SCORE, because a limitation whose sign is unknown has
+    not really been disclosed.
+    """
+    out = ['| benchmark | split / subset | scenario | answer extraction | scoring | execution | '
+           'budget | samples |',
+           '|---|---|---|---|---|---|---:|---:|']
+    for r in rows:
+        p = PROTOCOL.get(r['task'])
+        if not p:
+            continue
+        out.append(f'| {LABEL.get(r["task"], r["task"])} | ' + ' | '.join(p) +
+                   f' | {r.get("max_tokens")} | {r.get("reps", 1)} |')
+
+    samp = sorted({(r.get('temperature'), r.get('top_p'), r.get('effort', '?')) for r in rows})
+    out += ['', '**Decoding.** ' + '; '.join(
+        f'`{e}` reasoning effort at temperature {t}, top_p {tp}' for t, tp, e in samp) +
+        '. Sampling is stochastic rather than greedy, which is why interval width and avg@k are '
+        'reported rather than a bare point estimate. Per-benchmark token budget and sample count '
+        'are in the table above; each budget was set from an uncensored length calibration, not '
+        'chosen.']
+
+    out += ['', '**Intervals.** Single-sample tasks use a Wilson score interval. avg@k tasks use a '
+            'nested bootstrap over problems: k samples of one problem are not k independent '
+            'problems, and pooling them into a Wilson interval understates the width by up to 2x '
+            'here — most severely when the extra samples bought the least. This is the clustering '
+            'correction of Miller, *Adding Error Bars to Evals* (arXiv:2411.00640), which reports '
+            'cluster-adjusted standard errors up to 3x the naive ones.']
+
+    dev = [(t, DEVIATIONS[t]) for t in dict.fromkeys(r['task'] for r in rows) if t in DEVIATIONS]
+    if dev:
+        out += ['', '**Deviations from the canonical protocol.** Each is stated with the direction '
+                'it moves the score.', '']
+        for t, ds in dev:
+            out.append(f'- **{LABEL.get(t, t)}**')
+            out += [f'  - {d}' for d in ds]
+
+    out += ['', '**What this protocol does and does not license.** Every number here is '
+            're-derivable from the stored generations by `tools/eval_verify.py` with no GPU and no '
+            'model, against a sha-pinned dataset. That makes the numbers *reproducible*. It does '
+            'not make them *leaderboard-rankable*: the reference column is third-party aggregation '
+            'whose harness, token budget and sampling count are not ours and are not stated, so a '
+            'gap of a few points between a row and its reference is not interpretable in either '
+            'direction. The comparison this evidence genuinely supports is a paired one — REAP '
+            'against unpruned, same harness, same decoding, only the weights different — and that '
+            'baseline has not been run here.']
+    return out
 
 
 if __name__ == '__main__':
