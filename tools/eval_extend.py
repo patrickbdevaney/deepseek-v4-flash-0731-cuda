@@ -247,7 +247,18 @@ def main():
                            base_completion_tokens=base_ct, ext_completion_tokens=ext_ct,
                            continuation_prompt_tokens=got_pt,
                            expected_prompt_tokens=expect_pt, token_exact=True,
-                           code_commit=commit))
+                           code_commit=commit,
+                           # KEEP THE CONTINUATION LEG'S OWN TIMINGS. `rec = dict(r)` carries the
+                           # base record's `timings` forward, and they describe a decode that began
+                           # at a few hundred prompt tokens. This leg begins at base_pt+base_ct --
+                           # 8k and up -- and is the only place in the whole programme where decode
+                           # is measured at that depth. Overwriting the top-level `timings` would
+                           # change what a landed benchmark row means, so the leg is recorded
+                           # alongside instead: scoring reads `timings`, perf_ingest.py reads this.
+                           ext_timings=dict(
+                               (resp.get('timings') or {}),
+                               cached_tokens=(u.get('prompt_tokens_details') or {})
+                                             .get('cached_tokens', 0))))
         fout.write(json.dumps(rec, ensure_ascii=False) + '\n')
         fout.flush()
         el = time.time() - t0

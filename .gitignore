@@ -19,3 +19,9 @@ FLYWHEEL_STOP
 # python bytecode from the analysis tools
 __pycache__/
 *.pyc
+
+# Perf corpus: the SQLite warehouse is a pure function of evidence/evals/*.jsonl and is rebuilt
+# by tools/perf_ingest.py, so committing it would only create merge conflicts on a binary.
+# The /metrics time series IS primary evidence and is committed.
+evidence/perf/perf.sqlite
+evidence/perf/refresh.log
