@@ -1273,6 +1273,12 @@ def main():
                    correct=ok, finish_reason=ch.get('finish_reason'), truncated=bool(truncated),
                    category=it.get('category'), subject=it.get('subject'), level=it.get('level'),
                    usage=r.get('usage'), timings=r.get('timings'),
+                   # Per-request speculation profile: the joint (realised verify width, accepted
+                   # prefix) histogram, from which the conditional accept hazard h(j) is
+                   # recoverable. Absent until the server carrying it is deployed, so this is
+                   # written only when present rather than as a null column -- a record either has
+                   # the counter or predates it, and consumers must be able to tell which.
+                   **({'spec_profile': r['spec_profile']} if r.get('spec_profile') else {}),
                    reasoning_chars=len(reasoning), content=content, reasoning=reasoning)
         with open(path, 'a') as f:
             f.write(json.dumps(rec) + '\n')

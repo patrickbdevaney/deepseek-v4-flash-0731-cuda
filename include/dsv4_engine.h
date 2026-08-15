@@ -36,6 +36,24 @@ struct GenParams {
     std::vector<int> stop_ids;     // in addition to EOS
 };
 
+// Per-request speculation telemetry. `tok_per_verify` is one number summarising a chain of
+// DEPENDENT events, and accept_profile.py's whole argument is that it hides the thing training
+// moves: position j is only reached if 0..j-1 were all accepted, so the quantity that matters is
+// the conditional hazard h(j) = P(accept j | reached j). Two heads with identical tau can have
+// opposite h and respond to more training, and to a different adaptK, in opposite directions.
+//
+// h(j) is not recoverable from the two MARGINAL histograms (widths, accept lengths) -- it needs
+// the joint, because a verify only reaches position j if its width offered a proposal there. So
+// the joint is what is recorded. It is 16x16 ints = 1 KiB per request, incremented once per
+// verify with no sync and no device memory, which is why this can be always-on where
+// DSV4_SPECPROF (documented at ~1 % in LEVERS.md §7) cannot.
+struct SpecProfile {
+    static constexpr int MAXW = 16;
+    // accept_joint[w][a] = verifies that ran at realised width w and accepted a proposals.
+    // Width varies per step under adaptK, which nothing previously recorded at all.
+    int accept_joint[MAXW][MAXW] = {};
+};
+
 struct GenStats {
     int    prompt_tokens     = 0;
     int    cached_tokens     = 0;  // prompt tokens served from the prefix cache
@@ -45,6 +63,7 @@ struct GenStats {
     double decode_ms         = 0;
     double tok_per_s         = 0;
     double tok_per_verify    = 0;
+    SpecProfile spec;              // always-on; see SpecProfile
 };
 
 struct EngineConfig {

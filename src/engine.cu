@@ -723,6 +723,11 @@ GenStats Engine::Impl::generate(const std::vector<int>& ids, const GenParams& gp
         cpos += acc + 1;
         cur = correction;
         ++stats.verifies;
+        // Joint (realised width, accepted prefix). Two integer increments, no sync, no device
+        // memory -- the cost is unmeasurable against a verify that just ran a full forward, which
+        // is what makes it safe to leave on in production. See SpecProfile in dsv4_engine.h.
+        if (VB >= 0 && VB < SpecProfile::MAXW && acc >= 0 && acc < SpecProfile::MAXW)
+            ++stats.spec.accept_joint[VB][acc];
 
         for (int t : committed) {
             if (produced >= gp.max_tokens) { stop = true; break; }

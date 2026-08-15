@@ -111,6 +111,30 @@ static RunResult run_generation(const std::vector<int>& ids, const dsv4srv::GenP
     return out;
 }
 
+// Serialise the per-request speculation profile as a sparse list of [width, accepted, count].
+//
+// The dense 16x16 is 256 cells of which a real request touches a handful -- emitting it whole
+// would put a wall of zeros in every response for no information. Sparse keeps the field small
+// enough to leave on by default, which is the point: this is the counter that lets a corpus
+// recover the conditional accept hazard h(j) per workload, and a telemetry field nobody enables
+// measures nothing. Also carries the two marginals so a consumer that only wants tau's
+// decomposition does not have to reduce the joint itself.
+static json spec_profile_json(const dsv4srv::SpecProfile& s) {
+    json cells = json::array();
+    long long tot = 0, w_sum = 0, a_sum = 0;
+    for (int w = 0; w < dsv4srv::SpecProfile::MAXW; ++w)
+        for (int a = 0; a < dsv4srv::SpecProfile::MAXW; ++a) {
+            const int c = s.accept_joint[w][a];
+            if (!c) continue;
+            cells.push_back(json::array({w, a, c}));
+            tot += c; w_sum += (long long)w * c; a_sum += (long long)a * c;
+        }
+    return json{{"accept_joint", cells},
+                {"verifies", tot},
+                {"mean_width", tot ? (double)w_sum / tot : 0.0},
+                {"mean_accepted", tot ? (double)a_sum / tot : 0.0}};
+}
+
 static void account(const dsv4srv::GenStats& s) {
     m_prompt_tok += s.prompt_tokens;
     m_cached_tok += s.cached_tokens;
@@ -310,6 +334,7 @@ int main(int argc, char** argv) {
                                       {"decode_ms", r.stats.decode_ms},
                                       {"tokens_per_second", r.stats.tok_per_s},
                                       {"tokens_per_verify", r.stats.tok_per_verify}};
+                out["spec_profile"] = spec_profile_json(r.stats.spec);
                 res.set_content(dump_lossy(out), "application/json");
             } catch (const std::exception& e) {
                 ++m_errors;
@@ -394,7 +419,8 @@ int main(int argc, char** argv) {
                          {"timings", json{{"prefill_ms", r.stats.prefill_ms},
                                           {"decode_ms", r.stats.decode_ms},
                                           {"tokens_per_second", r.stats.tok_per_s},
-                                          {"tokens_per_verify", r.stats.tok_per_verify}}}};
+                                          {"tokens_per_verify", r.stats.tok_per_verify}}},
+                         {"spec_profile", spec_profile_json(r.stats.spec)}};
                   send("data: " + dump_lossy(o) + "\n\n"); }
                 send("data: [DONE]\n\n");
                 sink.done();
