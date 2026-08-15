@@ -30,8 +30,12 @@ accuracy among *terminated* traces would fall with completion length. It does no
 | 2335 – 4576 | 24 | 95.8% |
 | 4583 – 7938 | 26 | 88.5% |
 
-The curve is flat across a hundredfold range of thinking length. There is no in-sample evidence
-that the items which wanted more than 8000 tokens are items the model was going to get wrong.
+Sextiles are noisy at this n. Pooled into wider buckets the shape is a **mild monotonic decline**
+rather than a flat line — 95.7% under 600 tokens, 95.2% to 2000, 92.0% to 4000, 90.6% to 8000.
+So the items that wanted more than 8000 tokens are *somewhat* harder, which is why the prediction
+below sits under the 93.8% terminated rate rather than at it. What the data does **not** show is a
+collapse: a five-point drift across a hundredfold range of thinking length will not turn 93.8%
+into anything near 11.8%.
 
 **Prediction, stated in advance: 87–93%, central ~90%.**
 
