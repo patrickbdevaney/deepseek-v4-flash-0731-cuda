@@ -17,6 +17,64 @@
 > To resume: `rm FLYWHEEL_STOP`. `halt` in `FLYWHEEL_STATE.json` was deliberately left `false` so
 > that is all it takes.
 
+> ## ⚠ ONE LEVER REOPENS — and it is large. `PERF.md`, 2026-08-15
+>
+> **The queue is not 0.** §9's ledger, §1's baseline and every finding behind "the kernel path is
+> finished" share one scope condition, stated in §1's own first line: **prompt 0**. A cost that
+> scales with resident KV depth is identically zero there. The ledger is not wrong — it is correct
+> within the regime it measured, and nothing below retires anything in §3.
+>
+> The eval battery ran **891 requests of real workload** at prompt depths from 151 to 6568 tokens.
+> Fitting `ms_per_verify = W + K x kv_mid` over them (`tools/perf_report.py`):
+>
+> | term | estimate | 95 % CI (cluster bootstrap over tasks) |
+> |---|---:|---|
+> | `W` fixed per forward | 136.8 ms | [131.8, 143.1] |
+> | **`K` per resident KV token** | **0.0307 ms** | **[0.0283, 0.0335]** |
+>
+> That is **31 % of the forward at 2k depth, 65 % at 8k, 79 % at 16k**. It clears trap 25's ~1.5 %
+> cross-run floor by more than an order of magnitude, so it is not a timing artefact, and three
+> in-tool artefact checks fail to kill it: `tau` FALLS with depth (corr −0.317) so the mechanical
+> confound runs the wrong way; four workloads agree on the `tau`-free slope to within 4 %; and the
+> slope reproduces on **exogenous** prompt-length variation at matched completion length. The
+> intercept independently reproduces ROOFLINE §3's 126.7 ms AR step on the byte-identical 180B
+> backbone, landing just above it as the expert-union argument requires.
+>
+> **It is not a bandwidth term.** At 240 GB/s, `K` would mean moving **7.36 MB per resident KV token
+> per forward** against ~3.3 KB of actual per-position state, with `index_topk` = 512 bounding what
+> attention may read at any depth. Depth-linear cost that bytes cannot explain is compute-,
+> occupancy- or launch-bound. Ranked hypothesis, **not a diagnosis**: the DSA indexer must SCORE all
+> D resident positions per layer per forward to select its top-512, so it is linear in depth by
+> construction while the attention it feeds is not.
+>
+> This does **not** contradict F125/F126/F137. "MoE at 94 % of roofline" is a prompt-0 measurement of
+> the MoE window and stays true; the depth term lives in a different region that the prompt-0
+> instrument cannot see.
+>
+> **Instrument gap this exposes.** §7's instruments are rich but all are env-gated at process start
+> and emit log output from bench harnesses, and `DSV4_DPROF` is documented as costing ~0.4–1.0 %
+> ("never re-baseline from one"). None of them attribute *production* traffic. What is missing is a
+> cheap always-on per-request path in the **server**: per-position acceptance hazard `h(j)` rather
+> than only `tau`, realised verify width under `adaptK`, distinct experts touched per forward
+> (which would settle the speculation/weight-traffic interaction directly), and KV depth per step
+> rather than per request.
+>
+> **Do not treat this as a restart.** `FLYWHEEL_STOP` is untouched. This is the evidence §"Rules of
+> the road" requires to reopen a lever, recorded where the next reader will see it.
+>
+> **One caution, on a byte lever this reopens the pricing of.** A cloud FP4 requant is worth
+> costing, but not off `B_tok`: the routed experts are **already MXFP4**, so the FP4 mass is MLA
+> (4599 MB, FP8), shared expert (1082, FP8), `lm_head` (1059, BF16), KV compressor (526, BF16) and
+> the DSA indexer (275, BF16) — nominally `B_tok` 11202 -> 6848 MB, **38.9 %**. Two reasons that
+> number is not the answer. (a) **F129**: `B_tok` overstates every byte lever on a speculative
+> engine, because the verify reads each weight once for M tokens — so this must be re-derived
+> against F129 before anyone spends the requant. (b) Even taken at face value it prices out very
+> differently depending on what `W`'s non-transfer time is: at 240 GB/s `B_tok` is 46.7 ms of
+> transfer against a measured `W` of 136.8 ms, so **90.1 ms is not transfer**. If that is additive
+> overhead the requant buys **1.15x**; if it is bandwidth wasted by access pattern it buys
+> **1.64x**. Same measurement, two decompositions. The `ncu` profile that settles the depth term
+> settles this too — **profile before requanting**.
+
 **Read this before proposing any decode optimisation.** `LOOP_LOG.md` is 3,200 lines and 62 findings;
 this is the index. Its job is to stop a cycle spending a 15-minute checkpoint load re-deriving a
 result that is already in the log with a number attached.

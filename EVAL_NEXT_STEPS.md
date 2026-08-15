@@ -49,10 +49,10 @@ into anything near 11.8%.
 | all 51 resolve correct (hard ceiling) | 95.4% |
 
 Two reasons the realized number should sit below the naive 93.8% extrapolation: the truncated
-items are self-selected for wanting more than 8000 tokens, which is outside the range the flat
+items are self-selected for wanting more than 8000 tokens, which is outside the range the
 curve was measured over; and some of them will **still** truncate at 24k and stay wrong.
 
-**What would falsify the flat-curve reading:** a landing below 85%. That would mean traces which
+**What would falsify this reading:** a landing below 85%. That would mean traces which
 fail to converge inside 8000 tokens are qualitatively different — reasoning that wanders rather
 than reasoning that is merely long — which is itself a REAP-relevant finding about routing
 stability under long chains, and should be reported as one rather than buried.
@@ -208,7 +208,62 @@ This costs no extra runtime and is the sharpest REAP-specific test available fro
 
 ---
 
-## 5. Queue
+## 5. Production capture — where the real calibration comes from
+
+Benchmarks are a **proxy** for the workload. Production traffic is the workload. Once this
+checkpoint is serving real agentic sessions, the traces it produces are strictly better calibration
+material than anything here, and the infrastructure to consume them already exists: `perf_ingest.py`
+reads any jsonl carrying `usage` + `timings`, so the server only has to write records in that
+shape for `PERF.md` and the trace corpus to extend themselves.
+
+What production traces give that the battery cannot:
+
+| | benchmark corpus | production traces |
+|---|---|---|
+| context depth | 151 – 6568 tokens | whatever agents actually do — the regime where `K` dominates |
+| prefix-cache reuse | 25.7 %, and items mostly do not share prefixes | real multi-turn append; should be far higher |
+| draft-head training | on-distribution for benchmarks | on-distribution for **the job** |
+| token mix | question → answer | tool results, code diffs, file contents, retries |
+| RAG / cumulative knowledge | none | the corpus itself becomes the retrieval substrate |
+
+### The KV-precision question, settled by the measurement
+
+FP32 KV is why the battery runs at `effort=low`, so it is natural to read FP8 KV as the fix for
+everything. The corpus says it is a **capability lever, not a speed lever**, and the distinction is
+sharp:
+
+- The depth term is **2234x above its bandwidth roofline**. Its cost is not bytes. Cutting KV
+  precision 4x cuts the bandwidth component of a term whose bandwidth component is already
+  ~0.05 % of what is measured. **FP8 KV will barely move decode speed at depth.**
+- What it *does* buy is headroom, and headroom is what currently forces `effort=low`. That is worth
+  a great deal — it is the difference between a floor measurement and a capability measurement —
+  but it should be budgeted as an eval-quality win, not a throughput win.
+
+This is the general shape of the finding and the reason the instinct that "there is headroom we
+have not found" is right: every prior measurement was taken at prompt 0 (`LEVERS.md` §1), where the
+depth term does not exist. The physical roofline is not the binding constraint at working depth;
+inefficiency is, and inefficiency is recoverable.
+
+### What the server must emit for production traffic to pay
+
+`LEVERS.md` §7 lists a deep instrument set, but every one is env-gated at process start, emits log
+output from a bench harness, and at least one costs ~1 % just to be on. None of them attribute a
+production request. The gap is a cheap always-on per-request path:
+
+| wanted | why the current telemetry cannot answer it |
+|---|---|
+| per-position acceptance hazard `h(j)` | the API exposes only `tau`; `accept_profile.py`'s own docstring is that two heads with equal `tau` can have opposite `h`, and they respond to training in opposite directions |
+| realised verify width under `adaptK` | `adaptK` = 1.5 adapts per step; nothing records what it actually chose |
+| distinct experts touched per forward | would settle the speculation/weight-traffic interaction **directly** — currently the largest unpriced coupling in the ledger |
+| KV depth per step, not per request | `kv_mid` is an average; it cannot distinguish a linear depth cost from a super-linear one |
+| per-phase split (MLA / MoE / indexer) at depth | the prompt-0 budget table in `LEVERS.md` §9 exists; there is no depth-resolved equivalent |
+
+None of these require a model change, and all of them are integers or microsecond counters — immune
+to the ~1.5 % cross-run timing floor that `LEVERS.md` trap 25 warns about.
+
+---
+
+## 6. Queue
 
 1. Battery completes: scicode, mmlu_pro, humaneval, math500, lcb, aime24×2, aime25×2.
 2. `eval_extend_all.sh` — extension by continuation to 24k for every row over the 5% gate.
@@ -216,4 +271,9 @@ This costs no extra runtime and is the sharpest REAP-specific test available fro
 4. Per-subject dispersion analysis on MMLU-Pro and GPQA (§4).
 5. Speculative high-effort projections, labelled as such (§3).
 6. Build BFCL `multi_turn` — vendor the backends, `base` + `miss_func` first (§4).
-7. Matched-harness API baseline, if and when API inference is back in scope (§2).
+7. Matched-harness API baseline, if and when API inference is back in scope (§2). Run it at
+   low @ 8000 **and** low @ 24000: the pruned model will have both, and a prune delta that is
+   stable across that budget change is real evidence — not proof — that it is stable across
+   effort, which is the assumption the whole high-effort extrapolation rests on.
+8. Budget forcing: cap thinking with an injected `</think>`, paired within-item (task #26).
+9. Server-side per-request telemetry so production traffic profiles itself (§5).
