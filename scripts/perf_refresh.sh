@@ -30,6 +30,19 @@ while true; do
     python3 tools/perf_report.py --out PERF.md 2>&1
   } >> "$LOG" 2>&1
 
+  # Re-export the generation traces, but only when a benchmark has actually appended since the
+  # last export. Rebuilding them means re-deriving and re-hashing every prompt through the task
+  # builders, which loads the source datasets -- far too heavy to repeat every half hour for
+  # nothing. `find -newer` makes the export a no-op on a quiet pass.
+  MAN=evidence/traces/MANIFEST.text.json
+  if [ ! -f "$MAN" ] || [ -n "$(find evidence/evals -name '*.jsonl' -newer "$MAN" -print -quit 2>/dev/null)" ]; then
+    {
+      echo "--- trace export $(date -Is) ---"
+      python3 tools/trace_export.py --format text 2>&1
+      python3 tools/trace_export.py --format sft --exclude-truncated 2>&1
+    } >> "$LOG" 2>&1
+  fi
+
   # Stop when there is no longer any source of new requests: no battery, no extension pass. The
   # sampler is left running deliberately -- it is the only record of what the engine did while
   # idle, and an idle engine is still evidence.

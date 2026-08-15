@@ -25,3 +25,10 @@ __pycache__/
 # The /metrics time series IS primary evidence and is committed.
 evidence/perf/perf.sqlite
 evidence/perf/refresh.log
+
+# Generation traces: benchmark PROMPTS paired with model completions. Publishing these
+# contaminates the benchmarks they came from -- including the ones this repo reports scores on.
+# Rebuilt on demand by tools/trace_export.py from the eval records, so nothing is lost by not
+# tracking them. The README explaining the policy IS tracked.
+evidence/traces/*.jsonl
+evidence/traces/MANIFEST.*.json
