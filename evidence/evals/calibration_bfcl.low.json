@@ -1,0 +1,16 @@
+{
+  "task": "bfcl",
+  "effort": "low",
+  "sampled": 16,
+  "budget": 16000,
+  "truncated": 0,
+  "trunc_rate": 0.0,
+  "median": 100.5,
+  "p75": 167,
+  "p90": 207,
+  "p95": 3019,
+  "max": 3019,
+  "mean_tok_s": 0.49,
+  "mean_s_per_item": 603.5,
+  "full_task_hours": 40.2
+}

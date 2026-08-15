@@ -1,0 +1,126 @@
+[calibrate] lcb @ effort=low: 10 of 175 items, budget 16000, timeout 4180s
+  [1/10] lcb-abc387_b        570 tok    110s       got=import sys
+
+def main():
+    data = sys.stdin.read().strip()
+    if not data:
+        return
+    X = int(data)
+    total = 0
+    for i in range(1, 10):
+        for j in range(1, 10):
+            val = i * j
+            if val != X:
+                total += val
+    print(total)
+
+if __name__ == "__main__":
+    main()
+ gold=pass (2 min)
+  [2/10] lcb-abc390_e      12335 tok   1529s       got=import sys
+from bisect import bisect_left
+
+def main():
+    data = list(map(int, sys.stdin.buffer.read().split()))
+    if not data:
+        return
+
+    N = data[0]
+    X = data[1]
+
+    groups = [[] for _ in range(3)]
+    total = [0, 0, 0]
+
+    idx = 2
+    for _ in range(N):
+        v = data[idx] - 1
+        a = data[idx + 1]
+        c = data[idx + 2]
+        idx += 3
+        groups[v].append((c, a))
+        total[v] += a
+
+    bests = []
+
+    for v in range(3):
+        dp = [-1] * (X + 1)
+        dp[0] = 0
+
+        for w, val in groups[v]:
+            for j in range(X, w - 1, -1):
+                prev = dp[j - w]
+                if prev != -1:
+                    nv = prev + val
+                    if nv > dp[j]:
+                        dp[j] = nv
+
+        best = [0] * (X + 1)
+        cur = 0
+        for i in range(X + 1):
+            if dp[i] > cur:
+                cur = dp[i]
+            best[i] = cur
+
+        bests.append(best)
+
+    def feasible(T):
+        total_cost = 0
+        for best in bests:
+            pos = bisect_left(best, T)
+            if pos > X:
+                return False
+            total_cost += pos
+            if total_cost > X:
+                return False
+        return True
+
+    low = 0
+    high = min(total)
+    ans = 0
+
+    while low <= high:
+        mid = (low + high) // 2
+        if feasible(mid):
+            ans = mid
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    print(ans)
+
+if __name__ == "__main__":
+    main()
+ gold=pass (27 min)
+  [3/10] lcb-abc392_f      16000 tok   2249s TRUNC got=import sys
+
+def main():
+    data = list(map(int, sys.stdin.buffer.read().split()))
+    if not data:
+        return
+    N = data[0]
+    tree = [0] * (N + 1)
+    for i in range(1, N + 1):
+        tree[i] = i & -i
+    ans = [0] * N
+    highest = 1 << (N.bit_length() - 1)
+    for i in range(N, 0, -1):
+        k = data[i]
+        idx = 0
+        bit = highest
+        while bit:
+            nxt = idx + bit
+            if nxt <= N and tree[nxt] < k:
+                idx = nxt
+                k -= tree[nxt]
+            bit >>= 1
+        pos = idx + 1
+        ans[pos - 1] = i
+        j = pos
+        while j <= N:
+            tree[j] -= 1
+            j += j & -j
+    sys.stdout.write(' '.join(map(str, ans)) + '\n')
+
+if __name__ == '__main__':
+    main()
+ gold=pass (65 min)

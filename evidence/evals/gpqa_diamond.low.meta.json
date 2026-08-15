@@ -10,5 +10,9 @@
   "temperature": 1.0,
   "top_p": 0.95,
   "max_tokens": 8000,
-  "started": "2026-08-14T01:49:09Z"
+  "code_commit": "2fc88141f3d5c798b24ccfa9245cc2883eb7688a",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-14T18:53:54Z"
 }

@@ -160,6 +160,8 @@
     "HuggingFaceH4/MATH-500": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
     "google/IFEval": "966cd89545d6b6acfd7638bc708b98261ca58e84",
     "openai/openai_humaneval": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
-    "livecodebench/code_generation_lite": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505"
+    "livecodebench/code_generation_lite": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+    "SciCode1/SciCode": "4510f6a6aa27c43fad7b43da2c59602a86e88480",
+    "gorilla-llm/Berkeley-Function-Calling-Leaderboard": "61fc0608cfd831fcfbbaa676ebdfef0ed963eeda"
   }
 }

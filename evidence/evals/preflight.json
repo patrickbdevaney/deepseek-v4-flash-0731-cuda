@@ -4,7 +4,7 @@
       "section": "SERVER",
       "check": "reachable and model loaded",
       "ok": true,
-      "detail": "model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=10567"
+      "detail": "model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=4848"
     },
     {
       "section": "PROVENANCE",
@@ -34,43 +34,55 @@
       "section": "CONTEXT",
       "check": "chat-template overhead measured",
       "ok": true,
-      "detail": "4 tokens"
+      "detail": "16 tokens"
     },
     {
       "section": "CONTEXT",
       "check": "gpqa_diamond: every item fits",
       "ok": true,
-      "detail": "longest prompt 2564 + max_tokens 8000 + 12 = 10576 vs seqmax 32768"
+      "detail": "longest prompt 2564 + max_tokens 8000 + 24 = 10588 vs seqmax 32768"
+    },
+    {
+      "section": "CONTEXT",
+      "check": "bfcl: every item fits",
+      "ok": true,
+      "detail": "longest prompt 830 + max_tokens 2000 + 24 = 2854 vs seqmax 32768"
     },
     {
       "section": "CONTEXT",
       "check": "mmlu_pro: every item fits",
       "ok": true,
-      "detail": "longest prompt 535 + max_tokens 8000 + 12 = 8547 vs seqmax 32768"
-    },
-    {
-      "section": "CONTEXT",
-      "check": "math500: every item fits",
-      "ok": true,
-      "detail": "longest prompt 790 + max_tokens 8000 + 12 = 8802 vs seqmax 32768"
+      "detail": "longest prompt 535 + max_tokens 8000 + 24 = 8559 vs seqmax 32768"
     },
     {
       "section": "CONTEXT",
       "check": "humaneval: every item fits",
       "ok": true,
-      "detail": "longest prompt 415 + max_tokens 8000 + 12 = 8427 vs seqmax 32768"
+      "detail": "longest prompt 415 + max_tokens 8000 + 24 = 8439 vs seqmax 32768"
+    },
+    {
+      "section": "CONTEXT",
+      "check": "lcb: every item fits",
+      "ok": true,
+      "detail": "longest prompt 1362 + max_tokens 8000 + 24 = 9386 vs seqmax 32768"
+    },
+    {
+      "section": "CONTEXT",
+      "check": "math500: every item fits",
+      "ok": true,
+      "detail": "longest prompt 790 + max_tokens 8000 + 24 = 8814 vs seqmax 32768"
     },
     {
       "section": "CONTEXT",
       "check": "aime24: every item fits",
       "ok": true,
-      "detail": "longest prompt 352 + max_tokens 8000 + 12 = 8364 vs seqmax 32768"
+      "detail": "longest prompt 352 + max_tokens 8000 + 24 = 8376 vs seqmax 32768"
     },
     {
       "section": "CONTEXT",
       "check": "aime25: every item fits",
       "ok": true,
-      "detail": "longest prompt 252 + max_tokens 8000 + 12 = 8264 vs seqmax 32768"
+      "detail": "longest prompt 252 + max_tokens 8000 + 24 = 8276 vs seqmax 32768"
     },
     {
       "section": "POWER",
@@ -80,21 +92,33 @@
     },
     {
       "section": "POWER",
+      "check": "bfcl: interval quotable",
+      "ok": true,
+      "detail": "n=240 (reps=1) -> +-5.0 points at p=0.8"
+    },
+    {
+      "section": "POWER",
       "check": "mmlu_pro: interval quotable",
       "ok": true,
       "detail": "n=150 (reps=1) -> +-6.4 points at p=0.8"
     },
     {
       "section": "POWER",
-      "check": "math500: interval quotable",
-      "ok": true,
-      "detail": "n=100 (reps=1) -> +-7.8 points at p=0.8"
-    },
-    {
-      "section": "POWER",
       "check": "humaneval: interval quotable",
       "ok": true,
       "detail": "n=164 (reps=1) -> +-6.1 points at p=0.8"
+    },
+    {
+      "section": "POWER",
+      "check": "lcb: interval quotable",
+      "ok": true,
+      "detail": "n=175 (reps=1) -> +-5.9 points at p=0.8"
+    },
+    {
+      "section": "POWER",
+      "check": "math500: interval quotable",
+      "ok": true,
+      "detail": "n=100 (reps=1) -> +-7.8 points at p=0.8"
     },
     {
       "section": "POWER",
@@ -112,7 +136,7 @@
       "section": "MEMORY",
       "check": "headroom above the guard floor",
       "ok": true,
-      "detail": "MemAvailable 9676 MB"
+      "detail": "MemAvailable 8900 MB"
     },
     {
       "section": "MEMORY",
@@ -128,27 +152,39 @@
     },
     {
       "section": "LIVE",
-      "check": "mmlu_pro: longest item round-trips",
+      "check": "bfcl: longest item round-trips",
       "ok": true,
-      "detail": "503+435 tok, finish=stop, extracted=yes"
+      "detail": "834+249 tok, finish=stop, extracted=yes"
     },
     {
       "section": "LIVE",
-      "check": "math500: longest item round-trips",
+      "check": "mmlu_pro: longest item round-trips",
       "ok": true,
-      "detail": "794+487 tok, finish=stop, extracted=yes"
+      "detail": "503+940 tok, finish=stop, extracted=yes"
     },
     {
       "section": "LIVE",
       "check": "humaneval: longest item round-trips",
       "ok": true,
-      "detail": "419+3103 tok, finish=stop, extracted=yes"
+      "detail": "419+8000 tok, finish=stop, TRUNCATED, extracted=yes"
+    },
+    {
+      "section": "LIVE",
+      "check": "lcb: longest item round-trips",
+      "ok": true,
+      "detail": "1212+8000 tok, finish=stop, TRUNCATED, extracted=yes"
+    },
+    {
+      "section": "LIVE",
+      "check": "math500: longest item round-trips",
+      "ok": true,
+      "detail": "794+743 tok, finish=stop, extracted=yes"
     },
     {
       "section": "LIVE",
       "check": "aime24: longest item round-trips",
       "ok": true,
-      "detail": "356+6631 tok, finish=stop, extracted=yes"
+      "detail": "356+4113 tok, finish=stop, extracted=yes"
     },
     {
       "section": "LIVE",

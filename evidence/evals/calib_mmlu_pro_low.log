@@ -1,0 +1,18 @@
+[calibrate] mmlu_pro @ effort=low: 10 of 12032 items, budget 16000, timeout 4180s
+  [1/10] mmlupro-70         1254 tok    456s       got=I gold=I (8 min)
+  [2/10] mmlupro-1287        602 tok    154s       got=C gold=D (10 min)
+  [3/10] mmlupro-2509        828 tok    930s       got=B gold=C (26 min)
+  [4/10] mmlupro-3732        454 tok    504s       got=J gold=J (34 min)
+  [5/10] mmlupro-4951        194 tok    236s       got=F gold=F (38 min)
+  [6/10] mmlupro-6176       2567 tok    950s       got=D gold=D (54 min)
+  [7/10] mmlupro-7398        120 tok    766s       got=F gold=F (67 min)
+  [8/10] mmlupro-8608       1301 tok    395s       got=I gold=I (73 min)
+  [9/10] mmlupro-9815        151 tok     36s       got=H gold=H (74 min)
+  [10/10] mmlupro-11044        89 tok    448s       got=D gold=D (81 min)
+
+  truncated 0/10 = 0 %   (target < 5 %)
+  completion tokens: median 528.0  p75 1254  p90 2567  p95 2567  max 2567
+  throughput 1.55 tok/s, 487.7s per item
+  -> the FULL 12032-item task at this budget: ~1630.0 hours
+  -> budget 16000 MEETS the truncation target; p95 is 2567, so 3080 would too and would be cheaper.
+  wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/calibration_mmlu_pro.low.json

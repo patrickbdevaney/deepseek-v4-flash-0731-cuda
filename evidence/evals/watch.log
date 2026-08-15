@@ -1,1 +1,14 @@
 [watch] started 2026-08-13T21:49:12-04:00, polling evidence/evals/run.log every 60s
+[watch] started 2026-08-14T01:06:47-04:00, polling evidence/evals/run.log every 60s
+[watch] 2026-08-14T20:40:13-04:00 gpqa_diamond finished — landing
+  [PASS] gpqa_diamond   no duplicate records                     197 records, 197 unique
+  [PASS] gpqa_diamond   every id exists in the benchmark         0 unknown
+  [PASS] gpqa_diamond   gold matches the pinned dataset          0 mismatched
+  [PASS] gpqa_diamond   prompt matches the one that was sent     157/197 records carry a hash; 0 mismatched
+  [PASS] gpqa_diamond   unhashed records covered by the set pin  40 records predate the hash; set proven identical to run-start caafad0042fb (set-level, not per-record)
+  [PASS] gpqa_diamond   no silent empty generations              0 empty
+  [PASS] gpqa_diamond   stored correct flags reproduce           0 disagree
+  [PASS] gpqa_diamond/low published accuracy is reproducible       recomputed 72.6 % vs published 72.6 % over 197 records
+  [PASS] gpqa_diamond   snapshot matches the published one       68be75644976 vs 68be75644976
+
+VERIFY: 0 failed -> PASS

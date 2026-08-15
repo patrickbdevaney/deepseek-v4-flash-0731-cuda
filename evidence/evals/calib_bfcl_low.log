@@ -1,0 +1,40 @@
+[calibrate] bfcl @ effort=low: 16 of 240 items, budget 16000, timeout 4180s
+  [1/16] bfcl-exec_simple-0000     57 tok     76s       got=calc_binomial_probability(n=20, k=5, p=0.6) gold=["calc_binomial_probability(n=20, k=5, p=0.6)"] (1 min)
+  [2/16] bfcl-exec_simple-0015     81 tok    773s       got=calculate_mean(numbers=[15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160]) gold=["calculate_mean(numbers=[15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160])"] (14 min)
+  [3/16] bfcl-exec_simple-0030     44 tok    878s       got=get_active_covid_case_by_country(country="Brazil") gold=["get_active_covid_case_by_country(country='Brazil')"] (29 min)
+  [4/16] bfcl-exec_simple-0045    100 tok    173s       got=get_price_by_amazon_ASIN(ASIN='B08PPDJWC8') gold=["get_price_by_amazon_ASIN(ASIN='B08PPDJWC8')"] (32 min)
+  [5/16] bfcl-exec_simple-0060     76 tok    782s       got=get_zipcode_by_ip_address(ip_address="192.168.1.1") gold=["get_zipcode_by_ip_address(ip_address=\"192.168.1.1\")"] (45 min)
+  [6/16] bfcl-exec_simple-0075     62 tok    804s       got=retrieve_city_based_on_zipcode(zipcode="10001") gold=["retrieve_city_based_on_zipcode(zipcode='10001')"] (58 min)
+  [7/16] bfcl-exec_simple-0090    101 tok   1132s       got=book_room(room_type="deluxe", check_in_date="08-11-2024", check_out_date="08-15-2024", customer_id="123", price=1000.0) gold=["book_room(room_type='deluxe',price=1000,check_in_date='08-11-2024',check_out_date='08-15-2024',customer_id='123')"] (77 min)
+  [8/16] bfcl-exec_multiple-0005     94 tok     39s       got=calculate_final_velocity(initial_velocity=0, acceleration=9.8, time=12) gold=["calculate_final_velocity(initial_velocity=0, acceleration=9.8, time=12)"] (78 min)
+  [9/16] bfcl-exec_multiple-0020    107 tok     77s       got=get_distance(pointA=(45.76, 4.85), pointB=(48.85, 2.35)) gold=["get_distance(pointA=(45.76, 4.85), pointB=(48.85, 2.35))"] (79 min)
+  [10/16] bfcl-exec_multiple-0035    161 tok    826s       got=mortgage_calculator(loan_amount=350000, interest_rate=0.035, loan_period=30) gold=["mortgage_calculator(loan_amount=350000, interest_rate=0.035, loan_period=30)"] (93 min)
+  [11/16] bfcl-exec_parallel-0000    167 tok   1210s       got=calc_binomial_probability(n=10, k=3, p=0.3)
+calc_binomial_probability(n=15, k=5, p=0.3)
+calc_binomial_probability(n=20, k=7, p=0.3) gold=["calc_binomial_probability(n=10, k=3, p=0.3)", "calc_binomial_probability(n=15, k=5, p=0.3)", "calc_binomial_probability(n=20, k=7, p=0.3)"] (113 min)
+  [12/16] bfcl-exec_parallel-0015     98 tok     57s       got=get_active_covid_case_by_country(country="France")
+get_active_covid_case_by_country(country="Italy")
+get_active_covid_case_by_country(country="United States")
+get_active_covid_case_by_country(country="China") gold=["get_active_covid_case_by_country(country='France')", "get_active_covid_case_by_country(country='Italy')", "get_active_covid_case_by_country(country='United States')", "get_active_covid_case_by_country(country='China')"] (114 min)
+  [13/16] bfcl-exec_parallel-0030    207 tok    301s       got=get_zipcode_by_ip_address(ip_address='192.168.1.1')
+get_zipcode_by_ip_address(ip_address='172.16.254.1')
+get_zipcode_by_ip_address(ip_address='10.0.0.1')
+get_zipcode_by_ip_address(ip_address='203.0.113.0') gold=["get_zipcode_by_ip_address(ip_address='192.168.1.1')", "get_zipcode_by_ip_address(ip_address='172.16.254.1')", "get_zipcode_by_ip_address(ip_address='10.0.0.1')", "get_zipcode_by_ip_address(ip_address='203.0.113.0')"] (119 min)
+  [14/16] bfcl-exec_parallel-0045   3019 tok    987s       got=order_food(item=["burger"], quantity=[10], price=[5.0])
+order_food(item=["ice cream"], quantity=[7], price=[2.0])
+order_food(item=["pizza"], quantity=[3], price=[8.0])
+order_food(item=["donuts"], quantity=[12], price=[1.0]) gold=["order_food(item=['burger'], quantity=[10], price=[5])", "order_food(item=['ice cream'], quantity=[7], price=[2])", "order_food(item=['pizza'], quantity=[3], price=[8])", "order_food(item=['donut'], quantity=[12], price=[1])"] (135 min)
+  [15/16] bfcl-exec_parallel_multiple-0010    148 tok    669s       got=get_company_name_by_stock_name(stock_name="AAPL")
+math_lcm(a=18, b=12)
+calculate_triangle_area(base=10, height=15) gold=["get_company_name_by_stock_name(stock_name='AAPL')", "math_lcm(a=12, b=18)", "calculate_triangle_area(base=10, height=15)"] (146 min)
+  [16/16] bfcl-exec_parallel_multiple-0025    168 tok    871s       got=get_rating_by_amazon_ASIN(ASIN='B08PPDJWC8')
+get_rating_by_amazon_ASIN(ASIN='B08BHXG144')
+geometry_area_circle(radius=50)
+geometry_area_circle(radius=75) gold=["get_rating_by_amazon_ASIN(ASIN='B08PPDJWC8')", "get_rating_by_amazon_ASIN(ASIN='B08BHXG144')", "geometry_area_circle(radius=50)", "geometry_area_circle(radius=75)"] (161 min)
+
+  truncated 0/16 = 0 %   (target < 5 %)
+  completion tokens: median 100.5  p75 167  p90 207  p95 3019  max 3019
+  throughput 0.49 tok/s, 603.5s per item
+  -> the FULL 240-item task at this budget: ~40.2 hours
+  -> budget 16000 MEETS the truncation target; p95 is 3019, so 3622 would too and would be cheaper.
+  wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/calibration_bfcl.low.json

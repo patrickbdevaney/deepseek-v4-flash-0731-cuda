@@ -1,0 +1,18 @@
+{
+  "task": "bfcl",
+  "source": "gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240)",
+  "snapshot": "f087fb14f26dd1829604c83abc0ceaec62269fd8",
+  "n_items": 240,
+  "scoring": "call",
+  "n_unique": 240,
+  "reps": 1,
+  "effort": "low",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 2000,
+  "code_commit": "bef3172f1ee4fd132985b5b3b53a4c198a1251d4",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-15T00:40:11Z"
+}

@@ -1,0 +1,16 @@
+{
+  "task": "humaneval",
+  "effort": "low",
+  "sampled": 10,
+  "budget": 16000,
+  "truncated": 0,
+  "trunc_rate": 0.0,
+  "median": 531.5,
+  "p75": 918,
+  "p90": 5612,
+  "p95": 5612,
+  "max": 5612,
+  "mean_tok_s": 2.8,
+  "mean_s_per_item": 409.0,
+  "full_task_hours": 18.6
+}

@@ -40,3 +40,241 @@
   [38/198] gpqa-0037 gold=C got=C OK  run=30/38 stop 17.6 tok/s (185.2 min)
   [39/198] gpqa-0038 gold=B got=B OK  run=31/39 stop 13.1 tok/s (190.8 min)
   [40/198] gpqa-0039 gold=B got=B OK  run=32/40 stop 14.2 tok/s (192.7 min)
+=== preflight 2026-08-14T01:06:47-04:00
+  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=4057
+  [PASS] PROVENANCE  published dataset facts verified locally     19 checks; see evidence/evals/provenance.json
+  [PASS] SCORERS     HumanEval canonical solutions pass           164/164
+  [PASS] SCORERS     MATH-500 gold matches itself                 500/500
+  [PASS] SCORERS     answer extraction cases                      4/4
+  [PASS] CONTEXT     chat-template overhead measured              16 tokens
+  [PASS] CONTEXT     gpqa_diamond: every item fits                longest prompt 2564 + max_tokens 8000 + 24 = 10588 vs seqmax 32768
+  [PASS] CONTEXT     bfcl: every item fits                        longest prompt 830 + max_tokens 2000 + 24 = 2854 vs seqmax 32768
+  [PASS] CONTEXT     mmlu_pro: every item fits                    longest prompt 535 + max_tokens 8000 + 24 = 8559 vs seqmax 32768
+  [PASS] CONTEXT     humaneval: every item fits                   longest prompt 415 + max_tokens 8000 + 24 = 8439 vs seqmax 32768
+  [PASS] CONTEXT     lcb: every item fits                         longest prompt 1362 + max_tokens 8000 + 24 = 9386 vs seqmax 32768
+  [PASS] CONTEXT     math500: every item fits                     longest prompt 790 + max_tokens 8000 + 24 = 8814 vs seqmax 32768
+  [PASS] CONTEXT     aime24: every item fits                      longest prompt 352 + max_tokens 8000 + 24 = 8376 vs seqmax 32768
+  [PASS] CONTEXT     aime25: every item fits                      longest prompt 252 + max_tokens 8000 + 24 = 8276 vs seqmax 32768
+  [PASS] POWER       gpqa_diamond: interval quotable              n=198 (reps=1) -> +-5.6 points at p=0.8
+  [PASS] POWER       bfcl: interval quotable                      n=240 (reps=1) -> +-5.0 points at p=0.8
+  [PASS] POWER       mmlu_pro: interval quotable                  n=150 (reps=1) -> +-6.4 points at p=0.8
+  [PASS] POWER       humaneval: interval quotable                 n=164 (reps=1) -> +-6.1 points at p=0.8
+  [PASS] POWER       lcb: interval quotable                       n=175 (reps=1) -> +-5.9 points at p=0.8
+  [PASS] POWER       math500: interval quotable                   n=100 (reps=1) -> +-7.8 points at p=0.8
+  [PASS] POWER       aime24: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
+  [PASS] POWER       aime25: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
+  [PASS] MEMORY      headroom above the guard floor               MemAvailable 9211 MB
+  [PASS] MEMORY      memguard running                             kills the server before the kernel takes the box down
+  [PASS] LIVE        gpqa_diamond: longest item round-trips       2568+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        bfcl: longest item round-trips               834+378 tok, finish=stop, extracted=yes
+  [PASS] LIVE        mmlu_pro: longest item round-trips           503+984 tok, finish=stop, extracted=yes
+  [PASS] LIVE        humaneval: longest item round-trips          419+7566 tok, finish=stop, extracted=yes
+  [PASS] LIVE        lcb: longest item round-trips                1212+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        math500: longest item round-trips            794+859 tok, finish=stop, extracted=yes
+  [PASS] LIVE        aime24: longest item round-trips             356+3995 tok, finish=stop, extracted=yes
+  [PASS] LIVE        aime25: longest item round-trips             256+8000 tok, finish=stop, TRUNCATED, extracted=yes
+
+PREFLIGHT: 32 passed, 0 failed -> GO
+=== 2026-08-14T02:21:11-04:00  gpqa_diamond  n=0 reps=1 effort=low
+[gpqa_diamond] 198 items from fingertap/GPQA-Diamond (test, 198) (snapshot 68be75644976), 40 already done, 158 to go, max_tokens=8000, timeout=2180s
+  [1/158] gpqa-0040 gold=A got=G     run=0/1 stop 9.7 tok/s (13.9 min)
+  [2/158] gpqa-0041 gold=D got=None     run=0/2 stop 10.8 tok/s (26.4 min)
+  [3/158] gpqa-0042 gold=A got=A OK  run=1/3 stop 16.2 tok/s (26.6 min)
+  [4/158] gpqa-0043 gold=B got=D     run=1/4 stop 21.9 tok/s (26.9 min)
+  [5/158] gpqa-0044 gold=B got=B OK  run=2/5 stop 19.8 tok/s (27.3 min)
+  [6/158] gpqa-0045 gold=B got=B OK  run=3/6 stop 21.1 tok/s (27.8 min)
+  [7/158] gpqa-0046 gold=B got=B OK  run=4/7 stop 11.6 tok/s (36.2 min)
+  [8/158] gpqa-0047 gold=D got=D OK  run=5/8 stop 19.0 tok/s (36.8 min)
+  [9/158] gpqa-0048 gold=C got=C OK  run=6/9 stop 21.0 tok/s (36.9 min)
+  [10/158] gpqa-0049 gold=A got=A OK  run=7/10 stop 15.1 tok/s (37.1 min)
+  [11/158] gpqa-0050 gold=B got=B OK  run=8/11 stop 9.6 tok/s (50.8 min)
+  [12/158] gpqa-0051 gold=C got=C OK  run=9/12 stop 16.5 tok/s (51.3 min)
+  [13/158] gpqa-0052 gold=A got=A OK  run=10/13 stop 17.2 tok/s (52.6 min)
+  [14/158] gpqa-0053 gold=B got=B OK  run=11/14 stop 20.0 tok/s (52.9 min)
+  [15/158] gpqa-0054 gold=D got=D OK  run=12/15 stop 20.2 tok/s (53.1 min)
+  [16/158] gpqa-0055 gold=B got=B OK  run=13/16 stop 13.2 tok/s (56.2 min)
+  [17/158] gpqa-0056 gold=A got=A OK  run=14/17 stop 20.7 tok/s (56.6 min)
+  [18/158] gpqa-0057 gold=D got=D OK  run=15/18 stop 18.8 tok/s (56.9 min)
+  [19/158] gpqa-0058 gold=C got=C OK  run=16/19 stop 14.9 tok/s (60.1 min)
+  [20/158] gpqa-0059 gold=C got=C OK  run=17/20 stop 20.1 tok/s (60.7 min)
+  [21/158] gpqa-0060 gold=B got=C     run=17/21 stop 9.3 tok/s (75.0 min)
+  [22/158] gpqa-0061 gold=C got=B     run=17/22 stop 11.5 tok/s (83.4 min)
+  [23/158] gpqa-0062 gold=B got=B OK  run=18/23 stop 16.8 tok/s (84.5 min)
+  [24/158] gpqa-0063 gold=B got=A     run=18/24 stop 9.9 tok/s (98.1 min)
+  [25/158] gpqa-0064 gold=D got=B     run=18/25 stop 10.8 tok/s (108.1 min)
+  [26/158] gpqa-0065 gold=A got=A OK  run=19/26 stop 9.1 tok/s (122.8 min)
+  [27/158] gpqa-0066 gold=C got=C OK  run=20/27 stop 13.8 tok/s (126.0 min)
+  [28/158] gpqa-0067 gold=B got=B OK  run=21/28 stop 15.3 tok/s (128.9 min)
+  [29/158] gpqa-0068 gold=D got=D OK  run=22/29 stop 12.3 tok/s (134.5 min)
+  [30/158] gpqa-0069 gold=C got=None     run=22/30 stop 9.9 tok/s (148.1 min)
+  [31/158] gpqa-0070 gold=B got=C     run=22/31 stop 20.4 tok/s (148.4 min)
+  [32/158] gpqa-0071 gold=B got=G     run=22/32 stop 8.0 tok/s (165.9 min)
+  [33/158] gpqa-0072 gold=B got=B OK  run=23/33 stop 16.5 tok/s (167.5 min)
+  [34/158] gpqa-0073 gold=A got=A OK  run=24/34 stop 18.2 tok/s (167.9 min)
+  [35/158] gpqa-0074 gold=A got=A OK  run=25/35 stop 18.8 tok/s (168.9 min)
+  [36/158] gpqa-0075 gold=A got=A OK  run=26/36 stop 13.1 tok/s (173.2 min)
+  [37/158] gpqa-0076 gold=A got=None     run=26/37 stop 10.6 tok/s (185.8 min)
+  [38/158] gpqa-0077 gold=A got=None     run=26/38 stop 10.1 tok/s (199.1 min)
+  [39/158] gpqa-0078 gold=C got=C OK  run=27/39 stop 14.2 tok/s (203.1 min)
+  [40/158] gpqa-0079 gold=D got=D OK  run=28/40 stop 13.6 tok/s (207.8 min)
+  [41/158] gpqa-0080 gold=B got=B OK  run=29/41 stop 19.7 tok/s (208.7 min)
+  [42/158] gpqa-0081 gold=C got=C OK  run=30/42 stop 9.1 tok/s (223.4 min)
+  [43/158] gpqa-0082 gold=C got=C OK  run=31/43 stop 16.7 tok/s (225.6 min)
+  [44/158] gpqa-0083 gold=B got=B OK  run=32/44 stop 11.7 tok/s (234.4 min)
+  [45/158] gpqa-0084 gold=A got=D     run=32/45 stop 9.9 tok/s (247.9 min)
+  [46/158] gpqa-0085 gold=D got=H     run=32/46 stop 10.3 tok/s (261.0 min)
+  [47/158] gpqa-0086 gold=D got=D OK  run=33/47 stop 11.1 tok/s (268.9 min)
+  [48/158] gpqa-0087 gold=C got=None     run=33/48 stop 8.7 tok/s (284.3 min)
+  [49/158] gpqa-0088 gold=C got=C OK  run=34/49 stop 9.9 tok/s (297.9 min)
+  [50/158] gpqa-0089 gold=B got=C     run=34/50 stop 10.8 tok/s (310.4 min)
+  [51/158] gpqa-0090 gold=C got=C OK  run=35/51 stop 12.1 tok/s (315.9 min)
+  [52/158] gpqa-0091 gold=C got=C OK  run=36/52 stop 10.5 tok/s (328.6 min)
+  [53/158] gpqa-0092 gold=B got=B OK  run=37/53 stop 17.9 tok/s (328.7 min)
+  [54/158] gpqa-0093 gold=B got=B OK  run=38/54 stop 19.4 tok/s (329.7 min)
+  [55/158] gpqa-0094 gold=A got=None     run=38/55 stop 9.9 tok/s (343.2 min)
+  [56/158] gpqa-0095 gold=A got=A OK  run=39/56 stop 16.8 tok/s (344.4 min)
+  [57/158] gpqa-0096 gold=B got=H     run=39/57 stop 10.1 tok/s (357.6 min)
+  [58/158] gpqa-0097 gold=A got=C     run=39/58 stop 8.9 tok/s (372.7 min)
+  [59/158] gpqa-0098 gold=B got=B OK  run=40/59 stop 12.1 tok/s (383.0 min)
+  [60/158] gpqa-0099 gold=A got=A OK  run=41/60 stop 14.0 tok/s (385.7 min)
+  [61/158] gpqa-0100 gold=A got=A OK  run=42/61 stop 11.0 tok/s (396.2 min)
+  [62/158] gpqa-0101 gold=D got=None     run=42/62 stop 11.2 tok/s (408.1 min)
+  [63/158] gpqa-0102 gold=B got=None     run=42/63 stop 9.2 tok/s (422.6 min)
+  [64/158] gpqa-0103 gold=D got=C     run=42/64 stop 9.2 tok/s (437.3 min)
+  [65/158] gpqa-0104 gold=A got=None     run=42/65 stop 10.0 tok/s (450.8 min)
+  [66/158] gpqa-0105 gold=B got=B OK  run=43/66 stop 12.9 tok/s (456.7 min)
+  [67/158] gpqa-0106 gold=C got=None     run=43/67 stop 9.1 tok/s (471.5 min)
+  [68/158] gpqa-0107 gold=A got=D     run=43/68 stop 11.0 tok/s (483.5 min)
+  [69/158] gpqa-0108 gold=B got=None     run=43/69 stop 9.5 tok/s (497.6 min)
+  [70/158] gpqa-0109 gold=A got=None     run=43/70 stop 9.9 tok/s (511.2 min)
+  [71/158] gpqa-0110 gold=D got=H     run=43/71 stop 9.1 tok/s (525.9 min)
+  [72/158] gpqa-0111 gold=D got=None     run=43/72 stop 9.8 tok/s (539.5 min)
+  [73/158] gpqa-0112 gold=C got=None     run=43/73 stop 9.9 tok/s (553.0 min)
+  [74/158] gpqa-0113 gold=D got=D OK  run=44/74 stop 11.4 tok/s (561.7 min)
+  [75/158] gpqa-0114 gold=C got=C OK  run=45/75 stop 13.7 tok/s (565.5 min)
+  [76/158] gpqa-0115 gold=D got=None     run=45/76 stop 9.0 tok/s (580.3 min)
+  [77/158] gpqa-0116 gold=A got=B     run=45/77 stop 14.8 tok/s (582.9 min)
+  [78/158] gpqa-0117 gold=B got=B OK  run=46/78 stop 18.7 tok/s (584.0 min)
+  [79/158] gpqa-0118 gold=A got=A OK  run=47/79 stop 11.0 tok/s (595.3 min)
+  [80/158] gpqa-0119 gold=C got=B     run=47/80 stop 17.3 tok/s (596.7 min)
+  [81/158] gpqa-0120 gold=D got=None     run=47/81 stop 10.4 tok/s (609.5 min)
+  [82/158] gpqa-0121 gold=A got=A OK  run=48/82 stop 18.3 tok/s (610.0 min)
+  [83/158] gpqa-0122 gold=B got=B OK  run=49/83 stop 16.2 tok/s (611.8 min)
+  [84/158] gpqa-0123 gold=D got=D OK  run=50/84 stop 10.9 tok/s (622.3 min)
+  [85/158] gpqa-0124 gold=B got=H     run=50/85 stop 10.5 tok/s (635.2 min)
+  [86/158] gpqa-0125 gold=A got=None     run=50/86 stop 9.2 tok/s (649.9 min)
+  [87/158] gpqa-0126 gold=A got=A OK  run=51/87 stop 14.3 tok/s (652.7 min)
+  [88/158] gpqa-0127 gold=B got=None     run=51/88 stop 10.4 tok/s (665.8 min)
+=== preflight 2026-08-14T13:33:46-04:00
+  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=4848
+  [PASS] PROVENANCE  published dataset facts verified locally     19 checks; see evidence/evals/provenance.json
+  [PASS] SCORERS     HumanEval canonical solutions pass           164/164
+  [PASS] SCORERS     MATH-500 gold matches itself                 500/500
+  [PASS] SCORERS     answer extraction cases                      4/4
+  [PASS] CONTEXT     chat-template overhead measured              16 tokens
+  [PASS] CONTEXT     gpqa_diamond: every item fits                longest prompt 2564 + max_tokens 8000 + 24 = 10588 vs seqmax 32768
+  [PASS] CONTEXT     bfcl: every item fits                        longest prompt 830 + max_tokens 2000 + 24 = 2854 vs seqmax 32768
+  [PASS] CONTEXT     mmlu_pro: every item fits                    longest prompt 535 + max_tokens 8000 + 24 = 8559 vs seqmax 32768
+  [PASS] CONTEXT     humaneval: every item fits                   longest prompt 415 + max_tokens 8000 + 24 = 8439 vs seqmax 32768
+  [PASS] CONTEXT     lcb: every item fits                         longest prompt 1362 + max_tokens 8000 + 24 = 9386 vs seqmax 32768
+  [PASS] CONTEXT     math500: every item fits                     longest prompt 790 + max_tokens 8000 + 24 = 8814 vs seqmax 32768
+  [PASS] CONTEXT     aime24: every item fits                      longest prompt 352 + max_tokens 8000 + 24 = 8376 vs seqmax 32768
+  [PASS] CONTEXT     aime25: every item fits                      longest prompt 252 + max_tokens 8000 + 24 = 8276 vs seqmax 32768
+  [PASS] POWER       gpqa_diamond: interval quotable              n=198 (reps=1) -> +-5.6 points at p=0.8
+  [PASS] POWER       bfcl: interval quotable                      n=240 (reps=1) -> +-5.0 points at p=0.8
+  [PASS] POWER       mmlu_pro: interval quotable                  n=150 (reps=1) -> +-6.4 points at p=0.8
+  [PASS] POWER       humaneval: interval quotable                 n=164 (reps=1) -> +-6.1 points at p=0.8
+  [PASS] POWER       lcb: interval quotable                       n=175 (reps=1) -> +-5.9 points at p=0.8
+  [PASS] POWER       math500: interval quotable                   n=100 (reps=1) -> +-7.8 points at p=0.8
+  [PASS] POWER       aime24: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
+  [PASS] POWER       aime25: interval quotable                    n=120 (reps=4) -> +-7.1 points at p=0.8
+  [PASS] MEMORY      headroom above the guard floor               MemAvailable 8900 MB
+  [PASS] MEMORY      memguard running                             kills the server before the kernel takes the box down
+  [PASS] LIVE        gpqa_diamond: longest item round-trips       2568+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        bfcl: longest item round-trips               834+249 tok, finish=stop, extracted=yes
+  [PASS] LIVE        mmlu_pro: longest item round-trips           503+940 tok, finish=stop, extracted=yes
+  [PASS] LIVE        humaneval: longest item round-trips          419+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        lcb: longest item round-trips                1212+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        math500: longest item round-trips            794+743 tok, finish=stop, extracted=yes
+  [PASS] LIVE        aime24: longest item round-trips             356+4113 tok, finish=stop, extracted=yes
+  [PASS] LIVE        aime25: longest item round-trips             256+8000 tok, finish=stop, TRUNCATED, extracted=yes
+
+PREFLIGHT: 32 passed, 0 failed -> GO
+=== 2026-08-14T14:53:54-04:00  gpqa_diamond  n=0 reps=1 effort=low
+[gpqa_diamond] 198 items from fingertap/GPQA-Diamond (test, 198) (snapshot 68be75644976), 128 already done, 70 to go, max_tokens=8000, timeout=2180s
+  [1/70] gpqa-0128 gold=C got=C OK  run=1/1 stop 10.4 tok/s (14.6 min)
+  [2/70] gpqa-0129 gold=D got=None     run=1/2 stop 9.4 tok/s (29.1 min)
+  [3/70] gpqa-0130 gold=D got=D OK  run=2/3 stop 12.1 tok/s (36.7 min)
+  [4/70] gpqa-0131 gold=C got=C OK  run=3/4 stop 16.6 tok/s (40.0 min)
+  [5/70] gpqa-0132 gold=B got=None     run=3/5 stop 9.1 tok/s (55.2 min)
+  [6/70] gpqa-0133 gold=A got=A OK  run=4/6 stop 11.9 tok/s (64.1 min)
+  [7/70] gpqa-0134 gold=B got=B OK  run=5/7 stop 13.9 tok/s (68.1 min)
+  [8/70] gpqa-0135 gold=C got=F     run=5/8 stop 10.4 tok/s (81.3 min)
+  [9/70] gpqa-0136 gold=B got=B OK  run=6/9 stop 9.9 tok/s (96.8 min)
+  [10/70] gpqa-0137 gold=A got=A OK  run=7/10 stop 13.2 tok/s (102.6 min)
+  [11/70] gpqa-0138 gold=C got=C OK  run=8/11 stop 17.3 tok/s (104.0 min)
+  [12/70] gpqa-0139 gold=D got=D OK  run=9/12 stop 11.0 tok/s (111.6 min)
+  [13/70] gpqa-0140 gold=B got=B OK  run=10/13 stop 8.7 tok/s (127.0 min)
+  [14/70] gpqa-0141 gold=C got=C OK  run=11/14 stop 15.4 tok/s (129.6 min)
+  [15/70] gpqa-0142 gold=A got=None     run=11/15 stop 10.1 tok/s (143.2 min)
+  [16/70] gpqa-0143 gold=B got=C     run=11/16 stop 11.0 tok/s (163.0 min)
+  [17/70] gpqa-0144 gold=D got=D OK  run=12/17 stop 17.7 tok/s (164.1 min)
+  [18/70] gpqa-0145 gold=A got=A OK  run=13/18 stop 12.8 tok/s (170.2 min)
+  [19/70] gpqa-0146 gold=C got=C OK  run=14/19 stop 17.6 tok/s (171.2 min)
+  [20/70] gpqa-0147 gold=D got=D OK  run=15/20 stop 20.0 tok/s (172.2 min)
+  [21/70] gpqa-0148 gold=B got=B OK  run=16/21 stop 15.3 tok/s (175.2 min)
+  [22/70] gpqa-0149 gold=A got=B     run=16/22 stop 15.2 tok/s (179.4 min)
+  [23/70] gpqa-0150 gold=D got=D OK  run=17/23 stop 18.5 tok/s (181.1 min)
+  [24/70] gpqa-0151 gold=C got=C OK  run=18/24 stop 20.1 tok/s (182.1 min)
+  [25/70] gpqa-0152 gold=A got=A OK  run=19/25 stop 21.7 tok/s (207.5 min)
+  [gpqa-0153] ERROR (scored incorrect): request exceeded the 2180s timeout for max_tokens=8000. That is a budget/throughput problem, not a blip -- retrying it would just cost 3x as long to learn the same thing.
+  [27/70] gpqa-0154 gold=A got=A OK  run=20/27 stop 16.2 tok/s (247.2 min)
+  [28/70] gpqa-0155 gold=C got=C OK  run=21/28 stop 16.7 tok/s (249.4 min)
+  [29/70] gpqa-0156 gold=C got=C OK  run=22/29 stop 17.8 tok/s (250.8 min)
+  [30/70] gpqa-0157 gold=C got=C OK  run=23/30 stop 20.8 tok/s (251.3 min)
+  [31/70] gpqa-0158 gold=A got=B     run=23/31 stop 15.4 tok/s (253.1 min)
+  [32/70] gpqa-0159 gold=C got=C OK  run=24/32 stop 19.3 tok/s (254.0 min)
+  [33/70] gpqa-0160 gold=B got=B OK  run=25/33 stop 19.5 tok/s (255.1 min)
+  [34/70] gpqa-0161 gold=D got=D OK  run=26/34 stop 15.6 tok/s (257.5 min)
+  [35/70] gpqa-0162 gold=D got=D OK  run=27/35 stop 14.1 tok/s (263.2 min)
+  [36/70] gpqa-0163 gold=C got=C OK  run=28/36 stop 18.3 tok/s (264.2 min)
+  [37/70] gpqa-0164 gold=B got=B OK  run=29/37 stop 19.1 tok/s (264.4 min)
+  [38/70] gpqa-0165 gold=B got=B OK  run=30/38 stop 20.7 tok/s (264.8 min)
+  [39/70] gpqa-0166 gold=C got=C OK  run=31/39 stop 21.0 tok/s (265.2 min)
+  [40/70] gpqa-0167 gold=D got=D OK  run=32/40 stop 19.8 tok/s (266.0 min)
+  [41/70] gpqa-0168 gold=D got=D OK  run=33/41 stop 25.9 tok/s (266.4 min)
+  [42/70] gpqa-0169 gold=D got=D OK  run=34/42 stop 19.7 tok/s (266.9 min)
+  [43/70] gpqa-0170 gold=D got=D OK  run=35/43 stop 21.6 tok/s (267.3 min)
+  [44/70] gpqa-0171 gold=A got=A OK  run=36/44 stop 16.9 tok/s (269.6 min)
+  [45/70] gpqa-0172 gold=A got=A OK  run=37/45 stop 10.5 tok/s (282.4 min)
+  [46/70] gpqa-0173 gold=C got=C OK  run=38/46 stop 17.1 tok/s (284.4 min)
+  [47/70] gpqa-0174 gold=A got=A OK  run=39/47 stop 12.0 tok/s (292.4 min)
+  [48/70] gpqa-0175 gold=A got=A OK  run=40/48 stop 17.3 tok/s (292.5 min)
+  [49/70] gpqa-0176 gold=B got=B OK  run=41/49 stop 19.9 tok/s (293.4 min)
+  [50/70] gpqa-0177 gold=A got=A OK  run=42/50 stop 20.0 tok/s (293.7 min)
+  [51/70] gpqa-0178 gold=B got=A     run=42/51 stop 10.7 tok/s (306.2 min)
+  [52/70] gpqa-0179 gold=A got=A OK  run=43/52 stop 21.1 tok/s (306.9 min)
+  [53/70] gpqa-0180 gold=A got=A OK  run=44/53 stop 21.9 tok/s (307.2 min)
+  [54/70] gpqa-0181 gold=D got=D OK  run=45/54 stop 21.7 tok/s (307.3 min)
+  [55/70] gpqa-0182 gold=C got=C OK  run=46/55 stop 20.7 tok/s (307.8 min)
+  [56/70] gpqa-0183 gold=A got=A OK  run=47/56 stop 23.7 tok/s (308.1 min)
+  [57/70] gpqa-0184 gold=B got=B OK  run=48/57 stop 12.7 tok/s (315.1 min)
+  [58/70] gpqa-0185 gold=B got=B OK  run=49/58 stop 11.0 tok/s (321.7 min)
+  [59/70] gpqa-0186 gold=A got=A OK  run=50/59 stop 22.9 tok/s (322.0 min)
+  [60/70] gpqa-0187 gold=A got=A OK  run=51/60 stop 20.0 tok/s (322.4 min)
+  [61/70] gpqa-0188 gold=C got=C OK  run=52/61 stop 21.8 tok/s (323.1 min)
+  [62/70] gpqa-0189 gold=B got=B OK  run=53/62 stop 19.1 tok/s (324.3 min)
+  [63/70] gpqa-0190 gold=A got=A OK  run=54/63 stop 17.6 tok/s (324.4 min)
+  [64/70] gpqa-0191 gold=D got=D OK  run=55/64 stop 18.0 tok/s (324.9 min)
+  [65/70] gpqa-0192 gold=A got=A OK  run=56/65 stop 14.5 tok/s (328.5 min)
+  [66/70] gpqa-0193 gold=D got=D OK  run=57/66 stop 22.0 tok/s (328.9 min)
+  [67/70] gpqa-0194 gold=C got=C OK  run=58/67 stop 21.5 tok/s (329.2 min)
+  [68/70] gpqa-0195 gold=D got=D OK  run=59/68 stop 19.0 tok/s (329.7 min)
+  [69/70] gpqa-0196 gold=D got=A     run=59/69 stop 10.3 tok/s (342.6 min)
+  [70/70] gpqa-0197 gold=C got=C OK  run=60/70 stop 15.2 tok/s (346.3 min)
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     197/198    72.6    [66.0, 78.3]     51      3717    15.0
+=== 2026-08-14T20:40:11-04:00  gpqa_diamond done
+=== 2026-08-14T20:40:11-04:00  bfcl  n=0 reps=1 effort=low
+[bfcl] 240 items from gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240) (snapshot f087fb14f26d), 0 already done, 240 to go, max_tokens=2000, timeout=680s

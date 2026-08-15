@@ -1,0 +1,16 @@
+{
+  "task": "mmlu_pro",
+  "effort": "low",
+  "sampled": 10,
+  "budget": 16000,
+  "truncated": 0,
+  "trunc_rate": 0.0,
+  "median": 528.0,
+  "p75": 1254,
+  "p90": 2567,
+  "p95": 2567,
+  "max": 2567,
+  "mean_tok_s": 1.55,
+  "mean_s_per_item": 487.7,
+  "full_task_hours": 1630.0
+}

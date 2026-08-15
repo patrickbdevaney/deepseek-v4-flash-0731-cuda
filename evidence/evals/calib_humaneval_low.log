@@ -1,0 +1,197 @@
+[calibrate] humaneval @ effort=low: 10 of 164 items, budget 16000, timeout 4180s
+  [1/10] HumanEval-0         882 tok    964s       got=from typing import List
+
+
+def has_close_elements(numbers: List[float], threshold: float) -> bool:
+    """ Check if in given list of numbers, are any two numbers closer to each other than
+    given threshold.
+    >>> has_close_elements([1.0, 2.0, 3.0], 0.5)
+    False
+    >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)
+    True
+    """
+    numbers = sorted(numbers)
+    for i in range(len(numbers) - 1):
+        if numbers[i + 1] - numbers[i] < threshold:
+            return True
+    return False
+ gold=pass (16 min)
+  [2/10] HumanEval-16        410 tok    129s       got=def count_distinct_characters(string: str) -> int:
+    """ Given a string, find out how many distinct characters (regardless of case) does it consist of
+    >>> count_distinct_characters('xyzXYZ')
+    3
+    >>> count_distinct_characters('Jerry')
+    4
+    """
+    return len(set(string.lower()))
+ gold=pass (18 min)
+  [3/10] HumanEval-32       5612 tok   1259s       got=import math
+
+
+def poly(xs: list, x: float):
+    """
+    Evaluates polynomial with coefficients xs at point x.
+    return xs[0] + xs[1] * x + xs[1] * x^2 + .... xs[n] * x^n
+    """
+    return sum([coeff * math.pow(x, i) for i, coeff in enumerate(xs)])
+
+
+def find_zero(xs: list):
+    """ xs are coefficients of a polynomial.
+    find_zero find x such that poly(x) = 0.
+    find_zero returns only only zero point, even if there are many.
+    Moreover, find_zero only takes list xs having even number of coefficients
+    and largest non zero coefficient as it guarantees
+    a solution.
+    >>> round(find_zero([1, 2]), 2) # f(x) = 1 + 2x
+    -0.5
+    >>> round(find_zero([-6, 11, -6, 1]), 2) # (x - 1) * (x - 2) * (x - 3) = -6 + 11x - 6x^2 + x^3
+    1.0
+    """
+    # Find a bracket [a, b] with a sign change
+    a = -1.0
+    b = 1.0
+    fa = poly(xs, a)
+    fb = poly(xs, b)
+
+    if fa == 0:
+        return a
+    if fb == 0:
+        return b
+
+    # Expand the bracket until the signs differ
+    while fa * fb > 0:
+        a *= 2
+        b *= 2
+        fa = poly(xs, a)
+        fb = poly(xs, b)
+
+        if fa == 0:
+            return a
+        if fb == 0:
+            return b
+
+    # Bisection method to find the root
+    for _ in range(200):
+        mid = (a + b) / 2
+        fm = poly(xs, mid)
+
+        if fm == 0:
+            return mid
+
+        if fa * fm < 0:
+            b = mid
+            fb = fm
+        else:
+            a = mid
+            fa = fm
+
+    return (a + b) / 2
+ gold=pass (39 min)
+  [4/10] HumanEval-48        306 tok    745s       got=def is_palindrome(text: str):
+    """
+    Checks if given string is a palindrome
+    >>> is_palindrome('')
+    True
+    >>> is_palindrome('aba')
+    True
+    >>> is_palindrome('aaaaa')
+    True
+    >>> is_palindrome('zbcd')
+    False
+    """
+    return text == text[::-1]
+ gold=pass (52 min)
+  [5/10] HumanEval-64       1659 tok    142s       got=def vowels_count(s):
+    """Write a function vowels_count which takes a string representing
+    a word as input and returns the number of vowels in the string.
+    Vowels in this case are 'a', 'e', 'i', 'o', 'u'. Here, 'y' is also a
+    vowel, but only when it is at the end of the given word.
+
+    Example:
+    >>> vowels_count("abcde")
+    2
+    >>> vowels_count("ACEDY")
+    3
+    """
+    count = 0
+    s_lower = s.lower()
+    for ch in s_lower:
+        if ch in "aeiou":
+            count += 1
+    if s_lower.endswith("y"):
+        count += 1
+    return count
+ gold=pass (54 min)
+  [6/10] HumanEval-80        124 tok    283s       got=def is_happy(s):
+    if len(s) < 3:
+        return False
+    for i in range(len(s) - 2):
+        if len(set(s[i:i+3])) != 3:
+            return False
+    return True
+ gold=pass (59 min)
+  [7/10] HumanEval-96        918 tok     95s       got=def count_up_to(n):
+    def is_prime(x):
+        if x < 2:
+            return False
+        for i in range(2, int(x ** 0.5) + 1):
+            if x % i == 0:
+                return False
+        return True
+    return [i for i in range(2, n) if is_prime(i)]
+ gold=pass (60 min)
+  [8/10] HumanEval-112       487 tok     39s       got=def reverse_delete(s, c):
+    """Task
+    We are given two strings s and c, you have to deleted all the characters in s that are equal to any character in c
+    then check if the result string is palindrome.
+    A string is called palindrome if it reads the same backward as forward.
+    You should return a tuple containing the result string and True/False for the check.
+    Example
+    For s = "abcde", c = "ae", the result should be ('bcd',False)
+    For s = "abcdef", c = "b"  the result should be ('acdef',False)
+    For s = "abcdedcba", c = "ab", the result should be ('cdedc',True)
+    """
+    result = ''.join(ch for ch in s if ch not in c)
+    is_palindrome = result == result[::-1]
+    return (result, is_palindrome)
+ gold=pass (61 min)
+  [9/10] HumanEval-128       576 tok    183s       got=def prod_signs(arr):
+    """
+    You are given an array arr of integers and you need to return
+    sum of magnitudes of integers multiplied by product of all signs
+    of each number in the array, represented by 1, -1 or 0.
+    Note: return None for empty arr.
+
+    Example:
+    >>> prod_signs([1, 2, 2, -4]) == -9
+    >>> prod_signs([0, 1]) == 0
+    >>> prod_signs([]) == None
+    """
+    if not arr:
+        return None
+
+    sum_abs = sum(abs(x) for x in arr)
+
+    product_signs = 1
+    for x in arr:
+        if x == 0:
+            product_signs = 0
+            break
+        elif x < 0:
+            product_signs *= -1
+
+    return sum_abs * product_signs
+ gold=pass (64 min)
+  [10/10] HumanEval-144       461 tok    251s       got=def simplify(x, n):
+    a, b = map(int, x.split('/'))
+    c, d = map(int, n.split('/'))
+    return (a * c) % (b * d) == 0
+ gold=pass (68 min)
+
+  truncated 0/10 = 0 %   (target < 5 %)
+  completion tokens: median 531.5  p75 918  p90 5612  p95 5612  max 5612
+  throughput 2.8 tok/s, 409.0s per item
+  -> the FULL 164-item task at this budget: ~18.6 hours
+  -> budget 16000 MEETS the truncation target; p95 is 5612, so 6734 would too and would be cheaper.
+  wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/calibration_humaneval.low.json

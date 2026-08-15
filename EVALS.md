@@ -198,9 +198,9 @@ so a low number cannot be dismissed as strict parsing.
 <!-- RESULTS -->
 | benchmark | effort | scored | **acc %** | 95 % CI | trunc | err | mean out tok | tok/s | unpruned 0731 @ same effort |
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|
-| GPQA-Diamond *(partial)* **— NOT QUOTABLE, 32% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 123/198 | **65.9** | [57.1, 73.6] | 39 | 0 | 4200 | 14.2 | 71.20 |
+| GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 197/198 | **72.6** | [66.0, 78.3] | 51 | 0 | 3717 | 15.0 | 71.20 |
 
-123 items scored, 516,600 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+197 items scored, 732,249 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
 Interval method per row: GPQA-Diamond — wilson. Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
