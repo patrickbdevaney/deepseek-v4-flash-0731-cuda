@@ -13,3 +13,14 @@
 
 VERIFY: 0 failed -> PASS
 [land] gpqa_diamond@low: 72.6% [66.0, 78.3] n=197/198 trunc=51 err=0 — verified, committed, pushed
+[watch] 2026-08-14T21:44:17-04:00 bfcl finished — landing
+  [PASS] bfcl           no duplicate records                     240 records, 240 unique
+  [PASS] bfcl           every id exists in the benchmark         0 unknown
+  [PASS] bfcl           gold matches the pinned dataset          0 mismatched
+  [PASS] bfcl           prompt matches the one that was sent     240/240 records carry a hash; 0 mismatched
+  [PASS] bfcl           no silent empty generations              0 empty
+  [PASS] bfcl           stored correct flags reproduce           0 disagree
+  [PASS] bfcl/low       published accuracy is reproducible       recomputed 86.2 % vs published 86.2 % over 240 records
+  [PASS] bfcl           snapshot matches the published one       f087fb14f26d vs f087fb14f26d
+
+VERIFY: 0 failed -> PASS

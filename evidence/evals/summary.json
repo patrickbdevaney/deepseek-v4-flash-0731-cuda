@@ -26,5 +26,33 @@
     "max_tokens": 8000,
     "source": "fingertap/GPQA-Diamond (test, 198)",
     "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3"
+  },
+  {
+    "task": "bfcl",
+    "effort": "low",
+    "n": 240,
+    "n_total": 240,
+    "correct": 207,
+    "strata_field": "subject",
+    "strata_seen": 4,
+    "strata_total": 4,
+    "n_unique": 240,
+    "reps": 1,
+    "acc": 86.2,
+    "ci": [
+      81.3,
+      90.0
+    ],
+    "ci_method": "wilson",
+    "n_problems": 240,
+    "truncated": 3,
+    "errors": 0,
+    "mean_completion_tokens": 216,
+    "mean_tok_s": 22.75,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 2000,
+    "source": "gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240)",
+    "snapshot": "f087fb14f26dd1829604c83abc0ceaec62269fd8"
   }
 ]
