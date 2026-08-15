@@ -12,3 +12,4 @@
   [PASS] gpqa_diamond   snapshot matches the published one       68be75644976 vs 68be75644976
 
 VERIFY: 0 failed -> PASS
+[land] gpqa_diamond@low: 72.6% [66.0, 78.3] n=197/198 trunc=51 err=0 — verified, committed, pushed

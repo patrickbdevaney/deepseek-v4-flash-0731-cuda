@@ -60,8 +60,36 @@ PY
 EOF
 
   if [ "$complete" != "1" ]; then
-    say "$task: only $n records and the task is incomplete — refusing to extend a partial run"
-    continue
+    # TOP UP FIRST, then reconsider. A task can finish one item short without anything being wrong
+    # with the battery: dropping a record that measured the harness rather than the model (see
+    # eval_drop_record.py) takes effect only on the NEXT pass, because the runner builds its todo
+    # list once at task start. gpqa-0153 was exactly this -- GPQA landed at 197/198, and without a
+    # top-up the extension would refuse forever and the row would stay NOT QUOTABLE on a technicality.
+    say "$task: $n records, incomplete — re-running the task to fill the gap before extending"
+    EFFORT="$EFFORT" python3 tools/eval_suite.py --task "$task" --n 0 --reps 1 \
+        --effort "$EFFORT" --host localhost:8080 >> evidence/evals/run.log 2>&1
+    python3 tools/eval_suite.py --report > /dev/null 2>&1
+    read -r rate n complete <<EOF
+$(python3 - "$task" "$EFFORT" <<'PY'
+import json, sys
+task, eff = sys.argv[1], sys.argv[2]
+rows = json.load(open('evidence/evals/summary.json'))
+r = next((x for x in rows if x['task'] == task and x.get('effort') == eff), None)
+if not r:
+    print('0 0 0')
+else:
+    n = r['n'] or 0
+    print(f"{100.0*r.get('truncated',0)/n if n else 0:.1f} {n} "
+          f"{1 if (r.get('n_total') and n >= r['n_total']) else 0}")
+PY
+)
+EOF
+    if [ "$complete" != "1" ]; then
+      say "$task: still incomplete at $n after a top-up pass — not extending"
+      continue
+    fi
+    say "$task: topped up to $n records, ${rate}% truncated"
+    bash scripts/eval_land.sh "$task" "$EFFORT" || say "$task: top-up did not land"
   fi
   over=$(python3 -c "print(1 if float('$rate') > float('$GATE') else 0)")
   if [ "$over" != "1" ]; then
