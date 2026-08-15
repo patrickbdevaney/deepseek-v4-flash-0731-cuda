@@ -32,3 +32,10 @@ evidence/perf/refresh.log
 # tracking them. The README explaining the policy IS tracked.
 evidence/traces/*.jsonl
 evidence/traces/MANIFEST.*.json
+
+# BFCL's own eval package, installed isolated so its pinned numpy / faiss / sentence-transformers
+# never touch the environment the rest of this repo runs in. Recreate with:
+#   python3 -m venv .venv-bfcl && .venv-bfcl/bin/pip install --no-deps bfcl_eval==2026.3.23
+#   .venv-bfcl/bin/pip install mpmath==1.3.0 tree_sitter==0.21.3 tree-sitter-java==0.21.0 \
+#       tree-sitter-javascript==0.21.4 filelock==3.20.0 tenacity pydantic python-dotenv requests tqdm overrides
+.venv-bfcl/

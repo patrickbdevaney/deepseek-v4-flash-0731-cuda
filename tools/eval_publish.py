@@ -35,7 +35,9 @@ LABEL = {'gpqa_diamond': 'GPQA-Diamond', 'mmlu_pro': 'MMLU-Pro', 'aime24': 'AIME
          'bfcl': 'BFCL v3 — 4 `exec_*` categories, AST †',
          'bfcl_live': 'BFCL v3 — `live_*` categories, AST †',
          'lcb': 'LiveCodeBench — `test6` window †',
-         'scicode': 'SciCode — subproblem pass rate'}
+         'scicode': 'SciCode — subproblem pass rate',
+         'bfcl_mt_base': 'BFCL v4 — `multi_turn_base`, state-match ‡',
+         'bfcl_mt_miss_func': 'BFCL v4 — `multi_turn_miss_func`, state-match ‡'}
 
 # The full protocol, per benchmark. LiveCodeBench states the comparability condition for all of
 # these: scores are comparable only when the release, date window, scenario, metric, sampling count,
@@ -44,6 +46,17 @@ LABEL = {'gpqa_diamond': 'GPQA-Diamond', 'mmlu_pro': 'MMLU-Pro', 'aime24': 'AIME
 #
 # (split, scenario, extraction, scoring, execution)
 PROTOCOL = {
+    'bfcl_mt_base': ('BFCL v4 `multi_turn_base`, all 200', 'stateful multi-turn, prompting mode',
+                     "BFCL `default_decode_execute_prompting`",
+                     'BFCL `multi_turn_checker` — final backend STATE vs the ground-truth '
+                     'sequence, not call-string matching',
+                     "calls executed against BFCL's own stateful backends, AST-validated first"),
+    'bfcl_mt_miss_func': ('BFCL v4 `multi_turn_miss_func`, all 200',
+                     'stateful multi-turn; a required function is withheld and injected at a '
+                     'named turn',
+                     "BFCL `default_decode_execute_prompting`",
+                     'BFCL `multi_turn_checker` — final backend STATE',
+                     "calls executed against BFCL's own stateful backends, AST-validated first"),
     'gpqa_diamond': ('test, all 198', '0-shot generative CoT', 'final letter A–D',
                      'exact letter match', 'none'),
     'mmlu_pro':     ('test, seeded random subset of 12 032', '0-shot generative CoT',
@@ -81,6 +94,20 @@ PROTOCOL = {
 # Deviations from the canonical protocol, stated rather than discovered by a reader. Each says which
 # DIRECTION it biases the score, because a limitation whose sign is unknown is not disclosed.
 DEVIATIONS = {
+    'bfcl_mt_base': ['PROMPTING mode, not native function-calling: function docs are placed in the '
+                     'system prompt as text and the model is asked for `[func(a=1), ...]`. This is '
+                     "BFCL's `prompt` column, not its `FC` column, and it matches how `exec_*` and "
+                     '`live_*` were run here, so the three rows are comparable to each other. '
+                     'Direction of bias: unknown — a model may do better or worse than with its '
+                     'native tool tokens.',
+                     "execution results are returned in the CHECKPOINT'S native `<tool_result>` "
+                     'wrapper (CHAT_FORMAT.md) rather than BFCL\'s `role: tool` message, which '
+                     "relies on each model's chat template. Direction of bias: favours this model "
+                     'slightly, since results arrive in the form it was trained on.',
+                     'BFCL v4 data, while the `exec_*`/`live_*` rows above are v3. v3 and v4 share '
+                     'all 200 ids but only ~92 are byte-identical. v4 is used because it matches '
+                     'the version of the checker that scores it; both self-gate at 200/200.'],
+    'bfcl_mt_miss_func': ['same three deviations as `bfcl_mt_base`.'],
     'bfcl': ['runs 4 `exec_*` categories (240 items), **not** the BFCL v3 aggregate, which also '
              'spans multi-turn, relevance/irrelevance detection and non-Python languages — '
              '**this row is not the BFCL leaderboard quantity**',
