@@ -244,6 +244,69 @@ have not found" is right: every prior measurement was taken at prompt 0 (`LEVERS
 depth term does not exist. The physical roofline is not the binding constraint at working depth;
 inefficiency is, and inefficiency is recoverable.
 
+### Getting an agentic corpus in a day, not in months
+
+The objection to "capture production traces" is decisive on its own terms: models move faster than
+a corpus accumulates, and nobody should spend six months of real traffic to buy a speculation
+delta on a checkpoint that will have been superseded. So the corpus has to be manufactured, and it
+can be — **because the expensive tokens are not the ones that need generating.**
+
+In an agentic context the great majority of tokens are **environment** text: tool results, file
+contents, error messages, schemas echoed back. Those are off-distribution *by nature* — they are
+not model output at inference either, so borrowing them costs no distribution mismatch. Only the
+**assistant spans** must come from the target, and in a real turn those are a few hundred tokens
+against five to twenty thousand of context.
+
+So: take existing multi-turn trajectories, keep their contexts, and regenerate **only the assistant
+turns** with this checkpoint. At ~500 tokens per turn and the measured ~15 tok/s that is ~33 s per
+turn — **~1000 agentic turns in about 9 hours**, against months of waiting.
+
+Sources, cheapest first:
+
+1. **`bfcl_mt` itself.** The multi-turn run produces ~400 genuine trajectories with real executed
+   tool results, as a byproduct of an eval already queued. Same trick that banked 1.33 M tokens
+   from the battery: the corpus is the exhaust.
+2. **Public agentic trajectory corpora** for context only. Survey and pin them with
+   `eval_fetch.py`'s discipline — snapshot sha recorded, no unpinned downloads — and check each
+   licence before use. Do not assume availability; verify.
+3. **Real sessions**, once serving, as a slow accumulator on top rather than the plan.
+
+**The open question this leaves**, worth an A/B rather than an assumption: does `tau` respond more
+to realistic *context* or to volume of target-generated *spans*? The S5 harness can answer it
+cheaply by training two heads on the same token budget split the two ways. Nobody should guess.
+
+### Prompt-lookup — the lever that needs no corpus at all
+
+Before any of that, the cheaper thing. A large share of an agentic turn's OUTPUT is copied from its
+own context: file paths, identifiers, the function being edited, JSON echoed from a schema.
+N-gram / suffix speculation drafts those with **no head, no training and no data**.
+
+`LEVERS.md` §9 carries it as lever #4, "workload-dependent, untried" — and §7 already has the
+instrument to price it without building it. `DSV4_SUFFIXPROBE=1` runs `suffix_draft()` at every
+verify and counts what a suffix draft **would** have had accepted against what the MTP actually
+got, as **counted integers**, which is the only form that survives trap 25's ~1.5 % cross-run
+timing floor. It is read-only — no device buffer, no engine state — so GATE and LOSSLESS GATE are
+unaffected, and `tests/gate_suffix_draft` means the probe cannot retire S6 on a matcher bug.
+
+Two things to hold onto when reading its output:
+
+- Per F80 it reports a **sound lower bound** and an optimistic estimate, not a point value —
+  `tam[i]` is only valid ground truth for `i <= acc`. Quote the bound.
+- "Workload-dependent" is the whole point, and every prior measurement of it was taken on
+  benchmark-shaped traffic. `bfcl_mt` is the first **agentic-shaped** traffic this project will
+  have: tool results and schemas resident in context, which is precisely the regime where
+  prompt-lookup should pay and where the MTP head has no particular advantage.
+
+**Operationally, fold it into the one restart window.** `DSV4_SUFFIXPROBE` is env-gated at process
+start, and so is any decision about which binary is running — so deploying
+`build/dsv4-server.staged` (the accept-hazard telemetry) and taking a SUFFIXPROBE slice are the
+same window. Restarts cost a ~10-15 minute reload of a 101 GiB checkpoint and are this repo's most
+expensive class of mistake; do not spend two of them.
+
+Run the probe on a **dedicated slice**, not across the whole `bfcl_mt` run: the probe adds host
+work at every verify, and `bfcl_mt`'s timings are wanted clean as the first measurement of the
+depth curve at genuine agentic context lengths.
+
 ### What the server must emit for production traffic to pay
 
 `LEVERS.md` §7 lists a deep instrument set, but every one is env-gated at process start, emits log
@@ -270,10 +333,20 @@ to the ~1.5 % cross-run timing floor that `LEVERS.md` trap 25 warns about.
 3. Check §1's prediction against the realized GPQA number. Report the miss if it misses.
 4. Per-subject dispersion analysis on MMLU-Pro and GPQA (§4).
 5. Speculative high-effort projections, labelled as such (§3).
-6. Build BFCL `multi_turn` — vendor the backends, `base` + `miss_func` first (§4).
+6. Build BFCL `multi_turn` — **done** (`tools/eval_bfcl_mt.py`, self-gate 200/200 on both
+   categories); `scripts/eval_bfcl_mt_run.sh` is queued and blocking on the engine (§4).
 7. Matched-harness API baseline, if and when API inference is back in scope (§2). Run it at
    low @ 8000 **and** low @ 24000: the pruned model will have both, and a prune delta that is
    stable across that budget change is real evidence — not proof — that it is stable across
    effort, which is the assumption the whole high-effort extrapolation rests on.
 8. Budget forcing: cap thinking with an injected `</think>`, paired within-item (task #26).
-9. Server-side per-request telemetry so production traffic profiles itself (§5).
+9. **One restart window, three jobs** (§5). Restarts cost a ~10-15 min reload of a 101 GiB
+   checkpoint and are this repo's most expensive class of mistake, so do not spend two:
+   a. deploy `build/dsv4-server.staged` — per-request accept-hazard telemetry, already built
+      (`scripts/deploy_staged_server.sh`, which refuses while anything holds the engine);
+   b. take a `DSV4_SUFFIXPROBE=1` slice over agentic-shaped traffic to price prompt-lookup
+      (task #15) as a counted integer — no corpus, no training, quote F80's lower bound;
+   c. re-baseline, since the binary changed.
+10. Manufacture the agentic corpus for the draft head — regenerate assistant spans only over
+    borrowed contexts, ~1000 turns in ~9 h, starting with `bfcl_mt`'s own trajectories (§5,
+    task #10). A/B context-realism against span-volume rather than assuming which matters.
