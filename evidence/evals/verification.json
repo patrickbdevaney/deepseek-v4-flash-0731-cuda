@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "bfcl",
+      "task": "bfcl_live",
       "effort": "low",
-      "records": 240,
-      "recomputed_acc": 86.25,
-      "published_acc": 86.2,
-      "snapshot": "f087fb14f26dd1829604c83abc0ceaec62269fd8",
-      "source": "gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240)"
+      "records": 508,
+      "recomputed_acc": 78.74,
+      "published_acc": 78.7,
+      "snapshot": "61fc0608cfd831fcfbbaa676ebdfef0ed963eeda",
+      "source": "gorilla-llm/BFCL v3 (live_* subsets, AST-scored, 508)"
     }
   ],
   "failed": 0

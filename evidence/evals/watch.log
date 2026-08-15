@@ -24,3 +24,15 @@ VERIFY: 0 failed -> PASS
   [PASS] bfcl           snapshot matches the published one       f087fb14f26d vs f087fb14f26d
 
 VERIFY: 0 failed -> PASS
+[land] bfcl@low: 86.2% [81.3, 90.0] n=240/240 trunc=3 err=0 — verified, committed, pushed
+[watch] 2026-08-15T01:22:23-04:00 bfcl_live finished — landing
+  [PASS] bfcl_live      no duplicate records                     508 records, 508 unique
+  [PASS] bfcl_live      every id exists in the benchmark         0 unknown
+  [PASS] bfcl_live      gold matches the pinned dataset          0 mismatched
+  [PASS] bfcl_live      prompt matches the one that was sent     508/508 records carry a hash; 0 mismatched
+  [PASS] bfcl_live      no silent empty generations              0 empty
+  [PASS] bfcl_live      stored correct flags reproduce           0 disagree
+  [PASS] bfcl_live/low  published accuracy is reproducible       recomputed 78.7 % vs published 78.7 % over 508 records
+  [PASS] bfcl_live      snapshot matches the published one       61fc0608cfd8 vs 61fc0608cfd8
+
+VERIFY: 0 failed -> PASS

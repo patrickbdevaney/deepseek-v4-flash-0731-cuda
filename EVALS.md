@@ -200,10 +200,12 @@ so a low number cannot be dismissed as strict parsing.
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|
 | GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 197/198 | **72.6** | [66.0, 78.3] | 51 | 0 | 3717 | 15.0 | 71.20 |
 | BFCL v3 — 4 `exec_*` categories, AST † | **low** | 240/240 | **86.2** | [81.3, 90.0] | 3 | 0 | 216 | 22.8 | — *(none published)* |
+| BFCL v3 — `live_*` categories, AST † | **low** | 508/508 | **78.7** | [75.0, 82.1] | 5 | 0 | 247 | 18.5 | — *(none published)* |
+| SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 1 of 65 subject strata** | **low** | 1/291 | **100.0** | [20.7, 100.0] | 0 | 0 | 315 | 19.6 | — *(none published)* |
 
-437 items scored, 784,089 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+946 items scored, 909,880 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
-Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, GPQA-Diamond — wilson. Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
+Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, SciCode — subproblem pass rate — wilson. Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
 Per-task provenance (dataset and pinned snapshot):
 
@@ -211,6 +213,8 @@ Per-task provenance (dataset and pinned snapshot):
 |---|---|---|---:|
 | GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 8000 |
 | BFCL v3 — 4 `exec_*` categories, AST † | gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240) | `f087fb14f26d` | 2000 |
+| BFCL v3 — `live_*` categories, AST † | gorilla-llm/BFCL v3 (live_* subsets, AST-scored, 508) | `61fc0608cfd8` | 2000 |
+| SciCode — subproblem pass rate | SciCode1/SciCode (test, 65 problems, 291 subproblems) | `4510f6a6aa27` | 8000 |
 
 † This row is **not** the full benchmark — see the protocol block below.
 <!-- /RESULTS -->
@@ -249,6 +253,8 @@ the protocol and not by the harness name.
 |---|---|---|---|---|---|---:|---:|
 | GPQA-Diamond | test, all 198 | 0-shot generative CoT | final letter A–D | exact letter match | none | 8000 | 1 |
 | BFCL v3 — 4 `exec_*` categories, AST † | 4 of BFCL v3's `exec_*` categories, 240 items | prompt mode — calls emitted as text, not via a tool-call API | Python call expressions, one per line | BFCL's own AST metric: same function, argument names and values | none — AST comparison, not execution | 2000 | 1 |
+| BFCL v3 — `live_*` categories, AST † | 6 `live_*` categories, seeded cap of 150 per category | prompt mode — calls emitted as text | Python call expressions, or the literal NO_CALL | BFCL possible-answer AST match; relevance categories scored on whether a call was emitted at all | none — AST comparison, not execution | 2000 | 1 |
+| SciCode — subproblem pass rate | test split, 65 research problems → 291 subproblems, 16 science subfields | 0-shot per subproblem; the model's OWN earlier steps are in scope, no gold solutions exist | first ```python block | the benchmark's own numeric tests, all must pass | sandboxed subprocess, 90 s, 4 GiB address space | 8000 | 1 |
 
 **Decoding.** `low` reasoning effort at temperature 1.0, top_p 0.95. Sampling is stochastic rather than greedy, which is why interval width and avg@k are reported rather than a bare point estimate. Per-benchmark token budget and sample count are in the table above; each budget was set from an uncensored length calibration, not chosen.
 
@@ -259,6 +265,12 @@ the protocol and not by the harness name.
 - **BFCL v3 — 4 `exec_*` categories, AST †**
   - runs 4 `exec_*` categories (240 items), **not** the BFCL v3 aggregate, which also spans multi-turn, relevance/irrelevance detection and non-Python languages — **this row is not the BFCL leaderboard quantity**
   - scored by AST match rather than live execution, so a call that is structurally right but fails against a real API counts correct (biases **up**)
+- **BFCL v3 — `live_*` categories, AST †**
+  - a seeded cap of 150 items per category, because the `live_*` sets run from 1052 rows (`live_multiple`) to 16 (`live_parallel`) and taking all of them would let two categories set the headline
+  - category-balanced rather than BFCL's own weighting, so this is **not** the BFCL leaderboard aggregate
+- **SciCode — subproblem pass rate**
+  - subproblem pass rate is the headline; main-problem accuracy (every subproblem of a problem correct) is the harder published metric and is derived from the same records rather than reported in its place
+  - later steps run against the model's OWN earlier code, since no gold solutions ship — a wrong early step propagates, which is the intended behaviour and biases **down** relative to a gold-context setting
 
 **What this protocol does and does not license.** Every number here is re-derivable from the stored generations by `tools/eval_verify.py` with no GPU and no model, against a sha-pinned dataset. That makes the numbers *reproducible*. It does not make them *leaderboard-rankable*: the reference column is third-party aggregation whose harness, token budget and sampling count are not ours and are not stated, so a gap of a few points between a row and its reference is not interpretable in either direction. The comparison this evidence genuinely supports is a paired one — REAP against unpruned, same harness, same decoding, only the weights different — and that baseline has not been run here.
 <!-- /PROTOCOL -->

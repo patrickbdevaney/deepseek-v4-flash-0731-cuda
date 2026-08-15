@@ -54,5 +54,61 @@
     "max_tokens": 2000,
     "source": "gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240)",
     "snapshot": "f087fb14f26dd1829604c83abc0ceaec62269fd8"
+  },
+  {
+    "task": "bfcl_live",
+    "effort": "low",
+    "n": 508,
+    "n_total": 508,
+    "correct": 400,
+    "strata_field": "subject",
+    "strata_seen": 6,
+    "strata_total": 6,
+    "n_unique": 508,
+    "reps": 1,
+    "acc": 78.7,
+    "ci": [
+      75.0,
+      82.1
+    ],
+    "ci_method": "wilson",
+    "n_problems": 508,
+    "truncated": 5,
+    "errors": 0,
+    "mean_completion_tokens": 247,
+    "mean_tok_s": 18.52,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 2000,
+    "source": "gorilla-llm/BFCL v3 (live_* subsets, AST-scored, 508)",
+    "snapshot": "61fc0608cfd831fcfbbaa676ebdfef0ed963eeda"
+  },
+  {
+    "task": "scicode",
+    "effort": "low",
+    "n": 1,
+    "n_total": 291,
+    "correct": 1,
+    "strata_field": "subject",
+    "strata_seen": 1,
+    "strata_total": 65,
+    "n_unique": 291,
+    "reps": 1,
+    "acc": 100.0,
+    "ci": [
+      20.7,
+      100
+    ],
+    "ci_method": "wilson",
+    "n_problems": 1,
+    "truncated": 0,
+    "errors": 0,
+    "mean_completion_tokens": 315,
+    "mean_tok_s": 19.59,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 8000,
+    "source": "SciCode1/SciCode (test, 65 problems, 291 subproblems)",
+    "snapshot": "4510f6a6aa27c43fad7b43da2c59602a86e88480"
   }
 ]

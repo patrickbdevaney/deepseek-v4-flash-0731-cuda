@@ -1,0 +1,18 @@
+{
+  "task": "scicode",
+  "source": "SciCode1/SciCode (test, 65 problems, 291 subproblems)",
+  "snapshot": "4510f6a6aa27c43fad7b43da2c59602a86e88480",
+  "n_items": 291,
+  "scoring": "scicode",
+  "n_unique": 291,
+  "reps": 1,
+  "effort": "low",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 8000,
+  "code_commit": "bcc0aca32c3d44142d39f35f210baaeea5a5f4b3",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-15T05:22:00Z"
+}
