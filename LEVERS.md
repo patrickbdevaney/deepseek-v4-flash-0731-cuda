@@ -59,6 +59,12 @@
 > (which would settle the speculation/weight-traffic interaction directly), and KV depth per step
 > rather than per request.
 >
+> **The plan to close it is `DECODE_ROOFLINE_PLAN.md`.** Phase 1 needs no new code: `DSV4_BLKSWEEP`
+> entries are `BLK[:passes[:adaptK[:prompt]]]` where `prompt` indexes `DSV4_PROMPTS_FILE`, so
+> `DSV4_DPROF=1 DSV4_KSWEEP=1` over four prompt lengths recomputes §9's budget table at 0 / 2k / 8k
+> / 16k in **one checkpoint load**, and `tools/dprof_diff.sh` diffs the points by (K, sub-op). The
+> sub-op whose ms grows with the prompt index is the depth term.
+>
 > **Do not treat this as a restart.** `FLYWHEEL_STOP` is untouched. This is the evidence §"Rules of
 > the road" requires to reopen a lever, recorded where the next reader will see it.
 >

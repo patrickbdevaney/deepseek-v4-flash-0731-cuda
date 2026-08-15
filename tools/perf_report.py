@@ -418,9 +418,16 @@ def main():
     if len(fit_rows) >= 20 and f:
         Wc, K = f
         eff = (B_TOK_MB * 1e6) / (Wc / 1e3) / BW_ACHIEVABLE
-        W('| weight-stream efficiency | forward pays %.0f ms for %.2f MB = %.0f%% of achievable BW '
-          '| %.0f%% -> 75%% is **%.2fx** on the fixed term |'
-          % (Wc, B_TOK_MB, 100 * eff, 100 * eff, 0.75 / eff if eff else 0))
+        # NOT a 2.2x lever, and it was previously priced as one. This divides an M=1 quantity
+        # (B_tok) by a VERIFY-forward time, and a verify does several positions' work -- wider
+        # expert union, plus the draft head -- so the ratio understates efficiency by construction.
+        # LEVERS.md §9 measures the same engine properly at K=1, prompt 0: 160 GB/s = 77% of
+        # roofline, inside the 70-80% band ROOFLINE calls well-written. The weight-stream lever is
+        # small and largely closed (F125/F126/F137). Reported as a floor, with no headroom claim.
+        W('| weight-stream efficiency | forward pays %.0f ms for %.2f MB, a **floor** of %.0f%% of '
+          'achievable BW | **little** — measured properly at K=1/prompt 0 the engine is at 77%% of '
+          'roofline (`LEVERS.md` §9). Do not re-chase. |'
+          % (Wc, B_TOK_MB, 100 * eff))
         d = 16384
         W('| depth term (DSA indexer / KV) | `K` = %.4g ms/token, **%.0f%%** of the forward at %d '
           'depth | removing it at %d depth is **%.2fx** |'
@@ -429,6 +436,9 @@ def main():
     if tt:
         W('| draft-head acceptance | corpus mean `tau` = **%.3f** | tau %.2f -> %.2f is **%.2fx** |'
           % (tt, tt, tt + 1.0, (tt + 1.0) / tt))
+    W('')
+    W('')
+    W('See `DECODE_ROOFLINE_PLAN.md` for the investigation that turns the depth row into a change.')
     W('')
     W('The two are not additive and not independent: raising `tau` puts more positions through one')
     W('forward, which grows the union of routed experts that forward must read, so part of a')
