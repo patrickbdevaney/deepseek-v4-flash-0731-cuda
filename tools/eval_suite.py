@@ -1011,7 +1011,7 @@ def correct(kind, got, gold, item=None):
         return got == gold
 
 
-def accuracy_ci(recs, seed=20260814):
+def accuracy_ci(recs, seed=20260814, task=None):
     """Accuracy and a 95 % interval that respects how many PROBLEMS there are, not how many
     generations were drawn from them.
 
@@ -1028,6 +1028,20 @@ def accuracy_ci(recs, seed=20260814):
     the grouping is a no-op, and they keep the exact Wilson interval -- the normal approximation is
     wrong at 30 items near the ends, which is why Wilson is there in the first place.
     """
+    # SUB-ITEMS ARE NOT INDEPENDENT ITEMS. SciCode ships 291 subproblems drawn from 65 problems,
+    # and the subproblems of one problem are strongly dependent by construction: later steps are
+    # given the model's OWN earlier code, so an early error propagates. Measured on this run,
+    # P(step k correct | step k-1 correct) = 38.8% against P(step k correct | step k-1 wrong) =
+    # 12.3% -- a 3.1x hazard ratio. Treating 291 dependent subproblems as 291 independent trials is
+    # the same pseudo-replication that the avg@k branch below exists to prevent, and it understates
+    # the interval for exactly the same reason.
+    #
+    # The ESTIMAND differs between the two cases and must not be conflated. avg@k re-samples the
+    # same problem, so the estimand is the mean of per-problem rates. SciCode's published metric is
+    # the POOLED subproblem pass rate, so clustering must widen the interval WITHOUT moving the
+    # point estimate -- resample problems, pool their subproblems, recompute pooled accuracy.
+    CLUSTERED_SUBITEMS = {'scicode': lambda i: i.rsplit('-', 1)[0]}   # scicode-77-1 -> scicode-77
+
     groups = {}
     for r in recs:
         groups.setdefault(r['id'].split('#r')[0], []).append(bool(r.get('correct')))
@@ -1035,6 +1049,28 @@ def accuracy_ci(recs, seed=20260814):
     if m == 0:
         return 0.0, 0.0, 0.0, 'none', 0
     reps_max = max(len(v) for v in groups.values())
+    if reps_max <= 1 and task in CLUSTERED_SUBITEMS:
+        key = CLUSTERED_SUBITEMS[task]
+        cl = {}
+        for r in recs:
+            cl.setdefault(key(r['id'].split('#r')[0]), []).append(bool(r.get('correct')))
+        cvals = list(cl.values())
+        c = len(cvals)
+        k, n = sum(sum(v) for v in cvals), sum(len(v) for v in cvals)
+        if c < 2:
+            lo, hi = wilson(k, n)
+            return 100.0 * k / n, lo, hi, 'wilson', c
+        rng = random.Random(seed)
+        boot = []
+        for _ in range(10000):
+            num = den = 0
+            for _ in range(c):
+                v = cvals[rng.randrange(c)]
+                num += sum(v); den += len(v)
+            boot.append(num / den if den else 0.0)
+        boot.sort()
+        return (100.0 * k / n, 100.0 * boot[249], 100.0 * boot[9749],
+                f'cluster-bootstrap over {c} problems ({n} sub-items)', c)
     if reps_max <= 1:
         k, n = sum(sum(v) for v in groups.values()), sum(len(v) for v in groups.values())
         lo, hi = wilson(k, n)
@@ -1331,7 +1367,7 @@ def _report_one(task, eff, lines):
         mpath = os.path.join(OUT, f'{task}.{eff}.meta.json')
         meta = json.load(open(mpath)) if os.path.exists(mpath) else {}
         k, n = sum(r['correct'] for r in recs), len(recs)
-        acc, lo, hi, ci_method, n_problems = accuracy_ci(recs)
+        acc, lo, hi, ci_method, n_problems = accuracy_ci(recs, task=task)
         nerr = sum(1 for r in recs if r.get('error'))
         trunc = sum(1 for r in recs
                     if r.get('truncated') or r.get('finish_reason') == 'length'
