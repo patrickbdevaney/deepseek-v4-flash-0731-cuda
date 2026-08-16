@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "mmlu_pro",
+      "task": "humaneval",
       "effort": "low",
-      "records": 150,
-      "recomputed_acc": 73.33,
-      "published_acc": 73.3,
-      "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
-      "source": "TIGER-Lab/MMLU-Pro (test, 12032)"
+      "records": 164,
+      "recomputed_acc": 95.12,
+      "published_acc": 95.1,
+      "snapshot": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+      "source": "openai/openai_humaneval (164)"
     }
   ],
   "failed": 0
