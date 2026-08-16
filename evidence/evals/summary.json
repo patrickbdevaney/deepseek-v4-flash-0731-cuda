@@ -28,6 +28,34 @@
     "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3"
   },
   {
+    "task": "mmlu_pro",
+    "effort": "low",
+    "n": 150,
+    "n_total": 150,
+    "correct": 110,
+    "strata_field": "category",
+    "strata_seen": 14,
+    "strata_total": 14,
+    "n_unique": 150,
+    "reps": 1,
+    "acc": 73.3,
+    "ci": [
+      65.7,
+      79.8
+    ],
+    "ci_method": "wilson",
+    "n_problems": 150,
+    "truncated": 18,
+    "errors": 0,
+    "mean_completion_tokens": 1948,
+    "mean_tok_s": 17.28,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 8000,
+    "source": "TIGER-Lab/MMLU-Pro (test, 12032)",
+    "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be"
+  },
+  {
     "task": "bfcl",
     "effort": "low",
     "n": 240,

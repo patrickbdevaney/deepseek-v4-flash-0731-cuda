@@ -199,19 +199,21 @@ so a low number cannot be dismissed as strict parsing.
 | benchmark | effort | scored | **acc %** | 95 % CI | trunc | err | mean out tok | tok/s | unpruned 0731 @ same effort |
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|
 | GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 197/198 | **72.6** | [66.0, 78.3] | 51 | 0 | 3717 | 15.0 | 71.20 |
+| MMLU-Pro *(partial)* **— NOT QUOTABLE, 12% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 150/150 | **73.3** | [65.7, 79.8] | 18 | 0 | 1948 | 17.3 | 83.00 |
 | BFCL v3 — 4 `exec_*` categories, AST † | **low** | 240/240 | **86.2** | [81.3, 90.0] | 3 | 0 | 216 | 22.8 | — *(none published)* |
 | BFCL v3 — `live_*` categories, AST † | **low** | 508/508 | **78.7** | [75.0, 82.1] | 5 | 0 | 247 | 18.5 | — *(none published)* |
 | SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 19% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 291/291 | **30.2** | [24.1, 36.9] | 54 | 0 | 3534 | 14.7 | — *(none published)* |
 
-1236 items scored, 1,937,959 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+1386 items scored, 2,230,159 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
-Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
+Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
 Per-task provenance (dataset and pinned snapshot):
 
 | benchmark | dataset | snapshot | max_tokens |
 |---|---|---|---:|
 | GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 8000 |
+| MMLU-Pro | TIGER-Lab/MMLU-Pro (test, 12032) | `b189ec765aa7` | 8000 |
 | BFCL v3 — 4 `exec_*` categories, AST † | gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240) | `f087fb14f26d` | 2000 |
 | BFCL v3 — `live_*` categories, AST † | gorilla-llm/BFCL v3 (live_* subsets, AST-scored, 508) | `61fc0608cfd8` | 2000 |
 | SciCode — subproblem pass rate | SciCode1/SciCode (test, 65 problems, 291 subproblems) | `4510f6a6aa27` | 8000 |
@@ -252,6 +254,7 @@ the protocol and not by the harness name.
 | benchmark | split / subset | scenario | answer extraction | scoring | execution | budget | samples |
 |---|---|---|---|---|---|---:|---:|
 | GPQA-Diamond | test, all 198 | 0-shot generative CoT | final letter A–D | exact letter match | none | 8000 | 1 |
+| MMLU-Pro | test, seeded random subset of 12 032 | 0-shot generative CoT | final letter A–J | exact letter match | none | 8000 | 1 |
 | BFCL v3 — 4 `exec_*` categories, AST † | 4 of BFCL v3's `exec_*` categories, 240 items | prompt mode — calls emitted as text, not via a tool-call API | Python call expressions, one per line | BFCL's own AST metric: same function, argument names and values | none — AST comparison, not execution | 2000 | 1 |
 | BFCL v3 — `live_*` categories, AST † | 6 `live_*` categories, seeded cap of 150 per category | prompt mode — calls emitted as text | Python call expressions, or the literal NO_CALL | BFCL possible-answer AST match; relevance categories scored on whether a call was emitted at all | none — AST comparison, not execution | 2000 | 1 |
 | SciCode — subproblem pass rate | test split, 65 research problems → 291 subproblems, 16 science subfields | 0-shot per subproblem; the model's OWN earlier steps are in scope, no gold solutions exist | first ```python block | the benchmark's own numeric tests, all must pass | sandboxed subprocess, 90 s, 4 GiB address space | 8000 | 1 |
@@ -262,6 +265,8 @@ the protocol and not by the harness name.
 
 **Deviations from the canonical protocol.** Each is stated with the direction it moves the score.
 
+- **MMLU-Pro**
+  - a seeded random subset, not the full split — unbiased in expectation, but wider than the published interval on the full set
 - **BFCL v3 — 4 `exec_*` categories, AST †**
   - runs 4 `exec_*` categories (240 items), **not** the BFCL v3 aggregate, which also spans multi-turn, relevance/irrelevance detection and non-Python languages — **this row is not the BFCL leaderboard quantity**
   - scored by AST match rather than live execution, so a call that is structurally right but fails against a real API counts correct (biases **up**)

@@ -48,3 +48,15 @@ VERIFY: 0 failed -> PASS
   [PASS] scicode        snapshot matches the published one       4510f6a6aa27 vs 4510f6a6aa27
 
 VERIFY: 0 failed -> PASS
+[land] scicode@low: 30.2% [24.1, 36.9] n=291/291 trunc=54 err=0 — verified, committed, pushed
+[watch] 2026-08-16T11:22:26-04:00 mmlu_pro finished — landing
+  [PASS] mmlu_pro       no duplicate records                     150 records, 150 unique
+  [PASS] mmlu_pro       every id exists in the benchmark         0 unknown
+  [PASS] mmlu_pro       gold matches the pinned dataset          0 mismatched
+  [PASS] mmlu_pro       prompt matches the one that was sent     150/150 records carry a hash; 0 mismatched
+  [PASS] mmlu_pro       no silent empty generations              0 empty
+  [PASS] mmlu_pro       stored correct flags reproduce           0 disagree
+  [PASS] mmlu_pro/low   published accuracy is reproducible       recomputed 73.3 % vs published 73.3 % over 150 records
+  [PASS] mmlu_pro       snapshot matches the published one       b189ec765aa7 vs b189ec765aa7
+
+VERIFY: 0 failed -> PASS

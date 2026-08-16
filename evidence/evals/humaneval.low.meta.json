@@ -1,0 +1,18 @@
+{
+  "task": "humaneval",
+  "source": "openai/openai_humaneval (164)",
+  "snapshot": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+  "n_items": 164,
+  "scoring": "code",
+  "n_unique": 164,
+  "reps": 1,
+  "effort": "low",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 8000,
+  "code_commit": "23d0d9a6e77d0a6a775192b3f99cd16093d786ad",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-16T15:22:19Z"
+}
