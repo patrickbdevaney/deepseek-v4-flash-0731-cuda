@@ -1,0 +1,18 @@
+{
+  "task": "lcb",
+  "source": "livecodebench/code_generation_lite test6 (2025-01..2025-04, 175)",
+  "snapshot": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+  "n_items": 175,
+  "scoring": "lcb",
+  "n_unique": 175,
+  "reps": 1,
+  "effort": "low",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 8000,
+  "code_commit": "889e39af510e156ac6f4bdc545a03e6a84d33702",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-16T21:31:30Z"
+}

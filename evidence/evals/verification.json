@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "humaneval",
+      "task": "math500",
       "effort": "low",
-      "records": 164,
-      "recomputed_acc": 95.12,
-      "published_acc": 95.1,
-      "snapshot": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
-      "source": "openai/openai_humaneval (164)"
+      "records": 100,
+      "recomputed_acc": 95.0,
+      "published_acc": 95.0,
+      "snapshot": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+      "source": "HuggingFaceH4/MATH-500 (500)"
     }
   ],
   "failed": 0
