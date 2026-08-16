@@ -23,7 +23,7 @@ EFFORT="${EFFORT:-low}"
 BUDGET="${BUDGET:-24000}"
 GATE="${GATE:-5}"                      # percent truncation above which a row must be extended
 POLL="${POLL:-300}"
-TASKS="${TASKS:-gpqa_diamond aime24 aime25 lcb math500 scicode}"
+TASKS="${TASKS:-gpqa_diamond mmlu_pro aime24 aime25 lcb math500 humaneval scicode}"
 
 say(){ echo "[extend $(date -Is)] $*"; }
 
@@ -36,6 +36,31 @@ while ! grep -aq "ALL TASKS COMPLETE" evidence/evals/run.log 2>/dev/null; do
   sleep "$POLL"
 done
 say "battery complete; deciding which rows are budget-limited"
+
+# A HARDCODED LIST IS A PLACE TO FORGET SOMETHING, AND IT ALREADY WAS ONE: mmlu_pro landed at 12 %
+# truncated -- comfortably over the gate -- while absent from TASKS, so it would have stayed NOT
+# QUOTABLE for ever with nothing reporting that. The list stays explicit, because eval_extend.py
+# only understands tasks that eval_suite builds prompts for and a wildcard would hand it rows it
+# cannot continue. But anything over the gate and NOT in the list is now an audible fault.
+python3 - "$TASKS" "$GATE" <<'PY' || true
+import json, os, sys
+listed, gate = set(sys.argv[1].split()), float(sys.argv[2])
+try:
+    rows = json.load(open('evidence/evals/summary.json'))
+except Exception:
+    sys.exit(0)
+missed = []
+for r in rows:
+    n = r.get('n') or 0
+    if not n:
+        continue
+    pct = 100.0 * (r.get('truncated') or 0) / n
+    if pct > gate and r['task'] not in listed:
+        missed.append((r['task'], pct))
+for task, pct in missed:
+    print(f"[extend] FAULT: {task} is {pct:.1f}% truncated, over the {gate}% gate, "
+          f"but is NOT in TASKS. It will stay NOT QUOTABLE. Add it and re-run.")
+PY
 
 python3 tools/eval_suite.py --report > /dev/null 2>&1
 
