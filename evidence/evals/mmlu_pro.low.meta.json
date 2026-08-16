@@ -1,0 +1,18 @@
+{
+  "task": "mmlu_pro",
+  "source": "TIGER-Lab/MMLU-Pro (test, 12032)",
+  "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+  "n_items": 150,
+  "scoring": "letter",
+  "n_unique": 150,
+  "reps": 1,
+  "effort": "low",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 8000,
+  "code_commit": "12aafb73c3fb441a1de4133aebbb966566d82ef7",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-16T08:01:08Z"
+}

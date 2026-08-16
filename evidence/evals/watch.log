@@ -36,3 +36,15 @@ VERIFY: 0 failed -> PASS
   [PASS] bfcl_live      snapshot matches the published one       61fc0608cfd8 vs 61fc0608cfd8
 
 VERIFY: 0 failed -> PASS
+[land] bfcl_live@low: 78.7% [75.0, 82.1] n=508/508 trunc=5 err=0 — verified, committed, pushed
+[watch] 2026-08-16T04:02:01-04:00 scicode finished — landing
+  [PASS] scicode        no duplicate records                     291 records, 291 unique
+  [PASS] scicode        every id exists in the benchmark         0 unknown
+  [PASS] scicode        gold matches the pinned dataset          0 mismatched
+  [PASS] scicode        prompt matches the one that was sent     291/291 records carry a hash; 0 mismatched
+  [PASS] scicode        no silent empty generations              0 empty
+  [PASS] scicode        stored correct flags reproduce           0 disagree
+  [PASS] scicode/low    published accuracy is reproducible       recomputed 30.2 % vs published 30.2 % over 291 records
+  [PASS] scicode        snapshot matches the published one       4510f6a6aa27 vs 4510f6a6aa27
+
+VERIFY: 0 failed -> PASS

@@ -201,11 +201,11 @@ so a low number cannot be dismissed as strict parsing.
 | GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 197/198 | **72.6** | [66.0, 78.3] | 51 | 0 | 3717 | 15.0 | 71.20 |
 | BFCL v3 — 4 `exec_*` categories, AST † | **low** | 240/240 | **86.2** | [81.3, 90.0] | 3 | 0 | 216 | 22.8 | — *(none published)* |
 | BFCL v3 — `live_*` categories, AST † | **low** | 508/508 | **78.7** | [75.0, 82.1] | 5 | 0 | 247 | 18.5 | — *(none published)* |
-| SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 1 of 65 subject strata** | **low** | 1/291 | **100.0** | [20.7, 100.0] | 0 | 0 | 315 | 19.6 | — *(none published)* |
+| SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 19% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 291/291 | **30.2** | [24.1, 36.9] | 54 | 0 | 3534 | 14.7 | — *(none published)* |
 
-946 items scored, 909,880 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+1236 items scored, 1,937,959 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
-Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, SciCode — subproblem pass rate — wilson. Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
+Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
 Per-task provenance (dataset and pinned snapshot):
 
