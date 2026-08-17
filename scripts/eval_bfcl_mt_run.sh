@@ -7,9 +7,11 @@
 # calibration probe held the lock, and recovering it cost a drop-and-rerun. So this blocks until
 # the battery AND the extension pass are both finished, then takes the engine alone.
 #
-# ORDER. Extension first, multi-turn second. The extension repairs rows that are currently NOT
+# ORDER. Extension first, then forcing, then multi-turn. Both repair rows that are currently NOT
 # QUOTABLE, which is worth more than a new row: a benchmark nobody can cite is worth less than one
-# that is merely absent.
+# that is merely absent. eval_force_all.sh wakes on the same condition this script used to wake on,
+# so without the third clause in the wait loop below the two would start together and put a second
+# client on the engine -- the precise failure described above.
 #
 # SMOKE GATE. The checker, the stateful backends, the prompt assembly and the state comparison are
 # all validated offline -- ground truth replayed as model output scores 200/200 on both categories.
@@ -30,10 +32,11 @@ say(){ echo "[bfcl-mt $(date -Is)] $*"; }
 
 [ -x "$PY" ] || { say "no $PY — run: python3 -m venv .venv-bfcl && see tools/eval_bfcl_mt.py"; exit 1; }
 
-say "waiting for the battery and the extension pass to finish"
+say "waiting for the battery, the extension pass and the forcing pass to finish"
 while pgrep -f "bash scripts/eval_supervise.sh" > /dev/null \
    || pgrep -f "bash scripts/run_evals.sh" > /dev/null \
-   || pgrep -f "bash scripts/eval_extend_all.sh" > /dev/null; do
+   || pgrep -f "bash scripts/eval_extend_all.sh" > /dev/null \
+   || pgrep -f "bash scripts/eval_force_all.sh" > /dev/null; do
   sleep "$POLL"
 done
 say "engine is free"

@@ -1,0 +1,24 @@
+[Unit]
+# Hedge against power loss, not against reboots -- nobody intends to reboot this box during the
+# programme. A cut on day three of an eight-day run would otherwise end it silently, so this brings
+# the chain back and lets the stages re-converge from wherever they died.
+Description=DeepSeek-V4-Flash eval programme - resume after power loss
+After=network-online.target local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# eval_resume.sh spawns long-lived detached stages and returns immediately. Verified: with
+# RemainAfterExit + KillMode=process those children outlive the ExecStart, rather than being reaped
+# with the cgroup. Without this the unit would start the programme and then kill it.
+KillMode=process
+WorkingDirectory=/home/patrickd/deepseek-v4-flash-0731-cuda
+# The engine loads 101 GiB and needs the GPU stack up. Coming back too early costs a failed server
+# start and one of the supervisor's six restarts for no reason.
+ExecStartPre=/bin/sleep 120
+ExecStart=/bin/bash scripts/eval_resume.sh
+StandardOutput=append:/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/resume.log
+StandardError=append:/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/resume.log
+
+[Install]
+WantedBy=default.target
