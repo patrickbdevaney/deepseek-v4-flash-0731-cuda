@@ -44,9 +44,23 @@ startup by a two-request calibration against a real item, never assumed -- byte-
 at a boundary, and a suffix that silently costs 2 tokens instead of 1 would turn the per-item gate
 into a rubber stamp. The calibration's first leg also re-proves eval_extend's base identity.
 
-  python3 tools/eval_force.py --task gpqa_diamond --effort low --dry-run
-  python3 tools/eval_force.py --task gpqa_diamond --effort low
-  python3 tools/eval_force.py --task gpqa_diamond --effort low --pair-with low24k --report-only
+ORDER OF OPERATIONS: EXTEND FIRST, THEN FORCE THE RESIDUE. Forcing is applied to the run that has
+already had every cheap repair, which after the battery is the EXTENDED file (`low24k`), not the
+base (`low`). Two reasons, and the first is the one that matters:
+
+  * Forcing `low` throws away the extension's work. An item that would have finished on its own at
+    19k gets its thinking amputated at 8k instead, and the row is needlessly worse.
+  * A row forced at 24k of thinking is a stronger measurement than one forced at 8k, so the
+    deviation buys more.
+
+`--only-if-over 0.05` makes this safe to run across every task without deciding in advance which
+ones still need it: rows the extension already rescued exit having sent nothing.
+
+  # after the battery
+  bash scripts/eval_extend_all.sh                                   # 8000 -> 24000, unbiased
+  python3 tools/eval_force.py --task gpqa_diamond --effort low24k --only-if-over 0.05 --dry-run
+  python3 tools/eval_force.py --task gpqa_diamond --effort low24k --only-if-over 0.05
+  python3 tools/eval_force.py --task gpqa_diamond --effort low24k --pair-with low24k --report-only
 """
 import argparse, hashlib, json, math, os, subprocess, sys, time
 
@@ -65,6 +79,29 @@ THINK_START, THINK_END, EOS = X.THINK_START, X.THINK_END, X.EOS
 ANSWER_TOKENS = dict(letter=512, integer=512, math=1024, call=512,
                      code=2048, lcb=2048, scicode=2048)
 ANSWER_DEFAULT = 1024
+
+
+# TIMEOUTS MUST BE SIZED OFF PREFIX DEPTH HERE, WHICH IS WHY E.budget_timeout IS NOT USED.
+# That helper takes a flat 180 s prefill allowance and scales the rest off max_tokens, which is
+# right for eval_suite (few-hundred-token prompt, big generation) and right for eval_extend (8k
+# prompt, 16000 tokens of room -> a 4180 s timeout that dwarfs everything). Forcing is the exact
+# inverse: an 8k-24k prefix and a ~512-token answer. `budget_timeout(512)` is 308 s, and prefilling
+# 24k tokens alone takes ~490 s -- the request would time out, retry 3x, and die Fatal, having
+# burned an hour of engine time proving nothing.
+#
+# The floors are measured, from evidence/perf/perf.sqlite over 1688 requests: prefill settles at
+# 44-57 tok/s for prompts of 1000-4000 tokens (the sub-1000 band's 96 tok/s mean is inflated by
+# prefix-cache hits, and the 55469 max is entirely cache). 40 tok/s is below every uncached
+# observation. NOTE the corpus contains ZERO requests above 4000 prompt tokens -- nothing in the
+# battery has ever prefilled this deep -- so the deep end is an extrapolation of a rate that is
+# flat across the range we can see, and the floor is set pessimistically because of it.
+PREFILL_FLOOR_TOK_S = 40.0
+DECODE_FLOOR_TOK_S = 4.0
+
+
+def force_timeout(prompt_tokens, max_tokens, fixed_s=60):
+    """Client timeout covering BOTH legs of a deep-prefix, short-answer request."""
+    return int(fixed_s + prompt_tokens / PREFILL_FLOOR_TOK_S + max_tokens / DECODE_FLOOR_TOK_S)
 
 
 def tag_for(effort, cap):
@@ -90,14 +127,15 @@ def calibrate_suffix_tokens(host, prefix_no_suffix, suffix, expect_pt, temp, top
     WITHOUT the suffix does not tokenize to base_pt + base_ct, the stored record and the live
     tokenizer disagree and nothing downstream is trustworthy.
     """
-    a = X.complete(host, prefix_no_suffix, temp, top_p, 1, 300)
+    tmo = force_timeout(expect_pt, 1)
+    a = X.complete(host, prefix_no_suffix, temp, top_p, 1, tmo)
     got_a = (a.get('usage') or {}).get('prompt_tokens', -1)
     if got_a != expect_pt:
         raise E.Fatal(
             f'calibration leg 1: prefix WITHOUT suffix tokenized to {got_a}, expected {expect_pt} '
             f'(base prompt_tokens + completion_tokens). The stored trace and the live tokenizer '
             f'disagree — refusing to force anything.')
-    b = X.complete(host, prefix_no_suffix + suffix, temp, top_p, 1, 300)
+    b = X.complete(host, prefix_no_suffix + suffix, temp, top_p, 1, tmo)
     got_b = (b.get('usage') or {}).get('prompt_tokens', -1)
     t = got_b - got_a
     if t < 1:
@@ -176,6 +214,11 @@ def main():
                          'in the meta so a reader can see exactly what the model was handed.')
     ap.add_argument('--answer-tokens', type=int, default=0,
                     help='budget for the answer span (0 = per-kind default)')
+    ap.add_argument('--only-if-over', type=float, default=None, metavar='RATE',
+                    help='do nothing unless the source row is more than RATE truncated (e.g. 0.05, '
+                         "eval_publish's quotability gate). Forcing is a protocol deviation, so a "
+                         'row that the budget extension already rescued must not pay for one. Use '
+                         'this rather than remembering which rows needed it.')
     ap.add_argument('--dry-run', action='store_true',
                     help='rebuild and check every prefix, send nothing')
     ap.add_argument('--pair-with', default=None,
@@ -227,14 +270,24 @@ def main():
           f'{len(done)} already written')
     print(f'  suffix={a.suffix!r}  answer budget={ans_tok} tokens  kind={kind}')
 
-    # SAME GUARD AS eval_extend. A forced file built from a half-finished base run would carry over
-    # only the traces that terminated first -- the easy half -- and --report would publish an
-    # accuracy over that biased subset without anything erroring.
+    # SAME GUARD AS eval_extend, AND IT MUST COME BEFORE --only-if-over: the truncation rate of a
+    # half-finished run is not the row's truncation rate, so gating on it could wave a row through
+    # as "does not need forcing" on the strength of whichever items happened to finish first.
     n_expected = bmeta.get('n_items')
     if n_expected and len(base) < n_expected and not a.dry_run:
         sys.exit(f'base run is incomplete ({len(base)}/{n_expected} records). Forcing now would '
                  f'publish an accuracy over the traces that happened to terminate first. '
                  f'Wait for {a.task}.{a.effort} to finish.')
+
+    # THE GATE THAT KEEPS THE DEVIATION PROPORTIONATE. Every forced row costs a paragraph of
+    # published caveat, so a row the budget extension already brought under the quotability gate
+    # must not be forced merely because forcing is available and cheap.
+    if a.only_if_over is not None:
+        rate = len(todo) / len(base) if base else 0.0
+        if rate <= a.only_if_over:
+            print(f'  {rate:.1%} truncated is at or under the {a.only_if_over:.0%} gate — '
+                  f'this row does not need forcing. Doing nothing.')
+            return
 
     if a.dry_run:
         bad = 0
@@ -311,7 +364,8 @@ def main():
         expect_pt = base_pt + base_ct + T
         prefix = USER_SP + it['prompt'] + ASSISTANT_SP + content + a.suffix
 
-        resp = X.complete(a.host, prefix, a.temp, a.top_p, ans_tok, E.budget_timeout(ans_tok))
+        resp = X.complete(a.host, prefix, a.temp, a.top_p, ans_tok,
+                          force_timeout(expect_pt, ans_tok))
         u = resp.get('usage') or {}
         got_pt = u.get('prompt_tokens', -1)
         if got_pt != expect_pt:
