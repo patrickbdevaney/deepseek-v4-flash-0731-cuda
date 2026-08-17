@@ -28,7 +28,8 @@ LIVE=build/dsv4-server
 
 for p in "bash scripts/eval_supervise.sh" "bash scripts/run_evals.sh" \
          "bash scripts/eval_extend_all.sh" "bash scripts/eval_bfcl_mt_run.sh" \
-         "tools/eval_suite.py" "tools/eval_extend.py" "tools/eval_bfcl_mt.py"; do
+         "tools/eval_suite.py" "tools/eval_extend.py" "tools/eval_bfcl_mt.py" \
+         "tools/eval_force.py"; do
   if pgrep -f "$p" > /dev/null; then
     echo "REFUSING: '$p' is running. A restart now would cost it whatever is in flight."
     exit 1

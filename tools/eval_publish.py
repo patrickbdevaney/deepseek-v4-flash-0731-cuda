@@ -134,6 +134,34 @@ DEVIATIONS = {
     'math500': ['a seeded random subset, not the full 500'],
 }
 
+# BUDGET FORCING IS A PROPERTY OF THE RUN, NOT OF THE BENCHMARK, so it cannot live in DEVIATIONS
+# above -- that dict is keyed by task, and attaching this to `gpqa_diamond` would libel the
+# unforced `low` row of the same task. It is keyed off the effort tag instead (tools/eval_force.py
+# emits `<effort><cap>kforced`).
+#
+# WHY THIS EXISTS AT ALL. A forced row reports ~0 % truncation and therefore sails through the
+# NOT-QUOTABLE gate below -- which is correct, it genuinely is not budget-limited, and also exactly
+# how a protocol deviation would come to be published invisibly. The gate that catches truncation
+# cannot catch this, so this does.
+FORCED_SUFFIX = 'forced'
+FORCED_DEVIATION = [
+    'BUDGET FORCING. Traces that hit the thinking cap were **not** given more thinking room. The '
+    'end-of-thinking delimiter was appended to the exact stored prefix and the model answered from '
+    'the reasoning it had already produced. Truncation is therefore ~0 % **by construction**, not '
+    'because the traces finished. Precedent: s1, Muennighoff et al. 2025 (arXiv:2501.19393).',
+    'This row is **not comparable** with an unforced published reference number, and the reference '
+    'column is suppressed for it. It answers "what would the model say if made to stop here", '
+    'which is a different question from "what does the model say".',
+    'Direction of bias: **unknown, and not assumed**. Forcing rescues items that were going to '
+    'score at chance, which biases up; it also cuts off reasoning that had not yet reached its '
+    'answer, which biases down. `tools/eval_force.py --pair-with` measures the net on the same '
+    'prefixes with an exact McNemar test rather than arguing about it.',
+]
+
+
+def is_forced(r):
+    return str(r.get('effort', '')).endswith(FORCED_SUFFIX)
+
 
 def main():
     if not os.path.exists(SUMMARY):
@@ -166,6 +194,10 @@ def main():
             r = dict(r, _flag=r.get('_flag', '') +
                      f' **— NOT QUOTABLE, {rate:.0%} truncated at max_tokens={r.get("max_tokens")}; '
                      f'this measures the budget, not the model. Extend with tools/eval_extend.py**')
+        # A forced row is quotable -- but only as a forced row. Mark it in the cell so the label
+        # travels with the number if someone copies a single line out of the table.
+        if is_forced(r):
+            r = dict(r, _flag=r.get('_flag', '') + ' ‡ **budget-forced**')
         out.append('| {lbl}{star} | **{eff}** | {n}/{tot} | **{acc:.1f}** | [{lo:.1f}, {hi:.1f}] | '
                    '{tr} | {er} | {mt} | {tps:.1f} | {ref} |'.format(
                        eff=eff,
@@ -197,6 +229,10 @@ def main():
                    f'`{(r["snapshot"] or "")[:12]}` | {r["max_tokens"]} |')
     if any(r['task'] in DEVIATIONS for r in rows):
         out += ['', '† This row is **not** the full benchmark — see the protocol block below.']
+    if any(is_forced(r) for r in rows):
+        out += ['', '‡ This row was **budget-forced**: its ~0 % truncation is by construction, not '
+                'because the traces finished. It is not comparable with an unforced reference — '
+                'see the protocol block below.']
 
     proto = protocol_block(rows)
 
@@ -253,6 +289,13 @@ def protocol_block(rows):
         for t, ds in dev:
             out.append(f'- **{LABEL.get(t, t)}**')
             out += [f'  - {d}' for d in ds]
+
+    forced = [r for r in rows if is_forced(r)]
+    if forced:
+        names = ', '.join(dict.fromkeys(
+            f'{LABEL.get(r["task"], r["task"])} (`{r["effort"]}`)' for r in forced))
+        out += ['', f'**Budget forcing ‡** — applies to: {names}.', '']
+        out += [f'- {d}' for d in FORCED_DEVIATION]
 
     out += ['', '**What this protocol does and does not license.** Every number here is '
             're-derivable from the stored generations by `tools/eval_verify.py` with no GPU and no '
