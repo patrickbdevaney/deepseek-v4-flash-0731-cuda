@@ -83,7 +83,8 @@ The genuine frontier open-weights do not fit this box at any 4-bit quantisation 
 
 | model | params | resident at NVFP4 | verdict |
 |---|---|---:|---|
-| Kimi K3 | 2.8T, 16 of 896 experts | ~1.4 TB | 12x over |
+| Kimi K3 | 2.78T, top-16 of 896 experts, 69 KDA + 24 gated MLA layers, native MXFP4 | ~1.4 TB | 12x over |
+| Qwen3.8 flagship | 2.4T-A96B (big brother of the 27B dense) | ~1.2 TB | 10x over |
 | DeepSeek V4 Pro | 1.6T-A49B | ~800 GB | 7x over |
 | GLM-5.2 | 744B-A40B | ~372 GB | 3x over |
 | Nemotron 3 Ultra | 550B-A55B | ~275 GB | 2.3x over |
@@ -102,46 +103,74 @@ Those published fidelity numbers are also the **honest prior for our own eval**:
 test lands within a few points of the unpruned parent on matched harness and settings, that is the
 expected result, not a surprise. A large gap would be the finding.
 
-## 4b. SSD weight streaming: why it does not rescue the out-of-envelope models
+## 4b. SSD / NVMe weight streaming: why it does not rescue the out-of-envelope models
 
-Colibri (pure C, experts streamed from disk) reports **8.3 tok/s on GLM-5.2 744B-A40B** on a 128 GB
-M3 Max and 11.7 tok/s on a Ryzen 7950X workstation (*searched*). Those are real numbers and they
-are much better than a naive disk-bandwidth estimate, so the mechanism is worth stating correctly
-before dismissing the approach.
+Three engines are current as of this survey (*searched*), all pure C, all streaming expert weights
+from disk rather than requiring them resident:
 
-**It is a cache-hit-rate result, not a bandwidth result** (analysis). GLM-5.2 reads ~20 GB of
-active weights per token at NVFP4. A Gen4 NVMe does 5-7 GB/s, so if that came off disk it would be
-~0.3 tok/s, not 8.3. To reach 8.3 tok/s the disk can supply at most ~0.7 GB/token, i.e. **~96% of
+| engine | what it runs | reported throughput |
+|---|---|---|
+| [Colibri](https://github.com/JustVugg/colibri) | GLM-5.2 744B-A40B | **8.3 tok/s** on a 128 GB M3 Max; 11.7 tok/s on a Ryzen 7950X + 990 Pro; 6.1 tok/s on a 32 GB M4 mini (with 200-500 ms stalls); ~0.05-0.1 tok/s on a weak laptop |
+| [kimi-k3-in-c](https://github.com/FareedKhan-dev/kimi-k3-in-c) | Kimi K3 2.78T, 93 layers, 69 KDA + 24 gated MLA, 896 experts top-16, native MXFP4 | runs in **8.24 GB of RAM** on one CPU; trunk streaming makes the memory budget a dial, **byte-identical output from 8.24 GB to 224 GB** |
+| [warp / WASTE](https://github.com/sqliteai/warp) | Kimi K3 2.78T from NVMe | **~0.6 tok/s on a 64 GB MacBook Pro** |
+
+**These are lossless.** kimi-k3-in-c producing byte-identical output at every memory budget is the
+important architectural point: streaming trades *throughput and memory* against each other and does
+not touch quality. So the question is purely whether the resulting token rate supports the workload
+— not whether the model gets dumber.
+
+**Colibri's headline number is a cache-hit-rate result, not a bandwidth result** (analysis, and it
+is what makes the numbers above look inconsistent until you decompose them). GLM-5.2 reads ~20 GB
+of active weights per token at NVFP4. A Gen4 NVMe does 5-7 GB/s, so if that came off disk it would
+be ~0.3 tok/s, not 8.3. To reach 8.3 the disk can supply at most ~0.7 GB/token — i.e. **~96% of
 active weights are already resident**. Colibri pins attention, norms and embeddings and streams
 only cold experts behind double-buffered prefetch. The SSD covers the tail; RAM does the work.
 
-That makes *resident fraction* the governing variable, and it is where the frontier models fail on
-this box:
+That makes **resident fraction** the governing variable, and it is exactly where the frontier
+models fail on this box:
 
-| | total NVFP4 | RAM | resident | active/token |
-|---|---:|---:|---:|---:|
-| GLM-5.2, the reported 128 GB systems | 372 GB | 128 GB | **34%** | 20 GB |
-| Qwen3.8-2.4T-A96B on Thor | ~1.2 TB | 117 GiB | **~10%** | 48 GB |
+| | total NVFP4 | RAM | resident | active/token | observed |
+|---|---:|---:|---:|---:|---|
+| GLM-5.2 on the reported 128 GB systems | 372 GB | 128 GB | **34%** | 20 GB | 8.3 tok/s |
+| Kimi K3 on a 64 GB MacBook (warp) | ~1.4 TB | 64 GB | **4.6%** | ~52 GB | **0.6 tok/s** |
+| Qwen3.8-2.4T-A96B on Thor | ~1.2 TB | 117 GiB | **~10%** | 48 GB | ~0.6-3 tok/s (predicted) |
 
-Qwen3.8-2.4T offers 3.5x worse residency while demanding 2.4x more bytes per token — both terms
-move the wrong way together. At a 50-90% hit rate that is 0.25-1.25 tok/s, and even granting
-DFlash's tau ~ 2.5 on top, **~0.6-3 tok/s**.
+The warp datapoint is the useful one because it is the same regime: a trillion-scale MoE at single-
+digit residency lands at **0.6 tok/s measured**. Thor has roughly twice that residency for a
+slightly smaller model, so the estimate for Qwen3.8-2.4T here — 0.25-1.25 tok/s before speculation,
+~0.6-3 tok/s granting DFlash's tau ~ 2.5 — is corroborated by an independent measurement rather
+than resting on the roofline alone.
 
 **Why that is disqualifying for agentic work specifically.** The threshold is not reading speed.
 Agentic work multiplies tokens by turns, and the turns are strictly serial — turn N+1 depends on
-turn N's tool result, so none of it parallelises. A 20-turn task at ~2000 tokens/turn is 40k
-tokens: 13 min at 50 tok/s, 1.4 h at 8 tok/s, 5.6 h at 2 tok/s, **37 h at 0.3 tok/s**. At the
-bottom of that range the failure is not slowness, it is that you get one attempt per day and cannot
-course-correct.
+turn N's tool result, so none of it parallelises. A 20-turn task at ~2000 tokens/turn is 40k tokens:
+
+| rate | one agentic task |
+|---:|---|
+| 50 tok/s | 13 min |
+| 8 tok/s | 1.4 h |
+| 2 tok/s | 5.6 h |
+| 0.6 tok/s | **18 h** |
+| 0.3 tok/s | **37 h** |
+
+At the bottom of that table the failure is not slowness. It is that you get one attempt per day,
+cannot course-correct, and any wrong turn costs the entire run. That is a categorically different
+activity from coding.
 
 **The niche where it is still useful.** Streaming does not give you an agent; it can give you a
-*teacher*. Trace generation is throughput-tolerant, fully offline, has no serial feedback loop, and
-this box is now configured to run unattended work for days (`scripts/eval_resume.sh`,
-`dsv4-evals-watchdog.timer`). A 2.4T-A96B model at 0.5 tok/s still yields on the order of 40k
-tokens overnight — a meaningful volume of high-quality reference traces for draft-head training or
-distillation, which is the same big-model-as-oracle pattern already used elsewhere in this
-programme. Prefill-heavy single-answer work is the other survivor, since prefill is compute-bound
-and batches, so streaming amortises far better there than in decode.
+*teacher*. Trace generation is throughput-tolerant, fully offline, and has no serial feedback loop,
+and this box is now configured to run unattended work for days (`scripts/eval_resume.sh`,
+`dsv4-evals-watchdog.timer`, `CLAUDE.md` detachment rule). A trillion-scale model at 0.6 tok/s
+still yields ~50k tokens overnight — a meaningful volume of frontier-quality reference traces for
+draft-head training or distillation, and losslessly, per the byte-identical property above. That is
+the same big-model-as-oracle pattern already used elsewhere in this programme. Prefill-heavy
+single-answer work is the other survivor, since prefill is compute-bound and batches, so streaming
+amortises far better there than in decode.
+
+One further note of interest to the attention thesis in this document: **Kimi K3 is 69 KDA + 24
+gated MLA layers with native MXFP4 weights**. The frontier is converging on the same hybrid
+linear-attention design that makes Qwen3.8-27B and Ling 3.0 Flash attractive here, which is
+evidence that the small-KV architectures are not merely an efficiency concession at small scale.
 
 **Verdict: excluded from the interactive shortlist, retained as a candidate trace generator.**
 
@@ -203,4 +232,4 @@ Frontier scale: [Kimi K3 vs DeepSeek V4 Pro vs GLM-5.2](https://www.marktechpost
 REAP: [Cerebras blog](https://www.cerebras.ai/blog/reap) ·
 [repo](https://github.com/CerebrasResearch/reap) ·
 [HF collection](https://huggingface.co/collections/cerebras/cerebras-reap).
-Colibri: [repo](https://github.com/JustVugg/colibri) · [measured throughput](https://www.remio.ai/post/colibri-shows-how-to-run-glm-5-2-on-a-low-spec-pc-but-storage-sets-the-pace) · [consumer-hardware writeup](https://wavect.io/blog/colibri-glm-5-2-consumer-hardware/).
+Weight streaming: [Colibri](https://github.com/JustVugg/colibri) · [Colibri throughput](https://www.remio.ai/post/colibri-shows-how-to-run-glm-5-2-on-a-low-spec-pc-but-storage-sets-the-pace) · [Colibri on consumer hardware](https://wavect.io/blog/colibri-glm-5-2-consumer-hardware/) · [kimi-k3-in-c](https://github.com/FareedKhan-dev/kimi-k3-in-c) · [kimi-k3-in-c writeup](https://themenonlab.blog/blog/kimi-k3-in-c-trillion-parameter-model-8gb-ram/) · [warp / WASTE](https://github.com/sqliteai/warp).
