@@ -129,6 +129,66 @@ it returns to the streaming regime at ~2 tok/s. And the expert-fanout objection 
 the DDR4 tier at 20.8:1, so **speculation is marginal here too** unless the active set is largely
 VRAM-resident — it should help the A3B/A5.1B configs and probably will not help the A40B one.
 
+## 4c. Decision (2026-08-18): residency-first on Thor, desktop as the compression lab
+
+**The pooled-desktop configuration in 4b is documented but NOT adopted.** Operator judgement,
+supported by the arithmetic below: 8-16 tok/s is not worth the power draw or an unmeasured
+capability delta.
+
+### Power settles it
+
+| config | decode | system power | tok/s per watt |
+|---|---:|---:|---:|
+| desktop, GLM-5.3-REAP-504B @ 2-bit | 8-16 | ~500 W | **0.024** |
+| Thor, DSV4-Flash-0731-REAP @ NVFP4 | 10-24 (**measured**) | ~110 W | **0.155** |
+
+**Thor is ~6x more efficient per token and faster at the same time.** The desktop path spends 500 W
+and a two-tier memory engine to go slower. The capability being bought is also unmeasured and could
+be negative: GLM-5.3-REAP-504B-at-2-bit stacks two lossy transforms (34% prune, then the riskiest
+quantisation tier) on a base whose unpruned advantage over DeepSeek-V4-Flash-0731 is modest.
+
+### The low-risk first milestone: requantise the incumbent
+
+The checkpoint occupies **101 GiB for ~180B params — about 4.5 bits effective**, not 4 (MXFP4 plus
+scales and overhead). Tightening it carries no capability risk at all:
+
+| config | bits | resident | active bytes | roofline |
+|---|---:|---:|---:|---:|
+| today | ~4.5 | 101 GiB | 7.3 GB | 33 tok/s |
+| tight 4-bit | 4.0 | 90 GB | 6.5 GB | 37 tok/s |
+| **3.5-bit** | 3.5 | **79 GB** | **5.7 GB** | **42 tok/s** |
+
+**~28% more decode and ~22 GiB freed, same weights lineage, no new evaluation burden.** The freed
+memory then buys FP8 KV headroom *and* room for a larger draft head, which raises tau and compounds
+on top of the 28%. See `wiki/nvfp4-migration.md`.
+
+### The same pipeline unlocks the ambitious target
+
+If compression reaches ~2.5 bits with negligible loss, **GLM-5.3-REAP-50% (372B) is 116 GB and
+becomes resident on Thor**: A40B -> 12.5 GB/token -> **19 tok/s roofline, ~15-33 with speculation**.
+Better than the desktop configuration on every axis at a fifth of the power, with both components
+at published limits (REAP's validated 50%, QTIP's demonstrated 2-3 bit range). Residency-first is
+therefore **strictly dominant**, not a consolation, and it has a milestone that pays before any new
+model is touched.
+
+### Ling on the desktop is rejected, for a stronger reason than speed
+
+Ling 3.0 Flash fits Thor natively at 62 GB with a 94 tok/s roofline — **Thor runs it strictly
+better than the desktop would**, so the desktop adds nothing. If A5.1B ever proves itself on
+quality, it belongs on Thor.
+
+### The desktop's role
+
+**Not inference — the compression lab.** 24 GB VRAM + 128 GB DDR4 is a good workstation for
+shard-by-shard GPTQ/AWQ/QTIP calibration passes, holding calibration activations, sweeping quant
+configs against the KL metric of `COMPRESSION_PLAYBOOK.md` §5, and hosting the teacher-logit
+pipeline. That serves the Thor plan rather than competing with it. The 3090 keeps one inference
+role: anything <= 24 GB, i.e. Qwen3.8-27B at 35-45 tok/s, which is also power-sane.
+
+**Gate unchanged: prototype the low-bit kernel on `sm_110a` before committing to a format.** If
+trellis decode converts a bandwidth-bound decode into a compute-bound one, the whole path must
+reroute to a format with hardware unpack, and that is cheap to discover first.
+
 ## 5. Biggest model at acceptable decode, by configuration
 
 | configuration | biggest model | est. decode |
