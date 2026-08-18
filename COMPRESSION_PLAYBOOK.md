@@ -207,6 +207,60 @@ ambiguous — possibly more robust to 4-bit, possibly already at the edge with n
 [TWLA 1.58-bit PTQ](https://arxiv.org/pdf/2606.13054) · [PT2-LLM](https://arxiv.org/html/2510.03267) ·
 [PTQ1.61](https://arxiv.org/html/2502.13179)
 
+## 5c. The casual-budget path (the $25-35k figure is optional)
+
+That budget buys one thing only: **pushing past validated pruning rates**. Everything at validated
+rates is nearly free, and the highest-value moves cost nothing.
+
+### Tier 0 — $0, on hardware already owned. Most of the value is here.
+
+1. **Requantise the incumbent.** ~4.5 bits effective today (101 GiB / ~180B). GPTQ/AWQ/QTIP all
+   work **layer-by-layer** — one layer in VRAM at a time, the rest streamed from the desktop's
+   128 GB RAM and SSD, which is exactly what a 3090 + 128 GB box is for. To 3.5 bits: **~28% more
+   decode, ~22 GiB freed**, zero capability risk.
+2. **Finish the draft head (S5).** `tokens_per_verify` is **2.689** (**measured**). tau is a pure
+   multiplier and a draft head is a *small* model, trainable on the 3090. 2.7 -> 3.5 is **~30%**,
+   and `S5_RECIPE.md` / `HEAD_REGISTRY.md` already exist.
+3. **FP8 KV.** Frees memory, which buys a larger draft head, which raises tau further. Compounds
+   with both of the above.
+
+**Together plausibly 1.7-1.9x on the existing model** — ~10-24 tok/s to **~17-45 tok/s**. No new
+model, no new evaluation burden, no money. **Larger than any model swap currently on the table**,
+and it is the delta forfeited by chasing GLM first.
+
+### Tier 1 — $0-300
+
+**Wait for the community REAP.** `0xSero` published this repo's own DSV4-Flash-0731-REAP as well as
+GLM-5.2-REAP-504B and GLM-5.2-REAP-NU176-526B. GLM-5.3 shares 5.2's base so the recipe transfers; a
+5.3 REAP will plausibly appear within weeks of the ~2026-08-28 weight drop, making the expensive
+step free.
+
+**The catch:** community REAP ships at 34% (504B), and 504B at 2-bit is 126 GB — still over Thor's
+~107 GB. Reaching ~50% requires an incremental prune of an already-pruned model. REAP is one-shot
+with forward passes only, so that is feasible **locally, layer-by-layer on the 3090** — slow but
+free. **Unmeasured risk: two stacked prunes may be worse than one clean 50% prune.** Nobody has
+published that comparison.
+
+Renting an 8xH100 node for a single clean pruning pass is a few hours at ~$20-30/hr — **$100-250**.
+
+### Tier 2 — $500-1000
+
+Light distillation recovery, ~1B tokens rather than 50B. Student side ~167 H100-hours (~$350-500);
+teacher logits ~$200-400. Enough to make validated-rate pruning solid; **not** enough for 73-85%.
+
+### Out of reach on a casual budget
+
+DeepSeek V4 Pro, Qwen3.8 2.4T and Kimi K3 all require 73-85% pruning with full recovery training.
+There is no cheap version — that budget exists precisely to buy past what one-shot methods do.
+
+### Recommended order
+
+**Tier 0, in order, and stop.** Requantisation and the draft head are free, compound, carry no
+capability risk, and validate the kernels and the KL harness against a model with existing ground
+truth. If they reach ~40 tok/s on DSV4-Flash-REAP the GLM question becomes much less urgent; if
+they do not, the bandwidth-efficiency gap is located before any money is spent. Reassess when a
+GLM-5.3 REAP appears, which costs only patience.
+
 ## 6. Verdict and sequencing
 
 1. **GLM-5.3 at REAP-50% + QTIP ~2.3-bit is the one defensible target.** Actionable when weights
