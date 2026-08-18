@@ -122,6 +122,91 @@ on traces that hit the cap). **Do not use it as the search metric.**
    feedstock; it is the calibration corpus that makes prune and quant minimally lossy *on this
    workload* rather than on generic text.
 
+## 5b. The four trillion-scale candidates, at maximum compression effort
+
+Surveyed 2026-08-18 for Qwen3.8 2.4T-A96B, DeepSeek V4 Pro 0813, Kimi K3 and GLM-5.3, assuming
+cloud rental for the compression work.
+
+### Two independent constraints, and different levers fix each
+
+**Footprint** decides residency; **active params** decide speed. Expert pruning leaves top-k
+unchanged, so it does **not** reduce active params.
+
+| lever | cuts footprint | cuts active |
+|---|:---:|:---:|
+| inter-expert pruning (REAP, ConMoE, attribution-guided) | yes | **no** |
+| intra-expert slimming (SlimMoE, FlexMoE nested, MoE-SVD / D2-MoE / TD-MoE) | yes | **yes** |
+| quantisation | yes | yes |
+| top-k reduction | **no** | yes |
+
+**The PTQ floor is ~2 bits** (*searched*). Sub-2-bit PTQ exists — TWLA at 1.58-bit weights, PT2-LLM
+ternary, PTQ1.61 — but the literature reports **significant degradation below 2 bits, "a
+performance gap of almost half"**. BitNet-style 1.58-bit requires QAT from scratch and does not
+scale past ~3B. Treat 2 bits as the floor for "loses virtually nothing".
+
+### The arithmetic against Thor's ~107 GB
+
+| model | total @2-bit | prune needed | active @2-bit | roofline |
+|---|---:|---:|---:|---:|
+| **GLM-5.3** 744B-A40B | 186 GB | **42%** (inside validated) | 10.0 GB | **24 tok/s** |
+| **DSV4 Pro** 1.6T-A49B | 400 GB | **73%** | 12.25 GB | **19.6 tok/s** |
+| **Qwen3.8** 2.4T-A96B | 600 GB | **82%** | 24 GB | **10 tok/s** |
+| **Kimi K3** 2.78T-A104B | 695 GB | **85%** | 26 GB | **9.2 tok/s** |
+
+**This splits them cleanly.** GLM-5.3 and DSV4 Pro are *footprint-limited only* — active params are
+already acceptable, so expert pruning plus 2-bit quantisation suffices with no architectural
+surgery. **Qwen3.8 2.4T and Kimi K3 fail the ACTIVE test even with infinite pruning**: ~10 tok/s
+roofline is 2.5-5 tok/s at real efficiency, and speculation is fanout-damped. Fixing them requires
+cutting active params — top-k reduction (K3's top-16 -> ~top-6) or intra-expert slimming — a fourth
+compounding lossy transform that changes the computation per token, not just the pool.
+
+### The maximal stack, in the order the literature requires
+
+1. **Progressive, multi-stage, never one-shot.** SlimMoE is explicit that removing a large fraction
+   at once "can result in substantial performance degradation that may hinder distillation
+   effectiveness". At 73-85% this is the difference between working and not.
+2. **Inter-expert pruning** — REAP router-weighted, attribution-guided coverage-maximised, or
+   ConMoE/LightMoE *merging* rather than deletion (merging preserves more capacity per parameter).
+3. **Intra-expert slimming** where active must fall — SlimMoE, FlexMoE nested pruning, or tensor
+   decomposition (MoE-SVD, D2-MoE, TD-MoE).
+4. **Router calibration — mandatory, not optional.** "Is Retraining-Free Enough?" answers no.
+   GLM-5.2's REAP already does the cheap version at 0.016% of parameters.
+5. **Distillation recovery** — SlimMoE reaches high ratios with **<10% of the original training
+   data**, which is what makes this rentable rather than a pretraining budget.
+6. **Quantisation last** — QTIP/AQLM at 2-2.5 bit with sensitivity-mixed precision.
+7. **Low-rank residual + QAT** to recover quantisation loss.
+
+Anchoring precedent: **SlimQwen took Qwen3-Next-80B-A3B to 23B-A2B** — ~4x total *and* active —
+with competitive downstream performance. That is the shape of the operation being proposed.
+
+### Ranking
+
+1. **GLM-5.3 — the only candidate needing no unvalidated step.** 42% pruning sits inside REAP's
+   validated 50%; 2-bit sits inside QTIP's demonstrated range; A40B gives a 24 tok/s roofline.
+   Rough cloud cost for full distillation recovery on a ~372B student: **$25-35k**, dominated by
+   teacher-logit generation. An engineering project.
+2. **DeepSeek V4 Pro — plausible, one unvalidated axis.** 73% pruning is ~1.5x beyond validated but
+   active params are fine and everything else is known technique. Progressive pruning plus
+   SlimMoE-style recovery is precisely the untested regime. A research bet with a defined failure
+   mode.
+3. **Qwen3.8 2.4T and Kimi K3 — research projects.** Both need 82-85% pruning *and* active-param
+   surgery: four compounding lossy transforms.
+
+**Counterpoint held for K3:** 896 experts at top-16 is the most redundant pool of the four, and
+pruning to 134 experts still leaves a sane top-16-of-134 configuration, so per-expert removal may
+be more tolerable there than on a 256-expert model. Its native MXFP4 training is genuinely
+ambiguous — possibly more robust to 4-bit, possibly already at the edge with no headroom. Unknown.
+
+### Sources for this section
+
+[SlimMoE](https://arxiv.org/pdf/2506.18349) · [SlimQwen](https://arxiv.org/pdf/2605.08738) ·
+[FlexMoE](https://arxiv.org/pdf/2606.27866) · [ConMoE](https://arxiv.org/pdf/2605.29350) ·
+[LightMoE](https://arxiv.org/pdf/2603.12645) ·
+[router calibration necessity](https://arxiv.org/pdf/2603.02217) ·
+[attribution-guided pruning](https://arxiv.org/pdf/2606.18304) ·
+[TWLA 1.58-bit PTQ](https://arxiv.org/pdf/2606.13054) · [PT2-LLM](https://arxiv.org/html/2510.03267) ·
+[PTQ1.61](https://arxiv.org/html/2502.13179)
+
 ## 6. Verdict and sequencing
 
 1. **GLM-5.3 at REAP-50% + QTIP ~2.3-bit is the one defensible target.** Actionable when weights
