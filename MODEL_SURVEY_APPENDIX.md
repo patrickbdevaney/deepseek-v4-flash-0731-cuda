@@ -1,0 +1,162 @@
+# Appendix: candidate models for a local agentic-coding stack on Jetson AGX Thor
+
+Survey date **2026-08-18**. Companion to `MODEL_INVENTORY.md` (what is on disk) and `HARDWARE.md`
+(what the box actually does). This is the *forward-looking* list: what to run next, and why.
+
+**Provenance of every number below, because they are not all the same kind of fact.**
+
+| marking | means |
+|---|---|
+| **measured** | from this box, reproducible via the named tool |
+| *searched* | from a public source dated 2026, cited at the bottom; several are aggregator sites, not primary evals — directional only |
+| (analysis) | derived here from the roofline; not measured, and flagged where it is checkable |
+
+The assistant's training cutoff is May 2026, so **every model named here post-dates reliable
+parametric knowledge** and was taken from search rather than recall. Treat vendor and aggregator
+benchmark claims as claims.
+
+## 1. The envelope
+
+**measured** (`HARDWARE.md`, `tools/bw_probe.cu`):
+
+* unified memory **122 GiB total, 117 GiB available at rest** — `free` is authoritative on Thor,
+  `nvidia-smi` reports `Not Supported` for memory
+* **240 GB/s achievable streaming bandwidth**, 212 GB/s under contention, against 273 GB/s spec
+
+Decode is bandwidth-bound, so the governing equation is
+
+    tok/s  ~=  BW / bytes_read_per_forward  x  tau        (tau = accepted tokens per verify)
+
+At NVFP4 (~0.5 bytes/param plus scale overhead) that fixes a hard ceiling per model before any
+kernel work. Weights resident sets the *fit*; active params set the *speed*.
+
+## 2. The correction that reframes MoE vs dense (analysis)
+
+The usual claim is that an MoE buys big-model breadth at small-model speed. **That claim degrades
+once a speculator is in the loop, and it degrades only for the MoE.**
+
+A dense model reads the same weights whether it verifies 1 token or 5, so tau passes through
+nearly intact. An MoE verifying K tokens must read the *union* of the experts those K tokens route
+to — roughly `min(E, K*k)` experts — so bytes per forward grows with K until it saturates toward
+reading most of the expert set. The MoE's speculative speedup is damped; the dense model's is not.
+
+The supporting observation is local and is not a citation: **Qwen3.6-27B dense (17.8 tok/s
+roofline) and Qwen3.5-122B-A12B (40 tok/s roofline) both land near 50 tok/s under DFlash.** The
+model with the 2.2x worse roofline closed the entire gap. Expert fanout under speculation is the
+most plausible explanation.
+
+**This is checkable and should be checked** before it is trusted: the `spec_profile` histogram in
+`build/dsv4-server.staged` gives the joint (realised verify width, accepted prefix length)
+distribution. Bytes-per-verify plotted against verify width would show the saturation curve
+directly.
+
+**Counterweight specific to DSV4** — `dsv4-0731-cuda-server.md` records that **MLA is 41% of
+B_tok, not the MoE**. Where attention is that large a share, expert fanout is not the dominant
+term, and FP8 KV is a bigger lever than the fanout argument suggests. Do not generalise one
+model's bottleneck to the class.
+
+## 3. In-envelope candidates
+
+Roofline is `240 / (active_B * 0.5)` (analysis). Resident is `total_B * 0.5` plus ~10% for scales
+and embeddings (analysis). Benchmarks are *searched*.
+
+| model | params | resident NVFP4 | roofline tau=1 | attention | context | note |
+|---|---|---:|---:|---|---:|---|
+| **Qwen3.8-27B** | 27B dense | ~15 GB | 17.8 tok/s | 3x Gated DeltaNet : 1x full GQA, 16 of 64 layers full | 262K, ~1M YaRN | multimodal; same backbone as a 2.4T MoE flagship |
+| **Nemotron 3.5 Lightning** | 30B-A3B | ~17 GB | 160 tok/s | Mamba-2 + MoE + attention hybrid | 1M | **published vLLM + DSpark recipe tuned for GB10** |
+| **Muse Glimmer** (Meta) | 30B dense | ~17 GB | 16 tok/s | not established | 120K+ | NVFP4 "coming soon" as of the NVIDIA post |
+| **Nemotron 3 Super** | 120B-A12B | ~66 GB | 40 tok/s | not established | not established | released 2026-03-11, aimed at agentic |
+| **Ling 3.0 Flash** | 124B-A5.1B | ~68 GB | **94 tok/s** | Kimi Delta Attention : gated MLA at 5:1 | 262K | highest roofline in the fit-on-Thor class |
+| **Laguna S 2.1** | 118B-A8.5B | ~65 GB | 56 tok/s | not established | 1M | **NVFP4 published by Poolside**; Terminal-Bench 2.1 70.2 |
+| **DSV4-Flash-0731-REAP** | ~180B-A13B | **101 GiB measured** | 37 tok/s | MLA / DSA | 32K at FP32 KV (**seqmax measured**) | the incumbent; **10-24 tok/s measured** |
+
+Reported figures for Qwen3.8-27B (*searched*): LiveCodeBench v6 90.3, SWE-bench Pro 61.7,
+Terminal-Bench 2.1 **73.0**, Artificial Analysis Agentic Index 51 — reportedly above Claude Opus
+4.8 at maximum reasoning effort. Note it reportedly **beats Laguna S 2.1 on Terminal-Bench 2.1
+(73.0 vs 70.2) at ~4.4x fewer total parameters**, which is evidence that training quality is
+currently dominating parameter count in this band, and a caution against buying breadth by size
+alone.
+
+## 4. Out of envelope — and why the REAP line matters
+
+The genuine frontier open-weights do not fit this box at any 4-bit quantisation (*searched*):
+
+| model | params | resident at NVFP4 | verdict |
+|---|---|---:|---|
+| Kimi K3 | 2.8T, 16 of 896 experts | ~1.4 TB | 12x over |
+| DeepSeek V4 Pro | 1.6T-A49B | ~800 GB | 7x over |
+| GLM-5.2 | 744B-A40B | ~372 GB | 3x over |
+| Nemotron 3 Ultra | 550B-A55B | ~275 GB | 2.3x over |
+
+**So expert pruning is not a curiosity on this hardware — it is the only path to frontier-lineage
+breadth.** That is the strategic justification for the DSV4-Flash-0731-REAP programme independent
+of how its eval lands.
+
+REAP (Router-weighted Expert Activation Pruning, Cerebras + University of Calgary, ICLR 2026) is
+one-shot and post-training, no fine-tuning. Reported fidelity at **50% expert pruning** on
+Qwen3-480B-Coder-FP8: **97.6% of baseline non-agentic coding, 96.7% on agentic SWE-Bench**
+(*searched*). The Cerebras HuggingFace collection carries pruned GLM-4.6, GLM-4.5-Air,
+Qwen3-Coder-480B, Qwen3-Coder-30B, MiniMax-M2, Kimi-Linear and DeepSeek-V3.2.
+
+Those published fidelity numbers are also the **honest prior for our own eval**: if the REAP under
+test lands within a few points of the unpruned parent on matched harness and settings, that is the
+expected result, not a surprise. A large gap would be the finding.
+
+## 5. Recommendation
+
+**Run Qwen3.8-27B NVFP4 + DFlash as the Claude Code substitute candidate.** It wins on three axes
+simultaneously rather than trading between them:
+
+1. full dense forward pass every token — no routing approximation on the frontier-planning and
+   novel-algorithm work that is the whole point
+2. the 3:1 GDN hybrid means only 16 of 64 layers carry a growing KV cache, so 15 GB of weights
+   leaves **~100 GiB for context and a draft model**; long-horizon agents stop being memory-bound
+3. dense means speculation multiplies cleanly (§2), so the 50 tok/s already measured on the 3.6
+   generation is a floor
+
+Its honest cost is parametric breadth. 27B holds less biology, genetics, quantum and quantitative
+finance than 180B-A13B, and that is exactly the spread the operator cares about.
+
+**Keep DSV4-REAP as the breadth instrument, not the daily driver**, and finish its eval — it
+answers the REAP-fidelity question, which is a prerequisite for the whole pruning strategy above.
+
+**Add Ling 3.0 Flash to the shortlist.** At a 94 tok/s roofline with KDA + gated MLA it is the only
+in-envelope model that could plausibly reach triple-digit decode here. A5.1B is a real quality risk
+— it is the same shape as the Qwen3.6-35B-A3B failure mode, too few active parameters to reason
+confidently off the CoT rails — but that is cheap to falsify and worth knowing.
+
+**Nemotron 3.5 Lightning is the cheapest experiment on the list**, because NVIDIA published a vLLM
+recipe with **DSpark speculative decoding tuned for GB10**. Thor is not GB10, but it is the closest
+published tuning target to this hardware, and it is the only entry here that arrives with a
+speculator already fitted.
+
+## 6. The axis nobody benchmarks, and which this repo already measures
+
+For an agentic substitute the figure of merit is not decode rate and not accuracy. It is
+
+    effective throughput  =  tok/s  /  tokens_to_answer
+
+A model at 50 tok/s that answers in 800 tokens beats one at 100 tok/s that spirals for 3000.
+`tools/eval_suite.py --report` already emits the numerator's denominator as the `mean tok` column.
+**measured**, DSV4 at low effort: math500 940, mmlu_pro 1948, gpqa_diamond 3717, lcb 5578. The lcb
+row truncating at 59% is a CoT-efficiency failure, not a capability failure.
+
+When the Qwen3.8-27B leg runs under matched local config — same harness, same effort, same item
+set, same `eval_extend` policy — **that ratio is what should decide the comparison.** Record
+tokens-to-answer as a first-class result alongside accuracy, not as a footnote.
+
+## Sources
+
+Qwen3.8-27B: [architecture](https://www.mindstudio.ai/blog/qwen3-8-27b-architecture-benchmarks) ·
+[vLLM recipe](https://recipes.vllm.ai/Qwen/Qwen3.8-27B) ·
+[benchmarks](https://www.orcarouter.ai/blog/qwen-3-8-27b-benchmarks) ·
+[VentureBeat](https://venturebeat.com/technology/qwen3-8-27b-runs-frontier-class-coding-agents-and-reasoning-locally-no-cloud-api-required).
+Ling 3.0 Flash: [guide](https://www.aimadetools.com/blog/ling-3-0-flash-complete-guide/).
+Laguna S 2.1: [NVFP4 weights](https://huggingface.co/poolside/Laguna-S-2.1-NVFP4) ·
+[release](https://www.marktechpost.com/2026/07/21/poolside-releases-laguna-s-2-1/).
+Nemotron: [3.5 Lightning](https://www.marktechpost.com/2026/08/11/nvidia-ai-releases-nemotron-3-5-lightning-and-nemo-switchyard/) ·
+[NVIDIA local agents](https://blogs.nvidia.com/blog/local-ai-open-source-models-agents-nemotron/).
+Frontier scale: [Kimi K3 vs DeepSeek V4 Pro vs GLM-5.2](https://www.marktechpost.com/2026/07/18/kimi-k3-vs-deepseek-v4-pro-vs-glm-5-2-open-trillion-scale-moe-models-compared-on-benchmarks-license-and-serving-cost/).
+REAP: [Cerebras blog](https://www.cerebras.ai/blog/reap) ·
+[repo](https://github.com/CerebrasResearch/reap) ·
+[HF collection](https://huggingface.co/collections/cerebras/cerebras-reap).
