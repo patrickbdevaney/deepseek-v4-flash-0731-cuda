@@ -232,21 +232,84 @@ limit.** The binding constraint is active-parameter count, not the disk.
 ### The conclusion: residency is the whole game
 
 At ~107 GB usable for weights the reachable envelope is 214B params at 4-bit, 285B at 3-bit, 428B
-at 2-bit. So:
+at 2-bit. **CORRECTED 2026-08-18 — an earlier version of this section reasoned from REAP-50% and
+REAP-75%. Neither rate exists in released artifacts, and 75% is ~2x beyond anything validated.**
+The real rates (*searched*):
 
-* **GLM-5.2 744B-A40B at REAP-50% -> 372B** needs ~2.3 bits to fit. Cerebras already publishes
-  REAP'd GLM-4.6 and GLM-4.5-Air, and validated 50% pruning at 97.6% coding retention.
-* **DeepSeek V4 Pro at REAP-75% -> 400B at 2-bit ~= 100 GB.** Far past the validated 50%, so
-  quality there is genuinely unknown.
+| checkpoint | experts kept | pruned | result |
+|---|---|---:|---|
+| `0xSero/DeepSeek-V4-Flash-0731-REAP` (the incumbent) | 160 of 256, top-6 preserved | **37.5%** | ~180B, **fits at NVFP4 (101 GiB measured)** |
+| GLM-5.2 REAP | 168 of 256 | **34%** | ~504B from ~744B |
+| DeepSeek V4 Pro | — | — | **no REAP exists** |
 
-The payoff for getting resident is large and discontinuous: DeepSeek V4 Pro's A49B at 2-bit is
-12.25 GB/token -> **19.6 tok/s at the roofline, ~49 tok/s at tau = 2.5**, because once resident,
-speculation flips from liability back to multiplier.
+Re-running the GLM path at its real pruning rate: 504B is 252 GB at NVFP4, 189 GB at 3-bit,
+**126 GB at 2-bit — still over the ~107 GB budget.** Fitting it needs ~1.70 bits/param. **The GLM
+swap is not marginal, it is off the table at published rates**, before even reaching the separate
+point that unpruned DeepSeek-V4-Flash-0731 already beats GLM-5.2 on benchmarks, so only GLM-5.3
+would justify a move.
 
-**Strategic consequence: the question is whether the model can be made to fit, not how cleverly it
-can be streamed.** A trillion-scale model is interactive the moment it is resident and stuck at
-1-2 tok/s the moment it is not. That is the REAP thesis, and it makes the fidelity eval in this
-repo load-bearing for a strategy much larger than the single checkpoint under test.
+**Consequence: DeepSeek-V4-Flash-0731-REAP is at or very near the frontier of what actually fits
+117 GiB today.** Nothing larger is currently reachable as a download.
+
+Note also that GLM-5.2's REAP is not one-shot: the network is frozen and only the 75 router gate
+matrices (~0.016% of parameters) are trained to KL-match the unpruned teacher's next-token
+distribution. That is the lever most likely to push viable pruning past 37.5%, and it is cheap.
+
+### The 2-bit path has an ecosystem problem, not just a quality one
+
+`dspark-decode-gap-research` records that **sm_110a has FP4x2 hardware unpack but no tcgen05**.
+There is no 2-bit hardware unpack path, so a 2-bit GGUF means llama.cpp dequant kernels and
+forfeiting the FP4 tensor-core path this repo is built against. Decode is bandwidth-bound so
+halving bytes should still net positive, but it trades a hardware-accelerated format for a software
+one on a chip already running at ~25% bandwidth efficiency. **Measure before assuming.**
+
+### Residency-constrained speculation: correct idea, defeated by layer depth
+
+A natural mitigation for the fanout tax in the previous section is to speculate only where routing
+stays resident. It is implementable — routers are cheap, so all K draft positions' routing is known
+before the expert weights are needed, and positions touching a non-resident expert can be dropped
+from the verify batch at that layer onward (legal, since speculative decoding commits only a
+prefix; the wasted compute on earlier layers is free because compute is not the bottleneck).
+
+**It fails on depth compounding.** A token survives only if every layer's routed experts are
+resident, so with top-6 routing over ~60 MoE layers survival is `(h_expert^6)^60`:
+
+| h_expert | per-layer | survives 60 layers |
+|---:|---:|---:|
+| 0.98 | 0.886 | 0.08% |
+| 0.995 | 0.970 | 16% |
+| 0.9983 | 0.990 | 55% |
+
+You need ~99.8% per-expert residency before it buys anything, at which point you are resident
+anyway. **The trick cannot bootstrap out of the streaming regime.**
+
+The unconstrained version loses too, and the bound is tight: for top-6 of 160 the expert union at
+K=4 is ~22.6 experts against 6 for a single token (**3.8x fanout**) needing tau > 3.8 where typical
+tau at K=4 is 2.5-3; at K=2 it is 1.96x fanout against tau ~ 1.7-1.8. **Slightly losing at every
+K**, so the conclusion is structural rather than an artifact of a chosen depth.
+
+### SSD read wear is a non-issue
+
+NAND endurance is consumed by program/erase cycles, not reads. Weight streaming is a pure-read
+workload against static files; read-disturb accumulates over hundreds of thousands of reads between
+rewrites and the controller refreshes long before it matters. **The objection to streaming is
+throughput and only throughput.**
+
+### What could actually move the calculus
+
+In ascending cost:
+
+1. **A smaller frontier release.** Ling 3.0 Flash and Nemotron 3 Super already fit unpruned; the
+   open question is whether their quality reaches DSV4-Flash-REAP's.
+2. **`0xSero/DeepSeek-V4-Flash-162B`**, a smaller sibling that buys KV headroom and room for a
+   larger draft model at some quality cost.
+3. **Prune it locally.** `CerebrasResearch/reap` and `egesabanci/reap-cuda` exist, and the
+   router-gate KL distillation above shows the technique has moved past one-shot. This is the only
+   path to a 1.6T-lineage model on this box, and it is real work rather than a download.
+
+**Whether (3) is worth attempting is answered by the eval already running.** If REAP loss at 37.5%
+is genuinely small, extrapolating to deeper pruning is a defensible bet; if it is not, the whole
+strategy is refuted for free.
 
 ### Two measurements that would firm this up
 
