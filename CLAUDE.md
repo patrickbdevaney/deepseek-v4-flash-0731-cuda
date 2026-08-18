@@ -20,6 +20,22 @@ a session-bound process is correct. Do not detach work that needs a driver. Head
 the third option when work needs steering but must not be tied to an interactive terminal; the
 operator and Claude decide together when that is worth it.
 
+**The gap was structural, not an operator slip — and it is now closed.** `scripts/run_model.sh`
+has said since it was written that the benchmark must be "DETACHED. setsid+nohup so an SSH drop or
+a killed shell never leaves the GPU wedged". The server path never inherited that:
+`grep -c 'setsid\|nohup' scripts/serve.sh scripts/with_model_lock.sh` returns **0 and 0**, so
+whether the engine survived depended entirely on how the caller invoked it. Sanctioned launchers,
+all of which detach and then *prove* it:
+
+| use | launcher |
+|---|---|
+| the decode benchmark | `scripts/run_model.sh` |
+| the server alone | `scripts/run_server.sh` |
+| the whole eval programme | `scripts/eval_resume.sh` (idempotent; also starts every dependent stage) |
+
+`serve.sh` is deliberately left foreground-capable for debugging. The rule is that anything
+long-running goes through a launcher that detaches.
+
 **Verify parentage, not intent.** Detachment is a property of the process tree, not of how the
 launch command was written. `bash scripts/detach_audit.sh` checks it. PPID must be `1` or
 `systemd --user`, TTY must be `?`, and the session id must not be the launching shell's.

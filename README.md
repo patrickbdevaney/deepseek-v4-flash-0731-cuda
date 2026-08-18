@@ -93,6 +93,10 @@ not 233. See `wiki/measurement-and-traps.md`.
 | `ARTIFACTS.md` | **where the draft-head weights live**, and which directory to upload |
 | `protocol/suite_prompts.txt` | the frozen 8-prompt eval suite, as token ids |
 | `DECODE_FLYWHEEL.md` | the autonomous optimisation loop's operating manual |
+| `MODEL_SURVEY_APPENDIX.md` | **which other models fit this box**, what they would decode at, why the frontier open-weights do not fit at any 4-bit quantisation, and why weight streaming cannot rescue them |
+| `COMPRESSION_PLAYBOOK.md` | how to get a frontier MoE *resident*: the prune/quant/distill method space, which corners are arithmetically reachable, and the cheap KL-sweep protocol |
+| `EVAL_BUDGET_PROTOCOL.md` | how to choose `max_tokens` — the needed budget is not identifiable from a run at a budget that is too small |
+| `CLAUDE.md` | operating rules: **detachment** for unattended work, and why a stage that "completes" against a dead engine is worse than one that dies |
 
 ## The model
 

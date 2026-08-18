@@ -40,13 +40,26 @@ while read -r pid; do
   pcmd=$(ps -o comm= -p "$ppid" 2>/dev/null | tr -d ' ')
   n=$((n+1))
 
-  # Safe: reparented to init (1), or a direct child of the user manager, or of another already
-  # detached stage in this chain (eval_watch and run_evals are children of eval_supervise).
+  # SAFE IS A PROPERTY OF THE WHOLE ANCESTRY, NOT THE IMMEDIATE PARENT. Walk up from the process:
+  # it is detached if the chain reaches PID 1 or the user systemd manager without passing through
+  # anything that dies with a login -- a controlling terminal, an sshd, or a Claude Code session.
+  # Checking only the immediate parent was wrong and produced a false positive on
+  # `eval_suite.py --task`, whose parent run_evals.sh is itself perfectly detached.
   ok=0
-  [ "$ppid" = "1" ] && ok=1
-  [ "$pcmd" = "systemd" ] && ok=1
-  case "$(ps -o args= -p "$ppid" 2>/dev/null)" in *eval_supervise.sh*|*with_model_lock*) ok=1;; esac
-  # A controlling terminal means it is attached to somebody's session, whatever the parent says.
+  anc="$pid"
+  for _ in $(seq 1 24); do
+    anc=$(ps -o ppid= -p "$anc" 2>/dev/null | tr -d ' ')
+    [ -n "$anc" ] || break
+    if [ "$anc" = "1" ]; then ok=1; break; fi
+    acomm=$(ps -o comm= -p "$anc" 2>/dev/null | tr -d ' ')
+    atty=$(ps  -o tty=  -p "$anc" 2>/dev/null | tr -d ' ')
+    case "$acomm" in systemd) ok=1;; esac
+    [ "$ok" = "1" ] && break
+    # anything with a controlling terminal, or an ssh/login/claude session, is a death sentence
+    case "$acomm" in sshd|login|claude|node) ok=0; break;; esac
+    [ "$atty" = "?" ] || { ok=0; break; }
+  done
+  # A controlling terminal on the process ITSELF is disqualifying whatever the ancestry says.
   [ "$tty" = "?" ] || ok=0
 
   if [ "$ok" = "1" ]; then
