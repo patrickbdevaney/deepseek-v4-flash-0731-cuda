@@ -3,3 +3,5 @@
 Terminated
 [supervise 2026-08-14T13:32:46-04:00] run_evals exited rc=143 without completing; resuming after a pause
 [supervise 2026-08-14T13:33:46-04:00] battery attempt 1
+[supervise 2026-08-18T14:06:08-04:00] starting watcher (lands + commits + pushes each finished benchmark)
+[supervise 2026-08-18T14:06:08-04:00] battery attempt 0

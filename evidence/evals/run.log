@@ -2181,3 +2181,6 @@ from typing im     run=48/115 stop 8.3 tok/s (1244.1 min)
   [161/175] lcb-3736 gold=pass got=class Solution:
     def  OK  run=76/161 stop 18.4 tok/s (1674.3 min)
   [162/175] lcb-3743 gold=pass got=<think>We need to provid     run=76/162 stop 8.8 tok/s (1689.6 min)
+=== preflight 2026-08-18T14:06:08-04:00
+  [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=0
+  [PASS] PROVENANCE  published dataset facts verified locally     19 checks; see evidence/evals/provenance.json
