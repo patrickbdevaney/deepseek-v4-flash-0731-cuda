@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "mmlu_pro",
+      "task": "scicode",
       "effort": "low",
-      "records": 150,
-      "recomputed_acc": 73.33,
-      "published_acc": 73.3,
-      "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
-      "source": "TIGER-Lab/MMLU-Pro (test, 12032)"
+      "records": 291,
+      "recomputed_acc": 30.24,
+      "published_acc": 30.2,
+      "snapshot": "4510f6a6aa27c43fad7b43da2c59602a86e88480",
+      "source": "SciCode1/SciCode (test, 65 problems, 291 subproblems)"
     }
   ],
   "failed": 0
