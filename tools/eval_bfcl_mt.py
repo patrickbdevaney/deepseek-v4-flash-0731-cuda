@@ -306,6 +306,7 @@ def main():
 
     nok = len(done) and sum(1 for line in open(path) if json.loads(line).get('correct'))
     t0 = time.time()
+    nrun = ntok = ndead = 0
     with open(path, 'a') as fo:
         for i, it in enumerate(todo):
             clear_state(it['id'])
@@ -314,6 +315,17 @@ def main():
                 continue
             per_turn, st = run_item(it, a.host, a.max_tokens, a.timeout,
                                     lambda m: print(m, flush=True))
+            nrun += 1
+            ntok += st['completion_tokens']
+            # AN ITEM THAT GENERATED NOTHING DID NOT MEASURE THE MODEL. Zero steps and zero
+            # completion tokens means every request for this item failed at the transport --
+            # the engine was unreachable, not the model wrong. Writing it would bank a wrong
+            # answer AND make the resume skip it, because resume keys off ids already on disk.
+            if st['steps'] == 0 and st['completion_tokens'] == 0:
+                ndead += 1
+                print(f'  [{i+1}/{len(todo)}] {it["id"]:28s} DEAD  no tokens generated — '
+                      f'not scored, not written, will retry on resume', flush=True)
+                continue
             try:
                 good, r = score(per_turn, g, it, a.category)
             except Exception as e:
@@ -344,7 +356,23 @@ def main():
             print(f'  [{i+1}/{len(todo)}] {it["id"]:28s} {"OK " if good else "   "} '
                   f'turns={len(it["question"])} steps={st["steps"]:2d} '
                   f'tok={st["completion_tokens"]:5d} run={nok} ({el:.1f} min)', flush=True)
-    print(f'{task}: {nok}/{len(done) + len(todo)} correct')
+    print(f'{task}: {nok}/{len(done) + len(todo)} correct '
+          f'({ndead} dead of {nrun} attempted)')
+
+    # A DEAD ENGINE MUST NOT LOOK LIKE A SCORE OF ZERO. On 2026-08-17 an SSH drop killed the
+    # server; every request here failed with ECONNREFUSED, every item "scored" 0 with 0 tokens,
+    # and this returned 0. So the smoke gate in eval_bfcl_mt_run.sh passed, the 400-item "full"
+    # run finished in two minutes, and two rows of pure transport failure were committed and
+    # pushed as published results. The smoke gate can only protect the run if a broken run is
+    # actually a non-zero exit.
+    if nrun and not ntok:
+        print(f'{task}: ABORT — {nrun} items attempted and the engine produced ZERO tokens. '
+              f'That is a transport failure, not a score.', file=sys.stderr)
+        return 2
+    if nrun and ndead / nrun > 0.05:
+        print(f'{task}: ABORT — {ndead}/{nrun} items ({ndead/nrun:.0%}) generated no tokens at '
+              f'all. Refusing to report a run this damaged as a score.', file=sys.stderr)
+        return 2
     return 0
 
 
