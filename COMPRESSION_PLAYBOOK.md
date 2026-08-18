@@ -260,6 +260,57 @@ The first two leave the weights untouched, so neither invalidates a running eval
   model on held-out tokens** (§5), which resolves far below the battery's resolution and costs
   almost nothing.
 
+### Tier 0b — CORRECTION: doing our own REAP is affordable, and the source is FP8
+
+Established 2026-08-18 by inspecting the upstream cards (*searched*):
+
+* **`deepseek-ai/DeepSeek-V4-Flash-0731` is 304B total with tensor types `BF16, F32, F8_E4M3, I8`
+  — FP8-native.** A higher-precision source than MXFP4 therefore **exists**, so the compounding-error
+  objection in the section above is avoidable by working from the parent rather than from our
+  MXFP4 checkpoint.
+* **`0xSero/deepseek-v4-flash-0731-spark` is EXL3/Trellis at ~3.0 bits** for routed experts with
+  FP8 tensors preserved, REAP'd to **216 of 256 experts (15.6% pruned)**, 99.48 GiB, packaged for a
+  128 GB DGX Spark. Not usable here — EXL3 is ExLlamaV3's runtime, not a pure-CUDA `sm_110a` path —
+  but two things in it are valuable:
+
+  1. **A natural experiment against our own checkpoint**, same parent and essentially the same
+     footprint at the opposite Pareto point:
+
+     | | experts kept | bits | size |
+     |---|---|---:|---:|
+     | ours (K160) | 160/256 (**37.5% pruned**) | 4.25 | 100.4 GiB |
+     | spark | 216/256 (**15.6% pruned**) | 3.0 | 99.5 GiB |
+
+     That is a direct read on **which axis is cheaper — prune harder or quantise harder** — the
+     central open question of this document. It is also existence proof that **3-bit trellis works
+     on this architecture**, which is exactly what the `sm_110a` kernel gate is about.
+  2. **The calibration corpus is public**: `0xSero/deepseek-v4-flash-reap-observations-v2`, 21,289
+     rows including 2,253 agentic-tool and 4,096 tool-calling rows. That is the workload-matched
+     calibration set §3 argues for, already built for this model. **No need to generate our own.**
+
+**REAP is not the expensive part.** It is one-shot, **forward-only**, and layer-sequential: no
+backprop, no optimiser state, no teacher hosting. Cerebras' claim is that it needs no retraining up
+to 50%. Run layer-by-layer with cached activations (standard GPTQ practice) and it fits the desktop
+(analysis):
+
+* 304 GB FP8 parent on the 1 TB SSD, **streamed once** — ~100 s of I/O at ~3 GB/s
+* one layer (~5 GB) in 24 GB VRAM at a time
+* subsample calibration to a few hundred sequences, not all 21k rows -> activations ~14 GB, fits
+  in 64 GB RAM
+* compute is forward-only, order **hours on the 3090**
+
+**Cost: a 304 GB download and engineering time. $0 cloud.** What is genuinely unaffordable is
+*distillation recovery*, which is only required to exceed the validated 50% — not needed here.
+
+**Consequence.** One clean pass from FP8: prune *and* quantise from the parent directly into
+whatever format the kernels want, with agentic-matched calibration, **never touching MXFP4 in the
+middle**. No compounding error, our choice of block size and format, full provenance. Strictly
+better than requantising the existing checkpoint, and it makes the REAP-fidelity question the eval
+is answering apply to a pipeline we control end to end rather than to a third-party artifact.
+
+**The kernel gate still comes first** — decide the target format by prototyping it on `sm_110a`
+before committing a multi-hour pruning run to it.
+
 ### Tier 1 — $0-300
 
 **Wait for the community REAP.** `0xSero` published this repo's own DSV4-Flash-0731-REAP as well as
