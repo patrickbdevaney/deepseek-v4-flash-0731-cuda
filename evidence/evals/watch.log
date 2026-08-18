@@ -150,3 +150,15 @@ VERIFY: 0 failed -> PASS
   [PASS] math500        snapshot matches the published one       6e4ed1a2a79a vs 6e4ed1a2a79a
 
 VERIFY: 0 failed -> PASS
+[land] math500@low: 95.0% [88.8, 97.8] n=100/100 trunc=1 err=0 — verified, committed, pushed
+[watch] 2026-08-18T14:06:34-04:00 mmlu_pro finished — landing
+  [PASS] mmlu_pro       no duplicate records                     150 records, 150 unique
+  [PASS] mmlu_pro       every id exists in the benchmark         0 unknown
+  [PASS] mmlu_pro       gold matches the pinned dataset          0 mismatched
+  [PASS] mmlu_pro       prompt matches the one that was sent     150/150 records carry a hash; 0 mismatched
+  [PASS] mmlu_pro       no silent empty generations              0 empty
+  [PASS] mmlu_pro       stored correct flags reproduce           0 disagree
+  [PASS] mmlu_pro/low   published accuracy is reproducible       recomputed 73.3 % vs published 73.3 % over 150 records
+  [PASS] mmlu_pro       snapshot matches the published one       b189ec765aa7 vs b189ec765aa7
+
+VERIFY: 0 failed -> PASS

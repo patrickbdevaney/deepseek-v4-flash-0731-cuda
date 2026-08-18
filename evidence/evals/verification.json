@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "math500",
+      "task": "mmlu_pro",
       "effort": "low",
-      "records": 100,
-      "recomputed_acc": 95.0,
-      "published_acc": 95.0,
-      "snapshot": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
-      "source": "HuggingFaceH4/MATH-500 (500)"
+      "records": 150,
+      "recomputed_acc": 73.33,
+      "published_acc": 73.3,
+      "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+      "source": "TIGER-Lab/MMLU-Pro (test, 12032)"
     }
   ],
   "failed": 0
