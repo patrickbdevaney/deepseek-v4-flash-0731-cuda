@@ -248,6 +248,19 @@ swap is not marginal, it is off the table at published rates**, before even reac
 point that unpruned DeepSeek-V4-Flash-0731 already beats GLM-5.2 on benchmarks, so only GLM-5.3
 would justify a move.
 
+**GLM-5.3 status, and why waiting does not help** (*searched*, 2026-08-18). GLM-5.3 launched
+2026-08-14 through Zhipu's coding plan only; **open weights are expected on HuggingFace around
+2026-08-28** after their risk review. It reportedly gained ~50% coding capability over 5.2 and
+ranks first among open-source models on Terminal Bench 3.0 and Agents' Last Exam, so it is
+plausibly the strongest open coding model available.
+
+It does not change the arithmetic. **GLM-5.3 shares the same base as GLM-5.2** — its gains came
+from extended post-training, not a new pretraining run — so it carries the same 744B / 256-expert
+structure and a GLM-5.3 REAP inherits GLM-5.2's footprint exactly: 504B at 34% pruning, 126 GB at
+2-bit, against ~107 GB. **The GLM branch is closed structurally, not merely until the weights
+drop.** The one benefit of the shared base is that the existing REAP recipe and the router-gate KL
+distillation transfer directly; only the teacher changes.
+
 **Consequence: DeepSeek-V4-Flash-0731-REAP is at or very near the frontier of what actually fits
 117 GiB today.** Nothing larger is currently reachable as a download.
 
