@@ -11,7 +11,7 @@ fits) and `COMPRESSION_PLAYBOOK.md` (how to make it fit). Same provenance conven
 | RTX 3090 VRAM | 24 GB | **936 GB/s** (spec) | fastest available |
 | Jetson AGX Thor | **117 GiB** | **240 GB/s** (**measured**) | best capacity x speed |
 | Orin Nano Super | 8 GB (~6 usable) | 102 GB/s (*searched*) | + 1 TB NVMe |
-| B550 AORUS ELITE AX V2 DDR4 | **128 GB max**, 4 DIMM, dual channel (*searched*) | ~45-51 GB/s | large but slow |
+| B550 AORUS ELITE AX V2 DDR4 | **64 GB installed** (128 GB is the board ceiling, *searched*) | ~45-51 GB/s | modest and slow |
 | NVMe (any host) | 1 TB+ | ~3-6 GB/s | 40-200x penalty |
 
 The 3090 is Ampere (`sm_86`): **no FP4**, but INT4 via AWQ/GPTQ with Marlin kernels is mature.
@@ -25,8 +25,13 @@ Since `tok/s ~= BW / bytes_per_forward`, the best host is a step function of mod
 |---|---|---|
 | **<= 24 GB** | **RTX 3090** | 936 GB/s, 3.9x Thor |
 | **24-117 GB** | **Thor** | the desktop would spill to 45 GB/s DDR4, 5x worse |
-| **117-152 GB** | **desktop** | Thor must reach SSD at ~6 GB/s; DDR4 is ~7x faster than that |
-| **> 152 GB** | none | streaming regime, 1-3 tok/s, offline only |
+| **> 117 GB** | none | streaming regime, 1-3 tok/s, offline only |
+
+**CORRECTED 2026-08-18: the desktop has 64 GB installed, not the 128 GB board maximum.** An earlier
+version of this table gave the desktop a 117-152 GB window where it beat Thor. **That window does
+not exist.** The pooled desktop is 24 + 64 = **88 GB**, which is *smaller* than Thor's 117 GiB, so
+**Thor strictly dominates every model above 24 GB** and the only division of labour left is the
+3090 for anything that fits in VRAM.
 
 **The top row is the surprise and it changes the substitute plan.** Qwen3.8-27B at 4-bit is 13.5 GB
 and fits entirely in 3090 VRAM: **69 tok/s roofline against 17.8 on Thor**, realistically 35-45
@@ -78,8 +83,9 @@ which the desktop's 128 GB runs at Thor speeds.**
 
 ## 4b. The desktop alone, VRAM+DDR4 pooled: what it can actually run
 
-24 GB VRAM + 128 GB DDR4 = **152 GB**, ~145 GB usable after OS, KV and activations. Pooling does
-not make it one memory: the tiers differ by **20.8x**.
+24 GB VRAM + **64 GB DDR4 = 88 GB**, ~80 GB usable after OS, KV and activations (the 128 GB figure
+below the fold was the board ceiling, not the installed kit). Pooling does not make it one memory:
+the tiers differ by **20.8x**.
 
 | tier | cost per GB read |
 |---|---:|
@@ -92,8 +98,8 @@ not make it one memory: the tiers differ by **20.8x**.
 ### The inversion: Thor is capacity-constrained, the desktop is active-param-constrained
 
 On Thor, unified 240 GB/s means *total footprint* binds and anything that fits runs at similar
-speed. On the desktop total footprint barely matters — there is 152 GB — but **active parameters
-dominate**, because every missed byte costs 22 ms. The two machines therefore want **opposite model
+speed. On the desktop **both** now bind at 80 GB usable, and active parameters still dominate speed
+because every missed byte costs 22 ms. The two machines therefore want **opposite model
 shapes**, which is a better division of labour than one simply being faster.
 
 | model | active @ 4-bit | all-DDR4 worst case | with realistic VRAM caching |
@@ -102,15 +108,16 @@ shapes**, which is a better division of labour than one simply being faster.
 | **Ling 3.0 Flash 124B-A5.1B** | 2.55 GB | 17.6 tok/s | **40-90** |
 | Nemotron 3 Super 120B-**A12B** | 6.0 GB | 7.5 tok/s | **~22** |
 | DSV4-Flash-REAP 180B-**A13B** | 6.5 GB | 7 tok/s | ~17 |
-| GLM-5.3-REAP-504B **A40B** @ 2-bit | 10 GB | 2.3 tok/s | **8-16** |
-| Nemotron 3 Ultra 550B-**A55B** @ 2-bit | 13.8 GB | 1.7 tok/s | ~7 |
+| ~~GLM-5.3-REAP-504B @ 2-bit~~ (126 GB) | — | — | **does not fit 80 GB** |
+| ~~Nemotron 3 Ultra 550B @ 2-bit~~ (137 GB) | — | — | **does not fit 80 GB** |
+| ~~DSV4-Flash-0731-REAP~~ (100.4 GiB) | — | — | **does not fit 80 GB** |
 
 ### Three answers, depending on what "best" means
 
-* **Biggest, discounting speed — GLM-5.3-REAP-504B at 2-bit, 126 GB, ~8-16 tok/s.** A 744B-lineage
-  frontier coding model, and the configuration **does not fit on Thor** (126 GB > 117 GiB), so it
-  is the desktop's unique capability rather than a consolation prize. Needs only the shipping 34%
-  REAP, not the unvalidated 50%.
+* **Biggest — capped at ~80 GB, so roughly the 120-124B class at 4-bit.** With 64 GB installed the
+  desktop cannot hold GLM-5.3-REAP-504B at 2-bit (126 GB), Nemotron 3 Ultra at 2-bit (137 GB), or
+  even this repo's own checkpoint (100.4 GiB). **The desktop has no capacity advantage over Thor at
+  any model size.**
 * **Best overall tradeoff — Ling 3.0 Flash 124B-A5.1B at plain 4-bit, 62 GB, ~40-90 tok/s.** A 124B
   model at interactive-to-fast speed with **no pruning and no exotic quantisation**, fitting with
   80 GB to spare. A5.1B is small enough that even a poor hit rate still leaves ~17 tok/s. The risk
