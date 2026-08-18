@@ -76,6 +76,59 @@ which is a meaningfully better risk profile.
 additive*. You are bounded by the slowest stage, which is DDR4. **There is no configuration in
 which the desktop's 128 GB runs at Thor speeds.**
 
+## 4b. The desktop alone, VRAM+DDR4 pooled: what it can actually run
+
+24 GB VRAM + 128 GB DDR4 = **152 GB**, ~145 GB usable after OS, KV and activations. Pooling does
+not make it one memory: the tiers differ by **20.8x**.
+
+| tier | cost per GB read |
+|---|---:|
+| VRAM @ 936 GB/s | **1.07 ms** |
+| DDR4 @ ~45 GB/s | **22.2 ms** |
+
+**The design rule that follows:** a 20 tok/s target is a 50 ms budget, so you can afford
+**<= 2.2 GB per token from DDR4**. Everything above that must hit VRAM.
+
+### The inversion: Thor is capacity-constrained, the desktop is active-param-constrained
+
+On Thor, unified 240 GB/s means *total footprint* binds and anything that fits runs at similar
+speed. On the desktop total footprint barely matters — there is 152 GB — but **active parameters
+dominate**, because every missed byte costs 22 ms. The two machines therefore want **opposite model
+shapes**, which is a better division of labour than one simply being faster.
+
+| model | active @ 4-bit | all-DDR4 worst case | with realistic VRAM caching |
+|---|---:|---:|---:|
+| Nemotron 3.5 Lightning 30B-**A3B** | 1.5 GB | 30 tok/s | 40-60 |
+| **Ling 3.0 Flash 124B-A5.1B** | 2.55 GB | 17.6 tok/s | **40-90** |
+| Nemotron 3 Super 120B-**A12B** | 6.0 GB | 7.5 tok/s | **~22** |
+| DSV4-Flash-REAP 180B-**A13B** | 6.5 GB | 7 tok/s | ~17 |
+| GLM-5.3-REAP-504B **A40B** @ 2-bit | 10 GB | 2.3 tok/s | **8-16** |
+| Nemotron 3 Ultra 550B-**A55B** @ 2-bit | 13.8 GB | 1.7 tok/s | ~7 |
+
+### Three answers, depending on what "best" means
+
+* **Biggest, discounting speed — GLM-5.3-REAP-504B at 2-bit, 126 GB, ~8-16 tok/s.** A 744B-lineage
+  frontier coding model, and the configuration **does not fit on Thor** (126 GB > 117 GiB), so it
+  is the desktop's unique capability rather than a consolation prize. Needs only the shipping 34%
+  REAP, not the unvalidated 50%.
+* **Best overall tradeoff — Ling 3.0 Flash 124B-A5.1B at plain 4-bit, 62 GB, ~40-90 tok/s.** A 124B
+  model at interactive-to-fast speed with **no pruning and no exotic quantisation**, fitting with
+  80 GB to spare. A5.1B is small enough that even a poor hit rate still leaves ~17 tok/s. The risk
+  is quality, not engineering: too few active parameters to reason confidently off the CoT rails.
+* **Best quality-per-speed — Nemotron 3 Super 120B-A12B at 4-bit, 60 GB, ~22 tok/s.** A12B is in
+  the range where forward passes are substantive and it still clears the 18-20 target.
+
+### Consequence
+
+**The desktop is the ideal host for ultra-sparse MoEs** — precisely the models whose low active
+count makes them questionable as a sole driver but which the DDR4 tier can feed at speed. Thor is
+the better host for denser active sets (A13B+) that would choke on DDR4.
+
+**Out of reach:** unpruned GLM-5.3 at 4-bit is 372 GB, only 41% resident even in the full pool, so
+it returns to the streaming regime at ~2 tok/s. And the expert-fanout objection from §4c applies to
+the DDR4 tier at 20.8:1, so **speculation is marginal here too** unless the active set is largely
+VRAM-resident — it should help the A3B/A5.1B configs and probably will not help the A40B one.
+
 ## 5. Biggest model at acceptable decode, by configuration
 
 | configuration | biggest model | est. decode |
