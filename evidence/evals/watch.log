@@ -124,3 +124,15 @@ VERIFY: 0 failed -> PASS
   [PASS] gpqa_diamond   snapshot matches the published one       68be75644976 vs 68be75644976
 
 VERIFY: 0 failed -> PASS
+[land] gpqa_diamond@low: 72.6% [66.0, 78.3] n=197/198 trunc=51 err=0 — verified, committed, pushed
+[watch] 2026-08-18T14:06:20-04:00 humaneval finished — landing
+  [PASS] humaneval      no duplicate records                     164 records, 164 unique
+  [PASS] humaneval      every id exists in the benchmark         0 unknown
+  [PASS] humaneval      gold matches the pinned dataset          0 mismatched
+  [PASS] humaneval      prompt matches the one that was sent     164/164 records carry a hash; 0 mismatched
+  [PASS] humaneval      no silent empty generations              0 empty
+  [PASS] humaneval      stored correct flags reproduce           0 disagree
+  [PASS] humaneval/low  published accuracy is reproducible       recomputed 95.1 % vs published 95.1 % over 164 records
+  [PASS] humaneval      snapshot matches the published one       7dce6050a7d6 vs 7dce6050a7d6
+
+VERIFY: 0 failed -> PASS

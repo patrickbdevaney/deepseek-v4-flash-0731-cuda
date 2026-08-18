@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "gpqa_diamond",
+      "task": "humaneval",
       "effort": "low",
-      "records": 197,
-      "recomputed_acc": 72.59,
-      "published_acc": 72.6,
-      "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3",
-      "source": "fingertap/GPQA-Diamond (test, 198)"
+      "records": 164,
+      "recomputed_acc": 95.12,
+      "published_acc": 95.1,
+      "snapshot": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+      "source": "openai/openai_humaneval (164)"
     }
   ],
   "failed": 0
