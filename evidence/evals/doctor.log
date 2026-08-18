@@ -2414,3 +2414,1371 @@ DOCTOR: 0 repaired, 0 faults, 0 escalated
 [OK      ] engine error counter                         0 errors
 [OK      ] disk free for evidence                       306.6 GB
 DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T17:39:45-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 1002326
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T17:49:45-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 1002326
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T17:59:45-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T18:09:46-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T18:19:46-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T18:29:46-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 12 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T18:39:46-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T18:49:46-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T18:59:47-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T19:09:47-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T19:19:47-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T19:29:47-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T19:39:48-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 17 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T19:49:48-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T19:59:48-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T20:09:48-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T20:19:48-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T20:29:49-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T20:39:49-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T20:49:49-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T20:59:49-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T21:09:49-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T21:19:50-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T21:29:50-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T21:39:50-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T21:49:50-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T21:59:51-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T22:09:51-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T22:19:51-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T22:29:51-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T22:39:51-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T22:49:52-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T22:59:52-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T23:09:52-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T23:19:52-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T23:29:52-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T23:39:53-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 16 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T23:49:53-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-16T23:59:53-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T00:09:53-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T00:19:54-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T00:29:54-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T00:39:54-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T00:49:54-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 16 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T00:59:54-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T01:09:55-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 17 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T01:19:55-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T01:29:55-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T01:39:55-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T01:49:56-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T01:59:56-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T02:09:56-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T02:19:56-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T02:29:56-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T02:39:57-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T02:49:57-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T02:59:57-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T03:09:57-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T03:19:58-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T03:29:58-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T03:39:58-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T03:49:58-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T03:59:58-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T04:09:59-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T04:19:59-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T04:29:59-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T04:39:59-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 17 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T04:50:00-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T05:00:00-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T05:10:00-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T05:20:00-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T05:30:01-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T05:40:01-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T05:50:01-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T06:00:01-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T06:10:01-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T06:20:02-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T06:30:02-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 12 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T06:40:02-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T06:50:02-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T07:00:03-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T07:10:03-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T07:20:03-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T07:30:03-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T07:40:03-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T07:50:04-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T08:00:04-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T08:10:04-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T08:20:04-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T08:30:05-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 17 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T08:40:05-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T08:50:05-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T09:00:05-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T09:10:05-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T09:20:06-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 16 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T09:30:06-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T09:40:06-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T09:50:06-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T10:00:07-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.6 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T10:10:07-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 17 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T10:20:07-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T10:30:07-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T10:40:07-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T10:50:08-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T11:00:08-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T11:10:08-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 12 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T11:20:08-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T11:30:09-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T11:40:09-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T11:50:09-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T12:00:09-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 12 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T12:10:09-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T12:20:10-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T12:30:10-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T12:40:10-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T12:50:10-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 12 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T13:00:11-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T13:10:11-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T13:20:11-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 8 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T13:30:11-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T13:40:12-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 12 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T13:50:12-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T14:00:12-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T14:10:12-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T14:20:13-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T14:30:13-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T14:40:13-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T14:50:13-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T15:00:13-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T15:10:14-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T15:20:14-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T15:30:14-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T15:40:14-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T15:50:15-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T16:00:15-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 0 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T16:10:15-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T16:20:15-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T16:30:16-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T16:40:16-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T16:50:16-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T17:00:16-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T17:10:16-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 17 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T17:20:17-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T17:30:17-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T17:40:17-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T17:50:17-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T18:00:18-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T18:10:18-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T18:20:18-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T18:30:18-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T18:40:18-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 10 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T18:50:19-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T19:00:19-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T19:10:19-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T19:20:19-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T19:30:20-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 7 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T19:40:20-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T19:50:20-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T20:00:20-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T20:10:21-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 1 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T20:20:21-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 11 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T20:30:21-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 3 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T20:40:21-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 13 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T20:50:22-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 4 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T21:00:22-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 14 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T21:10:22-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 6 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T21:20:22-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 2 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T21:30:22-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 5 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T21:40:23-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 15 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T21:50:23-0400 (repair) ===
+[OK      ] memguard alive                               pid 48757
+[OK      ] watcher alive                                pid 264537
+[OK      ] extension watcher alive                      pid 2694909
+[OK      ] battery is advancing                         last write 9 min ago
+[OK      ] engine error counter                         0 errors
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 0 repaired, 0 faults, 0 escalated
+=== doctor 2026-08-17T22:00:23-0400 (repair) ===
+[REPAIRED] memguard restarted                           the box had no memory guard
+[OK      ] watcher not running                          no battery in flight; correct
+[ESCALATE] no supervisor and no runner                  the battery is NOT running
+[OK      ] server /metrics unreachable                  supervisor should restart it
+[OK      ] disk free for evidence                       306.5 GB
+DOCTOR: 1 repaired, 0 faults, 1 escalated
+[doctor-loop 2026-08-17T22:00:23-04:00] nothing left to supervise, exiting

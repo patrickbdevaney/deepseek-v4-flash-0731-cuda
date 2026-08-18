@@ -1857,3 +1857,327 @@ scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.
 
 def main():
  OK  run=1/1 stop 20.9 tok/s (0.2 min)
+  [2/175] lcb-abc387_f gold=pass got=<think>We need solve pro     run=1/2 stop 8.2 tok/s (16.7 min)
+  [3/175] lcb-abc387_a gold=pass got=import sys
+
+def main():
+ OK  run=2/3 stop 23.7 tok/s (16.9 min)
+  [4/175] lcb-abc387_c gold=pass got=<think>We need to write      run=2/4 stop 10.4 tok/s (29.8 min)
+  [5/175] lcb-abc388_d gold=pass got=<think>We need solve pro     run=2/5 stop 8.2 tok/s (46.2 min)
+  [6/175] lcb-abc388_b gold=pass got=import sys
+
+def main():
+ OK  run=3/6 stop 26.1 tok/s (46.5 min)
+  [7/175] lcb-abc388_g gold=pass got=<think>We need answer Py     run=3/7 stop 7.5 tok/s (64.6 min)
+  [8/175] lcb-abc388_c gold=pass got=import sys
+
+def main():
+ OK  run=4/8 stop 13.7 tok/s (69.4 min)
+  [9/175] lcb-abc388_a gold=pass got=import sys
+
+def main():
+ OK  run=5/9 stop 20.1 tok/s (69.5 min)
+  [10/175] lcb-abc388_f gold=pass got=<think>We need to write      run=5/10 stop 8.7 tok/s (85.0 min)
+  [11/175] lcb-abc388_e gold=pass got=<think>We need to solve:     run=5/11 stop 9.9 tok/s (98.6 min)
+  [12/175] lcb-abc389_d gold=pass got=import sys
+import math
+
+ OK  run=6/12 stop 11.3 tok/s (110.5 min)
+  [13/175] lcb-abc389_b gold=pass got=import sys
+
+def main():
+ OK  run=7/13 stop 19.4 tok/s (111.1 min)
+  [14/175] lcb-abc389_a gold=pass got=import sys
+
+def main():
+ OK  run=8/14 stop 22.4 tok/s (111.4 min)
+  [15/175] lcb-abc389_g gold=pass got=<think>We need solve. Ne     run=8/15 stop 7.7 tok/s (128.8 min)
+  [16/175] lcb-abc389_f gold=pass got=<think>We need to solve      run=8/16 stop 8.8 tok/s (144.1 min)
+  [17/175] lcb-abc389_e gold=pass got=<think>We need answer on     run=8/17 stop 8.5 tok/s (159.9 min)
+  [18/175] lcb-abc390_e gold=pass got=import sys
+
+def main():
+ OK  run=9/18 stop 9.9 tok/s (173.5 min)
+  [19/175] lcb-abc390_g gold=pass got=<think>We need solve pro     run=9/19 stop 9.2 tok/s (188.1 min)
+  [20/175] lcb-abc390_a gold=pass got=import sys
+
+def main():
+ OK  run=10/20 stop 20.4 tok/s (188.5 min)
+  [21/175] lcb-abc390_b gold=pass got=import sys
+
+def main():
+ OK  run=11/21 stop 16.3 tok/s (190.8 min)
+  [22/175] lcb-abc390_d gold=pass got=<think>We need answer on     run=11/22 stop 7.7 tok/s (208.3 min)
+  [23/175] lcb-abc390_f gold=pass got=<think>We need solve pro     run=11/23 stop 9.2 tok/s (223.0 min)
+  [24/175] lcb-abc390_c gold=pass got=import sys
+
+def main():
+ OK  run=12/24 stop 11.9 tok/s (228.3 min)
+  [25/175] lcb-abc391_d gold=pass got=<think>We need to produc     run=12/25 stop 8.6 tok/s (244.0 min)
+  [26/175] lcb-abc391_f gold=pass got=<think>We need to solve      run=12/26 stop 9.0 tok/s (259.0 min)
+  [27/175] lcb-abc391_a gold=pass got=import sys
+
+def main():
+ OK  run=13/27 stop 23.8 tok/s (259.3 min)
+  [28/175] lcb-abc391_e gold=pass got=<think>We need to provid     run=13/28 stop 10.1 tok/s (272.7 min)
+  [29/175] lcb-abc391_g gold=pass got=import sys
+...
+     run=13/29 stop 9.8 tok/s (286.4 min)
+  [30/175] lcb-abc391_b gold=pass got=import sys
+
+def main():
+ OK  run=14/30 stop 20.8 tok/s (286.9 min)
+  [31/175] lcb-abc392_a gold=pass got=import sys
+from itertool OK  run=15/31 stop 19.0 tok/s (287.5 min)
+  [32/175] lcb-abc392_g gold=pass got=<think>We need to solve      run=15/32 stop 9.9 tok/s (301.1 min)
+  [33/175] lcb-abc392_b gold=pass got=import sys
+
+def main():
+ OK  run=16/33 stop 21.8 tok/s (301.5 min)
+  [34/175] lcb-abc392_d gold=pass got=import sys
+from collecti     run=16/34 stop 14.2 tok/s (305.2 min)
+  [35/175] lcb-abc392_f gold=pass got=import sys
+
+def main():
+     run=16/35 stop 11.0 tok/s (317.2 min)
+  [36/175] lcb-abc392_c gold=pass got=import sys
+
+def main():
+ OK  run=17/36 stop 16.7 tok/s (318.9 min)
+  [37/175] lcb-abc393_a gold=pass got=import sys
+
+def main():
+ OK  run=18/37 stop 22.7 tok/s (319.3 min)
+  [38/175] lcb-abc393_f gold=pass got=import sys
+from bisect i OK  run=19/38 stop 8.6 tok/s (334.9 min)
+  [39/175] lcb-abc393_e gold=pass got=A.extend(map(int, line.s     run=19/39 stop 9.4 tok/s (349.3 min)
+  [40/175] lcb-abc393_d gold=pass got=import sys
+
+def main():
+ OK  run=20/40 stop 16.0 tok/s (351.8 min)
+  [41/175] lcb-abc393_b gold=pass got=import sys
+
+def main():
+ OK  run=21/41 stop 20.7 tok/s (352.5 min)
+  [42/175] lcb-abc394_c gold=pass got=<think>We need answer on     run=21/42 stop 8.4 tok/s (368.6 min)
+  [43/175] lcb-abc394_b gold=pass got=import sys
+
+def main():
+ OK  run=22/43 stop 19.7 tok/s (368.9 min)
+  [44/175] lcb-abc394_f gold=pass got=<think>We need solve pro     run=22/44 stop 8.1 tok/s (385.5 min)
+  [45/175] lcb-abc394_a gold=pass got=import sys
+
+def main():
+ OK  run=23/45 stop 22.2 tok/s (385.8 min)
+  [46/175] lcb-abc394_g gold=pass got=<think>We need answer Py     run=23/46 stop 7.0 tok/s (405.3 min)
+  [47/175] lcb-abc394_d gold=pass got=import sys
+
+def main():
+ OK  run=24/47 stop 7.9 tok/s (422.3 min)
+  [48/175] lcb-abc394_e gold=pass got=<think>We need write Pyt     run=24/48 stop 7.8 tok/s (439.6 min)
+  [49/175] lcb-abc395_c gold=pass got=import sys
+
+def solve(): OK  run=25/49 stop 15.9 tok/s (441.7 min)
+  [50/175] lcb-abc395_f gold=pass got=<think>We need solve pro     run=25/50 stop 8.0 tok/s (458.6 min)
+  [51/175] lcb-abc395_b gold=pass got=import sys
+
+def main():
+ OK  run=26/51 stop 16.6 tok/s (460.7 min)
+  [52/175] lcb-abc395_a gold=pass got=import sys
+
+def main():
+ OK  run=27/52 stop 20.8 tok/s (461.1 min)
+  [53/175] lcb-abc395_e gold=pass got=import sys
+from heapq im     run=27/53 stop 8.4 tok/s (477.2 min)
+  [54/175] lcb-abc396_g gold=pass got=<think>We need to solve      run=27/54 stop 10.3 tok/s (490.3 min)
+  [55/175] lcb-abc396_c gold=pass got=```python
+import sys
+
+de     run=27/55 stop 9.3 tok/s (504.8 min)
+  [56/175] lcb-abc396_f gold=pass got=<think>We need to write      run=27/56 stop 10.1 tok/s (518.1 min)
+  [57/175] lcb-abc396_b gold=pass got=import sys
+
+def main():
+ OK  run=28/57 stop 17.1 tok/s (519.3 min)
+  [58/175] lcb-abc396_e gold=pass got=<think>We need to write      run=28/58 stop 9.3 tok/s (533.8 min)
+  [59/175] lcb-abc396_d gold=pass got=import sys
+
+def solve(): OK  run=29/59 stop 14.2 tok/s (538.0 min)
+  [60/175] lcb-abc396_a gold=pass got=import sys
+
+def main():
+ OK  run=30/60 stop 21.5 tok/s (538.3 min)
+  [61/175] lcb-abc397_d gold=pass got=import sys
+from math imp OK  run=31/61 stop 11.3 tok/s (548.6 min)
+  [62/175] lcb-abc397_f gold=pass got=<think>We need to provid     run=31/62 stop 9.7 tok/s (562.6 min)
+  [63/175] lcb-abc397_c gold=pass got=import sys
+
+def main():
+ OK  run=32/63 stop 18.5 tok/s (563.9 min)
+  [64/175] lcb-abc397_g gold=pass got=<think>We need solve pro     run=32/64 stop 7.8 tok/s (581.2 min)
+  [65/175] lcb-abc397_e gold=pass got=<think>We need to solve      run=32/65 stop 9.0 tok/s (596.2 min)
+  [66/175] lcb-abc397_a gold=pass got=import sys
+
+s = sys.stdi OK  run=33/66 stop 19.2 tok/s (596.6 min)
+  [67/175] lcb-abc397_b gold=pass got=import sys
+
+def main():
+ OK  run=34/67 stop 12.0 tok/s (601.5 min)
+  [68/175] lcb-abc398_f gold=pass got=<think>We need answer Py     run=34/68 stop 8.8 tok/s (616.7 min)
+  [69/175] lcb-abc398_b gold=pass got=import sys
+
+def main():
+ OK  run=35/69 stop 18.5 tok/s (618.0 min)
+  [70/175] lcb-abc398_d gold=pass got=import sys
+
+def main():
+ OK  run=36/70 stop 9.9 tok/s (631.7 min)
+  [71/175] lcb-abc398_a gold=pass got=import sys
+
+def main():
+ OK  run=37/71 stop 17.5 tok/s (633.3 min)
+  [72/175] lcb-abc398_c gold=pass got=import sys
+from collecti OK  run=38/72 stop 19.3 tok/s (634.1 min)
+  [73/175] lcb-abc398_g gold=pass got=<think>We need solve. Ne     run=38/73 stop 7.9 tok/s (651.2 min)
+  [74/175] lcb-abc399_e gold=pass got=<think>We need answer on     run=38/74 stop 7.7 tok/s (668.6 min)
+  [75/175] lcb-abc399_d gold=pass got=<think>We need solve pro     run=38/75 stop 8.2 tok/s (685.0 min)
+  [76/175] lcb-abc399_a gold=pass got=import sys
+
+def main():
+ OK  run=39/76 stop 25.2 tok/s (685.2 min)
+  [77/175] lcb-abc399_c gold=pass got=import sys
+
+def solve(): OK  run=40/77 stop 13.6 tok/s (691.2 min)
+  [78/175] lcb-abc399_f gold=pass got=import sys
+
+MOD = 998244 OK  run=41/78 stop 11.5 tok/s (699.4 min)
+  [79/175] lcb-abc399_b gold=pass got=import sys
+
+def main():
+ OK  run=42/79 stop 18.9 tok/s (700.8 min)
+  [80/175] lcb-abc400_c gold=pass got=import sys
+from math imp OK  run=43/80 stop 10.4 tok/s (713.7 min)
+  [81/175] lcb-abc400_d gold=pass got=<think>We need answer on     run=43/81 stop 7.3 tok/s (732.4 min)
+  [82/175] lcb-abc400_a gold=pass got=import sys
+
+def main():
+ OK  run=44/82 stop 21.4 tok/s (732.8 min)
+  [83/175] lcb-abc400_b gold=pass got=import sys
+
+def main():
+ OK  run=45/83 stop 14.7 tok/s (736.7 min)
+  [84/175] lcb-abc400_e gold=pass got=import sys
+import math
+i OK  run=46/84 stop 10.9 tok/s (747.4 min)
+  [85/175] lcb-abc400_g gold=pass got=<think>We need solve pro     run=46/85 stop 7.0 tok/s (766.7 min)
+  [86/175] lcb-arc190_c gold=pass got=<think>We need to provid     run=46/86 stop 8.0 tok/s (783.8 min)
+  [87/175] lcb-arc190_a gold=pass got=<think>We need solve pro     run=46/87 stop 7.7 tok/s (801.5 min)
+  [88/175] lcb-arc190_d gold=pass got=<think>We need solve pro     run=46/88 stop 8.0 tok/s (818.4 min)
+  [89/175] lcb-arc191_d gold=pass got=<think>We need to solve      run=46/89 stop 8.5 tok/s (834.1 min)
+  [90/175] lcb-arc191_c gold=pass got=<think>We need solve pro     run=46/90 stop 8.9 tok/s (849.2 min)
+  [91/175] lcb-arc191_a gold=pass got=<think>We need to solve      run=46/91 stop 8.8 tok/s (864.4 min)
+  [92/175] lcb-arc192_e gold=pass got=<think>We need solve. Ne     run=46/92 stop 7.9 tok/s (881.3 min)
+  [93/175] lcb-arc192_b gold=pass got=<think>We need solve. Ne     run=46/93 stop 7.6 tok/s (898.9 min)
+  [94/175] lcb-arc192_d gold=pass got=<think>We need solve pro     run=46/94 stop 8.0 tok/s (915.8 min)
+  [95/175] lcb-arc192_a gold=pass got=<think>We need solve pro     run=46/95 stop 8.0 tok/s (932.8 min)
+  [96/175] lcb-arc193_b gold=pass got=<think>We need solve pro     run=46/96 stop 8.2 tok/s (949.2 min)
+  [97/175] lcb-arc193_a gold=pass got=<think>We need to write      run=46/97 stop 9.0 tok/s (964.3 min)
+  [98/175] lcb-arc193_d gold=pass got=<think>We need solve pro     run=46/98 stop 7.7 tok/s (981.8 min)
+  [99/175] lcb-arc194_c gold=pass got=<think>We need solve pro     run=46/99 stop 7.7 tok/s (999.3 min)
+  [100/175] lcb-arc194_b gold=pass got=<think>We need solve pro     run=46/100 stop 8.2 tok/s (1015.6 min)
+  [101/175] lcb-arc194_e gold=pass got=<think>We need to solve      run=46/101 stop 9.0 tok/s (1030.6 min)
+  [102/175] lcb-arc194_a gold=pass got=<think>We need to solve      run=46/102 stop 8.7 tok/s (1046.2 min)
+  [103/175] lcb-arc194_d gold=pass got=<think>We need solve pro     run=46/103 stop 7.7 tok/s (1063.6 min)
+  [104/175] lcb-arc195_e gold=pass got=<think>We need solve. Ne     run=46/104 stop 8.0 tok/s (1080.5 min)
+  [105/175] lcb-arc195_b gold=pass got=<think>We need answer Py     run=46/105 stop 8.4 tok/s (1096.4 min)
+  [106/175] lcb-arc195_c gold=pass got=<think>We need solve pro     run=46/106 stop 7.7 tok/s (1114.0 min)
+  [107/175] lcb-arc195_d gold=pass got=<think>We need answer Py     run=46/107 stop 7.4 tok/s (1132.1 min)
+  [108/175] lcb-arc195_a gold=pass got=<think>We need answer Py     run=46/108 stop 9.2 tok/s (1146.8 min)
+  [109/175] lcb-arc196_b gold=pass got=<think>We need solve. Ne     run=46/109 stop 8.0 tok/s (1163.7 min)
+  [110/175] lcb-arc196_c gold=pass got=<think>We need solve pro     run=46/110 stop 8.0 tok/s (1180.5 min)
+  [111/175] lcb-arc196_a gold=pass got=<think>We need solve pro     run=46/111 stop 8.5 tok/s (1196.2 min)
+  [112/175] lcb-arc196_d gold=pass got=<think>We need solve pro     run=46/112 stop 7.8 tok/s (1213.6 min)
+  [113/175] lcb-3708 gold=pass got=from typing import List
+ OK  run=47/113 stop 18.6 tok/s (1215.0 min)
+  [114/175] lcb-3677 gold=pass got=from typing import List
+ OK  run=48/114 stop 10.4 tok/s (1228.0 min)
+  [115/175] lcb-3720 gold=pass got=```python
+from typing im     run=48/115 stop 8.3 tok/s (1244.1 min)
+  [116/175] lcb-3674 gold=pass got=<think>We need to solve:     run=48/116 stop 9.4 tok/s (1258.5 min)
+  [117/175] lcb-3731 gold=pass got=from typing import List
+ OK  run=49/117 stop 19.8 tok/s (1258.9 min)
+  [118/175] lcb-3714 gold=pass got=from typing import List
+ OK  run=50/118 stop 10.9 tok/s (1271.3 min)
+  [119/175] lcb-3737 gold=pass got=from typing import List
+ OK  run=51/119 stop 9.5 tok/s (1282.8 min)
+  [120/175] lcb-3725 gold=pass got=class Solution:
+    def      run=51/120 stop 9.2 tok/s (1297.3 min)
+  [121/175] lcb-3704 gold=pass got=from typing import List
+ OK  run=52/121 stop 18.2 tok/s (1298.7 min)
+  [122/175] lcb-3721 gold=pass got=from typing import List
+ OK  run=53/122 stop 8.3 tok/s (1315.0 min)
+  [123/175] lcb-3751 gold=pass got=class Solution:
+    def      run=53/123 stop 8.2 tok/s (1331.3 min)
+  [124/175] lcb-3753 gold=pass got=class Solution:
+    def  OK  run=54/124 stop 22.3 tok/s (1331.6 min)
+  [125/175] lcb-3754 gold=pass got=<think>We need answer co     run=54/125 stop 8.0 tok/s (1348.5 min)
+  [126/175] lcb-3697 gold=pass got=<think>We need to solve:     run=54/126 stop 9.4 tok/s (1362.8 min)
+  [127/175] lcb-3748 gold=pass got=from typing import List
+ OK  run=55/127 stop 17.1 tok/s (1364.7 min)
+  [128/175] lcb-3760 gold=pass got=from typing import List
+ OK  run=56/128 stop 14.3 tok/s (1369.7 min)
+  [129/175] lcb-3696 gold=pass got=class Solution:
+    def  OK  run=57/129 stop 9.6 tok/s (1383.7 min)
+  [130/175] lcb-3762 gold=pass got=<think>We need answer co     run=57/130 stop 8.3 tok/s (1399.8 min)
+  [131/175] lcb-3709 gold=pass got=class Solution:
+    def  OK  run=58/131 stop 16.3 tok/s (1401.9 min)
+  [132/175] lcb-3779 gold=pass got=<think>We need solve pro     run=58/132 stop 8.0 tok/s (1418.8 min)
+  [133/175] lcb-3771 gold=pass got=class Solution:
+    def      run=58/133 stop 8.1 tok/s (1435.4 min)
+  [134/175] lcb-3733 gold=pass got=<think>We need answer co     run=58/134 stop 7.9 tok/s (1452.5 min)
+  [135/175] lcb-3768 gold=pass got=class Solution:
+    def  OK  run=59/135 stop 19.2 tok/s (1452.9 min)
+  [136/175] lcb-3764 gold=pass got=from typing import List
+ OK  run=60/136 stop 18.4 tok/s (1453.9 min)
+  [137/175] lcb-3781 gold=pass got=<think>We need solve pro     run=60/137 stop 8.2 tok/s (1470.4 min)
+  [138/175] lcb-3705 gold=pass got=from typing import List
+ OK  run=61/138 stop 15.5 tok/s (1472.7 min)
+  [139/175] lcb-3786 gold=pass got=class Solution:
+    def  OK  run=62/139 stop 8.9 tok/s (1487.8 min)
+  [140/175] lcb-3722 gold=pass got=from typing import List
+ OK  run=63/140 stop 11.7 tok/s (1499.3 min)
+  [141/175] lcb-3770 gold=pass got=<think>We need solve pro     run=63/141 stop 7.6 tok/s (1516.8 min)
+  [142/175] lcb-3759 gold=pass got=from typing import List
+ OK  run=64/142 stop 12.7 tok/s (1522.4 min)
+  [143/175] lcb-3791 gold=pass got=from typing import List
+ OK  run=65/143 stop 11.2 tok/s (1530.2 min)
+  [144/175] lcb-3789 gold=pass got=<think>We need solve pro     run=65/144 stop 8.6 tok/s (1545.8 min)
+  [145/175] lcb-3788 gold=pass got=from typing import List
+ OK  run=66/145 stop 13.9 tok/s (1549.5 min)
+  [146/175] lcb-3750 gold=pass got=from typing import List
+ OK  run=67/146 stop 15.5 tok/s (1552.1 min)
+  [147/175] lcb-3795 gold=pass got=from typing import List
+ OK  run=68/147 stop 8.5 tok/s (1567.8 min)
+  [148/175] lcb-3801 gold=pass got=<think>We need to solve      run=68/148 stop 9.8 tok/s (1581.5 min)
+  [149/175] lcb-3817 gold=pass got=class Solution:
+    def  OK  run=69/149 stop 20.7 tok/s (1581.7 min)
+  [150/175] lcb-3809 gold=pass got=from typing import List
+ OK  run=70/150 stop 22.4 tok/s (1582.4 min)
+  [151/175] lcb-3794 gold=pass got=<think>We need solve pro     run=70/151 stop 8.7 tok/s (1597.8 min)
+  [152/175] lcb-3744 gold=pass got=<think>We need to write      run=70/152 stop 10.0 tok/s (1611.3 min)
+  [153/175] lcb-3832 gold=pass got=from typing import List
+ OK  run=71/153 stop 15.2 tok/s (1613.3 min)
+  [154/175] lcb-3793 gold=pass got=class Solution:
+    def  OK  run=72/154 stop 15.1 tok/s (1616.0 min)
+  [155/175] lcb-3717 gold=pass got=<think>We need answer Py     run=72/155 stop 9.1 tok/s (1630.8 min)
+  [156/175] lcb-3773 gold=pass got=from typing import List
+ OK  run=73/156 stop 14.9 tok/s (1634.5 min)
+  [157/175] lcb-3777 gold=pass got=<think>We need solve pro     run=73/157 stop 7.4 tok/s (1652.7 min)
+  [158/175] lcb-3747 gold=pass got=from typing import List
+ OK  run=74/158 stop 20.7 tok/s (1652.9 min)
+  [159/175] lcb-3687 gold=pass got=        stack = [(0, 0)]     run=74/159 stop 9.4 tok/s (1667.3 min)
+  [160/175] lcb-3739 gold=pass got=class Solution:
+    def  OK  run=75/160 stop 13.3 tok/s (1673.0 min)
+  [161/175] lcb-3736 gold=pass got=class Solution:
+    def  OK  run=76/161 stop 18.4 tok/s (1674.3 min)
+  [162/175] lcb-3743 gold=pass got=<think>We need to provid     run=76/162 stop 8.8 tok/s (1689.6 min)

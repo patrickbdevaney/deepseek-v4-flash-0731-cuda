@@ -1,0 +1,5 @@
+[force 2026-08-17T10:30:53-04:00] waiting for the battery and the extension pass to finish
+[force 2026-08-17T10:33:19-04:00] waiting for the battery and the extension pass to finish
+[force 2026-08-17T21:58:21-04:00] the extension pass is not running and never printed ALL EXTENSIONS COMPLETE.
+[force 2026-08-17T21:58:21-04:00] Forcing now would force 8k base files for whichever tasks it had not reached yet.
+[force 2026-08-17T21:58:21-04:00] Refusing. Re-run scripts/eval_extend_all.sh first (it resumes), then this.

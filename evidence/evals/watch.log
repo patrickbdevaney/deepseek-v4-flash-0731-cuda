@@ -86,3 +86,4 @@ VERIFY: 0 failed -> PASS
   [PASS] math500        snapshot matches the published one       6e4ed1a2a79a vs 6e4ed1a2a79a
 
 VERIFY: 0 failed -> PASS
+[land] math500@low: 95.0% [88.8, 97.8] n=100/100 trunc=1 err=0 — verified, committed, pushed

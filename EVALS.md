@@ -204,10 +204,10 @@ so a low number cannot be dismissed as strict parsing.
 | HumanEval | **low** | 164/164 | **95.1** | [90.7, 97.5] | 6 | 0 | 1438 | 20.6 | — *(none published)* |
 | BFCL v3 — 4 `exec_*` categories, AST † | **low** | 240/240 | **86.2** | [81.3, 90.0] | 3 | 0 | 216 | 22.8 | — *(none published)* |
 | BFCL v3 — `live_*` categories, AST † | **low** | 508/508 | **78.7** | [75.0, 82.1] | 5 | 0 | 247 | 18.5 | — *(none published)* |
-| LiveCodeBench — `test6` window † *(partial)* **— NOT QUOTABLE, 1 of 2 subject strata** | **low** | 1/175 | **100.0** | [20.7, 100.0] | 0 | 0 | 188 | 20.9 | — *(none published)* |
+| LiveCodeBench — `test6` window † *(partial)* **— NOT QUOTABLE, 59% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 162/175 | **46.9** | [39.4, 54.6] | 96 | 0 | 5578 | 12.3 | — *(none published)* |
 | SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 19% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 291/291 | **30.2** | [24.1, 36.9] | 54 | 0 | 3534 | 14.7 | — *(none published)* |
 
-1651 items scored, 2,560,179 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+1812 items scored, 3,463,627 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
 Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, HumanEval — wilson, LiveCodeBench — `test6` window † — wilson, MATH-500 — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
