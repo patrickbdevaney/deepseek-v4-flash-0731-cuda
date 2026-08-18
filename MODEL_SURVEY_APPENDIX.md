@@ -330,6 +330,10 @@ strategy is refuted for free.
 2. **The expert hit-rate curve against resident fraction**, which is the single parameter the whole
    model pivots on. Recoverable from an instrumented streaming run.
 
+> **How to actually get there:** `COMPRESSION_PLAYBOOK.md` covers the prune/quant/distill
+> method space, which corners are arithmetically reachable, and the cheap KL-sweep evaluation
+> protocol that avoids running the full battery per configuration.
+
 ## 5. Recommendation
 
 **Run Qwen3.8-27B NVFP4 + DFlash as the Claude Code substitute candidate.** It wins on three axes
