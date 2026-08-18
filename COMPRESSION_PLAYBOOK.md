@@ -4,7 +4,67 @@ Companion to `MODEL_SURVEY_APPENDIX.md` §4c, which establishes *that* residency
 This is *how*, assuming rentable cloud GPUs and a budget. Same provenance convention: **measured**
 here, *searched* with a citation, (analysis) derived.
 
-## 0. THE ADOPTED PATH (decided 2026-08-18)
+## 0. VERDICT: the prune/quantise pipeline is SHELVED (decided 2026-08-18)
+
+**Do the kernel work instead.** The pipeline is dominated on every axis, and the reason is a
+logical error worth stating plainly because an earlier version of this document made it.
+
+### Byte reduction only pays in proportion to how bandwidth-bound you already are
+
+**measured**: MLA GEMVs run at **115-195 GB/s against 240 GB/s achievable**, and
+`dspark-decode-gap-research` concludes the decode gap is **"efficiency not algo"**.
+
+**We are therefore not bandwidth-bound.** In that regime, handing the kernel 18% fewer bytes to
+move buys close to nothing — the bottleneck is occupancy, launch overhead or serialisation, not the
+bytes. **The "~10% from 3.5-bit" figure earlier in this document is optimistic; the honest estimate
+is 0-10%, and which end cannot be known until the kernel is fixed.**
+
+That reframes the question. It is not "kernel or pipeline". **The pipeline cannot even be
+evaluated until the kernel work is done**, because a bandwidth optimisation is unmeasurable on a
+machine that is not bandwidth-bound.
+
+### Risk survey
+
+| change | decode gain | quality risk | operational risk | invalidates |
+|---|---|---|---|---|
+| **Kernel (MLA GEMV)** | up to **~2x** | **none** — no model change | bit-exactness gates already catch regressions | nothing |
+| **Draft head fine-tune** | ~30% (tau 2.689 -> ~3.5) | **none by construction** — speculative verify is exact | reversible, keep the old head | `PERF.md` |
+| **3.5-bit requant** | **0-10%** | sub-4-bit degradation; **CoT loops**; unvalidated at 3.5 on this model | **new GEMV kernels, new gates, collides with the bit-exactness invariant** (`wiki/dense-mla-gemv.md`); compounding error unless the REAP is also redone from the FP8 parent | **the entire accuracy battery** |
+| **Deeper REAP (50%)** | **0%** — top-k unchanged | **CoT degeneration (observed first-hand by the operator on other REAPs)**, world knowledge, tool-call formatting, long-context coherence | router recalibration required | **the entire accuracy battery** |
+
+Additional risks specific to the prune/quant path, enumerated rather than assumed away:
+
+* **tool-call and structured-output formatting degrades before prose does** — an agentic model can
+  lose its function-calling reliability while still reading fine
+* **long-context coherence** can break if experts specialise positionally
+* **router quantisation flips routing**, producing erratic expert selection — a direct mechanism
+  for incoherence (routers are 0.070 GiB and must stay high-precision)
+* **compounding error** means a clean job requires redoing the REAP from the FP8 parent rather than
+  requantising our checkpoint — which drags the high-risk pruning step back in
+
+### Verdict
+
+**Not worth it.** Highest engineering cost, highest quality risk, forces a full eval re-run, and
+delivers the *smallest* gain — a gain that may be zero until the kernel work that would let us
+measure it is done.
+
+1. **Kernel (MLA GEMV efficiency)** — largest prize, no model risk, invalidates nothing.
+2. **Draft head fine-tune** — accuracy-neutral by construction, reversible.
+3. Stop.
+
+### Re-entry condition
+
+Revisit compression only if **all three** hold:
+
+1. kernel work plateaus well short of the roofline, **and**
+2. decode has become genuinely bandwidth-bound, **and**
+3. the eval shows 37.5% REAP cost little, making deeper compression defensible.
+
+Until then it is the wrong tool aimed at a bottleneck we do not have.
+
+---
+
+## 0a. The adopted path, in detail (decided 2026-08-18)
 
 Everything below this section is analysis. **This section is the plan.**
 
