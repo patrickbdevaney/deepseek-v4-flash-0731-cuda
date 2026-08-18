@@ -4,6 +4,90 @@ Companion to `MODEL_SURVEY_APPENDIX.md` §4c, which establishes *that* residency
 This is *how*, assuming rentable cloud GPUs and a budget. Same provenance convention: **measured**
 here, *searched* with a citation, (analysis) derived.
 
+## 0. THE ADOPTED PATH (decided 2026-08-18)
+
+Everything below this section is analysis. **This section is the plan.**
+
+### Do not prune further. Stay at K160 (37.5%).
+
+A 50% REAP would free ~17 GiB — **headroom we do not need.** Thor has 117 GiB, the model is
+100.4 GiB, so **~16.6 GiB is already free**, and FP8 KV *frees* memory rather than consuming it.
+The only thing wanting space is a larger draft head, and the MTP heads are 6.529 GiB today, so they
+could be doubled inside the existing headroom.
+
+Pruning deeper therefore trades capability for space we already have. Worse, it risks the two
+things we cannot cheaply measure: **world knowledge** (Cerebras' 50% validation is on *coding*
+benchmarks — 97.6% non-agentic, 96.7% agentic SWE-Bench on Qwen3-480B-Coder — and says nothing
+about GPQA/MMLU-Pro-style breadth, which is exactly what expert count buys) and **chain-of-thought
+coherence** (below). Every lever in the adopted path leaves expert count untouched.
+
+### Ranked levers, by measured size of the prize
+
+| # | lever | prize | risk | invalidates |
+|---|---|---|---|---|
+| 1 | **MLA GEMV efficiency** | **~2x** — decode runs at ~25% of the bandwidth roofline, and MLA GEMVs at 115-195 GB/s against 240 achievable while MLA is **41% of B_tok** | pure kernel work | nothing |
+| 2 | **FP8 KV** | attacks the same 41% of bytes; frees GB | low, reversible | `PERF.md` only |
+| 3 | **Draft head fine-tune** | tau 2.689 -> higher, a pure multiplier | low | `PERF.md` only — speculative verify is *exact*, so this is **accuracy-neutral by construction** |
+| 4 | **Bit-width change** | ~10% overall (see below) | needs a new `sm_110a` kernel | **the whole accuracy battery** |
+
+**The kernel efficiency gap is roughly ten times the bit-width lever**, needs no model change, and
+does not invalidate a running evaluation. It goes first.
+
+### If bit-width is attempted anyway: 3.5-bit, not NVFP4
+
+At A13B active:
+
+| format | bits | active bytes | roofline | HW unpack |
+|---|---:|---:|---:|:---:|
+| NVFP4 | 4.5 | 7.31 GB | 32.8 tok/s | yes (FP4x2) |
+| MXFP4 (today) | 4.25 | 6.91 GB | 34.7 | yes |
+| 3.5-bit trellis | 3.5 | 5.69 GB | **42.2** | **no** |
+
+**NVFP4 is 4.5 bits — worse than the MXFP4 we already run on both size and speed.** Its only case
+is kernel quality for the MLA GEMV problem, which lever 1 addresses directly and more cheaply.
+3.5-bit is ~28% faster than NVFP4 at the roofline and 22% smaller.
+
+The risk in 3.5-bit is **not FLOPs** — decode GEMV needs ~480 GFLOP/s at 35 tok/s against 100+
+TFLOPS, so dequant could cost 100x more ALU without becoming compute-bound. The risk is
+**instruction-level serialisation**, since trellis decode is sequential within a block by
+construction. QTIP claims to have solved exactly that (it beats QuIP#/AQLM on *speed*), and
+`0xSero/deepseek-v4-flash-0731-spark` is existence proof that 3-bit trellis works on this model.
+**Prototype the kernel before committing.**
+
+### CoT degeneration: the failure mode accuracy cannot see
+
+A variant that is 95% as accurate but spirals 20% of the time is **useless as an agent** while
+looking fine in a results table. Compression damage to reasoning coherence must be tested for
+directly.
+
+* **Truncation rate and `mean tok` are leading indicators, and this repo already records both.**
+  Damage shows there *before* accuracy moves: traces lengthen and terminate less often. LCB at
+  **59.3% truncated** is this model's canary — a compression step that hurt coherence would move it
+  immediately.
+* **KL divergence has a structural blind spot here.** §5 recommends a KL sweep for ranking
+  configurations, and it is right for that — but **KL is teacher-forced and cannot detect
+  degeneration loops**, which are an autoregressive-feedback phenomenon that only appears in
+  free-running generation. KL will rank two configs equivalent while one of them loops.
+* **Fix, and it is cheap:** alongside the KL sweep, run a few dozen **free-running** generations and
+  measure the completion-length distribution and n-gram repetition rate. Minutes, not a battery.
+* **Protect the routers.** Routers are tiny but decisive — quantise them hard and routing flips,
+  giving erratic expert selection, a direct mechanism for incoherence. The inventory shows router
+  at 0.070 GiB and norms at 0.001 GiB, already high precision. **Any new pipeline must preserve
+  that**; a naive "quantise everything to N bits" script gets this wrong for free.
+
+### Comparison protocol for any compressed variant
+
+Diff against baseline on **all** of: accuracy, **truncation rate**, **mean tokens-to-answer**, KL /
+top-1 agreement (teacher-forced), and free-running repetition rate. A variant that holds accuracy
+while `mean tok` rises 20% has damaged the model in the way that matters for agentic work.
+
+### Sequencing
+
+The eval currently running is the **baseline** for every comparison above, and it owns the GPU —
+concurrent kernel work would contend for the same 240 GB/s it is measuring, corrupting both. Wait
+for `ALL FORCING COMPLETE`. Desktop-side work (the layer-wise pipeline, the KL and free-running
+harnesses, the 304 GB FP8 parent download) can proceed in parallel; none of it touches Thor.
+
 ## 1. The target, stated exactly
 
 Budget **~107 GB for weights** (117 GiB available **measured**, ~10 GiB reserved for KV,
