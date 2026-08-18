@@ -1,0 +1,9 @@
+[Unit]
+Description=Check every 10 minutes that the eval chain is still alive
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+AccuracySec=30s
+Persistent=true
+[Install]
+WantedBy=timers.target

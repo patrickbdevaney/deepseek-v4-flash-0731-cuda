@@ -1,0 +1,14 @@
+[Unit]
+# The boot unit only helps after a reboot. What actually killed the programme on 2026-08-17 was an
+# SSH drop with the box still up, and nothing noticed for 16 hours. This re-runs the idempotent
+# resume on a timer so any dead stage comes back within minutes, whatever killed it.
+Description=DeepSeek-V4-Flash eval programme - watchdog resume
+[Service]
+Type=oneshot
+# Verified with a throwaway unit: detached children survive this unit going inactive. Without it
+# systemd reaps the whole chain every time the timer fires.
+KillMode=process
+WorkingDirectory=/home/patrickd/deepseek-v4-flash-0731-cuda
+ExecStart=/bin/bash scripts/eval_resume.sh
+StandardOutput=append:/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/resume.log
+StandardError=append:/home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/resume.log
