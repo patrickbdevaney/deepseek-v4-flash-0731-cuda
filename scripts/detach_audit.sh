@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# detach_audit.sh — prove the unattended workloads are actually detached, rather than assuming it.
+#
+# A written rule does not survive contact with a hurried launch, and the failure mode is silent:
+# a session-bound process looks completely healthy right up until the connection drops. On
+# 2026-08-17 the engine and eval_supervise had been running happily for four days as children of a
+# Claude Code Bash invocation inside an SSH session; the laptop lid closed and both took SIGHUP,
+# costing ~16 hours. Nothing about their behaviour beforehand hinted at it.
+#
+# Detachment is a property of the PROCESS TREE, not of how the launch command was written, so this
+# checks the tree: a safe process is reparented to init or to `systemd --user`, has no controlling
+# terminal, and is not in the session of any interactive shell.
+#
+#   bash scripts/detach_audit.sh        # exits non-zero if anything is session-bound
+set -u
+cd "$(dirname "$0")/.."
+PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py}"
+
+# NEVER FLAG OUR OWN ANCESTRY. This script is itself run from a shell -- often a Claude Code Bash
+# invocation, which IS session-bound and correctly so. Its command line contains the patterns we
+# grep for, and truncating args for display is not a filter. Walk up from self and exclude the
+# whole chain of ancestors, which is the only way to be sure we are not auditing ourselves.
+SELF=""
+_p=$$
+while [ -n "$_p" ] && [ "$_p" != "1" ] && [ "$_p" != "0" ]; do
+  SELF="$SELF $_p"
+  _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d ' ')
+done
+
+bad=0; n=0
+printf '%-8s %-8s %-9s %-6s %s\n' PID PPID PARENT TTY PROCESS
+while read -r pid; do
+  [ -n "$pid" ] || continue
+  case " $SELF " in *" $pid "*) continue;; esac
+  ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ') || continue
+  [ -n "$ppid" ] || continue
+  tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
+  cmd=$(ps -o args= -p "$pid" 2>/dev/null | cut -c1-58)
+  case "$cmd" in *detach_audit*|*ps\ -o*) continue;; esac
+  pcmd=$(ps -o comm= -p "$ppid" 2>/dev/null | tr -d ' ')
+  n=$((n+1))
+
+  # Safe: reparented to init (1), or a direct child of the user manager, or of another already
+  # detached stage in this chain (eval_watch and run_evals are children of eval_supervise).
+  ok=0
+  [ "$ppid" = "1" ] && ok=1
+  [ "$pcmd" = "systemd" ] && ok=1
+  case "$(ps -o args= -p "$ppid" 2>/dev/null)" in *eval_supervise.sh*|*with_model_lock*) ok=1;; esac
+  # A controlling terminal means it is attached to somebody's session, whatever the parent says.
+  [ "$tty" = "?" ] || ok=0
+
+  if [ "$ok" = "1" ]; then
+    printf '%-8s %-8s %-9s %-6s %s\n' "$pid" "$ppid" "$pcmd" "$tty" "$cmd"
+  else
+    bad=$((bad+1))
+    printf '%-8s %-8s %-9s %-6s %s   <-- SESSION-BOUND\n' "$pid" "$ppid" "$pcmd" "$tty" "$cmd"
+  fi
+done < <(pgrep -f "$PATTERNS" 2>/dev/null)
+
+echo
+if [ "$n" = "0" ]; then
+  echo "detach_audit: nothing matching is running."
+  exit 0
+fi
+if [ "$bad" = "0" ]; then
+  echo "detach_audit: $n process(es), all detached. A dropped SSH session cannot touch them."
+  exit 0
+fi
+echo "detach_audit: $bad of $n process(es) are SESSION-BOUND and will die with the terminal that"
+echo "started them. Restart them through scripts/eval_resume.sh, which detaches every stage."
+exit 1

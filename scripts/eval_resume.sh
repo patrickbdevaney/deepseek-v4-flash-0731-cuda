@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # eval_resume.sh — bring the whole eval programme back after a power cut, from wherever it died.
 #
-# WHAT THIS HEDGES AGAINST, AND WHAT IT DOES NOT. Every stage of the programme is a bare
-# `nohup setsid` process. eval_supervise.sh survives the *server* dying, but nothing survives the
-# *box* dying, and this machine has lost power mid-run before. A cut on day three of an eight-day
-# programme would otherwise end it with no notification and no log line saying so. This is started
-# by a systemd user unit at boot so the chain re-converges by itself.
+# WHAT THIS HEDGES AGAINST. eval_supervise.sh survives the *server* dying, but nothing survives
+# the *supervisor* dying, and there are two ways that happens. The box loses power -- this machine
+# has done it before -- which dsv4-evals.service covers by running this at boot. Or a stage was
+# never detached in the first place: on 2026-08-17 the engine and eval_supervise were children of a
+# Claude Code Bash invocation inside an SSH session, a laptop lid closed, SIGHUP killed both, and
+# nothing noticed for sixteen hours with the box still up. dsv4-evals-watchdog.timer covers that by
+# re-running this every ten minutes, and the audit at the bottom re-proves detachment each time.
 #
 # IT IS IDEMPOTENT AND IT IS RESUMPTIVE. Running it when everything is already healthy does
 # nothing: each stage is skipped if it is already running or has already printed its completion
@@ -101,6 +103,14 @@ elif done_marker bfcl_mt.log "ALL MULTI-TURN COMPLETE"; then
   say "multi-turn already complete"
 else
   launch eval_bfcl_mt_run.sh bfcl_mt.log
+fi
+
+# THE RULE IS ONLY REAL IF SOMETHING CHECKS IT. A session-bound stage looks perfectly healthy
+# until the connection drops, so every resume -- including every watchdog tick -- re-proves that
+# what is running is actually detached. Quiet when clean; loud when not.
+if ! out=$(bash scripts/detach_audit.sh 2>&1); then
+  say "DETACHMENT FAULT — something is session-bound and will die with its terminal:"
+  printf '%s\n' "$out"
 fi
 
 say "resume complete — stages self-order from here"
