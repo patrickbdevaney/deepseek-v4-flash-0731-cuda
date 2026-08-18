@@ -136,3 +136,17 @@ VERIFY: 0 failed -> PASS
   [PASS] humaneval      snapshot matches the published one       7dce6050a7d6 vs 7dce6050a7d6
 
 VERIFY: 0 failed -> PASS
+[land] humaneval@low: 95.1% [90.7, 97.5] n=164/164 trunc=6 err=0 — verified, committed, pushed
+[watch] 2026-08-18T14:06:29-04:00 math500 finished — landing
+  [PASS] math500        no duplicate records                     100 records, 100 unique
+  [PASS] math500        every id exists in the benchmark         0 unknown
+  [PASS] math500        gold matches the pinned dataset          0 mismatched
+  [PASS] math500        prompt matches the one that was sent     100/100 records carry a hash; 0 mismatched
+  [PASS] math500        no silent empty generations              0 empty
+/usr/lib/python3/dist-packages/sympy/parsing/latex/_parse_latex_antlr.py:23: UserWarning: antlr4.error.ErrorListener module is not installed
+  ErrorListener = import_module('antlr4.error.ErrorListener',
+  [PASS] math500        stored correct flags reproduce           0 disagree
+  [PASS] math500/low    published accuracy is reproducible       recomputed 95.0 % vs published 95.0 % over 100 records
+  [PASS] math500        snapshot matches the published one       6e4ed1a2a79a vs 6e4ed1a2a79a
+
+VERIFY: 0 failed -> PASS
