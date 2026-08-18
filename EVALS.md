@@ -198,23 +198,25 @@ so a low number cannot be dismissed as strict parsing.
 <!-- RESULTS -->
 | benchmark | effort | scored | **acc %** | 95 % CI | trunc | err | mean out tok | tok/s | unpruned 0731 @ same effort |
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|
-| GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 197/198 | **72.6** | [66.0, 78.3] | 51 | 0 | 3717 | 15.0 | 71.20 |
+| AIME 2024 *(partial)* | **low** | 1/60 | **100.0** | [20.7, 100.0] | 0 | 0 | 1030 | 22.7 | — *(none published)* |
+| GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 198/198 | **72.7** | [66.1, 78.5] | 51 | 0 | 3699 | 15.0 | 71.20 |
 | MMLU-Pro *(partial)* **— NOT QUOTABLE, 12% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 150/150 | **73.3** | [65.7, 79.8] | 18 | 0 | 1948 | 17.3 | 83.00 |
 | MATH-500 | **low** | 100/100 | **95.0** | [88.8, 97.8] | 1 | 0 | 940 | 21.6 | — *(none published)* |
 | HumanEval | **low** | 164/164 | **95.1** | [90.7, 97.5] | 6 | 0 | 1438 | 20.6 | — *(none published)* |
 | BFCL v3 — 4 `exec_*` categories, AST † | **low** | 240/240 | **86.2** | [81.3, 90.0] | 3 | 0 | 216 | 22.8 | — *(none published)* |
 | BFCL v3 — `live_*` categories, AST † | **low** | 508/508 | **78.7** | [75.0, 82.1] | 5 | 0 | 247 | 18.5 | — *(none published)* |
-| LiveCodeBench — `test6` window † *(partial)* **— NOT QUOTABLE, 59% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 162/175 | **46.9** | [39.4, 54.6] | 96 | 0 | 5578 | 12.3 | — *(none published)* |
+| LiveCodeBench — `test6` window † *(partial)* **— NOT QUOTABLE, 59% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 175/175 | **46.9** | [39.6, 54.2] | 104 | 0 | 5552 | 12.3 | — *(none published)* |
 | SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 19% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 291/291 | **30.2** | [24.1, 36.9] | 54 | 0 | 3534 | 14.7 | — *(none published)* |
 
-1812 items scored, 3,463,627 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+1827 items scored, 3,532,774 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
-Interval method per row: BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, HumanEval — wilson, LiveCodeBench — `test6` window † — wilson, MATH-500 — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
+Interval method per row: AIME 2024 — wilson, BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, HumanEval — wilson, LiveCodeBench — `test6` window † — wilson, MATH-500 — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
 Per-task provenance (dataset and pinned snapshot):
 
 | benchmark | dataset | snapshot | max_tokens |
 |---|---|---|---:|
+| AIME 2024 | Maxwell-Jia/AIME_2024 (30) | `8d88b2876a82` | 8000 |
 | GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 8000 |
 | MMLU-Pro | TIGER-Lab/MMLU-Pro (test, 12032) | `b189ec765aa7` | 8000 |
 | MATH-500 | HuggingFaceH4/MATH-500 (500) | `6e4ed1a2a79a` | 8000 |
@@ -259,6 +261,7 @@ the protocol and not by the harness name.
 <!-- PROTOCOL -->
 | benchmark | split / subset | scenario | answer extraction | scoring | execution | budget | samples |
 |---|---|---|---|---|---|---:|---:|
+| AIME 2024 | all 30 | 0-shot generative CoT | final integer 0–999 | exact integer match | none | 8000 | 2 |
 | GPQA-Diamond | test, all 198 | 0-shot generative CoT | final letter A–D | exact letter match | none | 8000 | 1 |
 | MMLU-Pro | test, seeded random subset of 12 032 | 0-shot generative CoT | final letter A–J | exact letter match | none | 8000 | 1 |
 | MATH-500 | test, seeded random subset of 500 | 0-shot generative CoT | last brace-balanced \boxed{} | string → numeric → sympy equivalence | none | 8000 | 1 |

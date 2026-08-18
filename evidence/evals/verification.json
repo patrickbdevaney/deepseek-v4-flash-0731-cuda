@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "scicode",
+      "task": "lcb",
       "effort": "low",
-      "records": 291,
-      "recomputed_acc": 30.24,
-      "published_acc": 30.2,
-      "snapshot": "4510f6a6aa27c43fad7b43da2c59602a86e88480",
-      "source": "SciCode1/SciCode (test, 65 problems, 291 subproblems)"
+      "records": 175,
+      "recomputed_acc": 46.86,
+      "published_acc": 46.9,
+      "snapshot": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+      "source": "livecodebench/code_generation_lite test6 (2025-01..2025-04, 175)"
     }
   ],
   "failed": 0

@@ -2210,3 +2210,144 @@ from typing im     run=48/115 stop 8.3 tok/s (1244.1 min)
   [PASS] POWER       aime25: interval quotable                    n=60 (reps=2) -> +-10.0 points at p=0.8
   [PASS] MEMORY      headroom above the guard floor               MemAvailable 8025 MB
   [PASS] MEMORY      memguard running                             kills the server before the kernel takes the box down
+  [PASS] LIVE        gpqa_diamond: longest item round-trips       2568+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        bfcl: longest item round-trips               834+326 tok, finish=stop, extracted=yes
+  [PASS] LIVE        bfcl_live: longest item round-trips          3207+1113 tok, finish=stop, extracted=yes
+  [PASS] LIVE        scicode: longest item round-trips            2592+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        mmlu_pro: longest item round-trips           503+980 tok, finish=stop, extracted=yes
+  [PASS] LIVE        humaneval: longest item round-trips          419+4886 tok, finish=stop, extracted=yes
+  [PASS] LIVE        math500: longest item round-trips            794+780 tok, finish=stop, extracted=yes
+  [PASS] LIVE        lcb: longest item round-trips                1212+8000 tok, finish=stop, TRUNCATED, extracted=yes
+  [PASS] LIVE        aime24: longest item round-trips             356+4435 tok, finish=stop, extracted=yes
+  [PASS] LIVE        aime25: longest item round-trips             256+8000 tok, finish=stop, TRUNCATED, extracted=yes
+
+PREFLIGHT: 38 passed, 0 failed -> GO
+=== 2026-08-18T15:25:08-04:00  gpqa_diamond  n=0 reps=1 effort=low
+[gpqa_diamond] 198 items from fingertap/GPQA-Diamond (test, 198) (snapshot 68be75644976), 197 already done, 1 to go, max_tokens=8000, timeout=2180s
+  [1/1] gpqa-0153 gold=B got=B OK  run=1/1 stop 21.5 tok/s (0.1 min)
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     162/175    46.9    [39.4, 54.6]     96      5578    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T15:25:19-04:00  gpqa_diamond done
+=== 2026-08-18T15:25:19-04:00  bfcl  n=0 reps=1 effort=low
+[bfcl] 240 items from gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240) (snapshot f087fb14f26d), 240 already done, 0 to go, max_tokens=2000, timeout=680s
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     162/175    46.9    [39.4, 54.6]     96      5578    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T15:25:21-04:00  bfcl done
+=== 2026-08-18T15:25:21-04:00  bfcl_live  n=0 reps=1 effort=low
+[bfcl_live] 508 items from gorilla-llm/BFCL v3 (live_* subsets, AST-scored, 508) (snapshot 61fc0608cfd8), 508 already done, 0 to go, max_tokens=2000, timeout=680s
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     162/175    46.9    [39.4, 54.6]     96      5578    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T15:25:24-04:00  bfcl_live done
+=== 2026-08-18T15:25:24-04:00  scicode  n=0 reps=1 effort=low
+[scicode] rebuilt prior-step code for 65 problems from 291 existing records
+[scicode] 291 items from SciCode1/SciCode (test, 65 problems, 291 subproblems) (snapshot 4510f6a6aa27), 291 already done, 0 to go, max_tokens=8000, timeout=2180s
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     162/175    46.9    [39.4, 54.6]     96      5578    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T15:25:26-04:00  scicode done
+=== 2026-08-18T15:25:26-04:00  mmlu_pro  n=150 reps=1 effort=low
+[mmlu_pro] 150 items from TIGER-Lab/MMLU-Pro (test, 12032) (snapshot b189ec765aa7), 150 already done, 0 to go, max_tokens=8000, timeout=2180s
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     162/175    46.9    [39.4, 54.6]     96      5578    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T15:25:29-04:00  mmlu_pro done
+=== 2026-08-18T15:25:29-04:00  humaneval  n=0 reps=1 effort=low
+[humaneval] 164 items from openai/openai_humaneval (164) (snapshot 7dce6050a7d6), 164 already done, 0 to go, max_tokens=8000, timeout=2180s
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     162/175    46.9    [39.4, 54.6]     96      5578    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T15:25:31-04:00  humaneval done
+=== 2026-08-18T15:25:31-04:00  math500  n=100 reps=1 effort=low
+[math500] 100 items from HuggingFaceH4/MATH-500 (500) (snapshot 6e4ed1a2a79a), 100 already done, 0 to go, max_tokens=8000, timeout=2180s
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     162/175    46.9    [39.4, 54.6]     96      5578    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T15:25:34-04:00  math500 done
+=== 2026-08-18T15:25:34-04:00  lcb  n=0 reps=1 effort=low
+[lcb] 175 items from livecodebench/code_generation_lite test6 (2025-01..2025-04, 175) (snapshot 0fe84c3912ea), 162 already done, 13 to go, max_tokens=8000, timeout=2180s
+  [1/13] lcb-3701 gold=pass got=<think>We need solve pro     run=0/1 stop 7.6 tok/s (17.7 min)
+  [2/13] lcb-3723 gold=pass got=from typing import List
+ OK  run=1/2 stop 20.3 tok/s (18.8 min)
+  [3/13] lcb-3763 gold=pass got=<think>The user wants a      run=1/3 stop 9.6 tok/s (32.8 min)
+  [4/13] lcb-3692 gold=pass got=<think>We need to write      run=1/4 stop 9.2 tok/s (47.4 min)
+  [5/13] lcb-3778 gold=pass got=from typing import List
+ OK  run=2/5 stop 19.1 tok/s (47.7 min)
+  [6/13] lcb-3785 gold=pass got=from typing import List
+ OK  run=3/6 stop 18.3 tok/s (49.0 min)
+  [7/13] lcb-3776 gold=pass got=from typing import List
+ OK  run=4/7 stop 9.8 tok/s (62.8 min)
+  [8/13] lcb-3783 gold=pass got=<think>The user wants a      run=4/8 stop 10.6 tok/s (75.5 min)
+  [9/13] lcb-3799 gold=pass got=from typing import List
+ OK  run=5/9 stop 18.1 tok/s (76.6 min)
+  [10/13] lcb-3784 gold=pass got=<think>We need to write      run=5/10 stop 8.5 tok/s (92.4 min)
+  [11/13] lcb-3811 gold=pass got=class Solution:
+    def  OK  run=6/11 stop 22.2 tok/s (92.7 min)
+  [12/13] lcb-3805 gold=pass got=<think>We need answer co     run=6/12 stop 9.1 tok/s (107.4 min)
+  [13/13] lcb-3765 gold=pass got=class Solution:
+    def      run=6/13 stop 9.6 tok/s (121.5 min)
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     175/175    46.9    [39.6, 54.2]    104      5552    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T17:27:05-04:00  lcb done
+=== 2026-08-18T17:27:05-04:00  aime24  n=0 reps=2 effort=low
+[aime24] 60 items from Maxwell-Jia/AIME_2024 (30) (snapshot 8d88b2876a82), 0 already done, 60 to go, max_tokens=8000, timeout=2180s
+  [1/60] aime2024-2024-II-4 gold=33 got=33 OK  run=1/1 stop 22.7 tok/s (0.8 min)

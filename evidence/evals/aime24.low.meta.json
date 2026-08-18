@@ -1,0 +1,18 @@
+{
+  "task": "aime24",
+  "source": "Maxwell-Jia/AIME_2024 (30)",
+  "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792",
+  "n_items": 60,
+  "scoring": "integer",
+  "n_unique": 30,
+  "reps": 2,
+  "effort": "low",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 8000,
+  "code_commit": "3462730acdfaa4d269b87e106918f162ed2016ea",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-18T21:27:05Z"
+}

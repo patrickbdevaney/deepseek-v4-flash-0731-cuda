@@ -174,3 +174,15 @@ VERIFY: 0 failed -> PASS
   [PASS] scicode        snapshot matches the published one       4510f6a6aa27 vs 4510f6a6aa27
 
 VERIFY: 0 failed -> PASS
+[land] scicode@low: 30.2% [24.1, 36.9] n=291/291 trunc=54 err=0 — verified, committed, pushed
+[watch] 2026-08-18T17:28:00-04:00 lcb finished — landing
+  [PASS] lcb            no duplicate records                     175 records, 175 unique
+  [PASS] lcb            every id exists in the benchmark         0 unknown
+  [PASS] lcb            gold matches the pinned dataset          0 mismatched
+  [PASS] lcb            prompt matches the one that was sent     175/175 records carry a hash; 0 mismatched
+  [PASS] lcb            no silent empty generations              0 empty
+  [PASS] lcb            stored correct flags reproduce           0 disagree
+  [PASS] lcb/low        published accuracy is reproducible       recomputed 46.9 % vs published 46.9 % over 175 records
+  [PASS] lcb            snapshot matches the published one       0fe84c3912ea vs 0fe84c3912ea
+
+VERIFY: 0 failed -> PASS
