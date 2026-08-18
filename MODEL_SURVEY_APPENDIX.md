@@ -174,6 +174,86 @@ evidence that the small-KV architectures are not merely an efficiency concession
 
 **Verdict: excluded from the interactive shortlist, retained as a candidate trace generator.**
 
+## 4c. Ceiling analysis: the best a hybrid RAM/streaming engine could do (analysis)
+
+What could an engine achieve on Kimi K3, the Qwen3.8 2.4T flagship or DeepSeek V4 Pro 0813 if it
+optimised *everything* — unified-memory residency, speculation, KV, quantisation, and a hybrid
+RAM/NVMe weight path? Worked below from the **measured** 240 GB/s and an assumed ~6 GB/s Gen4 NVMe.
+**Thor's actual NVMe read bandwidth has not been measured and should be** — Gen5 would move every
+number here.
+
+### The governing constant: a 40:1 cliff
+
+Time per forward pass with hit rate `h` on active weights is `h*B/240 + (1-h)*B/6`. The SSD term
+overtakes the RAM term below **h = 97.6%**. Above that you have a RAM machine; below it a disk
+machine. There is no useful middle, and no engine changes the ratio.
+
+### Active bytes per token is what separates the three
+
+| model | total | active | B at 4-bit | footprint | residency on 107 GB |
+|---|---|---:|---:|---:|---:|
+| Kimi K3 | 2.78T | ~104B | 52 GB | ~1.39 TB | 7.7% |
+| Qwen3.8 flagship | 2.4T | 96B | 48 GB | ~1.2 TB | 8.9% |
+| **DeepSeek V4 Pro 0813** | 1.6T | **49B** | **24.5 GB** | ~800 GB | **13.4%** |
+
+DeepSeek is the tractable one: half the active parameters and the best residency ratio.
+
+### Achievable decode
+
+| h | DSV4 Pro | Qwen 2.4T | Kimi K3 |
+|---:|---:|---:|---:|
+| 0.90 | 2.0 | 1.0 | 0.9 |
+| 0.95 | 3.3 | 1.7 | 1.6 |
+| 0.98 | 5.5 | 2.8 | 2.6 |
+| 0.99 | 7.0 | 3.6 | 3.3 |
+| 1.00 (hypothetical) | 9.8 | 5.0 | 4.6 |
+
+**Calibrated against a real engine:** warp reports 0.6 tok/s on K3 with 64 GB. Inverting the model
+gives **h ~= 0.83 at 4.6% residency**, so production engines already achieve strong expert
+locality. Thor's 8-13% residency should support h ~= 0.88-0.92 -> **~1-2.4 tok/s**.
+
+Note the ceiling: even at a physically impossible h = 1.0, K3 tops out at 4.6 tok/s, because 52 GB
+per token is 4.6 reads/s at full RAM bandwidth. **Streaming cannot reach interactivity even in the
+limit.** The binding constraint is active-parameter count, not the disk.
+
+### What each lever is worth
+
+* **KV cache: nearly nothing.** All three use compressed attention (K3 is 69 KDA + 24 gated MLA;
+  DeepSeek MLA/DSA is ~2% of vanilla). Single-digit GB against 24-52 GB of weight traffic per
+  token. A 2-10% lever on a problem needing 20x. **Do not spend effort here.**
+* **Speculation: plausibly negative.** Verifying K tokens reads the *union* of the experts they
+  route to. Top-16 of 896 with K=4 gives ~62 distinct experts against 16 for a single token — a
+  3.9x inflation of exactly the bytes that cost 40x to fetch. With tau ~ 3 against fanout ~ 3.9 the
+  net is a slowdown. Routing correlation between adjacent tokens softens this and the sign is not
+  guaranteed either way, but **speculation is a resident-model technique and it fights streaming.**
+* **Weight quantisation: the best lever, because it pays twice** — fewer bytes per token *and*
+  higher residency, and both appear in the denominator.
+
+### The conclusion: residency is the whole game
+
+At ~107 GB usable for weights the reachable envelope is 214B params at 4-bit, 285B at 3-bit, 428B
+at 2-bit. So:
+
+* **GLM-5.2 744B-A40B at REAP-50% -> 372B** needs ~2.3 bits to fit. Cerebras already publishes
+  REAP'd GLM-4.6 and GLM-4.5-Air, and validated 50% pruning at 97.6% coding retention.
+* **DeepSeek V4 Pro at REAP-75% -> 400B at 2-bit ~= 100 GB.** Far past the validated 50%, so
+  quality there is genuinely unknown.
+
+The payoff for getting resident is large and discontinuous: DeepSeek V4 Pro's A49B at 2-bit is
+12.25 GB/token -> **19.6 tok/s at the roofline, ~49 tok/s at tau = 2.5**, because once resident,
+speculation flips from liability back to multiplier.
+
+**Strategic consequence: the question is whether the model can be made to fit, not how cleverly it
+can be streamed.** A trillion-scale model is interactive the moment it is resident and stuck at
+1-2 tok/s the moment it is not. That is the REAP thesis, and it makes the fidelity eval in this
+repo load-bearing for a strategy much larger than the single checkpoint under test.
+
+### Two measurements that would firm this up
+
+1. **Thor's NVMe sequential read bandwidth.** Assumed ~6 GB/s; every number above scales with it.
+2. **The expert hit-rate curve against resident fraction**, which is the single parameter the whole
+   model pivots on. Recoverable from an instrumented streaming run.
+
 ## 5. Recommendation
 
 **Run Qwen3.8-27B NVFP4 + DFlash as the Claude Code substitute candidate.** It wins on three axes
