@@ -102,6 +102,49 @@ Those published fidelity numbers are also the **honest prior for our own eval**:
 test lands within a few points of the unpruned parent on matched harness and settings, that is the
 expected result, not a surprise. A large gap would be the finding.
 
+## 4b. SSD weight streaming: why it does not rescue the out-of-envelope models
+
+Colibri (pure C, experts streamed from disk) reports **8.3 tok/s on GLM-5.2 744B-A40B** on a 128 GB
+M3 Max and 11.7 tok/s on a Ryzen 7950X workstation (*searched*). Those are real numbers and they
+are much better than a naive disk-bandwidth estimate, so the mechanism is worth stating correctly
+before dismissing the approach.
+
+**It is a cache-hit-rate result, not a bandwidth result** (analysis). GLM-5.2 reads ~20 GB of
+active weights per token at NVFP4. A Gen4 NVMe does 5-7 GB/s, so if that came off disk it would be
+~0.3 tok/s, not 8.3. To reach 8.3 tok/s the disk can supply at most ~0.7 GB/token, i.e. **~96% of
+active weights are already resident**. Colibri pins attention, norms and embeddings and streams
+only cold experts behind double-buffered prefetch. The SSD covers the tail; RAM does the work.
+
+That makes *resident fraction* the governing variable, and it is where the frontier models fail on
+this box:
+
+| | total NVFP4 | RAM | resident | active/token |
+|---|---:|---:|---:|---:|
+| GLM-5.2, the reported 128 GB systems | 372 GB | 128 GB | **34%** | 20 GB |
+| Qwen3.8-2.4T-A96B on Thor | ~1.2 TB | 117 GiB | **~10%** | 48 GB |
+
+Qwen3.8-2.4T offers 3.5x worse residency while demanding 2.4x more bytes per token — both terms
+move the wrong way together. At a 50-90% hit rate that is 0.25-1.25 tok/s, and even granting
+DFlash's tau ~ 2.5 on top, **~0.6-3 tok/s**.
+
+**Why that is disqualifying for agentic work specifically.** The threshold is not reading speed.
+Agentic work multiplies tokens by turns, and the turns are strictly serial — turn N+1 depends on
+turn N's tool result, so none of it parallelises. A 20-turn task at ~2000 tokens/turn is 40k
+tokens: 13 min at 50 tok/s, 1.4 h at 8 tok/s, 5.6 h at 2 tok/s, **37 h at 0.3 tok/s**. At the
+bottom of that range the failure is not slowness, it is that you get one attempt per day and cannot
+course-correct.
+
+**The niche where it is still useful.** Streaming does not give you an agent; it can give you a
+*teacher*. Trace generation is throughput-tolerant, fully offline, has no serial feedback loop, and
+this box is now configured to run unattended work for days (`scripts/eval_resume.sh`,
+`dsv4-evals-watchdog.timer`). A 2.4T-A96B model at 0.5 tok/s still yields on the order of 40k
+tokens overnight — a meaningful volume of high-quality reference traces for draft-head training or
+distillation, which is the same big-model-as-oracle pattern already used elsewhere in this
+programme. Prefill-heavy single-answer work is the other survivor, since prefill is compute-bound
+and batches, so streaming amortises far better there than in decode.
+
+**Verdict: excluded from the interactive shortlist, retained as a candidate trace generator.**
+
 ## 5. Recommendation
 
 **Run Qwen3.8-27B NVFP4 + DFlash as the Claude Code substitute candidate.** It wins on three axes
@@ -160,3 +203,4 @@ Frontier scale: [Kimi K3 vs DeepSeek V4 Pro vs GLM-5.2](https://www.marktechpost
 REAP: [Cerebras blog](https://www.cerebras.ai/blog/reap) ·
 [repo](https://github.com/CerebrasResearch/reap) ·
 [HF collection](https://huggingface.co/collections/cerebras/cerebras-reap).
+Colibri: [repo](https://github.com/JustVugg/colibri) · [measured throughput](https://www.remio.ai/post/colibri-shows-how-to-run-glm-5-2-on-a-low-spec-pc-but-storage-sets-the-pace) · [consumer-hardware writeup](https://wavect.io/blog/colibri-glm-5-2-consumer-hardware/).
