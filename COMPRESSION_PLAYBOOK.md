@@ -212,21 +212,53 @@ ambiguous — possibly more robust to 4-bit, possibly already at the edge with n
 That budget buys one thing only: **pushing past validated pruning rates**. Everything at validated
 rates is nearly free, and the highest-value moves cost nothing.
 
-### Tier 0 — $0, on hardware already owned. Most of the value is here.
+### Tier 0 — $0, on hardware already owned
 
-1. **Requantise the incumbent.** ~4.5 bits effective today (101 GiB / ~180B). GPTQ/AWQ/QTIP all
-   work **layer-by-layer** — one layer in VRAM at a time, the rest streamed from the desktop's
-   128 GB RAM and SSD, which is exactly what a 3090 + 128 GB box is for. To 3.5 bits: **~28% more
-   decode, ~22 GiB freed**, zero capability risk.
-2. **Finish the draft head (S5).** `tokens_per_verify` is **2.689** (**measured**). tau is a pure
-   multiplier and a draft head is a *small* model, trainable on the 3090. 2.7 -> 3.5 is **~30%**,
-   and `S5_RECIPE.md` / `HEAD_REGISTRY.md` already exist.
-3. **FP8 KV.** Frees memory, which buys a larger draft head, which raises tau further. Compounds
-   with both of the above.
+**CORRECTED 2026-08-18. An earlier version of this section claimed requantising the incumbent was a
+free ~28% / 22 GiB win. It is not: the checkpoint is already at the MXFP4 floor.** From
+`MODEL_INVENTORY.md` (**measured**): routed experts 85.664 GiB in MXFP4, MTP/DSpark heads 6.529
+GiB, MLA attention 4.284 GiB, everything else ~3.9 GiB, total 100.400 GiB. MXFP4 is 4 bits plus one
+E8M0 scale per 32-element block = **4.25 bits/param, the format's floor**. The ~4.5-bit *average*
+is above 4.25 only because attention, embeddings, lm_head and router are deliberately held at
+FP8/BF16, which is correct practice rather than fat.
 
-**Together plausibly 1.7-1.9x on the existing model** — ~10-24 tok/s to **~17-45 tok/s**. No new
-model, no new evaluation burden, no money. **Larger than any model swap currently on the table**,
-and it is the delta forfeited by chasing GLM first.
+Going below 4.25 bits therefore means **abandoning MXFP4 for a format with no hardware unpack on
+`sm_110a`**. Corrected figures: experts 85.7 -> ~70.5 GiB (**~15 GiB freed**), active bytes 6.9 ->
+5.7 GB (**~18% decode**), conditional on a software-unpacked format not converting a
+bandwidth-bound decode into a compute-bound one. **A real engineering bet gated on the kernel
+prototype, not a free win.**
+
+Revised ranking of the genuinely free levers:
+
+1. **FP8 KV — now the best free lever.** MLA is 41% of B_tok (`dsv4-0731-cuda-server`) and the
+   battery runs FP32 KV. Cutting KV reads 4x plausibly buys **~15% decode** *and* frees GB, with no
+   weight surgery, and it is trivially reversible.
+2. **Draft head / tau.** `tokens_per_verify` is **2.689** (**measured**). tau is a pure multiplier,
+   the head is a small model trainable on the 3090, and **the MTP heads already exist in the
+   checkpoint** (6.529 GiB) to fine-tune rather than build. See `S5_RECIPE.md`, `HEAD_REGISTRY.md`.
+3. **Requantisation — only after** the low-bit `sm_110a` kernel prototype clears the format.
+
+The first two leave the weights untouched, so neither invalidates a running evaluation.
+
+### Requantisation: three things established before attempting it
+
+* **Compounding error is unavoidable if MXFP4 is the only source.** Requantising already-quantised
+  weights stacks e1 (MXFP4) on e2 (the new step); calibration methods faithfully reproduce whatever
+  they are handed, error included. `MODEL_INVENTORY.md` marks the expert format as native MXFP4
+  "proof, not assumption", and the DeepSeek V4 line appears MXFP4-native like Kimi K3 — so there
+  may be **no higher-precision parent to work from**. Confirm what
+  `deepseek-ai/DeepSeek-V4-Flash-0731` actually ships before planning around a BF16 source.
+* **The draft head is coupled to the quantisation, but only through tau.** Speculative decoding is
+  *exact* — verification guarantees the target's output distribution regardless of draft quality —
+  so a mismatched head costs **speed, never correctness**. MTP heads consume the target's hidden
+  states, which shift on requantisation, so acceptance drops. **Sequencing: requantise first, then
+  train the head against the final quantisation**, or the head work is done twice.
+* **"Within rounding-error noise" needs a testable definition, and the battery cannot supply it.**
+  GPQA's CI is +-6 points at n=197, so a change costing under ~3 points is invisible *at this
+  sample size* — which is not the same as lossless. Published 4-bit -> 3-bit results degrade
+  measurably without recovery training. Use **KL divergence and top-1 agreement against the MXFP4
+  model on held-out tokens** (§5), which resolves far below the battery's resolution and costs
+  almost nothing.
 
 ### Tier 1 — $0-300
 
