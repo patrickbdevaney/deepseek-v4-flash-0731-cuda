@@ -2184,3 +2184,10 @@ from typing im     run=48/115 stop 8.3 tok/s (1244.1 min)
 === preflight 2026-08-18T14:06:08-04:00
   [PASS] SERVER      reachable and model loaded                   model=deepseek-v4-flash-0731-reap seqmax=32768 context_len=0
   [PASS] PROVENANCE  published dataset facts verified locally     19 checks; see evidence/evals/provenance.json
+  [PASS] SCORERS     HumanEval canonical solutions pass           164/164
+  [PASS] SCORERS     MATH-500 gold matches itself                 500/500
+  [PASS] SCORERS     answer extraction cases                      4/4
+  [PASS] CONTEXT     chat-template overhead measured              4 tokens
+  [PASS] CONTEXT     gpqa_diamond: every item fits                longest prompt 2564 + max_tokens 8000 + 12 = 10576 vs seqmax 32768
+  [PASS] CONTEXT     bfcl: every item fits                        longest prompt 830 + max_tokens 2000 + 12 = 2842 vs seqmax 32768
+  [PASS] CONTEXT     bfcl_live: every item fits                   longest prompt 3488 + max_tokens 2000 + 12 = 5500 vs seqmax 32768
