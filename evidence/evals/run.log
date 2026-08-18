@@ -2191,3 +2191,22 @@ from typing im     run=48/115 stop 8.3 tok/s (1244.1 min)
   [PASS] CONTEXT     gpqa_diamond: every item fits                longest prompt 2564 + max_tokens 8000 + 12 = 10576 vs seqmax 32768
   [PASS] CONTEXT     bfcl: every item fits                        longest prompt 830 + max_tokens 2000 + 12 = 2842 vs seqmax 32768
   [PASS] CONTEXT     bfcl_live: every item fits                   longest prompt 3488 + max_tokens 2000 + 12 = 5500 vs seqmax 32768
+  [PASS] CONTEXT     scicode: every item fits                     longest prompt 2588 + max_tokens 8000 + 12 = 10600 vs seqmax 32768
+  [PASS] CONTEXT     mmlu_pro: every item fits                    longest prompt 535 + max_tokens 8000 + 12 = 8547 vs seqmax 32768
+  [PASS] CONTEXT     humaneval: every item fits                   longest prompt 415 + max_tokens 8000 + 12 = 8427 vs seqmax 32768
+  [PASS] CONTEXT     math500: every item fits                     longest prompt 790 + max_tokens 8000 + 12 = 8802 vs seqmax 32768
+  [PASS] CONTEXT     lcb: every item fits                         longest prompt 1362 + max_tokens 8000 + 12 = 9374 vs seqmax 32768
+  [PASS] CONTEXT     aime24: every item fits                      longest prompt 352 + max_tokens 8000 + 12 = 8364 vs seqmax 32768
+  [PASS] CONTEXT     aime25: every item fits                      longest prompt 252 + max_tokens 8000 + 12 = 8264 vs seqmax 32768
+  [PASS] POWER       gpqa_diamond: interval quotable              n=198 (reps=1) -> +-5.6 points at p=0.8
+  [PASS] POWER       bfcl: interval quotable                      n=240 (reps=1) -> +-5.0 points at p=0.8
+  [PASS] POWER       bfcl_live: interval quotable                 n=508 (reps=1) -> +-3.5 points at p=0.8
+  [PASS] POWER       scicode: interval quotable                   n=291 (reps=1) -> +-4.6 points at p=0.8
+  [PASS] POWER       mmlu_pro: interval quotable                  n=150 (reps=1) -> +-6.4 points at p=0.8
+  [PASS] POWER       humaneval: interval quotable                 n=164 (reps=1) -> +-6.1 points at p=0.8
+  [PASS] POWER       math500: interval quotable                   n=100 (reps=1) -> +-7.8 points at p=0.8
+  [PASS] POWER       lcb: interval quotable                       n=175 (reps=1) -> +-5.9 points at p=0.8
+  [PASS] POWER       aime24: interval quotable                    n=60 (reps=2) -> +-10.0 points at p=0.8
+  [PASS] POWER       aime25: interval quotable                    n=60 (reps=2) -> +-10.0 points at p=0.8
+  [PASS] MEMORY      headroom above the guard floor               MemAvailable 8025 MB
+  [PASS] MEMORY      memguard running                             kills the server before the kernel takes the box down

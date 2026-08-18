@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "bfcl_live",
+      "task": "gpqa_diamond",
       "effort": "low",
-      "records": 508,
-      "recomputed_acc": 78.74,
-      "published_acc": 78.7,
-      "snapshot": "61fc0608cfd831fcfbbaa676ebdfef0ed963eeda",
-      "source": "gorilla-llm/BFCL v3 (live_* subsets, AST-scored, 508)"
+      "records": 197,
+      "recomputed_acc": 72.59,
+      "published_acc": 72.6,
+      "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3",
+      "source": "fingertap/GPQA-Diamond (test, 198)"
     }
   ],
   "failed": 0
