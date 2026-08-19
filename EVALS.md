@@ -199,7 +199,7 @@ so a low number cannot be dismissed as strict parsing.
 | benchmark | effort | scored | **acc %** | 95 % CI | trunc | err | mean out tok | tok/s | unpruned 0731 @ same effort |
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|
 | AIME 2024 *(partial)* **— NOT QUOTABLE, 15% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 60/60 | **85.0** | [71.7, 96.7] | 9 | 0 | 3735 | 15.6 | — *(none published)* |
-| AIME 2025 *(partial)* | **low** | 1/60 | **100.0** | [20.7, 100.0] | 0 | 0 | 316 | 25.6 | — *(none published)* |
+| AIME 2025 *(partial)* **— NOT QUOTABLE, 35% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 60/60 | **68.3** | [51.7, 83.3] | 21 | 0 | 4742 | 14.9 | — *(none published)* |
 | GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 198/198 | **72.7** | [66.1, 78.5] | 51 | 0 | 3699 | 15.0 | 71.20 |
 | MMLU-Pro *(partial)* **— NOT QUOTABLE, 12% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 150/150 | **73.3** | [65.7, 79.8] | 18 | 0 | 1948 | 17.3 | 83.00 |
 | MATH-500 | **low** | 100/100 | **95.0** | [88.8, 97.8] | 1 | 0 | 940 | 21.6 | — *(none published)* |
@@ -209,9 +209,9 @@ so a low number cannot be dismissed as strict parsing.
 | LiveCodeBench — `test6` window † *(partial)* **— NOT QUOTABLE, 59% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 175/175 | **46.9** | [39.6, 54.2] | 104 | 0 | 5552 | 12.3 | — *(none published)* |
 | SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 19% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 291/291 | **30.2** | [24.1, 36.9] | 54 | 0 | 3534 | 14.7 | — *(none published)* |
 
-1887 items scored, 3,756,160 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+1946 items scored, 4,040,364 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
-Interval method per row: AIME 2024 — cluster-bootstrap over 30 problems (avg@2), AIME 2025 — wilson, BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, HumanEval — wilson, LiveCodeBench — `test6` window † — wilson, MATH-500 — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
+Interval method per row: AIME 2024 — cluster-bootstrap over 30 problems (avg@2), AIME 2025 — cluster-bootstrap over 30 problems (avg@2), BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, HumanEval — wilson, LiveCodeBench — `test6` window † — wilson, MATH-500 — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
 Per-task provenance (dataset and pinned snapshot):
 

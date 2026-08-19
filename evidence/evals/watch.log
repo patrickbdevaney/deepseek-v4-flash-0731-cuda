@@ -198,3 +198,15 @@ VERIFY: 0 failed -> PASS
   [PASS] aime24         snapshot matches the published one       8d88b2876a82 vs 8d88b2876a82
 
 VERIFY: 0 failed -> PASS
+[land] aime24@low: 85.0% [71.7, 96.7] n=60/60 trunc=9 err=0 — verified, committed, pushed
+[watch] 2026-08-19T05:23:49-04:00 aime25 finished — landing
+  [PASS] aime25         no duplicate records                     60 records, 60 unique
+  [PASS] aime25         every id exists in the benchmark         0 unknown
+  [PASS] aime25         gold matches the pinned dataset          0 mismatched
+  [PASS] aime25         prompt matches the one that was sent     60/60 records carry a hash; 0 mismatched
+  [PASS] aime25         no silent empty generations              0 empty
+  [PASS] aime25         stored correct flags reproduce           0 disagree
+  [PASS] aime25/low     published accuracy is reproducible       recomputed 68.3 % vs published 68.3 % over 60 records
+  [PASS] aime25         snapshot matches the published one       a6ad95f611d7 vs a6ad95f611d7
+
+VERIFY: 0 failed -> PASS

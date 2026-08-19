@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "aime24",
+      "task": "aime25",
       "effort": "low",
       "records": 60,
-      "recomputed_acc": 85.0,
-      "published_acc": 85.0,
-      "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792",
-      "source": "Maxwell-Jia/AIME_2024 (30)"
+      "recomputed_acc": 68.33,
+      "published_acc": 68.3,
+      "snapshot": "a6ad95f611d72cf628a80b58bd0432ef6638f958",
+      "source": "opencompass/AIME2025 (I+II, 30)"
     }
   ],
   "failed": 0
