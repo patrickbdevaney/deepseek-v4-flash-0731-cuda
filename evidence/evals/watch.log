@@ -186,3 +186,15 @@ VERIFY: 0 failed -> PASS
   [PASS] lcb            snapshot matches the published one       0fe84c3912ea vs 0fe84c3912ea
 
 VERIFY: 0 failed -> PASS
+[land] lcb@low: 46.9% [39.6, 54.2] n=175/175 trunc=104 err=0 — verified, committed, pushed
+[watch] 2026-08-18T22:30:35-04:00 aime24 finished — landing
+  [PASS] aime24         no duplicate records                     60 records, 60 unique
+  [PASS] aime24         every id exists in the benchmark         0 unknown
+  [PASS] aime24         gold matches the pinned dataset          0 mismatched
+  [PASS] aime24         prompt matches the one that was sent     60/60 records carry a hash; 0 mismatched
+  [PASS] aime24         no silent empty generations              0 empty
+  [PASS] aime24         stored correct flags reproduce           0 disagree
+  [PASS] aime24/low     published accuracy is reproducible       recomputed 85.0 % vs published 85.0 % over 60 records
+  [PASS] aime24         snapshot matches the published one       8d88b2876a82 vs 8d88b2876a82
+
+VERIFY: 0 failed -> PASS

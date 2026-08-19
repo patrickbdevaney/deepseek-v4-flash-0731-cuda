@@ -2,6 +2,34 @@
   {
     "task": "aime24",
     "effort": "low",
+    "n": 60,
+    "n_total": 60,
+    "correct": 51,
+    "strata_field": null,
+    "strata_seen": null,
+    "strata_total": null,
+    "n_unique": 30,
+    "reps": 2,
+    "acc": 85.0,
+    "ci": [
+      71.7,
+      96.7
+    ],
+    "ci_method": "cluster-bootstrap over 30 problems (avg@2)",
+    "n_problems": 30,
+    "truncated": 9,
+    "errors": 0,
+    "mean_completion_tokens": 3735,
+    "mean_tok_s": 15.63,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 8000,
+    "source": "Maxwell-Jia/AIME_2024 (30)",
+    "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792"
+  },
+  {
+    "task": "aime25",
+    "effort": "low",
     "n": 1,
     "n_total": 60,
     "correct": 1,
@@ -19,13 +47,13 @@
     "n_problems": 1,
     "truncated": 0,
     "errors": 0,
-    "mean_completion_tokens": 1030,
-    "mean_tok_s": 22.72,
+    "mean_completion_tokens": 316,
+    "mean_tok_s": 25.63,
     "temperature": 1.0,
     "top_p": 0.95,
     "max_tokens": 8000,
-    "source": "Maxwell-Jia/AIME_2024 (30)",
-    "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792"
+    "source": "opencompass/AIME2025 (I+II, 30)",
+    "snapshot": "a6ad95f611d72cf628a80b58bd0432ef6638f958"
   },
   {
     "task": "gpqa_diamond",

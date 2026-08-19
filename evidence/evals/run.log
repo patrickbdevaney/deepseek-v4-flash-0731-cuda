@@ -2351,3 +2351,77 @@ scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.
 === 2026-08-18T17:27:05-04:00  aime24  n=0 reps=2 effort=low
 [aime24] 60 items from Maxwell-Jia/AIME_2024 (30) (snapshot 8d88b2876a82), 0 already done, 60 to go, max_tokens=8000, timeout=2180s
   [1/60] aime2024-2024-II-4 gold=33 got=33 OK  run=1/1 stop 22.7 tok/s (0.8 min)
+  [2/60] aime2024-2024-II-12 gold=23 got=23 OK  run=2/2 stop 14.7 tok/s (4.6 min)
+  [3/60] aime2024-2024-I-4 gold=116 got=116 OK  run=3/3 stop 22.4 tok/s (5.0 min)
+  [4/60] aime2024-2024-I-3 gold=809 got=809 OK  run=4/4 stop 17.5 tok/s (6.2 min)
+  [5/60] aime2024-2024-I-8 gold=197 got=m+n     run=4/5 stop 9.2 tok/s (20.7 min)
+  [6/60] aime2024-2024-I-12 gold=385 got=4     run=4/6 stop 11.6 tok/s (32.3 min)
+  [7/60] aime2024-2024-I-11 gold=371 got=3     run=4/7 stop 9.9 tok/s (45.7 min)
+  [8/60] aime2024-2024-II-11 gold=601 got=601 OK  run=5/8 stop 15.9 tok/s (49.3 min)
+  [9/60] aime2024-2024-I-2 gold=25 got=25 OK  run=6/9 stop 21.1 tok/s (49.6 min)
+  [10/60] aime2024-2024-II-6 gold=55 got=55 OK  run=7/10 stop 21.4 tok/s (50.5 min)
+  [11/60] aime2024-2024-I-7 gold=540 got=540 OK  run=8/11 stop 22.2 tok/s (51.0 min)
+  [12/60] aime2024-2024-II-3 gold=45 got=45 OK  run=9/12 stop 17.1 tok/s (52.8 min)
+  [13/60] aime2024-2024-I-1 gold=204 got=204 OK  run=10/13 stop 20.6 tok/s (53.4 min)
+  [14/60] aime2024-2024-II-7 gold=699 got=699 OK  run=11/14 stop 13.9 tok/s (59.9 min)
+  [15/60] aime2024-2024-I-6 gold=294 got=294 OK  run=12/15 stop 18.5 tok/s (60.8 min)
+  [16/60] aime2024-2024-I-13 gold=110 got=110 OK  run=13/16 stop 13.7 tok/s (66.3 min)
+  [17/60] aime2024-2024-I-15 gold=721 got=721 OK  run=14/17 stop 12.9 tok/s (71.9 min)
+  [18/60] aime2024-2024-II-15 gold=315 got=5     run=14/18 stop 10.5 tok/s (84.6 min)
+  [19/60] aime2024-2024-II-10 gold=468 got=468 OK  run=15/19 stop 16.5 tok/s (87.7 min)
+  [20/60] aime2024-2024-II-9 gold=902 got=902 OK  run=16/20 stop 11.9 tok/s (94.8 min)
+  [21/60] aime2024-2024-II-14 gold=211 got=211 OK  run=17/21 stop 12.6 tok/s (101.4 min)
+  [22/60] aime2024-2024-II-5 gold=80 got=13     run=17/22 stop 10.7 tok/s (113.8 min)
+  [23/60] aime2024-2024-I-9 gold=480 got=480 OK  run=18/23 stop 13.2 tok/s (120.3 min)
+  [24/60] aime2024-2024-II-2 gold=236 got=236 OK  run=19/24 stop 15.2 tok/s (123.4 min)
+  [25/60] aime2024-2024-II-1 gold=73 got=73 OK  run=20/25 stop 19.5 tok/s (124.5 min)
+  [26/60] aime2024-2024-I-10 gold=113 got=113 OK  run=21/26 stop 10.4 tok/s (137.3 min)
+  [27/60] aime2024-2024-II-8 gold=127 got=127 OK  run=22/27 stop 12.1 tok/s (144.3 min)
+  [28/60] aime2024-2024-I-14 gold=104 got=104 OK  run=23/28 stop 16.0 tok/s (147.9 min)
+  [29/60] aime2024-2024-I-5 gold=104 got=104 OK  run=24/29 stop 15.2 tok/s (151.2 min)
+  [30/60] aime2024-2024-II-13 gold=321 got=321 OK  run=25/30 stop 18.9 tok/s (152.8 min)
+  [31/60] aime2024-2024-II-4#r1 gold=33 got=33 OK  run=26/31 stop 25.1 tok/s (153.3 min)
+  [32/60] aime2024-2024-II-12#r1 gold=23 got=23 OK  run=27/32 stop 15.0 tok/s (156.9 min)
+  [33/60] aime2024-2024-I-4#r1 gold=116 got=116 OK  run=28/33 stop 23.1 tok/s (157.2 min)
+  [34/60] aime2024-2024-I-3#r1 gold=809 got=809 OK  run=29/34 stop 14.5 tok/s (161.0 min)
+  [35/60] aime2024-2024-I-8#r1 gold=197 got=2     run=29/35 stop 9.3 tok/s (175.3 min)
+  [36/60] aime2024-2024-I-12#r1 gold=385 got=4     run=29/36 stop 11.8 tok/s (186.6 min)
+  [37/60] aime2024-2024-I-11#r1 gold=371 got=1     run=29/37 stop 9.9 tok/s (200.1 min)
+  [38/60] aime2024-2024-II-11#r1 gold=601 got=601 OK  run=30/38 stop 14.2 tok/s (205.6 min)
+  [39/60] aime2024-2024-I-2#r1 gold=25 got=25 OK  run=31/39 stop 21.2 tok/s (205.9 min)
+  [40/60] aime2024-2024-II-6#r1 gold=55 got=55 OK  run=32/40 stop 21.0 tok/s (206.8 min)
+  [41/60] aime2024-2024-I-7#r1 gold=540 got=540 OK  run=33/41 stop 23.1 tok/s (207.3 min)
+  [42/60] aime2024-2024-II-3#r1 gold=45 got=45 OK  run=34/42 stop 16.0 tok/s (209.2 min)
+  [43/60] aime2024-2024-I-1#r1 gold=204 got=204 OK  run=35/43 stop 22.9 tok/s (209.6 min)
+  [44/60] aime2024-2024-II-7#r1 gold=699 got=699 OK  run=36/44 stop 15.7 tok/s (213.4 min)
+  [45/60] aime2024-2024-I-6#r1 gold=294 got=294 OK  run=37/45 stop 18.7 tok/s (214.2 min)
+  [46/60] aime2024-2024-I-13#r1 gold=110 got=110 OK  run=38/46 stop 14.1 tok/s (218.5 min)
+  [47/60] aime2024-2024-I-15#r1 gold=721 got=721 OK  run=39/47 stop 11.4 tok/s (228.7 min)
+  [48/60] aime2024-2024-II-15#r1 gold=315 got=12     run=39/48 stop 9.9 tok/s (242.2 min)
+  [49/60] aime2024-2024-II-10#r1 gold=468 got=468 OK  run=40/49 stop 14.7 tok/s (247.2 min)
+  [50/60] aime2024-2024-II-9#r1 gold=902 got=902 OK  run=41/50 stop 10.2 tok/s (259.0 min)
+  [51/60] aime2024-2024-II-14#r1 gold=211 got=211 OK  run=42/51 stop 14.5 tok/s (262.6 min)
+  [52/60] aime2024-2024-II-5#r1 gold=80 got=80 OK  run=43/52 stop 11.4 tok/s (271.9 min)
+  [53/60] aime2024-2024-I-9#r1 gold=480 got=480 OK  run=44/53 stop 14.3 tok/s (276.3 min)
+  [54/60] aime2024-2024-II-2#r1 gold=236 got=236 OK  run=45/54 stop 14.8 tok/s (279.7 min)
+  [55/60] aime2024-2024-II-1#r1 gold=73 got=73 OK  run=46/55 stop 19.3 tok/s (280.4 min)
+  [56/60] aime2024-2024-I-10#r1 gold=113 got=113 OK  run=47/56 stop 13.4 tok/s (287.2 min)
+  [57/60] aime2024-2024-II-8#r1 gold=127 got=127 OK  run=48/57 stop 12.9 tok/s (292.3 min)
+  [58/60] aime2024-2024-I-14#r1 gold=104 got=104 OK  run=49/58 stop 16.5 tok/s (295.5 min)
+  [59/60] aime2024-2024-I-5#r1 gold=104 got=104 OK  run=50/59 stop 13.9 tok/s (300.6 min)
+  [60/60] aime2024-2024-II-13#r1 gold=321 got=321 OK  run=51/60 stop 16.6 tok/s (303.0 min)
+
+task             eff      scored   acc %          95% CI  trunc  mean tok   tok/s
+aime24           low       60/60    85.0    [71.7, 96.7]      9      3735    15.6
+gpqa_diamond     low     198/198    72.7    [66.1, 78.5]     51      3699    15.0
+mmlu_pro         low     150/150    73.3    [65.7, 79.8]     18      1948    17.3
+math500          low     100/100    95.0    [88.8, 97.8]      1       940    21.6
+humaneval        low     164/164    95.1    [90.7, 97.5]      6      1438    20.6
+bfcl             low     240/240    86.2    [81.3, 90.0]      3       216    22.8
+bfcl_live        low     508/508    78.7    [75.0, 82.1]      5       247    18.5
+lcb              low     175/175    46.9    [39.6, 54.2]    104      5552    12.3
+scicode          low     291/291    30.2    [24.1, 36.9]     54      3534    14.7
+=== 2026-08-18T22:30:09-04:00  aime24 done
+=== 2026-08-18T22:30:09-04:00  aime25  n=0 reps=2 effort=low
+[aime25] 60 items from opencompass/AIME2025 (I+II, 30) (snapshot a6ad95f611d7), 0 already done, 60 to go, max_tokens=8000, timeout=2180s
+  [1/60] aime2025-0000 gold=70 got=70 OK  run=1/1 stop 25.6 tok/s (0.2 min)

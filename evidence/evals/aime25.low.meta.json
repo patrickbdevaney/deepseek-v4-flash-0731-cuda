@@ -1,0 +1,18 @@
+{
+  "task": "aime25",
+  "source": "opencompass/AIME2025 (I+II, 30)",
+  "snapshot": "a6ad95f611d72cf628a80b58bd0432ef6638f958",
+  "n_items": 60,
+  "scoring": "integer",
+  "n_unique": 30,
+  "reps": 2,
+  "effort": "low",
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "max_tokens": 8000,
+  "code_commit": "4adee362185ca7809dcd9769956c2411fb3ad0a2",
+  "code_dirty": true,
+  "server_sha256": "5a0f9e482e712d80",
+  "server_mtime": "2026-08-13T23:19:14Z",
+  "started": "2026-08-19T02:30:10Z"
+}

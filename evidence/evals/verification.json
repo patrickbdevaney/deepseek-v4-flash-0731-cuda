@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "lcb",
+      "task": "aime24",
       "effort": "low",
-      "records": 175,
-      "recomputed_acc": 46.86,
-      "published_acc": 46.9,
-      "snapshot": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
-      "source": "livecodebench/code_generation_lite test6 (2025-01..2025-04, 175)"
+      "records": 60,
+      "recomputed_acc": 85.0,
+      "published_acc": 85.0,
+      "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792",
+      "source": "Maxwell-Jia/AIME_2024 (30)"
     }
   ],
   "failed": 0
