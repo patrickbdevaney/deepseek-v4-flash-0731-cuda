@@ -86,6 +86,17 @@ else
   launch eval_extend_all.sh extend.log
 fi
 
+# STAGE 2b: the extension RETRY. The sweep above visits each task exactly once and never looks
+# back, so a task whose extension died mid-way is left with a partial merged file and the chain
+# walks on. This finishes them. It must run BEFORE forcing, and forcing blocks on it.
+if running eval_extend_retry.sh; then
+  say "extension retry already running"
+elif done_marker extend_retry.log "ALL EXTENSION RETRIES COMPLETE"; then
+  say "extension retry already complete"
+else
+  launch eval_extend_retry.sh extend_retry.log
+fi
+
 # STAGE 3: forcing. Rescues the rows the extension could not reach. Declines every row the
 # extension already brought under the gate, so on a healthy run this does work on about two rows.
 if running eval_force_all.sh; then

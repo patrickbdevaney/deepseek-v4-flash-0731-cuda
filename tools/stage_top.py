@@ -30,6 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'evidence', 'evals')
 
 RUN_LOG, EXT_LOG = os.path.join(OUT, 'run.log'), os.path.join(OUT, 'extend.log')
+RTY_LOG = os.path.join(OUT, 'extend_retry.log')
 FRC_LOG, MT_LOG = os.path.join(OUT, 'force.log'), os.path.join(OUT, 'bfcl_mt.log')
 
 # The order eval_extend_all.sh sweeps in. Matching it means the table reads as a queue.
@@ -75,7 +76,8 @@ def procs():
         except OSError:
             continue
         for key in ('eval_supervise.sh', 'run_evals.sh', 'eval_extend_all.sh', 'eval_force_all.sh',
-                    'eval_bfcl_mt_run.sh', 'eval_extend.py', 'eval_force.py', 'eval_bfcl_mt.py',
+                    'eval_extend_retry.sh', 'eval_bfcl_mt_run.sh',
+                    'eval_extend.py', 'eval_force.py', 'eval_bfcl_mt.py',
                     'eval_suite.py'):
             if key in cmd:
                 alive.add(key)
@@ -141,6 +143,29 @@ def parse_extend(txt):
             r['result'] = 'incomplete'
         elif 'topped up to' in msg:
             r['topped'] = True
+    return st
+
+
+def parse_retry(txt):
+    """The retry pass runs eval_extend.py again, so its per-item feed is the extension's. Only the
+    surrounding decisions differ, and those are all this needs to read."""
+    st = dict(done=False, started=False, tasks={}, still=[], no_engine=False)
+    for line in txt.splitlines():
+        m = RE_SAY.match(line)
+        if not m:
+            continue
+        msg = m.group(2)
+        if 'ALL EXTENSION RETRIES COMPLETE' in msg:
+            st['done'] = True
+        elif msg.startswith('pass '):
+            st['started'] = True
+            mm = re.search(r'pass \d+: (\w+) is incomplete \((.*?)\)', msg)
+            if mm:
+                st['tasks'][mm.group(1)] = mm.group(2)
+        elif msg.startswith('STILL INCOMPLETE:'):
+            st['still'].append(msg.split(':', 1)[1].strip())
+        elif 'the engine is down' in msg:
+            st['no_engine'] = True
     return st
 
 
@@ -216,7 +241,7 @@ def parse_mt(txt):
     return st
 
 
-def faults(ext, frc, up, e_run, f_run):
+def faults(ext, rty, frc, up, e_run, r_run, f_run):
     """Cross-check the logs against the files. This is the part a `tail` cannot do.
 
     THE ONE THAT MATTERS. eval_force_all.sh selects the extended file with a bare `[ -s ]` test, so
@@ -224,7 +249,7 @@ def faults(ext, frc, up, e_run, f_run):
     already terminated. Forcing then reads 0 % truncation out of it, declines, and prints "declined
     by the gate" -- and the row it was supposed to rescue stays NOT QUOTABLE with both logs green.
     """
-    out = []
+    out, pending = [], []
     if not up:
         out.append('the engine is DOWN — every stage below is either blocked or banking failures')
     for t in EXT_TASKS:
@@ -236,15 +261,21 @@ def faults(ext, frc, up, e_run, f_run):
             continue
         base, e = nrec(f'{t}.{EFFORT}.jsonl'), nrec(f'{t}.{EXT_TAG}.jsonl')
         if not e:
-            continue
+            continue                                  # never extended: under the gate, or not reached
         res = (ext['tasks'].get(t) or {}).get('result')
-        if e < base and res != 'landed':
-            out.append(f'{t}: {EXT_TAG} is PARTIAL ({e}/{base} records, extension {res or "abandoned"}). '
-                       f'eval_force_all.sh selects it on a bare [ -s ] test, will read 0% truncation '
-                       f'and DECLINE — the row stays NOT QUOTABLE and force.log says "declined by the gate".')
-        elif not os.path.exists(os.path.join(OUT, f'{t}.{EXT_TAG}.meta.json')):
-            out.append(f'{t}: {EXT_TAG}.jsonl exists with no .meta.json — eval_force.tag_for() will '
-                       f'fall back to defaults and derive the wrong forced tag.')
+        broken = (e < base) or not os.path.exists(os.path.join(OUT, f'{t}.{EXT_TAG}.meta.json'))
+        if not broken:
+            continue
+        # A PARTIAL FILE IS ONLY A FAULT ONCE THE THING THAT REPAIRS IT HAS HAD ITS TURN.
+        # eval_extend_retry.sh resumes every partial merged file before forcing runs, so until it
+        # has finished, a partial file is queued work rather than a defect. Saying otherwise trains
+        # the operator to ignore the panel, which is the only way a real fault gets missed.
+        if r_run or not rty['done']:
+            pending.append(f'{t} ({e}/{base})')
+            continue
+        out.append(f'{t}: {EXT_TAG} is PARTIAL ({e}/{base} records, extension {res or "abandoned"}) '
+                   f'and the retry pass has already run. eval_force_all.sh will fall back to the '
+                   f'base row — correct, but this row never got its extension.')
     # ONLY IF IT IS STILL THE LAST WORD. Both of these are recorded permanently in a log that a
     # resume appends to, so a refusal from two days ago that eval_resume.sh already cleared must not
     # keep showing as a live fault -- a panel that is always red is a panel nobody reads.
@@ -252,7 +283,11 @@ def faults(ext, frc, up, e_run, f_run):
         out.append(f'the extension stopped at {ext["stopped"]} rather than extend a partial battery')
     if frc['refused'] and not (frc['sweeping'] or f_run):
         out.append(f'forcing REFUSED at {frc["refused"]} — it saw no ALL EXTENSIONS COMPLETE marker')
-    return out
+    if rty['no_engine']:
+        out.append('the retry pass found no engine and refused — run scripts/eval_resume.sh')
+    for t in rty['still']:
+        out.append(f'retry could not finish {t} — forcing will fall back to the base row')
+    return out, pending
 
 
 def stage_line(name, state, detail):
@@ -266,6 +301,7 @@ def frame():
     H = shutil.get_terminal_size((110, 44)).lines
     alive = procs()
     ext = parse_extend(read_text(EXT_LOG))
+    rty = parse_retry(read_text(RTY_LOG))
     frc = parse_force(read_text(FRC_LOG))
     mt = parse_mt(read_text(MT_LOG))
     mx = metrics()
@@ -298,6 +334,13 @@ def frame():
                         f'{n_done}/{len(EXT_TASKS)} tasks decided' +
                         (f'  ·  {ext["cur"]} in flight' if ext['cur'] else '')))
 
+    r_run = 'eval_extend_retry.sh' in alive
+    r_state = ('complete' if rty['done'] else 'dead' if not r_run
+               else 'running' if rty['started'] else 'waiting')
+    L.append(stage_line('2b retry', r_state,
+                        (', '.join(f'{k} {v}' for k, v in rty['tasks'].items()) or
+                         'finishes any extension the sweep left partial')))
+
     f_run = 'eval_force_all.sh' in alive
     f_state = ('complete' if frc['done'] else 'FAILED' if frc['refused'] and not f_run
                else 'dead' if not f_run else 'running' if frc['sweeping'] else 'waiting')
@@ -313,7 +356,7 @@ def frame():
                                          else 'blocked on forcing')))
 
     # ---- faults -------------------------------------------------------------------------------
-    fl = faults(ext, frc, up, e_run, f_run)
+    fl, pending = faults(ext, rty, frc, up, e_run, r_run, f_run)
     if fl:
         L.append('')
         L.append('  ' + red(bold('── faults ')) + dim('─' * (W - 14)))
@@ -325,6 +368,11 @@ def frame():
                     line = '     '
                 line += w + ' '
             L.append('  ' + red(line))
+
+    if pending:
+        L.append('')
+        L.append('  ' + yellow('  queued for the retry pass: ') + dim(', '.join(pending)) +
+                 dim('  (partial merged files — 2b resumes them before forcing runs)'))
 
     # ---- extension ----------------------------------------------------------------------------
     L.append('')
@@ -403,7 +451,7 @@ def frame():
                              dim(f'turns {it["turns"]}  steps {it["steps"]:>2}  '
                                  f'{it["tok"]:>5} tok   {it["nok"]} correct   {it["mins"]:.0f}m'))
 
-    for log, st in ((EXT_LOG, e_state), (FRC_LOG, f_state), (MT_LOG, m_state)):
+    for log, st in ((EXT_LOG, e_state), (RTY_LOG, r_state), (FRC_LOG, f_state), (MT_LOG, m_state)):
         if st in ('waiting', 'running'):
             last = [l for l in read_text(log, 8000).splitlines() if l.strip()]
             if last:

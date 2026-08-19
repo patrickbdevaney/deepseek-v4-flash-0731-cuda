@@ -1,3 +1,58 @@
 [extend 2026-08-16T17:58:02-04:00] waiting for the battery to finish before extending anything
 [extend 2026-08-17T21:58:09-04:00] no battery and no supervisor running — stopping rather than extending a partial run
 [extend 2026-08-18T14:06:08-04:00] waiting for the battery to finish before extending anything
+[extend 2026-08-19T05:26:12-04:00] battery complete; deciding which rows are budget-limited
+[extend 2026-08-19T05:26:15-04:00] gpqa_diamond: 25.8% truncated over 198 records — continuing truncated traces to 24000
+[gpqa_diamond@low -> low24k] 198 base records: 147 terminated (kept as-is), 51 truncated (to continue), 0 already written
+
+gpqa-0010: PREFIX IS NOT TOKEN-EXACT — refusing to continue.
+  the base run fed 327 prompt + 8000 completion = 8327 tokens
+  the rebuilt prefix tokenizes to 8325
+  continuing from a different token sequence would measure a different thing.
+[extend 2026-08-19T06:30:07-04:00] gpqa_diamond: EXTENSION FAILED — the base row stays flagged NOT QUOTABLE, which is correct
+[extend 2026-08-19T06:30:07-04:00] mmlu_pro: 12.0% truncated over 150 records — continuing truncated traces to 24000
+[mmlu_pro@low -> low24k] 150 base records: 132 terminated (kept as-is), 18 truncated (to continue), 0 already written
+  [1/18] mmlupro-472 gold=I got=I OK  +332 tok (total 8332) stop (3.7 min)
+  [2/18] mmlupro-509 gold=E got=E OK  +2733 tok (total 10733) stop (14.5 min)
+  [3/18] mmlupro-1007 gold=A got=I     +4067 tok (total 12067) stop (29.6 min)
+  [4/18] mmlupro-1975 gold=I got=F     +3764 tok (total 11764) stop (45.0 min)
+  [5/18] mmlupro-3003 gold=J got=J OK  +155 tok (total 8155) stop (48.3 min)
+  [6/18] mmlupro-3873 gold=F got=F OK  +1051 tok (total 9051) stop (53.7 min)
+  [7/18] mmlupro-4549 gold=B got=J     +2509 tok (total 10509) stop (62.9 min)
+  [8/18] mmlupro-5019 gold=D got=None     +16000 tok (total 24000) TRUNC (127.7 min)
+  [9/18] mmlupro-5737 gold=E got=F     +16000 tok (total 24000) TRUNC (186.5 min)
+
+mmlupro-6545: PREFIX IS NOT TOKEN-EXACT — refusing to continue.
+  the base run fed 423 prompt + 8000 completion = 8423 tokens
+  the rebuilt prefix tokenizes to 8422
+  continuing from a different token sequence would measure a different thing.
+[extend 2026-08-19T10:29:05-04:00] mmlu_pro: EXTENSION FAILED — the base row stays flagged NOT QUOTABLE, which is correct
+[extend 2026-08-19T10:29:05-04:00] aime24: 15.0% truncated over 60 records — continuing truncated traces to 24000
+[aime24@low -> low24k] 60 base records: 51 terminated (kept as-is), 9 truncated (to continue), 0 already written
+  [1/9] aime2024-2024-I-8 gold=197 got=m+n     +16000 tok (total 24000) TRUNC (61.5 min)
+  [2/9] aime2024-2024-I-12 gold=385 got=3     +16000 tok (total 24000) TRUNC (121.0 min)
+  [3/9] aime2024-2024-I-11 gold=371 got=371 OK  +5086 tok (total 13086) stop (139.2 min)
+  [4/9] aime2024-2024-II-15 gold=315 got=315 OK  +16000 tok (total 24000) TRUNC (203.1 min)
+  [5/9] aime2024-2024-II-5 gold=80 got=80 OK  +11357 tok (total 19357) stop (240.2 min)
+  [6/9] aime2024-2024-I-8#r1 gold=197 got=1     +16000 tok (total 24000) TRUNC (306.3 min)
+  [7/9] aime2024-2024-I-12#r1 gold=385 got=1     +16000 tok (total 24000) TRUNC (368.9 min)
+  [8/9] aime2024-2024-I-11#r1 gold=371 got=371 OK  +12020 tok (total 20020) stop (413.0 min)
+  [9/9] aime2024-2024-II-15#r1 gold=315 got=165     +16000 tok (total 24000) TRUNC (474.3 min)
+
+wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/aime24.low24k.jsonl  (51 carried + 9 continued + 0 not continuable, 0 with prefix drift, max |drift| 0)
+[extend 2026-08-19T18:23:20-04:00] aime24: extension finished, landing as aime24@low24k
+Traceback (most recent call last):
+  File "/home/patrickd/deepseek-v4-flash-0731-cuda/tools/eval_publish.py", line 313, in <module>
+    main()
+  File "/home/patrickd/deepseek-v4-flash-0731-cuda/tools/eval_publish.py", line 237, in main
+    proto = protocol_block(rows)
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/patrickd/deepseek-v4-flash-0731-cuda/tools/eval_publish.py", line 270, in protocol_block
+    samp = sorted({(r.get('temperature'), r.get('top_p'), r.get('effort', '?')) for r in rows})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: '<' not supported between instances of 'NoneType' and 'float'
+[extend 2026-08-19T18:23:24-04:00] aime24: extension did not land (see above)
+[extend 2026-08-19T18:23:24-04:00] aime25: 35.0% truncated over 60 records — continuing truncated traces to 24000
+[aime25@low -> low24k] 60 base records: 39 terminated (kept as-is), 21 truncated (to continue), 0 already written
+  [1/21] aime2025-0001 gold=588 got=588 OK  +2526 tok (total 10526) stop (8.9 min)
+  [2/21] aime2025-0008 gold=62 got=62 OK  +7254 tok (total 15254) stop (29.4 min)

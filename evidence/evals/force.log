@@ -4,3 +4,4 @@
 [force 2026-08-17T21:58:21-04:00] Forcing now would force 8k base files for whichever tasks it had not reached yet.
 [force 2026-08-17T21:58:21-04:00] Refusing. Re-run scripts/eval_extend_all.sh first (it resumes), then this.
 [force 2026-08-18T14:06:08-04:00] waiting for the battery and the extension pass to finish
+[force 2026-08-19T08:07:38-04:00] waiting for the battery, the extension sweep and its retry pass to finish

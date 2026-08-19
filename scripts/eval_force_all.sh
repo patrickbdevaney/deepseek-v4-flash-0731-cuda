@@ -7,11 +7,22 @@
 # can cite was the one outcome the whole battery existed to avoid, so the last repair step is now
 # part of the chain rather than a thing somebody has to remember.
 #
-# IT FORCES THE EXTENDED FILE, NOT THE BASE ONE. Forcing `low` would close the thinking block at
-# 8000 tokens for items that would have terminated on their own at 19k, throwing away the
-# extension's work and scoring the row worse than it deserves. So each task is forced at
-# `low24k` where that file exists and `low` only where it does not (a row that was never over the
-# gate, and which the gate below will decline anyway).
+# IT FORCES THE EXTENDED FILE, NOT THE BASE ONE -- BUT ONLY IF THAT FILE IS FINISHED. Forcing `low`
+# would close the thinking block at 8000 tokens for items that would have terminated on their own at
+# 19k, throwing away the extension's work and scoring the row worse than it deserves. So each task is
+# forced at `low24k` where that file exists and `low` only where it does not.
+#
+# "EXISTS" USED TO MEAN `[ -s ]`, AND THAT WAS A TRAP THAT SPRUNG. When an extension dies part way
+# it has already copied across the traces that TERMINATED -- the easy half -- so it leaves a
+# non-empty file containing no truncated items at all. GPQA-Diamond did exactly this on 2026-08-19:
+# 147 of 198 records, all of them terminated. `[ -s ]` selected it, eval_force.py measured 0 %
+# truncation in it, `--only-if-over 0.05` declined, and the battery's most truncated row would have
+# ended the chain NOT QUOTABLE while this log said "declined by the gate -- no forcing needed". A
+# stage that reports success over an amputated file is worse than one that crashes.
+#
+# So completeness is now tested, not assumed: the merged file counts at least as many records as the
+# base run AND carries the meta that eval_extend.py writes as its very last act. Anything short of
+# that falls back to the base file, which is truncated, over the gate, and therefore actually forced.
 #
 # THE GATE IS THE POINT. Every forced row costs a paragraph of published caveat -- forcing makes
 # truncation ~0 % *by construction*, which the quotability gate cannot detect, so eval_publish.py
@@ -34,10 +45,11 @@ TASKS="${TASKS:-gpqa_diamond mmlu_pro scicode lcb humaneval math500 aime24 aime2
 
 say(){ echo "[force $(date -Is)] $*"; }
 
-say "waiting for the battery and the extension pass to finish"
+say "waiting for the battery, the extension sweep and its retry pass to finish"
 while pgrep -f "bash scripts/eval_supervise.sh" > /dev/null \
    || pgrep -f "bash scripts/run_evals.sh" > /dev/null \
-   || pgrep -f "bash scripts/eval_extend_all.sh" > /dev/null; do
+   || pgrep -f "bash scripts/eval_extend_all.sh" > /dev/null \
+   || pgrep -f "bash scripts/eval_extend_retry.sh" > /dev/null; do
   sleep "$POLL"
 done
 
@@ -51,6 +63,14 @@ if ! grep -aq "ALL EXTENSIONS COMPLETE" evidence/evals/extend.log 2>/dev/null; t
   say "Refusing. Re-run scripts/eval_extend_all.sh first (it resumes), then this."
   exit 1
 fi
+# The retry pass is what turns a half-finished sweep into a finished one, so its marker is the real
+# end of the extension phase. Absent entirely means an older chain that predates it -- carry on.
+if [ -e evidence/evals/extend_retry.log ] \
+   && ! grep -aq "ALL EXTENSION RETRIES COMPLETE" evidence/evals/extend_retry.log 2>/dev/null; then
+  say "the retry pass started but never printed ALL EXTENSION RETRIES COMPLETE."
+  say "Refusing. Re-run scripts/eval_extend_retry.sh first (it resumes), then this."
+  exit 1
+fi
 say "extension complete; sweeping for rows still over the ${GATE} gate"
 
 python3 tools/eval_suite.py --report > /dev/null 2>&1
@@ -58,9 +78,19 @@ python3 tools/eval_suite.py --report > /dev/null 2>&1
 ext="${EFFORT}$((BUDGET / 1000))k"
 forced_any=0
 for task in $TASKS; do
-  # Prefer the extended row. A task with no extended file was under the gate and never extended;
-  # naming its base file here is harmless because --only-if-over declines it without sending.
-  if [ -s "evidence/evals/${task}.${ext}.jsonl" ]; then eff="$ext"; else eff="$EFFORT"; fi
+  # Prefer the extended row, but only when it is COMPLETE. A task with no extended file was under
+  # the gate and never extended; naming its base file here is harmless because --only-if-over
+  # declines it without sending. A task with a PARTIAL extended file is the dangerous case: see the
+  # header. Fall back to the base file there, so the row is forced rather than silently declined.
+  eff="$EFFORT"
+  if [ -s "evidence/evals/${task}.${ext}.jsonl" ]; then
+    if state=$(python3 tools/eval_ext_complete.py "$task" "$EFFORT" "$ext"); then
+      eff="$ext"
+    else
+      say "$task: ${ext} is INCOMPLETE (${state}) — forcing the base ${EFFORT} row instead."
+      say "$task: that row is still over the gate, which is why this is the safe fallback."
+    fi
+  fi
   [ -s "evidence/evals/${task}.${eff}.jsonl" ] || { say "$task: no records, skipping"; continue; }
 
   # ASK THE TOOL FOR THE TAG, DO NOT GUESS IT. eval_force.py derives the output tag from the base

@@ -28,6 +28,34 @@
     "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792"
   },
   {
+    "task": "aime24",
+    "effort": "low24k",
+    "n": 60,
+    "n_total": 60,
+    "correct": 55,
+    "strata_field": null,
+    "strata_seen": null,
+    "strata_total": null,
+    "n_unique": 30,
+    "reps": 2,
+    "acc": 91.7,
+    "ci": [
+      80.0,
+      100.0
+    ],
+    "ci_method": "cluster-bootstrap over 30 problems (avg@2)",
+    "n_problems": 30,
+    "truncated": 6,
+    "errors": 0,
+    "mean_completion_tokens": 5809,
+    "mean_tok_s": 15.63,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 24000,
+    "source": "Maxwell-Jia/AIME_2024 (30)",
+    "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792"
+  },
+  {
     "task": "aime25",
     "effort": "low",
     "n": 60,
@@ -54,6 +82,34 @@
     "max_tokens": 8000,
     "source": "opencompass/AIME2025 (I+II, 30)",
     "snapshot": "a6ad95f611d72cf628a80b58bd0432ef6638f958"
+  },
+  {
+    "task": "aime25",
+    "effort": "low24k",
+    "n": 41,
+    "n_total": null,
+    "correct": 41,
+    "strata_field": null,
+    "strata_seen": null,
+    "strata_total": null,
+    "n_unique": null,
+    "reps": 1,
+    "acc": 100.0,
+    "ci": [
+      100.0,
+      100.0
+    ],
+    "ci_method": "cluster-bootstrap over 23 problems (avg@2)",
+    "n_problems": 23,
+    "truncated": 0,
+    "errors": 0,
+    "mean_completion_tokens": 3470,
+    "mean_tok_s": 16.89,
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": null,
+    "source": null,
+    "snapshot": null
   },
   {
     "task": "gpqa_diamond",
@@ -84,6 +140,34 @@
     "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3"
   },
   {
+    "task": "gpqa_diamond",
+    "effort": "low24k",
+    "n": 147,
+    "n_total": null,
+    "correct": 138,
+    "strata_field": null,
+    "strata_seen": null,
+    "strata_total": null,
+    "n_unique": null,
+    "reps": 1,
+    "acc": 93.9,
+    "ci": [
+      88.8,
+      96.7
+    ],
+    "ci_method": "wilson",
+    "n_problems": 147,
+    "truncated": 0,
+    "errors": 0,
+    "mean_completion_tokens": 2207,
+    "mean_tok_s": 16.73,
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": null,
+    "source": null,
+    "snapshot": null
+  },
+  {
     "task": "mmlu_pro",
     "effort": "low",
     "n": 150,
@@ -110,6 +194,34 @@
     "max_tokens": 8000,
     "source": "TIGER-Lab/MMLU-Pro (test, 12032)",
     "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be"
+  },
+  {
+    "task": "mmlu_pro",
+    "effort": "low24k",
+    "n": 141,
+    "n_total": null,
+    "correct": 108,
+    "strata_field": "category",
+    "strata_seen": 14,
+    "strata_total": 14,
+    "n_unique": null,
+    "reps": 1,
+    "acc": 76.6,
+    "ci": [
+      69.0,
+      82.8
+    ],
+    "ci_method": "wilson",
+    "n_problems": 141,
+    "truncated": 2,
+    "errors": 0,
+    "mean_completion_tokens": 1892,
+    "mean_tok_s": 17.76,
+    "temperature": null,
+    "top_p": null,
+    "max_tokens": null,
+    "source": null,
+    "snapshot": null
   },
   {
     "task": "math500",

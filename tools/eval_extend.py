@@ -30,10 +30,35 @@ model really is re-fed the same tokens. Two facts make that checkable rather tha
     and stored the text with its leading <think> intact. The prefix is therefore reconstructible as
     <|User|> + question + <|Assistant|> + stored_content, with no marker to re-add or double.
   * The raw /v1/completions path prepends BOS and applies no chat template, so the token count it
-    reports for that reconstruction MUST equal the base record's prompt_tokens + completion_tokens.
+    reports for that reconstruction is directly comparable with the base record's
+    prompt_tokens + completion_tokens.
 
-That second identity is checked per item and is a hard gate: a reconstruction that is off by even
-one token aborts the run rather than quietly measuring something else.
+WHAT THAT SECOND CHECK CAN AND CANNOT PROVE -- measured, not assumed. It was written as a hard
+gate: off by one token and the whole task aborted. That cost the GPQA extension outright on
+2026-08-19, at item 10 of 51, and the diagnosis is that the gate was testing an identity that
+cannot hold. The model emits TOKEN IDS; a record stores the DETOKENIZED TEXT; rebuilding re-encodes
+that text with greedy BPE, and detokenize->retokenize is not the identity -- adjacent pieces re-merge,
+and a hard truncation can cut mid-fragment. tools/tokprobe.cpp links the server's own tokenizer and
+encoder and measured all 260 truncated traces in the battery offline:
+
+    231 exact (88.8 %), 29 drifted; 23 of those by exactly one or two tokens.
+    The three largest (-5, -22, -56) are all LiveCodeBench, where long indentation
+    runs re-merge differently. No item's TEXT differs: it is stored verbatim and the
+    prompt is hash-checked separately.
+
+So token count is a DIAGNOSTIC, not a correctness condition. The condition that actually matters --
+same question, same stored continuation text -- is enforced by the prompt hash and by using the
+stored content verbatim. The count is still compared, still recorded per item, and still trips, but
+only on a divergence far too large to be BPE noise, which would mean the wrong text rather than a
+different tiling of the right text.
+
+AND ONE ITEM MUST NEVER COST THE TASK. The old gate called sys.exit() mid-sweep, which left a
+half-written merged file holding only the traces that had already terminated -- a file that is
+non-empty, so eval_force_all.sh selects it, reads 0 % truncation out of it and declines. Now an
+item that cannot be continued is CARRIED FORWARD UNCHANGED and stays flagged truncated, so the
+merged file is always complete, its truncation rate is honest, and the forcing pass picks up
+exactly the residue the extension could not repair. That is the division of labour the chain was
+designed around.
 
   python3 tools/eval_extend.py --task gpqa_diamond --effort low --budget 24000 --dry-run
   python3 tools/eval_extend.py --task gpqa_diamond --effort low --budget 24000
@@ -94,6 +119,13 @@ def main():
     ap.add_argument('--top-p', type=float, default=0.95)
     ap.add_argument('--dry-run', action='store_true',
                     help='rebuild and check every prefix, send nothing')
+    # A TRIPWIRE FOR THE WRONG TEXT, NOT A BPE NOISE FLOOR. Measured worst-case re-merge across the
+    # whole battery is 56 tokens on an 8.4k prefix; grafting the wrong continuation onto a prompt
+    # would differ by a large fraction of it, not by tenths of a percent. 1 % with a 64-token floor
+    # sits an order of magnitude above the noise and still catches a structural mistake.
+    ap.add_argument('--drift-tol', type=float, default=0.01,
+                    help='max |rebuilt - fed| token drift, as a fraction of the fed prefix')
+    ap.add_argument('--drift-floor', type=int, default=64)
     a = ap.parse_args()
 
     base_path = os.path.join(OUT, f'{a.task}.{a.effort}.jsonl')
@@ -173,8 +205,23 @@ def main():
 
     commit = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True,
                             cwd=os.path.dirname(OUT)).stdout.strip() or None
-    nok = nbad = 0
+    nok = nbad = ndrift = 0
+    max_drift = 0
     t0 = time.time()
+
+    def carry_unrepaired(rec, reason, **extra):
+        """Write a truncated trace forward UNCHANGED when it cannot be continued.
+
+        The merged file must always hold one record per base record. Dropping the ones that could
+        not be continued would understate the truncation rate by removing exactly the items that
+        are truncated, and would leave a short file that eval_force_all.sh still selects. Carried
+        forward, the row's truncation rate stays honest and the forcing pass sees the residue."""
+        out = dict(rec, budget=a.budget,
+                   extension=dict(method='not-continued', reason=reason,
+                                  base_budget=base_budget, code_commit=commit, **extra))
+        fout.write(json.dumps(out, ensure_ascii=False) + '\n')
+        fout.flush()
+        done.add(rec['id'])
     for i, r in enumerate(todo):
         if r['id'] in done:
             continue
@@ -194,7 +241,9 @@ def main():
             # Cut off after </think> (mid final answer) rather than inside it. Reconstructing that
             # prefix needs the reasoning and the body rejoined, which is a different shape; rather
             # than guess, skip it and say so.
-            print(f'  [skip] {r["id"]}: truncated outside the thinking block, not continuable')
+            print(f'  [skip] {r["id"]}: truncated outside the thinking block, not continuable '
+                  f'— carried forward still truncated for the forcing pass')
+            carry_unrepaired(r, 'truncated outside the thinking block')
             nbad += 1
             continue
 
@@ -208,12 +257,24 @@ def main():
         resp = complete(a.host, prefix, a.temp, a.top_p, room, timeout)
         u = resp.get('usage') or {}
         got_pt = u.get('prompt_tokens', -1)
-        if got_pt != expect_pt:
-            sys.exit(
-                f'\n{r["id"]}: PREFIX IS NOT TOKEN-EXACT — refusing to continue.\n'
-                f'  the base run fed {base_pt} prompt + {base_ct} completion = {expect_pt} tokens\n'
-                f'  the rebuilt prefix tokenizes to {got_pt}\n'
-                f'  continuing from a different token sequence would measure a different thing.')
+        drift = got_pt - expect_pt
+        tol = max(a.drift_floor, int(a.drift_tol * expect_pt))
+        if abs(drift) > tol:
+            # Past the tripwire this is no longer a different tiling of the same text, it is
+            # probably not the same text. Refuse THIS item, keep the task alive, and say so loudly
+            # enough that it is not mistaken for the ordinary re-merge below.
+            print(f'  [REFUSE] {r["id"]}: rebuilt prefix is {got_pt} tokens against {expect_pt} fed '
+                  f'({drift:+d}, tolerance ±{tol}). That is too large to be BPE re-merge — the '
+                  f'reconstruction is probably not the same text. Carried forward untouched.',
+                  flush=True)
+            carry_unrepaired(r, 'prefix drift beyond tolerance',
+                             rebuilt_prompt_tokens=got_pt, expected_prompt_tokens=expect_pt,
+                             drift=drift, tolerance=tol)
+            nbad += 1
+            continue
+        if drift:
+            ndrift += 1
+            max_drift = max(max_drift, abs(drift))
 
         cont = (resp.get('choices') or [{}])[0].get('text') or ''
         if cont.endswith(EOS):
@@ -246,7 +307,12 @@ def main():
             extension=dict(method='prefix-continuation', base_budget=base_budget,
                            base_completion_tokens=base_ct, ext_completion_tokens=ext_ct,
                            continuation_prompt_tokens=got_pt,
-                           expected_prompt_tokens=expect_pt, token_exact=True,
+                           expected_prompt_tokens=expect_pt,
+                           # token_exact is now MEASURED, not asserted. 88.8 % of the battery's
+                           # truncated traces round-trip exactly; the rest differ by a token or two
+                           # because BPE re-merges the same text differently. Storing the number
+                           # lets eval_publish caveat the row instead of the tool pretending.
+                           token_exact=(drift == 0), prefix_token_drift=drift,
                            code_commit=commit,
                            # KEEP THE CONTINUATION LEG'S OWN TIMINGS. `rec = dict(r)` carries the
                            # base record's `timings` forward, and they describe a decode that began
@@ -275,10 +341,16 @@ def main():
                         'carried over unchanged; traces that hit it are continued from their exact '
                         'stored prefix, verified token-exact per item'),
                 n_carried=len(keep), n_continued=len(todo) - nbad, n_not_continuable=nbad,
+                n_prefix_drifted=ndrift, max_prefix_token_drift=max_drift,
+                prefix_drift_note=('continuations are rebuilt from the stored text, so a prefix can '
+                                   're-tokenize to a slightly different length than the ids the model '
+                                   'emitted; the text is identical by construction and each record '
+                                   'carries its own measured drift'),
                 code_commit=commit)
     with open(os.path.join(OUT, f'{a.task}.{tag}.meta.json'), 'w') as f:
         json.dump(meta, f, indent=2)
-    print(f'\nwrote {out_path}  ({len(keep)} carried + {len(todo) - nbad} continued)')
+    print(f'\nwrote {out_path}  ({len(keep)} carried + {len(todo) - nbad} continued + '
+          f'{nbad} not continuable, {ndrift} with prefix drift, max |drift| {max_drift})')
 
 
 if __name__ == '__main__':

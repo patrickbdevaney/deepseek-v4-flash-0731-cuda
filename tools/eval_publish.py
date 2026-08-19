@@ -267,9 +267,18 @@ def protocol_block(rows):
         out.append(f'| {LABEL.get(r["task"], r["task"])} | ' + ' | '.join(p) +
                    f' | {r.get("max_tokens")} | {r.get("reps", 1)} |')
 
-    samp = sorted({(r.get('temperature'), r.get('top_p'), r.get('effort', '?')) for r in rows})
-    out += ['', '**Decoding.** ' + '; '.join(
-        f'`{e}` reasoning effort at temperature {t}, top_p {tp}' for t, tp, e in samp) +
+    # A ROW WITH NO RECORDED SAMPLING PARAMS CANNOT CONTRIBUTE A CLAIM ABOUT SAMPLING, AND MUST NOT
+    # BRING THE PUBLISH DOWN. An extension that dies before writing its meta leaves a row whose
+    # temperature and top_p are None; sorting None against a float raises TypeError, and on
+    # 2026-08-19 that killed the landing of aime24 -- a task that had extended perfectly, 60 of 60 --
+    # because two OTHER tasks had partial merged files. A row that cannot describe its own decoding
+    # is dropped from this sentence and stays out of it until its meta exists.
+    samp = sorted({(r.get('temperature'), r.get('top_p'), r.get('effort', '?')) for r in rows
+                   if r.get('temperature') is not None and r.get('top_p') is not None},
+                  key=lambda t: (float(t[0]), float(t[1]), str(t[2])))
+    out += ['', '**Decoding.** ' + ('; '.join(
+        f'`{e}` reasoning effort at temperature {t}, top_p {tp}' for t, tp, e in samp)
+        or 'not recorded for any row in this table') +
         '. Sampling is stochastic rather than greedy, which is why interval width and avg@k are '
         'reported rather than a bare point estimate. Per-benchmark token budget and sample count '
         'are in the table above; each budget was set from an uncensored length calibration, not '
