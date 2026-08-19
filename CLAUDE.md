@@ -4,8 +4,12 @@
 
 **Rule.** Any long-running programmatic workload that does not depend on Claude Code to steer,
 code, engineer, or actively monitor it **must be detached from the session before it starts**.
-That is every battery in this repo: the eval suite, the extension and forcing passes, BFCL
-multi-turn, profiling sweeps, fine-tuning runs, agentic trace generation.
+That is every battery in this repo: the eval suite, the extension pass and its retry, the forcing
+pass, BFCL multi-turn, profiling sweeps, fine-tuning runs, agentic trace generation.
+
+**A new unattended stage is not finished until `detach_audit.sh` knows its name.** The audit works
+from a pattern list, so a stage absent from `PATTERNS` reports as "all detached" by never being
+looked at -- a green audit that proves nothing. Add the stage to that list in the same commit.
 
     nohup setsid <cmd> > <log> 2>&1 < /dev/null &      # minimum
     systemd --user unit + loginctl enable-linger        # better; survives every logout
