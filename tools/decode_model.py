@@ -14,6 +14,13 @@ bandwidth wall. `b` is everything that grows with resident context: the DSA inde
 compressed-cache reads, the top-k selection. They are different problems with different fixes,
 and only the split says which one to work on.
 
+PER LEG, NOT PER RECORD. An extended record carries the BASE leg's `timings` while its `usage`
+has been updated to the TOTAL completion tokens -- eval_extend.py keeps them apart on purpose, and
+dividing one by the other silently understates cost on exactly the longest generations. The
+continuation leg's own timings are empty because /v1/completions returns no `timings` object at
+all, so decode above the base budget is currently UNMEASURED. Fix that in the server before
+trusting any number at high context.
+
 PER FORWARD, NOT PER TOKEN. Speculation commits tau tokens per target forward (tau ~2.9 here), so
 tok/s is not comparable with a roofline computed from bytes per forward. Records carry
 `timings.tokens_per_verify`; multiplying ms/token by it removes speculation from the comparison
@@ -46,9 +53,15 @@ def collect(pattern, per_token):
             except Exception:
                 continue
             t, u = r.get('timings') or {}, r.get('usage') or {}
-            dm, ct, pt_ = t.get('decode_ms'), u.get('completion_tokens', 0), u.get('prompt_tokens', 0)
+            e = r.get('extension') or {}
+            dm, pt_ = t.get('decode_ms'), u.get('prompt_tokens', 0)
             tv = t.get('tokens_per_verify')
-            if not dm or ct < 64:
+            # `timings` always describes the BASE leg. For a continued record `usage` describes the
+            # MERGED total, so the divisor must come from the extension block or the record reads
+            # ~3x faster than it ran.
+            ct = (e.get('base_completion_tokens') if e.get('method') == 'prefix-continuation'
+                  else u.get('completion_tokens', 0))
+            if not dm or not ct or ct < 64:
                 continue
             if not per_token and not tv:
                 continue                       # cannot divide out speculation for this record
@@ -89,8 +102,18 @@ def main():
 
     print(f'n = {len(pts)} generations   tau p50 = {taus[len(taus)//2]:.2f}   R^2 = {r2:.3f}')
     print(f'\n  ms per {unit} = {A:.2f} + {B*1000:.3f} x (context / 1000)\n')
+    # NEVER PRINT A ROW THE DATA DOES NOT REACH. The first version of this tool extrapolated the
+    # fit to 24000 and reported "78 % of a forward is context" as though it had been measured; the
+    # records stop near 6000, because the only generations that go deeper are continuation legs and
+    # those carry no timings. An extrapolation printed in the same table as a measurement is
+    # indistinguishable from one, which is the exact failure this instrument exists to end.
+    ctx_max = max(x for x, _, _ in pts)
+    print(f'  measured context range: {min(x for x,_,_ in pts):.0f} to {ctx_max:.0f}\n')
     print(f'  {"context":>8}{"ms":>10}{"tok/s":>9}{"ctx share":>11}')
     for c in (0, 2000, 4000, 8000, 16000, 24000):
+        if c > ctx_max:
+            print(f'  {c:>8}{"— beyond the measured range; instrument /v1/completions to reach it":>41}')
+            continue
         ms = A + B * c
         tps = 1000.0 / ms * (1.0 if a.per_token else taus[len(taus)//2])
         print(f'  {c:>8}{ms:>10.2f}{tps:>9.2f}{B*c/ms:>10.0%}')
@@ -100,7 +123,7 @@ def main():
         # are different engineering problems and the bigger one changes with context.
         print(f'\n  constant term      {A:7.2f} ms   vs {WALL_MS:.2f} ms wall @ {BW:.0f} GB/s'
               f'   -> {WALL_MS/A*100:.0f}% of achievable, headroom {A/WALL_MS:.2f}x')
-        for c in (8000, 24000):
+        for c in (c for c in (8000, 24000) if c <= ctx_max):
             tot = A + B * c
             print(f'  at ctx {c:>5}: fixing the constant alone -> {tot/(WALL_MS + B*c):.2f}x   '
                   f'fixing the context term alone -> {tot/A:.2f}x   both -> {tot/WALL_MS:.2f}x')

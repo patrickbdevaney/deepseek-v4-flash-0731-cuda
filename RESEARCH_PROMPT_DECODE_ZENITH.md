@@ -40,44 +40,67 @@ terms, and in what order?
 
 ## 2. The central measurement
 
-Least-squares over 2,156 generations, expressed **per target forward** so that speculation is
-divided out and the result is directly comparable with the bandwidth wall:
+Least-squares over 2,156 generation legs, expressed **per target forward** so that speculation is
+divided out and the result is directly comparable with the bandwidth wall. Recompute at any time
+with `tools/decode_model.py`.
 
 ```
-ms per target forward  =  147.14  +  21.891 × (context / 1000)
+ms per target forward  =  136.44  +  30.053 x (context / 1000)      R^2 = 0.965, n = 2156
+measured context range: 71 to 6592          <-- NOT extrapolated beyond this
 
-  context        0     4000     8000    16000    24000
-  ms/forward  147.1    234.7    322.3    497.4    672.5
-  context %      0%      37%      54%      70%      78%
+  context        0     2000     4000     6592
+  ms/forward   136.4    196.6    256.7    334.5
+  context %       0%      31%      47%      59%
 ```
 
-**Two terms, both with headroom, and they are not the same problem.**
+**A correction that matters, recorded so nobody repeats it.** The first version of this fit gave
+`147.14 + 21.891x` with R^2 0.64 and was quoted out to 24,000 tokens. It was wrong twice. Extended
+records carry the BASE leg's `timings` while their `usage` has been updated to the MERGED total, so
+dividing one by the other understated cost on precisely the longest generations; correcting the
+divisor moved R^2 from 0.640 to **0.965**. And the table was extrapolated far past the data. Both
+are now structurally impossible in `decode_model.py`: it takes the divisor from the extension block
+and refuses to print a row beyond the measured range.
 
-**Term A — the context-independent 147.14 ms/forward.** The wall is 46.70 ms, so this runs at
-**32% of achievable bandwidth**. This corroborates `PERF.md`'s independently derived 81.7 GB/s /
-34% figure, from a completely different measurement. Headroom: **≈3.15×**. This is the term the
-MoE/MLA GEMV work has been attacking, and it is real, but it is bounded.
+**INSTRUMENTATION GAP — FIX THIS FIRST, IT IS CHEAP.** `/v1/completions` returns **no `timings`
+object at all**, so every continuation leg -- the only decode this project has ever run above the
+8k base budget -- recorded nothing. Decode above ~6.6k context is therefore **entirely unmeasured**.
+Adding `timings` to that endpoint is a few lines and makes the 8k-24k regime observable for the
+first time. Until then, treat every claim about 24k decode as a conjecture.
 
-**Term B — the 21.891 ms per 1000 tokens of context.** Estimated bytes that *must* move per
-decoded token at 24k context:
+**Two terms, both with headroom, and they are different engineering problems.**
+
+**Term A - the context-independent 136.44 ms/forward.** The wall is 46.70 ms, so this runs at
+**34% of achievable bandwidth**, headroom **2.92x**. This independently reproduces `PERF.md`'s
+81.7 GB/s / 34% figure from a completely different measurement, which is strong corroboration that
+both are measuring something real. This is the term the MoE/MLA GEMV work has been attacking.
+
+**Term B - 30.053 ms per 1000 tokens of context.** It is 47% of a forward by 4k and 59% by 6.6k,
+i.e. the majority of decode cost well inside the range we can actually see. Bytes that must move at
+the deepest measured context:
 
 ```
-DSA index scoring   (24000/4) × 128 × 4B × 21 layers ≈ 64 MB
-top-512 attend         512    × 512 × 4B × 21 layers ≈ 21 MB
-strided compressed  (24000/128) × 512 × 4B × 21      ≈  8 MB
-                                               total ≈ 93 MB  →  0.39 ms at 240 GB/s
+at context 6592:  DSA index scoring 17.7 MB + top-512 attend 22.0 MB + strided 2.2 MB
+                  = 42.0 MB  ->  0.175 ms at 240 GB/s  ->  0.509 ms per forward at tau 2.91
+                  MEASURED: 198.1 ms per forward   ->  389x off its own roofline
 ```
 
-Measured at 24k: **525 ms per forward**. Even allowing ~3× for verifying τ positions, this is
-**~2 orders of magnitude off its own roofline** — and at the contexts the battery actually runs
-at, it is the majority of decode. It has never been profiled.
+Term A is 2.92x from its wall. Term B is **389x** from its wall, inside the measured range, and has
+never been profiled. That asymmetry is the whole finding.
 
-**The named suspect, already in the source and never measured.** `src/engine.cu:320` records that
-the context-dependent cost is *not* the KV copy, it is the DSA index path — "which scores every
-compressed row to select top-k — O(context/ratio) by construction — **with a `<<<1,32>>>` top-k on
-one warp** on top of it. That is where the next measurement goes." It never went. A single-warp
-selection over ~6,000 candidates, on 21 layers, once per forward, is a latency structure that
-would produce exactly this slope.
+**The named suspect, already in the source and never followed up.** `src/engine.cu:320` records
+that the context-dependent cost is *not* the KV copy, it is the DSA index path -- "which scores
+every compressed row to select top-k -- O(context/ratio) by construction -- **with a `<<<1,32>>>`
+top-k on one warp** on top of it. That is where the next measurement goes." It never went. A
+single-warp selection over ~1,600 candidates at 6.6k context (~6,000 at 24k), on 21 layers, once
+per forward, is a latency structure that would produce exactly this.
+
+**A falsifiable prediction that has NOT yet been tested.** `INDEX_TOPK` is 512 and selection is
+over `context/4` rows, so below context 2048 there is nothing to select -- every row survives. If
+the indexer's *selection* is the cost, the slope should change at ~2048. Binned medians over the
+current data do not show a clean knee there (marginal cost per 1000 context runs 28.2, 34.9, 29.1,
+23.6, 18.5 across the range), which suggests the cost is the **O(context) scoring pass** rather
+than the top-k selection itself -- or that both matter. Resolving this decides which of 4.1's
+answers applies, and it is cheap: profile one decode step at two context lengths with `ncu`.
 
 ## 3. What is already ruled out — do not re-derive these
 
