@@ -1,0 +1,14 @@
+### arm=off
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                   3072     6144    12288
+STEP (tot+draft)     130.82   134.55   143.62
+    i:score            1.93     3.53     6.58
+  cattn:indexer        4.79     6.41     9.51
+    i:topk             0.72     0.73     0.76
+### arm=on
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                   3072     6144    12288
+STEP (tot+draft)     130.29   132.45   138.61
+  cattn:indexer        3.86     4.00     4.27
+    i:score            0.99     1.12     1.36
+    i:topk             0.72     0.72     0.76

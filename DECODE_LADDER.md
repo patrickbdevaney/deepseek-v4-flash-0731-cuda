@@ -22,6 +22,14 @@ down 65 % from the 7.220 the ladder opened on.** Term A is untouched and is now 
 distance from its floor — it is 129.11 of a 154.66 ms forward at ctx 12,410, i.e. **83 %**. The fit
 reaches context 12,410, so the stop check does not extrapolate.
 
+**1.5 moved term B again, 2026-08-20.** The paired saving over 16 legs is
+**0.572 +/- 0.018 ms per 1000 context** (R^2 0.987, every leg negative, `tau` and emitted text
+identical in all 16), so the tracked `b` goes **2.514 -> 1.942** and `b x 6592` goes
+**16.57 -> 12.80 ms**. That is carried by SUBTRACTION of a paired number and not by re-fitting:
+1.5's own sweep spans ctx 3,197-12,410 where a fit determines `b` badly (R^2 0.433 on the after
+arm), and rule 7 applies to your own arms too. Cumulatively `b` is down **73 %** from the 7.220 the
+ladder opened on. Term A is untouched and is now 83 % of the forward.
+
 **1.3 moved neither term and was pre-registered as unable to** — it is a ~4 us/call kernel saving
 that fires only below ctx 2048, worth 0.07 % of a forward; `b` measured `3.008 +/- 0.241 ->
 3.036 +/- 0.240` across its arms. It is marked done, not skipped, and the ladder rule it produced
@@ -742,12 +750,139 @@ So, in order:
       Code: `include/indexer.h`, `kernels/attention.cu`, `tests/gate_topk_smem_ctx.cu`,
       `tests/gate_sdpa_smem.cu`, `scripts/gate_topk_smem_ctx.sh`, `scripts/build_gate.sh`,
       `scripts/detach_audit.sh`.
-- [ ] **1.5** **CONFIRMED BY 0.4, 2026-08-20 — this kernel is 9 % of the context term.**
-      `i:score` measured **6.58 ms at ctx 12,288**, slope **0.644 +/- 0.018 ms per 1000 context**
-      (R^2 0.750, width held fixed), against the 0.02 ms at context 9 it was retired on — 330x low.
-      Ranks third, behind 1.0 and 1.2. `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
-      (658 us -> 39 us at T=6000). **FP32/TF32 accumulation only** — an external ablation shows
-      FP16 dropping perfect-recall rows from 99.99 % to 91.82 % on this exact operation.
+- [x] **1.5 DONE 2026-08-20 — `index_score` as a register-tiled GEMM. +4.57 % tok/s at ctx 12,410,
+      and the context term falls 0.572 +/- 0.018 ms per 1000. The first kernel win since 1.2.**
+
+      **What it was.** `i:score` measured **6.58 ms at ctx 12,288**, slope **0.644 +/- 0.018 ms per
+      1000 context**, against the 0.02 ms at context 9 it was retired on — 330x low. Ranked third,
+      behind 1.0 and 1.2, and both of those are spent.
+
+      **THE RATCHET, paired, same session, control arm FIRST so drift favours the control.** Four
+      reps x three sweep contexts plus two control contexts, one server load per arm, corpus
+      `79ac6563f97e53e5`/`ac10134c87e3d0fe`:
+
+      | ctx | ms/forward before | after | paired delta | tok/s before -> after | tau |
+      |---|---|---|---|---|---|
+      | 3,197 | 142.94 | 141.45 | **-1.49** | 12.14 -> **12.27** (+0.99 %) | 1.736 both |
+      | 6,260 | 146.95 | 143.76 | **-3.19** | 11.87 -> **12.15** (+2.24 %) | 1.788 both |
+      | 12,410 | 154.44 | 147.77 | **-6.67** | 10.46 -> **10.93** (+4.57 %) | 1.615 both |
+      | 1,656 (control) | 137.40 | 136.68 | -0.71 | 13.43 -> 13.50 | 1.846 both |
+      | 6,248 (control) | 147.07 | 143.91 | -3.16 | 10.86 -> 11.10 | 1.599 both |
+
+      **All 16 legs faster, all 16 byte-identical in the emitted text, `tau` and mean verify width
+      identical to four decimals in every one.** Regressing the 16 paired deltas on context gives
+      the saving directly, and it is the number this item ratchets:
+
+          delta_fwd = +0.358 +/- 0.134  -0.5724 +/- 0.0178 x (ctx/1000)     R^2 0.987, n=16
+
+      i.e. **-0.572 +/- 0.018 ms per 1000 context**, which is **89 % of the 0.644 +/- 0.018 that 0.4
+      attributed to this mark** — the prediction and the delivery agree inside one SE. Note the
+      intercept: at zero context the GEMM is **0.358 +/- 0.134 ms SLOWER** per forward (it stages
+      33 KiB of shared per block, which does not pay for itself until there are rows to amortise it
+      over). Break-even is near ctx 625. That is a real, small, measured cost and it is why the
+      1,656 control leg gains almost nothing.
+
+      **DO NOT read the two arms' fitted `b` as the ladder's tracked `b`.** This sweep spans
+      ctx 3,197-12,410; the `a = 129.11, b = 2.514` the stop condition tracks was fit over
+      249-12,410 with ten points. The arms here fit `139.57 + 1.231 (SE 0.254)` and
+      `140.00 + 0.652 (SE 0.236)` — same direction, but a narrow range against a large intercept
+      determines `b` badly (R^2 0.701 and 0.433). The paired saving is the trustworthy quantity,
+      so the tracked term is carried forward by SUBTRACTION, not by re-fit:
+      **`b` 2.514 -> 1.942 ms/1000, `b x 6592` 16.57 -> 12.80 ms** (stop wants <= 5.0).
+
+      **THE MARK ITSELF, dprof, both arms, same protocol** (`dprof_ctx_1p5_off/on.txt`) — medians in
+      ms at ctx 3072 / 6144 / 12,288:
+
+      | mark | before | after |
+      |---|---|---|
+      | `i:score` | 1.93 / 3.53 / **6.58** | 0.99 / 1.12 / **1.36** |
+      | `cattn:indexer` (its parent) | 4.79 / 6.41 / **9.51** | 3.86 / 4.00 / **4.27** |
+      | `i:topk` (untouched — the control mark) | 0.72 / 0.73 / 0.76 | 0.72 / 0.72 / 0.76 |
+      | `STEP` | 130.82 / 134.55 / **143.62** | 130.29 / 132.45 / **138.61** |
+
+      **6.58 ms at ctx 12,288 reproduces 0.4's 6.58 exactly**, four iterations and three kernel
+      changes later. The saving lands entirely inside the parent mark (-5.24 of `cattn:indexer`
+      against -5.22 of `i:score`) and `i:topk` does not move, so nothing was relocated. The mark's own
+      slope goes **0.503 +/- 0.006 -> 0.040 +/- 0.001 ms per 1000** — 92 % dead, not merely smaller.
+      Note that dprof reads the saving LOW: 0.463 in `i:score`, 0.484 +/- 0.009 in `STEP`, against
+      the clean paired **0.572 +/- 0.018**. Its own per-mark syncs compress the difference by
+      15-20 %, which is why the ratchet is the clean pair and dprof is only the attribution.
+
+      **THE MECHANISM IS MEMORY PLACEMENT AND AN ACCUMULATION ORDER, NOT NEW MATHEMATICS.** The
+      shipped `index_score_warp_kernel` is warp-per-(query,row) and re-reads both operands from
+      global on every head: `q` for one query is H*d = 8192 floats = 32 KiB, re-read once per row
+      `t`; `kv[t]` is re-read once per head. At the verify shape (S=6, T=3072) that is 1.2 GB moved
+      to do 151 M MACs — 0.5 FLOP/byte, and `d` is a runtime argument so the inner loop cannot
+      unroll. `index_score_gemm_kernel` makes it `P[(s,h),t] = q . kv^T` with M=H=64, N=T, K=d=128,
+      one block owning all 64 heads of one query and 128 rows: 8x8 register tiling gives 16 shared
+      loads per 64 FFMAs (~4:1 against the old 1:1), `P` lands in shared, and the epilogue walks
+      `h = 0..H-1` in order. Standalone, 30 interleaved repeats:
+
+      | S,T | warp (us) | GEMM (us) | |
+      |---|---|---|---|
+      | 6, 768 | 239.7 | **45.0** | 5.33x |
+      | 6, 3072 | 898.7 | **132.5** | 6.78x |
+      | 6, 6144 | 1771.6 | **237.6** | 7.46x |
+      | 1, 6144 | 311.7 | **53.9** | 5.78x |
+
+      **THE BIT-EXACTNESS CLAIM CHANGED DIRECTION, AND THAT IS THE INTERESTING PART.** An
+      intermediate `index_score_tiled_kernel` was built first and is bit-identical to the *shipped
+      warp kernel* — and that capped it at **2.0x**, because bit-exactness with the warp kernel
+      mandates keeping its 5-step `__shfl_down_sync` tree, and SHFL retires one warp-instruction per
+      SM per clock: 1.18 M (row,head) pairs x 5 over 20 SMs is a ~200 us floor no matter how the
+      operands are staged. The GEMM is bit-identical to `index_score_kernel` instead — the
+      correctness-first SCALAR REFERENCE that `gate_units` checks against
+      `ref/goldens/unit_index_score.safetensors` — because a register-tiled GEMM accumulates
+      serially in k, which IS the reference's order. LOOP_LOG Finding 68 adopted the warp kernel as
+      a deviation FROM that reference behind the LOSSLESS gate; **1.5 hands that deviation back and
+      is 6.8x rather than 2.0x for doing so.** The tiled kernel is kept only as the fallback for
+      shapes the GEMM cannot serve. See `wiki/negative-results.md` §4d.
+
+      **THE INVARIANT IS SATISFIED ON ITS SECOND BRANCH, AND THE DEVIATION IS MEASURED, NOT
+      ASSERTED.** `tests/gate_index_score` (1130 shapes, 21,773,760 floats): **0 differing, 0 bad
+      shapes -> PASS** on both claims (TILED == WARP, GEMM == SCALAR). Against the *shipped* warp
+      kernel it prints what the change spends, per input distribution, out of 2,160,800 floats:
+      uniform+/- 1,905,110 differ (max_abs 1.05e-05, max_rel 0.609); all-positive 1,062,863
+      (3.05e-04, 5.38e-07); all-negative 1,890,149 (1.37e-04, 0.847); near-tie 995,537 (4.88e-04,
+      1.19e-07); signed-zero/denormal 583,868 (3.58e-07, 0.0164). Those relative numbers are large
+      on near-zero scores and this kernel feeds a SELECTION, so the only acceptable evidence is
+      downstream behaviour — which is why the 16/16 byte-identical emitted texts and the
+      four-decimal `tau` match above are the real gate, and they were taken at ctx 12,410, not at
+      ctx 9. Standing gates: `LOSSLESS GATE -> PASS` x3 on the GEMM arm; `gate_units` (cosine, vs
+      goldens), `gate_indexer_decode`, `gate_compressed_decode`, `gate_prefill_len` all rc=0. And
+      because the shipped path is CUDA-graph captured, the two capture gates were run on the GEMM
+      too, once they could be built again: `gate_indexer_graph` and `gate_compressed_graph` both
+      **`cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS`**, i.e. graph replay is bit-identical to the
+      sequential path. `ixgemm_launch` issues a kernel launch and no other CUDA API call, so that
+      was true by construction; it is now also true by test.
+
+      **THE SAME-ARM DECODE CONTROL IS A NULL, AND IT SHOULD BE.** Three replicates per arm in one
+      load each, `build/decode` at seqmax 85 — where T = s/ratio is ~21 rows and this kernel has
+      almost nothing to do: `tau` **2.87** in all six, generated ids byte-identical
+      (`11111 16 455 6102 294 16603 344 29168`), spec throughput **21.03-21.24** (GEMM) against
+      **21.02-21.26** (warp). A change that is worth +4.6 % at ctx 12,410 and exactly nothing at
+      ctx 85 is behaving like a context-term change, which is the claim.
+
+      **A GATE THAT DOES NOT COMPILE IS A GATE THAT PASSES BY NEVER RUNNING.** Phase 1 could not
+      start: `gate_indexer_decode`, `gate_compressed_decode`, `gate_indexer_graph` and
+      `gate_compressed_graph` had not built since commit `5c1e047` split `x_full` into
+      `(x_cur, x_full)` and left four call sites one argument short. That is **the four in-situ
+      gates for the exact subsystem this item changes**, dead for the whole ladder to date, on top
+      of the `set -e` + bare-`nvcc` breakage iteration 7 found in `build_gate.sh` one line above
+      them. Fixed here (`x` -> `x + pos*DIM, x`, restoring the pre-`5c1e047` semantics exactly) and
+      all four now pass, the two graph gates at `maxabs 0.00e+00`.
+      `wiki/measurement-and-traps.md` §20.
+
+      Evidence: `evidence/decode_loop/ixgemm_ab.log` (the whole run),
+      `gate_index_score_1p5.log`, `fit_1p5_off.txt` / `fit_1p5_on.txt` / `fit_1p5_paired.txt`,
+      `fit_1p5_iscore.txt`, `dprof_ctx_1p5_off.txt` / `dprof_ctx_1p5_on.txt`,
+      `decode_1p5_lossless.log` / `decode_1p5_control.log` (**the same-arm control**),
+      `gate_units_1p5.log`, `gate_indexer_decode_1p5.log`, `gate_compressed_decode_1p5.log`,
+      `gate_prefill_len_1p5.log`, `build_1p5b_*.log`.
+      Code: `kernels/indexer.cu`, `include/indexer.h`, `tests/gate_index_score.cu`,
+      `scripts/ixgemm_ab_run.sh`, `scripts/build_gate.sh`, `tests/gate_indexer_decode.cu`,
+      `tests/gate_compressed_decode.cu`, `tests/gate_indexer_graph.cu`,
+      `tests/gate_compressed_graph.cu`.
 
 - [ ] **1.9** **Find out why the engine stops reproducing itself part-way through a long run.**
       **Opened by 1.0, 2026-08-20, and it is a correctness item before it is a performance one.**
@@ -770,6 +905,16 @@ So, in order:
       * `build/dsv4-server`: legs 1-31 of 52 identical (including every leg at ctx 12,410, 9,341,
         6,260, 3,197 and 1,536, with `tau` matching to three decimals across three independent
         server starts), then leg 32 onward all differ.
+
+      **NEW DATUM FROM 1.5, 2026-08-20, and it sharpens the shape rather than contradicting it.**
+      1.5's A/B ran 16 legs per arm across **two independent server starts** — different kernels,
+      contexts 1,656 to 12,410, 256 completion tokens each — and **all 16 pairs emitted
+      byte-identical text**, with `tau` and mean verify width matching to four decimals. So at 16
+      legs the server reproduces itself perfectly across loads AND across a kernel change; the
+      divergence below started at leg **32** of 52. That is consistent with a per-leg accumulation
+      rather than a per-step rate, and it means any probe for this must run **more than ~31 legs in
+      one start** or it will report clean. It also means every A/B on this ladder so far has been
+      inside the clean region, which is luck, not design.
 
       Generation is autoregressive, so **one** flipped token permanently de-synchronises everything
       after it. The observation is therefore not "context X is nondeterministic" but "there is a

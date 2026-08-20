@@ -308,8 +308,13 @@ and even that is deferred (Phase 3).
 
 1. **Decode above ~6.6k context is entirely unmeasured** — `/v1/completions` returns no `timings`.
    Every 8k-24k claim in this document, mine included, is extrapolation. Phase 0.1 fixes it.
-2. **The split of Term B** between `i:topk`, `i:score` and `cattn:sparse` has never been measured.
-   Phase 0.2 costs minutes and gates the ordering of 1.1 vs 1.5.
+2. ~~**The split of Term B** between `i:topk`, `i:score` and `cattn:sparse` has never been measured.
+   Phase 0.2 costs minutes and gates the ordering of 1.1 vs 1.5.~~ **CLOSED 2026-08-20 by ladder
+   0.4, and all three named items have since been acted on** — `i:topk` (1.2), `i:score` (1.5) and
+   `cattn:sparse`, whose cost turned out to be a ~20 ms floor rather than a slope. `b` is down 73 %
+   from the 7.220 ms/1000 this document's phase 0 opened on, and what remains of the term is *not*
+   attributed to any mark. See `DECODE_LADDER.md` and `wiki/context-scaling.md`; this section is
+   the plan as written, kept for the record, not the current state.
 3. **Whether tau holds above 3.5k prompt tokens.** The corpus stops there; the agentic target is
    8k-100k. The SWA-128-plus-pooled-hidden drafter is the hedge, and it is untested at that scale.
 4. **Why MoE decode universally lands ~30 points below dense** on this hardware. Reproduces across

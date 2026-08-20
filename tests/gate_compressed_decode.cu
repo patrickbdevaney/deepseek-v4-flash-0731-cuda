@@ -59,7 +59,7 @@ int main(int argc, char** argv){
     int Th=0;
     compressed_attn_cache(win_kv, comp_kv, &Th, x, w, s-1, ratio, EPS);
     float* out_dec; CU(cudaMalloc(&out_dec,(size_t)DIM*4));
-    compressed_decode_step_strided(out_dec, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
+    compressed_decode_step_strided(out_dec, x+(size_t)(s-1)*DIM, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
     CU(cudaDeviceSynchronize());
 
     std::vector<float> op(DIM), od(DIM);

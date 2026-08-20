@@ -314,6 +314,78 @@ here can resolve.** It is default-on because it is strictly less work, but it is
 written up in [`negative-results.md` §4c](negative-results.md), because §2.6 above had already taken
 the money it was aimed at.
 
+### 2.7 Change which kernel the bit-exactness claim is *against* — `index_score` as a register-tiled GEMM (ladder 1.5, 2026-08-20)
+
+**Mechanism.** `index_score[s,t] = sum_h relu(q[s,h,:] . kv[t,:]) * w[s,h]` is what the DSA indexer
+scores every compressed row with, once per ratio-4 layer, every forward. The shipped
+`index_score_warp_kernel` put one warp on each (query, row) pair and read **both** operands from
+global on every head: `q` for one query is `H*d = 64*128 = 8192` floats = 32 KiB and is re-read once
+per row `t`; `kv[t]` is 128 floats and is re-read once per **head**. At the verify shape
+(S=6, T=3072) that is **1.2 GB moved to do 151 M MACs — 0.5 FLOP/byte** on a part whose FFMA peak is
+5.45 TFLOPS, and `d` is a runtime argument so the inner loop is a serial chain of dependent global
+loads that cannot unroll.
+
+The replacement is the same arithmetic as a GEMM: `P[(s,h),t] = q . kv^T`, M = H = 64, N = T,
+K = d = 128, with the reduction over M in the epilogue. One block owns **all 64 heads of one query**
+and 128 rows of `kv`; the k-loop is 8x8 register-tiled, so 16 shared loads feed 64 FFMAs (~4:1,
+against the warp kernel's 1:1); `P` for the tile goes to shared and the epilogue walks `h` in order.
+The register tiling is **strided, not blocked** (`t = tx + j*16`, `h = ty + i*8`) so consecutive
+threads read consecutive shared floats with plain scalar loads and no bank conflict — no `float4`
+and no padding games.
+
+**THE WIN CAME FROM CHANGING WHICH KERNEL THE CLAIM WAS AGAINST.** An intermediate
+`index_score_tiled_kernel` was built first, staging `q` in shared and holding `kv[t]` in registers,
+and it is bit-identical to the shipped warp kernel — which capped it at **2.0x**. Bit-exactness with
+the warp kernel mandates keeping its 5-step `__shfl_down_sync` tree, and SHFL retires at one
+warp-instruction per SM per clock here: 1.18 M (row, head) pairs x 5 steps over 20 SMs is a ~200 us
+floor at the verify shape *no matter how the operands are staged*. The GEMM instead is bit-identical
+to `index_score_kernel`, the correctness-first **scalar reference** that `gate_units` checks against
+`ref/goldens/unit_index_score.safetensors`, because a register-tiled GEMM accumulates serially in k
+and that IS the reference's order. LOOP_LOG Finding 68 had adopted the warp kernel as a deviation
+*from* that reference behind the LOSSLESS gate; 1.5 spends the deviation back and is 6.8x rather
+than 2.0x for it. Full argument in [`negative-results.md` §4d](negative-results.md).
+
+**Measured gain, standalone** — 30 repeats, arms interleaved in one process, H=64 d=128, median us:
+
+| S, T | warp | tiled | GEMM | |
+|---|---|---|---|---|
+| 6, 768 | 239.7 | 138.3 | **45.0** | 5.33x |
+| 6, 1536 | 462.9 | 237.2 | **72.6** | 6.37x |
+| 6, 3072 | 898.7 | 449.7 | **132.5** | 6.78x |
+| 6, 6144 | 1771.6 | 877.8 | **237.6** | 7.46x |
+| 1, 6144 | 311.7 | 156.7 | **53.9** | 5.78x |
+
+**Measured gain, in situ** — one server load per arm, control arm first so drift favours the
+control, four reps per sweep context:
+
+| ctx | tok/s before | tok/s after | paired | `tau` |
+|---|---|---|---|---|
+| 3,197 | 12.14 | **12.27** | +0.99 % | 1.736 both |
+| 6,260 | 11.87 | **12.15** | +2.24 % | 1.788 both |
+| 12,410 | 10.46 | **10.93** | **+4.57 %** | 1.615 both |
+
+Regressing the 16 paired per-leg forward-time deltas on context gives
+**-0.572 +/- 0.018 ms per 1000 context** (R^2 0.987), which is **89 % of the 0.644 +/- 0.018 that
+ladder item 0.4 attributed to this mark** — prediction and delivery agree inside one SE. The
+intercept is **+0.358 +/- 0.134 ms**: at zero context the GEMM is slightly *slower*, because it
+stages 33 KiB of shared per block that needs rows to amortise over. Break-even is near ctx 625, and
+that is visible as a **null** on `build/decode` at seqmax 85 — 21.03-21.24 tok/s against the warp
+kernel's 21.02-21.26, three replicates each in one load per arm.
+
+**The gate that proved it.** The claim is value equality, so the instrument is `memcmp`:
+`tests/gate_index_score` sweeps 1130 shapes (S ∈ {1,2,5,6,17,129}, T from 1 to 6001, H ∈ {1,3,64},
+d ∈ {32,64,96,128,256}, five input distributions including all-negative, near-tie and
+signed-zero/denormal, output poisoned to `0xEE` before every launch) — **21,773,760 floats, 0
+differing** on both claims. It also **prints what the change spends** against the shipped warp
+kernel rather than asserting it is small: up to 88 % of elements differ, `max_abs` 4.88e-04,
+`max_rel` 0.847 on near-zero scores. Those numbers are meaningless on their own, because this
+kernel feeds a **selection** and a last-ulp flip near the k-th boundary changes which rows attention
+sees. So the evidence that counts is downstream and at context: **16 of 16 legs emitted
+byte-identical text at ctx up to 12,410, with `tau` and mean verify width identical to four
+decimals**, plus `LOSSLESS GATE -> PASS` x3 and `gate_units` / `gate_indexer_decode` /
+`gate_compressed_decode` / `gate_prefill_len` all green. See
+[`context-scaling.md`](context-scaling.md) for what it did to the term.
+
 ---
 
 ## 3. Precision and layout

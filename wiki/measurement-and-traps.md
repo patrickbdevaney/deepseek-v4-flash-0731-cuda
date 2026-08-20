@@ -467,3 +467,72 @@ substantially understates the *between*-session term.
 
 This is the throughput-side twin of §12: there, token ids diverged run-to-run and the fix was to run
 the same-arm control first. Here, throughput drifts load-to-load and the fix is the same shape.
+
+## 20. A gate that does not compile is a gate that passes by never running (ladder 1.5, 2026-08-20)
+
+`scripts/ixgemm_ab_run.sh` phase 1 refuses to spend a checkpoint load until the in-situ engine gates
+pass. It could not start, because **four of them had not built since commit `5c1e047`**:
+
+```
+tests/gate_indexer_decode.cu(66): error: too few arguments in function call
+tests/gate_compressed_decode.cu(62): error: too few arguments in function call
+tests/gate_indexer_graph.cu, tests/gate_compressed_graph.cu — same
+```
+
+`5c1e047` ("xin ring: seqmax 8192 → 32768") split `x_full` into `(x_cur, x_full)` on the decode and
+verify steps — `const float* xt = x_full + pos*DIM` became `const float* xt = x_cur` — so that `xin`
+could be a small ring. Every engine call site was updated. Four **test** call sites were not, and
+they are, precisely:
+
+* `gate_indexer_decode` — prefill vs. `compressed_attn_cache_r4` + `compressed_decode_step_indexer`
+  at ratio 4. **The in-situ gate for the DSA indexer decode path.**
+* `gate_compressed_decode` — the strided twin.
+* `gate_indexer_graph`, `gate_compressed_graph` — the **CUDA-graph capture** equivalence gates.
+
+That is the entire in-situ correctness harness for the subsystem ladder items 1.2, 1.3, 1.4 and 1.5
+all edit, dead for the whole ladder to date. Nothing reported it, because a build failure in
+`build_gate.sh` is not a gate failure — it is an *absent* gate, and the run that consumes it either
+skips it or tests a binary from before the change. §13 and §14 are the same shape at the stage
+level; this is it at the build level, and it is the more dangerous version because `build/` still
+contains a plausible-looking executable with an old timestamp.
+
+**Compounding it, one line above:** `build_gate.sh` had a bare `nvcc` under `set -e`, so the first
+link failure (`gate_units`, missing `kernels/nvfp4_dense.cu` since nvfp4 landed) killed the script
+and **none of the twelve gates below it rebuilt either**. The file already contained a block written
+to prevent exactly this — a `bg` helper that records failures and keeps going — and the raw `nvcc`
+lines above that block reintroduced the failure mode the block was written for. Found by *running*
+the script, not by reading it.
+
+> **Rule.** Treat "did the gate build?" as part of the gate. `build_gate.sh` now exits non-zero when
+> any binary is missing, and a stage that consumes a gate must refuse when the binary is absent or
+> older than the source it tests — which is what phase 0/1 of the A/B scripts do. The general form:
+> **a gate has three outcomes, PASS, FAIL and NOT RUN, and only the first two are ever printed.**
+> Go looking for the third.
+
+The fix here was mechanical (`x` → `x + pos*DIM, x`, restoring the pre-`5c1e047` semantics exactly)
+and all four now pass — `cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00` on the decode pair, and
+`cosine=1.0000000 maxabs/|o|=0.00e+00` on both **CUDA-graph replay** gates, which is the first time
+the captured path has been tested against the sequential one since the ring landed. The cost of
+*not* having them was four ladder items gated on strictly less evidence than their write-ups
+claimed.
+
+## 21. dprof reads a saving 15–20 % low, so it attributes but does not ratchet (ladder 1.5)
+
+Same change, three instruments, one session:
+
+| instrument | context-term saving |
+|---|---|
+| clean paired A/B, 16 legs | **0.572 ± 0.018 ms per 1000** |
+| `STEP` mark under `DSV4_DPROF=1` | 0.484 ± 0.009 |
+| `i:score` mark under `DSV4_DPROF=1` | 0.463 |
+
+The two dprof numbers agree with each other and both sit ~15–20 % below the clean pair. That is the
+expected direction: dprof inserts a per-mark synchronisation, which adds a roughly fixed cost to
+every step and dilutes any *relative* difference between arms. It does not bias the *attribution* —
+`i:score` still goes from 0.503 ± 0.006 to 0.040 ± 0.001 ms per 1000, and the saving still lands
+entirely inside its parent mark `cattn:indexer` (−5.24 ms against −5.22) with the untouched `i:topk`
+control flat at 0.72/0.72/0.76 — so dprof answers "where did it go" correctly and "how much was it"
+low.
+
+> **Rule.** Attribute with dprof, ratchet with the clean pair. Quoting a dprof delta as the
+> throughput result understates a win and would, on a marginal item, turn a real gain into a null.

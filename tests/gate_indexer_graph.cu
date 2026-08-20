@@ -34,7 +34,7 @@ int main(){
     int winmax=s, Tmax=s/ratio+2;
     float *win_kv,*comp_kv,*idx_ckv,*outS; CU(cudaMalloc(&win_kv,(size_t)s*HEAD_DIM*4)); CU(cudaMalloc(&comp_kv,(size_t)Tmax*HEAD_DIM*4)); CU(cudaMalloc(&idx_ckv,(size_t)Tmax*ihd*4)); CU(cudaMalloc(&outS,(size_t)K*DIM*4));
     int Th=0; compressed_attn_cache_r4(win_kv,comp_kv,idx_ckv,&Th,x,w,PS,ratio,EPS); int T0=Th;
-    for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
+    for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x+(size_t)(PS+i)*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
     CU(cudaDeviceSynchronize());
     arena_init((size_t)256<<20);
     float *kvc,*ikvc,*xbuf,*outg; int *d_pos,*d_T,*d_g; CU(cudaMalloc(&kvc,(size_t)(winmax+Tmax)*HEAD_DIM*4)); CU(cudaMalloc(&ikvc,(size_t)Tmax*ihd*4)); CU(cudaMalloc(&xbuf,(size_t)DIM*4)); CU(cudaMalloc(&outg,(size_t)DIM*4));

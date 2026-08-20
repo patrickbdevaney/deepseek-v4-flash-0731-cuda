@@ -1,0 +1,14 @@
+### evidence/decode_loop/decode_1p5_control.log
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 84.6 ms/tok = 11.83 tok/s  (M=1 steady state, 7-step avg)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 11.83 tok/s
+### evidence/decode_loop/decode_1p5_lossless.log
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 85.0 ms/tok = 11.77 tok/s  (M=1 steady state, 7-step avg)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 11.77 tok/s

@@ -160,6 +160,50 @@ fire. The change works; the term it optimises was already spent by 1.2 one itera
 [`negative-results.md` §4c](negative-results.md) for why it was built anyway, which is the part
 worth reading.
 
+## Status — 1.5 is done, and it is the first kernel win since 1.2
+
+**Adopted 2026-08-20. `index_score` as a register-tiled GEMM: `b` falls by
+0.572 +/- 0.018 ms per 1000 context, paired, over 16 legs.** This is the item this page named as
+"linear, and the next kernel", and it delivered **89 % of the 0.644 +/- 0.018 that 0.4 predicted**
+— inside one standard error of the prediction.
+
+```
+paired, per leg, control arm first (drift favours the control):
+  delta_fwd = +0.358 +/- 0.134  -0.5724 +/- 0.0178 x (ctx/1000)      R^2 0.987, n=16
+```
+
+Every one of the 16 legs is faster, and `tau`, mean verify width and the **emitted text hash** are
+identical in every one — at ctx up to 12,410, not at ctx 9. tok/s at ctx 3,197 / 6,260 / 12,410:
+**12.14 -> 12.27, 11.87 -> 12.15, 10.46 -> 10.93** (+0.99 %, +2.24 %, **+4.57 %**). The gain rising
+with context *is* the signature: this is a Term-B change and it behaves like one at both ends —
+at ctx 85 on `build/decode` it is a measured **null** (21.03-21.24 against 21.02-21.26).
+
+The mark confirms it directly. dprof medians, both arms, same protocol:
+
+| mark | before, ctx 3072/6144/12,288 | after |
+|---|---|---|
+| `i:score` | 1.93 / 3.53 / **6.58** | 0.99 / 1.12 / **1.36** |
+| `cattn:indexer` (parent) | 4.79 / 6.41 / **9.51** | 3.86 / 4.00 / **4.27** |
+| `i:topk` (untouched control) | 0.72 / 0.73 / 0.76 | 0.72 / 0.72 / 0.76 |
+| `STEP` | 130.82 / 134.55 / **143.62** | 130.29 / 132.45 / **138.61** |
+
+Three things to read off that table. **`i:score` = 6.58 ms at ctx 12,288 reproduces 0.4's 6.58
+exactly**, four iterations and three kernel changes later — the attribution this whole page rests on
+is reproducible. **The saving lands entirely inside the parent** (-5.24 of `cattn:indexer` against
+-5.22 of `i:score`) and `i:topk` does not move, so no work was relocated into an unmarked region.
+And **the slope saving reads 0.463 ms/1000 in `i:score`'s own mark, and 0.484 +/- 0.009 in `STEP`,
+against 0.572 +/- 0.018 clean** — dprof's own per-mark syncs compress the difference by 15-20 %,
+which is why the ratchet is the clean pair and dprof is only the attribution. (`i:score` itself goes
+from **0.503 +/- 0.006 to 0.040 +/- 0.001 ms per 1000**: the mark is 92 % dead, not merely smaller.)
+
+**The tracked `b` is carried forward by subtraction, not by re-fit, and that is deliberate.** 1.5's
+sweep spans ctx 3,197-12,410, and over that narrow range against a ~140 ms intercept a fit
+determines `b` badly — the two arms fit `139.57 + 1.231 (SE 0.254)` and `140.00 + 0.652 (SE 0.236)`,
+R^2 0.701 and 0.433. Same direction, useless precision. The paired number has R^2 0.987 because the
+common-mode drift cancels leg by leg. So: **`b` 2.514 -> 1.942 ms/1000; `b x 6592` 16.57 ->
+12.80 ms** (the stop condition wants <= 5.0). Cumulatively `b` is down **73 %** from the 7.220 this
+ladder opened on. Rule 7 applies to your own arms too.
+
 ## What is left of the term
 
 Slopes below are 0.4's, fit over ctx 3k–12k. The `now` column is 1.3's re-attribution, 220 verify
@@ -171,7 +215,7 @@ samples over ctx 369–6255, width held fixed
 | ~~`draft:main_kv`~~ | ~~3.867~~ | **−0.000** | **done, §2.5** |
 | ~~`i:topk`~~ | ~~0.872 ± 0.021~~ | **0.084 ± 0.001** | **done, §2.6 + 1.3** |
 | `cattn:sparse` | 0.709 ± 0.050 | 1.694 ± 0.065 ⚠ | ladder 1.7 — the lever is its ~20 ms *floor*, not its slope |
-| `i:score` | 0.644 ± 0.018 | **0.629 ± 0.018** | ladder 1.5 — **linear, and the next kernel** |
+| ~~`i:score`~~ | ~~0.644 ± 0.018~~ | **0.040 ± 0.001** | **done, [`kernel-optimisations.md` §2.7](kernel-optimisations.md)** |
 
 ⚠ **The two `cattn:sparse` numbers are one concave curve read over two windows, not a disagreement,
 and the larger one must not be used to re-rank.** Per-point medians run 9.35 → 15.72 → 19.89 ms at
@@ -181,11 +225,17 @@ first leg, 0.208 across the last.** That is a top-`k` gather saturating once con
 0.88 → 1.25 → 3.53 ms, i.e. 0.482 then 0.495 per 1000 — genuinely linear, so its `b` means what it
 says. Full argument in [`measurement-and-traps.md` §16](measurement-and-traps.md).
 
-The four were 6.09 of the 6.97 ms/1000 step slope that 0.4 attributed. Both large ones are now
-spent, and what remains is **1.35 ms/1000 of identified work inside a measured 2.514** — so about
-half of the surviving slope is *still* unattributed, and the two named items are each worth roughly
-a tenth of what 1.0 was worth. **The easy half of this term is gone; the honest next question is
-what the other 1.16 ms/1000 is**, and the intercept surprise above says at least some of it is on
-the draft side where no mark has ever been placed.
+The four were 6.09 of the 6.97 ms/1000 step slope that 0.4 attributed. **Three of the four are now
+spent** — `draft:main_kv`, `i:topk` and, as of 1.5, `i:score` — and what remains named is
+`cattn:sparse`, whose lever is a ~20 ms *floor* and not a slope at all. Against the tracked
+`b = 1.942`, that is **essentially nothing identified in the surviving term**: every mark 0.4 put a
+number on has been taken, and the slope did not go to zero with them.
+
+**That is the honest state and it is the next question on this page.** The remaining context cost is
+in regions no mark brackets, and the intercept surprise above says at least some of it is on the
+draft side where no mark has ever been placed. A fifth attribution pass would be a *new instrument*,
+which this ladder deliberately ranks below any available kernel change — but there is no longer a
+named, linear, kernel-shaped context item waiting, and that is a change in the situation, not a
+gap in the notes.
 
 Term A is now much the larger problem: at ctx 12,410 it is 129.11 ms of a 154.66 ms forward — 83 %.

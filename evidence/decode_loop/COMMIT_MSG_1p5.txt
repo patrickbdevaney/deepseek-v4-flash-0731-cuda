@@ -1,0 +1,58 @@
+1.5: index_score as a register-tiled GEMM -- +4.57 % tok/s at ctx 12,410, and the context term
+falls 0.572 +/- 0.018 ms per 1000, which is 89 % of what 0.4 predicted for this mark
+
+WHAT WAS MEASURED. One server load per arm, control (warp kernel) arm FIRST so drift favours the
+control, four reps x three sweep contexts plus two control contexts:
+
+  ctx    ms/forward before -> after   paired    tok/s before -> after    tau
+  3,197  142.94 -> 141.45             -1.49     12.14 -> 12.27 (+0.99 %) 1.736 both
+  6,260  146.95 -> 143.76             -3.19     11.87 -> 12.15 (+2.24 %) 1.788 both
+ 12,410  154.44 -> 147.77             -6.67     10.46 -> 10.93 (+4.57 %) 1.615 both
+
+All 16 legs faster. tau, mean verify width and the EMITTED TEXT HASH identical in every one, at
+ctx up to 12,410 -- not at ctx 9. Regressing the 16 paired deltas on context:
+
+  delta_fwd = +0.358 +/- 0.134  -0.5724 +/- 0.0178 x (ctx/1000)    R^2 0.987, n=16
+
+WHAT IT MEANS. 0.4 attributed 0.644 +/- 0.018 ms per 1000 to the `i:score` mark. This delivered
+0.572 +/- 0.018 -- prediction and delivery agree inside one SE, which is the strongest thing this
+ladder has said about its own cost model. The tracked b goes 2.514 -> 1.942 (b x 6592: 16.57 ->
+12.80 ms; stop wants <= 5.0), carried by SUBTRACTING a paired number rather than re-fitting a
+narrow range, because over ctx 3,197-12,410 the arms fit b to R^2 0.701 and 0.433. Cumulatively b
+is down 73 % from the 7.220 the ladder opened on. Note the intercept: at zero context the GEMM is
+0.358 +/- 0.134 ms SLOWER, break-even near ctx 625 -- and on build/decode at seqmax 85 it is a
+measured NULL (21.03-21.24 vs the warp kernel's 21.02-21.26, tau 2.87 in all six replicates,
+generated ids byte-identical). A change worth +4.6 % where the kernel has rows and nothing where it
+does not is behaving like a context-term change, which is the claim.
+
+THE MECHANISM, and the part worth remembering. The shipped warp kernel re-read both operands from
+global on every head: 1.2 GB moved per call at the verify shape to do 151 M MACs, 0.5 FLOP/byte.
+An intermediate tiled kernel fixes exactly that and is bit-identical to the shipped kernel -- and
+that capped it at 2.0x, because bit-exactness with the warp kernel mandates keeping its 5-step
+__shfl_down_sync tree, and SHFL is a ~200 us floor at this shape however the operands are staged.
+The GEMM is bit-identical to index_score_kernel, the SCALAR REFERENCE gate_units checks against
+ref/goldens, because register-tiled accumulation in k IS the reference's order -- and it is 6.8x.
+"Bit-exact" is a two-place relation and the second argument is a design decision; claiming it
+against the incumbent inherits every reassociation the incumbent ever made, including (Finding 68)
+ones adopted as explicit deviations.
+
+THE INVARIANT, second branch. Not bit-exact with what it replaces, so it ships behind the LOSSLESS
+gate with the deviation MEASURED: gate_index_score sweeps 1130 shapes / 21,773,760 floats at 0
+differing on both claims, and prints what the change spends vs the warp kernel per distribution
+(up to 88 % of elements differ, max_abs 4.88e-04, max_rel 0.847 on near-zero scores). Those are
+meaningless alone -- the kernel feeds a SELECTION -- so the evidence that counts is the 16/16
+byte-identical texts at context above. LOSSLESS GATE PASS x3; gate_units, gate_indexer_decode,
+gate_compressed_decode, gate_prefill_len rc=0; both CUDA-graph capture gates bit-identical.
+
+A GATE THAT DOES NOT COMPILE IS A GATE THAT PASSES BY NEVER RUNNING. Phase 1 could not start:
+gate_indexer_decode, gate_compressed_decode, gate_indexer_graph and gate_compressed_graph had not
+built since 5c1e047 split x_full into (x_cur, x_full) and left four test call sites one argument
+short. That is the entire in-situ correctness harness for the subsystem items 1.2-1.5 all edit,
+absent for the whole ladder to date, on top of the set -e + bare-nvcc breakage iteration 7 found in
+build_gate.sh one line above it. Fixed, and all four pass.
+
+Wiki: kernel-optimisations.md 2.7 (the win), negative-results.md 4d (the 2x version and why the
+reference choice cost 3.4x), context-scaling.md (the term; three of 0.4's four items are now spent
+and what is left is not linear), measurement-and-traps.md 20 (a gate has three outcomes and only
+two are ever printed) and 21 (dprof reads a saving 15-20 % low: attribute with it, ratchet with the
+clean pair), README.md state table.

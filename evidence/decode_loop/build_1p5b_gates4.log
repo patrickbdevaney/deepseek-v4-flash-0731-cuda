@@ -1,0 +1,6 @@
+prior build_gate.sh finished 2026-08-20T09:16:59-04:00
+built build/gate_compressed_decode
+built build/gate_indexer_decode
+built build/gate_compressed_graph
+built build/gate_indexer_graph
+rebuild4 rc=0 2026-08-20T09:23:35-04:00

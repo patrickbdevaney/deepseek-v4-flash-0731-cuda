@@ -72,3 +72,61 @@ tests/gate_indexer_decode.cu(66): error: too few arguments in function call
 
 6 errors detected in the compilation of "tests/gate_indexer_decode.cu".
 FAILED TO BUILD build/gate_indexer_decode
+built build/gate_scratch_init
+tests/gate_compressed_graph.cu(37): error: argument of type "int" is incompatible with parameter of type "const float *"
+      for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
+                                                                               ^
+
+tests/gate_compressed_graph.cu(37): error: no suitable conversion function from "CompressedAttnWeights" to "int" exists
+      for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
+                                                                                    ^
+
+tests/gate_compressed_graph.cu(37): error: no suitable constructor exists to convert from "float *" to "CompressedAttnWeights"
+      for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
+                                                                                      ^
+
+tests/gate_compressed_graph.cu(37): error: argument of type "int *" is incompatible with parameter of type "float *"
+      for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
+                                                                                                     ^
+
+tests/gate_compressed_graph.cu(37): error: argument of type "int" is incompatible with parameter of type "int *"
+      for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
+                                                                                                         ^
+
+tests/gate_compressed_graph.cu(37): error: too few arguments in function call
+      for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
+                                                                                                                  ^
+
+6 errors detected in the compilation of "tests/gate_compressed_graph.cu".
+FAILED TO BUILD build/gate_compressed_graph
+tests/gate_indexer_graph.cu(37): error: argument of type "int" is incompatible with parameter of type "const float *"
+      for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
+                                                                               ^
+
+tests/gate_indexer_graph.cu(37): error: no suitable conversion function from "CompressedAttnWeights" to "int" exists
+      for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
+                                                                                    ^
+
+tests/gate_indexer_graph.cu(37): error: no suitable constructor exists to convert from "float *" to "CompressedAttnWeights"
+      for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
+                                                                                      ^
+
+tests/gate_indexer_graph.cu(37): error: argument of type "int *" is incompatible with parameter of type "float *"
+      for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
+                                                                                                             ^
+
+tests/gate_indexer_graph.cu(37): error: argument of type "int" is incompatible with parameter of type "int *"
+      for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
+                                                                                                                 ^
+
+tests/gate_indexer_graph.cu(37): error: too few arguments in function call
+      for(int i=0;i<K;++i) compressed_decode_step_indexer(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,idx_ckv,&Th,ratio,EPS);
+                                                                                                                          ^
+
+6 errors detected in the compilation of "tests/gate_indexer_graph.cu".
+FAILED TO BUILD build/gate_indexer_graph
+built build/gate_compressor_emit
+built build/gate_grouped_moe
+built build/gate_mainkv_incr
+built build/gate_fp4_gemv
+GATE BUILD FAILURES: gate_compressed_decode gate_indexer_decode gate_compressed_graph gate_indexer_graph

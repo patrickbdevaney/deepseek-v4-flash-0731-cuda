@@ -27,12 +27,18 @@ historical measurement; the second is where agentic work actually runs.
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
 
-| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | |
-|---|---|---|---|---|---|
-| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | **10.69 tok/s** | *unchanged* | +24.4 % then **+8.2 %** then nothing |
-| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | +21.7 % then +6.7 % |
-| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | **11.77 tok/s** | *unchanged* | +15.8 % then +5.8 % |
-| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | **2.514 ms/1000** | 3.008 → 3.036, its own arms | **−65 % cumulative** |
+| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | |
+|---|---|---|---|---|---|---|
+| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | 10.69 tok/s | *unchanged* | **+4.57 % paired** (10.46 → 10.93 in-session) | +24.4 %, +8.2 %, nothing, **+4.6 %** |
+| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | +21.7 % then +6.7 % |
+| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | +15.8 %, +5.8 %, nothing, +2.2 % |
+| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | **1.942 ms/1000** (−0.572 ± 0.018 paired) | **−73 % cumulative** |
+
+**Read 1.5's column as a paired percentage, not as a new absolute.** Its sweep spans ctx
+3,197–12,410 in one session per arm; the 10.93 and 12.15 are that session's after-arm and are not
+commensurable with 1.2's 10.69/11.77 from a different load (§19 — the between-load spread is 5.7 %).
+The trustworthy quantity is the paired delta, which is why it is the one in bold, and `b` is carried
+forward by **subtracting** the paired saving rather than by re-fitting a narrow range.
 
 **1.4 is not in that table at all, and that is the correct place for it.** It is a correctness item,
 not a throughput one: it removes a silent garbage-return above context 49,140 from the two top-k
@@ -69,12 +75,13 @@ sweep, and 1.2's before-arm measured `b = 3.488` where 1.0's after-arm reported 
 run-to-run spread on a fitted coefficient, which is why the *paired* saving and not the fit
 difference is the ratchet in both cases.
 
-**The context term is no longer where the money is.** Of the 6.97 ms/1000 that 0.4 attributed, the
-two large items — `draft:main_kv` (3.867) and `i:topk` (0.872) — are both spent, and a fresh
-attribution confirms them dead at **−0.000** and **0.084 ± 0.001**. What is named and left is
-`cattn:sparse` (0.709) and `i:score` (0.644 → re-measured 0.629 ± 0.018), **1.35 of a measured
-2.514**, so about half the surviving slope is still unattributed. Term A is now 129.11 ms of a
-154.66 ms forward at ctx 12,410 — **83 %** — and it is 1.57× its byte floor. See
+**The context term is no longer where the money is, and as of 1.5 it is no longer where the named
+work is either.** Of the 6.97 ms/1000 that 0.4 attributed, **three of the four items are now
+spent**: `draft:main_kv` (3.867 → −0.000), `i:topk` (0.872 → 0.084 ± 0.001) and, with 1.5,
+`i:score` (0.644 → **0.040 ± 0.001**). What is named and left is `cattn:sparse`, whose lever is a
+~20 ms *floor* rather than a slope — so against the tracked `b = 1.942` there is essentially no
+identified linear work remaining, and the slope did not go to zero when the marks did. Term A is
+129.11 ms of a 154.66 ms forward at ctx 12,410 — **83 %** — and it is 1.57× its byte floor. See
 [`context-scaling.md`](context-scaling.md).
 
 `cattn:sparse` re-fits at **1.694 ± 0.065** over ctx 0.4k–6k against 0.4's **0.709 ± 0.050** over
@@ -108,6 +115,21 @@ where a clean fit with a tight SE meant something other than it looked like.
 > gated by memcmp on the whole index array across 11,008 calls and 183 M slots. It also arrived
 > **3.12 ms/forward ahead of what the profile predicted**, in a kernel on the draft side that has
 > never had a dprof mark — so the profile is *still* incomplete, for the second time.
+
+> **Update 2026-08-20, third of the three:** the *last* of the linear items 0.4 named is spent too.
+> `index_score` is a register-tiled GEMM rather than a warp-per-(query,row) kernel
+> ([`kernel-optimisations.md` §2.7](kernel-optimisations.md)) — **+4.57 % paired at ctx 12,410**,
+> **−0.572 ± 0.018 ms per 1000 context**, 16 of 16 legs faster with `tau`, verify width and the
+> emitted text hash identical in every one. It delivered **89 % of what 0.4 predicted for the mark**,
+> which is the strongest thing this ladder has said about its own cost model. The mechanism worth
+> remembering is not the tiling: it is that the 2× version was capped by claiming bit-exactness
+> against the *shipped* kernel, and the 6.8× version got there by claiming it against the *scalar
+> reference* instead ([`negative-results.md` §4d](negative-results.md)).
+>
+> **And the gates that were supposed to be watching this subsystem had not compiled in weeks** —
+> four in-situ gates, including both CUDA-graph capture gates, silently absent since the `xin`-ring
+> commit ([`measurement-and-traps.md` §20](measurement-and-traps.md)). A gate has three outcomes and
+> only two of them are ever printed.
 
 ## If you read one thing
 

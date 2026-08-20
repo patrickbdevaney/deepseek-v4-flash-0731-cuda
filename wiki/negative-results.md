@@ -151,6 +151,45 @@ the cost model.** The re-check is free: every A/B here already runs a dprof pair
 iteration's attribution is sitting on disk. This produced ladder rule 6, and it generalises past
 this repo — the more effective a queue of optimisations is, the faster its own ordering rots.
 
+## 4d. Superseded before it shipped — the tiled `index_score`, and the cost of picking the wrong reference (ladder 1.5, 2026-08-20)
+
+**A correct, bit-exact, 2x kernel that never ran in the engine**, because a better one existed one
+assumption away — and the assumption was not about the hardware, it was about **which kernel the
+bit-exactness claim was made against**.
+
+**The change.** `index_score_warp_kernel` re-reads both operands from global on every head: 32 KiB
+of `q` once per row, `kv[t]` once per head, 1.2 GB moved per call at the verify shape for 151 M MACs.
+`index_score_tiled_kernel` fixes exactly that — `q` staged once per block into shared, `kv[t]` held
+in registers by the warp that owns row `t`, `d` promoted to a template parameter so the inner loop
+unrolls — while changing **nothing** about the arithmetic: same lane→element mapping, same serial
+`dot +=`, same 5-step `__shfl_down_sync` tree, same `fmaxf`, same serial accumulation over heads. It
+is bit-identical to the shipped kernel by construction and `memcmp`-gated. It is worth **2.0x**
+(898.7 → 449.7 µs at S=6, T=3072).
+
+**And 2.0x is its ceiling, structurally.** Per (row, head) the kernel does 4 useful FFMAs against
+~16 instructions of overhead, half of which is the shuffle tree. SHFL retires at one
+warp-instruction per SM per clock on this part, so 1.18 M (row, head) pairs × 5 steps over 20 SMs is
+a **~200 µs floor** at the verify shape regardless of how the operands are staged — and the measured
+tiled kernel is 451 µs against exactly that arithmetic. **The tree cannot be removed while the claim
+is "bit-identical to the warp kernel", because the tree IS the warp kernel's summation order.**
+
+**The fix was to aim the claim at the reference instead of at the incumbent.** `index_score_kernel`,
+the scalar version `gate_units` checks against `ref/goldens`, accumulates **serially in d** — which
+is precisely what a register-tiled GEMM does in k. So a GEMM can be bit-identical to the *reference*
+while the *shipped* kernel is not, and it is **6.8x**. LOOP_LOG Finding 68 had adopted the warp
+kernel as a deviation from that reference behind the LOSSLESS gate; 1.5 handed the deviation back
+and got 3.4x more for it. [`kernel-optimisations.md` §2.7](kernel-optimisations.md).
+
+**The tiled kernel is kept**, but only as the fallback for shapes the GEMM's tiling cannot serve
+(`H % 8 != 0`), which the model never issues. On the shipped path it is dead code, and this entry is
+what it is for.
+
+**The generalisable form: "bit-exact" is a two-place relation and nobody says the second argument.**
+A bit-exactness constraint is only as good as the kernel you point it at, and pointing it at the
+*current* implementation silently inherits every reassociation that implementation ever made —
+including ones adopted, as here, as explicit deviations. **Ask what the claim is against before
+letting it bound the design.** The incumbent is not the reference; the reference is the reference.
+
 ---
 
 ## 5. What the negatives taught
@@ -165,3 +204,6 @@ this repo — the more effective a queue of optimisations is, the faster its own
 5. **Host time is not critical-path time** (F83).
 6. **A probe whose input distribution differs from production selects the wrong parameter** (F65,
    F70, F59).
+7. **"Bit-exact" is a two-place relation, and the second argument is a design decision** (ladder
+   1.5, §4d). Claiming it against the incumbent inherits the incumbent's reassociations and cost
+   1.5 a factor of 3.4 until the claim was re-aimed at the reference.

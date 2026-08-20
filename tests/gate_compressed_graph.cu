@@ -34,7 +34,7 @@ int main(){
     int winmax=s, Tmax=s/ratio+2;
     float *win_kv,*comp_kv,*outS; CU(cudaMalloc(&win_kv,(size_t)s*HEAD_DIM*4)); CU(cudaMalloc(&comp_kv,(size_t)Tmax*HEAD_DIM*4)); CU(cudaMalloc(&outS,(size_t)K*DIM*4));
     int Th=0; compressed_attn_cache(win_kv,comp_kv,&Th,x,w,PS,ratio,EPS); int T0=Th;
-    for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
+    for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x+(size_t)(PS+i)*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
     CU(cudaDeviceSynchronize());
     // dp: combined cache seeded from the SAME prefill, captured graph
     arena_init((size_t)128<<20);

@@ -161,30 +161,6 @@ server_down
 [ "$rc" = "0" ] || { say "FATAL: gemm sweep failed"; exit 1; }
 fi
 
-# ================= PHASE 4 — dprof, CONTROL then 1.5 =========================================
-# The instrument that can see the `i:score` mark itself. Both arms carry the identical dprof
-# overhead, so their medians are comparable to each other; they are NOT comparable to phase 2/3's
-# clean tok/s and nothing here should be quoted as a throughput number.
-if [ "$PHASE_FROM" -le 4 ]; then
-export DSV4_DPROF=1
-export DSV4_DPROF_EVERY="${DSV4_DPROF_EVERY:-4}"
-for arm in off on; do
-  say "=== PHASE 4$arm: dprof attribution, arm=$arm ==="
-  if [ "$arm" = "off" ]; then export NO_IXGEMM=1 NO_IXTILE=1; OUT=$DPOFF_OUT
-  else unset NO_IXGEMM NO_IXTILE; OUT=$DPON_OUT; fi
-  DP_LOG=$EV/server_1p5_dprof_$arm.log
-  : > "$DP_LOG"
-  start_server "$DP_LOG" "dprof-$arm" || exit 1
-  python3 tools/decode_fit_probe.py --outdir "$OUT" --targets "$DPROF_TARGETS" --reps "$DPROF_REPS" \
-          --max-tokens 128 --no-control --ckpt "$CKPT"
-  rc=$?; say "dprof-$arm probe rc=$rc"
-  server_down
-  [ "$rc" = "0" ] || { say "FATAL: dprof $arm sweep failed"; exit 1; }
-  python3 tools/dprof_ctx.py "$DP_LOG" | tee $EV/dprof_ctx_1p5_$arm.txt
-done
-unset DSV4_DPROF NO_IXGEMM NO_IXTILE
-fi
-
 # ================= PHASE 5 — the standing GATE and LOSSLESS GATE =============================
 # This is the branch of the ladder's bit-exactness invariant that 1.5 has to satisfy: the change is
 # NOT byte-identical to the arm it replaces, so it ships behind this gate. Three replicates in ONE
@@ -214,8 +190,32 @@ if [ ! -s "$DECC_LOG" ]; then say "FATAL: PHASE 5b produced no log."; exit 1; fi
 grep -E 'GATE|tok/verify|tok/s|LOSSLESS' "$DECC_LOG" | tail -30
 fi
 
-# ================= PHASE 6 — the ratchet =====================================================
-say "=== PHASE 6: reports ==="
+# ================= PHASE 6 — dprof, CONTROL then 1.5 =========================================
+# The instrument that can see the `i:score` mark itself. Both arms carry the identical dprof
+# overhead, so their medians are comparable to each other; they are NOT comparable to phase 2/3's
+# clean tok/s and nothing here should be quoted as a throughput number.
+if [ "$PHASE_FROM" -le 6 ]; then
+export DSV4_DPROF=1
+export DSV4_DPROF_EVERY="${DSV4_DPROF_EVERY:-4}"
+for arm in off on; do
+  say "=== PHASE 6$arm: dprof attribution, arm=$arm ==="
+  if [ "$arm" = "off" ]; then export NO_IXGEMM=1 NO_IXTILE=1; OUT=$DPOFF_OUT
+  else unset NO_IXGEMM NO_IXTILE; OUT=$DPON_OUT; fi
+  DP_LOG=$EV/server_1p5_dprof_$arm.log
+  : > "$DP_LOG"
+  start_server "$DP_LOG" "dprof-$arm" || exit 1
+  python3 tools/decode_fit_probe.py --outdir "$OUT" --targets "$DPROF_TARGETS" --reps "$DPROF_REPS" \
+          --max-tokens 128 --no-control --ckpt "$CKPT"
+  rc=$?; say "dprof-$arm probe rc=$rc"
+  server_down
+  [ "$rc" = "0" ] || { say "FATAL: dprof $arm sweep failed"; exit 1; }
+  python3 tools/dprof_ctx.py "$DP_LOG" | tee $EV/dprof_ctx_1p5_$arm.txt
+done
+unset DSV4_DPROF NO_IXGEMM NO_IXTILE
+fi
+
+# ================= PHASE 7 — the ratchet =====================================================
+say "=== PHASE 7: reports ==="
 say "--- BEFORE (warp kernel) ---"
 python3 tools/decode_fit_probe.py --outdir "$OFF_OUT" --report | tee $EV/fit_1p5_off.txt
 say "--- AFTER (register-tiled GEMM) ---"

@@ -1,0 +1,29 @@
+[yarn] seqlen=64 dim=64  max_abs=3.01e-06 (yarn+off) -> PASS
+[indexer] s=16 T=4 nh=8 idx_hd=128  valid|sc|max=2.4054 max_abs=0.00000 rel=0.00000 -> PASS
+[compressor] bs=8 d=128 ratio=4  |pooled|max=3.6048 max_abs=0.00000 max_rel=0.00001 -> PASS
+[compressor_overlap] s=8 d=64 ratio=4  |p|max=1.4016 max_abs=0.00000 max_rel=0.00000 -> PASS
+[compressor_full rotate=0] s=8 dim=256 d=128  |o|max=3.2500 max_abs=0.00000 max_rel=0.00001 -> PASS
+[compressor_full rotate=1] s=8 dim=256 d=128  |o|max=3.0000 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hadamard] rows=8 D=128  |y|max=3.4210 max_abs=0.00000 max_rel=0.00000 -> PASS
+[index_score] S=8 H=8 d=128 T=6  |sc|max=11.0703 max_abs=0.00000 max_rel=0.00000 -> PASS
+[act_quant_fp4] n=32 dim=256 block=32  max_abs=0.00000 max_rel=0.00000 -> PASS
+[fp8_block_gemm] M=48 N=256 K=512  |C|max=4.9551  max_abs=0.00000  max_rel=0.00002  -> PASS
+[fp8_gemm TC m16n8k32] cosine=1.000000 max_rel=0.00002 -> PASS
+[fp8_gemm A/B] fp8_block_gemm 0.1253 ms | tc_fp8_gemm 0.0080 ms -> 15.64x
+[hc_sinkhorn] n=64 hc=4 iters=20  max_abs pre=5.96e-08 post=1.19e-07 comb=1.19e-07  -> PASS
+[sparse_attn] b=1 m=8 h=4 d=128 n=24 topk=16  |o|max=2.0625 max_abs=0.00726 max_rel=0.00365 -> PASS
+[rope] rows=32 rope_dim=64  fwd_abs=2.38e-07 inv_abs=2.38e-07 -> PASS
+[rmsnorm] rows=32 dim=512  w_abs=7.15e-07 now_abs=4.77e-07 -> PASS
+[act_quant] rows=32 dim=512 block=64  max_abs=0.00000 max_rel=0.00000 -> PASS
+[ogroup_gemm] bs=8 G=2 R=16 Kd=128  |out|max=1.9535 max_abs=0.00000 max_rel=0.00000 -> PASS
+[fp4_gemm] M=32 N=128 K=256  |C|max=6.4257 max_abs=0.00000 max_rel=0.00001 -> PASS
+[router] n=16 dim=256 n_routed=8 topk=2  w_abs=1.19e-07 idx_mismatch=0 -> PASS
+[moe batched] cosine vs per-token oracle=1.0000000 -> PASS
+[moe device_route] cosine vs per-token oracle=1.0000000 -> PASS
+[moe batched+TC] cosine vs oracle=1.0000000 -> PASS
+[moe A/B] per-token 0.859 ms | batched 0.523 ms (1.64x) | batched+TC 1.033 ms (0.83x)
+[moe determinism] 32 repeats of the DECODE config on one input: 0 differ (worst 0/2048 elements) -> PASS
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+
+Gate K (units): PASS
