@@ -265,3 +265,118 @@ three shards and those shards contain nothing else, so restore is a file copy.
 **Gate: the LOSSLESS check (first 8 tokens match base AR) must pass on the fine-tuned head.** The
 verify step makes speculation lossless by construction, so a failure there means we perturbed
 something the verify path depends on — not that the draft got worse.
+
+---
+
+## 8. Deployment — the gap between *promoted* and *served* (ladder 2.2, 2026-08-20)
+
+**s3 was promoted on 2026-08-12 and served for the first time on 2026-08-20.** For eight days the
+best head this project has trained sat in `~/model-backups/heads/s3/`, sha256-recorded, with its
+measurement in `HEAD_REGISTRY.md`, while every single server start loaded the shipped head.
+
+Nothing was broken. `tools/promote_head.py` says in its own docstring that it archives and records,
+and it deliberately does not write the live checkpoint — promotion is a judgement about weights and
+overwriting a 101 GiB checkpoint is not something a selection tool should do as a side effect. That
+was the right call. The mistake was that **nothing else could name a different checkpoint either**:
+`scripts/serve.sh` hardcoded the base path, and every server launcher in the repo (`run_server.sh`,
+`eval_resume.sh`, `eval_supervise.sh`, `deploy_staged_server.sh`) execs `serve.sh`. There was no
+supported way to serve a promoted head, so the promotion pipeline terminated one step short of
+having any effect. **A head nobody serves is not a speedup.**
+
+### 8.1 The mechanism: a symlink farm, not a `--head` flag
+
+The obvious fix is a `--head DIR` argument on the server, mirroring `decode`'s `argv[4]`. It is the
+wrong one here, and the engine's own source says why. On 0731-REAP the head is **embedded**: all
+2977 `mtp.*` tensors live in shards 46–48 and those shards contain nothing else (§7). `src/engine.cu`
+therefore loads the head out of the main `WeightStore`, with the comment that a second store "would
+duplicate ~6.5 GiB against ~16 GiB of headroom". A `--head` flag *adds* a head mapping on top of the
+base head mapping the main store has already made.
+
+`scripts/stage_head.sh` **replaces** those three shards instead:
+
+    ~/models/ckpt-head-s3/
+      model-00001..45          -> symlink to the read-only base checkpoint (same inode)
+      tokenizer.json, config.json, encoding/, ...  -> symlink to base
+      model-00046..48          -> symlink to ~/model-backups/heads/s3/
+
+Three properties fall out, and each is worth more than the flag would have been:
+
+* **Zero extra resident bytes.** The staged checkpoint's mapped set is bit-for-bit the shape of a
+  production load. Nothing is duplicated and nothing is copied — 45 of the 48 shards are the *same
+  inode* as the base.
+* **The checkpoint is never written.** It stays mode 0444 in a read-only directory. Rollback is
+  deleting a symlink farm.
+* **The A/B runs the identical binary.** The only difference between the two arms below is three
+  shard files, which is the cleanest comparison a deployment can be given.
+
+The base index already maps `mtp.*` to those three filenames and the archived head's partial index
+maps the same 2977 names to the same filenames, so the index does not need rewriting either.
+
+`tools/verify_staged_ckpt.py` proves the farm before any load — seconds on the CPU against ten
+minutes of weights. It checks that all 45,821 tensors are drop-in identical in dtype, shape and byte
+length; that the head shards are *different bytes* from base (a no-op stage would have "measured"
+the shipped head twice and called it a deployment); that every non-head file is the same inode; and
+that the head shards' sha256 equal the ones `head_card.json` recorded at promotion. That last one is
+the useful link: **what is served is provably the artifact that was measured.**
+
+Which checkpoint is live is `config/live_ckpt`, a one-line tracked file that `serve.sh` reads. It is
+in git so the production head is reviewable in a diff instead of living in one operator's shell
+history, and a `config/live_ckpt` naming a directory that no longer exists falls back to the base
+checkpoint **loudly** rather than refusing to start.
+
+### 8.2 The measurement — s3 vs shipped on today's engine, back to back
+
+The archived numbers (s3 25.53 tok/s, shipped 22.66) were taken at engine revs `85dbea6c` and
+`2632540`, before ladder items 1.0/1.2/1.3/1.4/1.5 rewrote the decode path and took the context term
+down 73 %. They are not admissible as a before-arm. Both heads were re-measured today on `93699e6`,
+same binary, same frozen 8-prompt protocol (block 6, adaptK 1.50, NGEN0 = 200, clean), one arm after
+the other, with the page cache dropped before each:
+
+| | base AR | suite mean `tau` | suite mean tok/s | tok/s ÷ base AR |
+|---|---|---|---|---|
+| shipped head | 11.41 tok/s | **3.5362** | 22.1425 | 1.9406 |
+| `s3` (staged) | 11.33 tok/s | **3.8438** | 24.2512 | 2.1404 |
+| delta | −0.70 % | **+0.3076 (+8.70 %)** | **+9.52 %** | **+10.30 %** |
+
+LOSSLESS gate PASS and first-token gate PASS on both arms; both clean.
+
+The −0.70 % on base AR is the drift control. Base AR never touches the draft head, so it is a
+within-arm measurement of exactly the between-load spread that per-prompt pairing cannot cancel
+(measurement-and-traps §19: 5.7 % between loads). It came in at 0.7 %, so the two loads were
+unusually well matched and the tok/s gain is not drift.
+
+Per-prompt, paired: `d tau = +0.3075 ± 0.4814`, 5 of 8 legs positive. **That band is not measurement
+error** — `tau` is an exact draft/target token comparison and reproduced to four decimal places
+(§8.3). It is between-*prompt* heterogeneity: the suite mean is exact on this corpus, and ±0.48 is
+how well eight prompts estimate a ninth. So: **s3 is a decided win on the frozen corpus, and only
+weakly established as a win on an arbitrary prompt.**
+
+### 8.3 What actually improved: the floor, not the ceiling
+
+The per-prompt taus are the interesting part, because the win is not uniform — it is nearly
+anti-correlated with where the shipped head was already good.
+
+| prompt | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| shipped | 5.15 | 4.43 | **1.84** | **1.75** | 5.54 | 4.46 | **1.85** | 3.27 |
+| `s3` | 3.64 | 4.20 | **2.49** | **3.06** | 3.94 | 6.09 | **3.85** | 3.48 |
+| d | −1.51 | −0.23 | **+0.65** | **+1.31** | −1.60 | +1.63 | **+2.00** | +0.21 |
+
+The three prompts where the shipped head essentially failed to speculate — `tau` below 2 out of a
+possible 5, i.e. barely better than autoregressive — are the three largest gains, and after s3
+**no prompt is below 2**. Meanwhile s3 gives back 1.5–1.6 `tau` on the two prompts the shipped head
+was best at. Standard deviation across the suite falls **1.570 → 1.056, −32.8 %**, while the mean
+rises.
+
+That is the signature of a head that has been distribution-matched rather than sharpened, and it is
+the outcome §3.3 predicted from a balanced 1536-prompt corpus. It also says something about what to
+optimise next: on a real workload the value of a draft head is dominated by its **worst** prompts,
+because those are the ones that spend the most wall-clock per token, and mean `tau` understates the
+gain there. Prompt 7 went from 14.39 to 26.33 tok/s — **+83 %** — which no suite mean will ever show.
+
+### 8.4 Deployed and proven
+
+`config/live_ckpt` points at the staged checkpoint, and the server was started on it and confirmed
+loading `/home/patrickd/models/ckpt-head-s3` with the three shards' sha256 matching s3's promotion
+record. Every future server start — including the boot-time `dsv4-evals.service` and its watchdog —
+picks it up with no further action.

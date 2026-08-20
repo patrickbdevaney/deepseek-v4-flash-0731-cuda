@@ -4,6 +4,6 @@
   roundtrip: 2118/2118 cases lossless
   stream:    2118/2118 cases match one-shot decode
   [PASS] </think> and DSML markers survive decode_stream(skip_special=false)
-  speed:     4.0 MB/s  (577033 bytes -> 173344 tokens in 143.2 ms)
+  speed:     4.1 MB/s  (577033 bytes -> 173344 tokens in 140.5 ms)
 
 Gate TOKENIZER: PASS

@@ -536,3 +536,69 @@ low.
 
 > **Rule.** Attribute with dprof, ratchet with the clean pair. Quoting a dprof delta as the
 > throughput result understates a win and would, on a marginal item, turn a real gain into a null.
+
+---
+
+## 22. `tau` reproduced to four decimals; `tok/s` on the same protocol did not — and the promotion gate keys on the second one (ladder 2.2, 2026-08-20)
+
+Deploying `s3` meant re-measuring it and the shipped head back to back on today's engine, because
+their archived numbers came from revs `85dbea6c` and `2632540` — before 1.0/1.2/1.3/1.4/1.5. Both
+arms ran the frozen 8-prompt protocol, same binary, same session. What came back:
+
+| suite mean | archived | re-measured today | drift |
+|---|---|---|---|
+| shipped `tau` | 3.5362 | **3.5362** | **0.0000** |
+| `s3` `tau` | 3.8438 | **3.8438** | **0.0000** |
+| shipped tok/s | 22.655 | 22.1425 | −2.3 % |
+| `s3` tok/s | 25.5312 | 24.2512 | −5.0 % |
+| base AR tok/s | 13.76 / 13.80 | 11.41 / 11.33 | **−17.4 %** |
+
+Not "close". **Identical to the last recorded digit**, eight days and five decode-kernel rewrites
+apart, on both heads, and per-prompt as well as in the mean. That is not luck — `tau` is an exact
+draft/target token comparison. It is a property of the head, the prompt and the acceptance rule, and
+it is blind to clocks, thermals, page cache and to every kernel on the ladder. **On this protocol
+`tau` has no measurement error at all.**
+
+Everything else on the same lines moved.
+
+### 22.1 The consequence for the selection rule
+
+`tools/promote_head.py` fixes its criteria before any head exists, which is the right instinct, and
+criterion 4 is:
+
+> Suite-mean tau must EXCEED the incumbent's by more than the measured run-to-run spread (3.5 %).
+
+The docstring says `tau`. **The code compares `suite_tok_s`** — and against an incumbent row read
+out of `HEAD_REGISTRY.md`, i.e. a number recorded on whatever engine revision was current when that
+head was measured. So the gate is differencing the one column that drifts, across the axis it drifts
+along, and calling the result head quality.
+
+It is not hypothetical. `s2` was refused at 24.7575 against s1's 24.515 × 1.035 = 25.373, a margin
+of 0.6 tok/s — about 2.5 %. The engine drift between two arbitrary revisions measured here is 2.3 %,
+5.0 % and 17.4 % on the three rows above. **A verdict that turns on 2.5 % was being decided by a
+quantity that moves more than that for reasons having nothing to do with the head.** Three of the
+registry's seven rows are `not promoted` verdicts of exactly this shape.
+
+The fix is not to switch the comparison to `tau` and stop there — throughput is what a user gets,
+and a head could in principle buy `tau` while costing draft time. The fix is that **the incumbent
+must be re-measured in the same session as the candidate**, which is what ladder 2.2 did, and which
+makes the drift common-mode instead of a term in the answer. `tau` is then the cross-session anchor
+that says the re-measurement was faithful — as it did here, twice, exactly.
+
+### 22.2 The 17 % that is not in the answer but should be in someone's notebook
+
+The base-AR row above is the loudest number on the page and it is not this item's business, so it
+is recorded rather than explained: **the `WARM decode` M=1 measurement fell from 72.5 ms/tok to
+87.7 and 88.2 ms/tok** — measured twice today, in two independent loads, on the identical gate
+prompt and the identical 7-step averaging.
+
+The reason to be careful rather than alarmed is that **speculative throughput on the same suite in
+the same runs is flat** (22.655 → 22.1425, −2.3 %, inside the 3.5 % spread). Spec decode runs the
+same forward. A genuine 17 % regression in the forward cannot leave spec throughput unchanged, so
+the likeliest reading is that the *measurement* changed, not the engine — a 7-step warm average is
+short, and the ladder has since put a main-KV cache (1.0) on a path it warms.
+
+What it definitely does mean is that **every "N.NNx vs base AR" figure in this repo is a ratio of
+two numbers only one of which is stable**, and the shipped head's own ratio inflated from 1.6464 to
+1.9406 across the ladder without the numerator moving. Quote the two throughputs, not the ratio.
+Worth its own ladder item; not worth folding into a deployment.

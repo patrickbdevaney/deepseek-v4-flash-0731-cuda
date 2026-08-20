@@ -1,0 +1,75 @@
+2.2: deploy s3 -- tau 3.5362 -> 3.8438 and +9.52 % tok/s on the frozen suite, and the server has now actually run it
+
+s3 was promoted 2026-08-12 and had never been loaded by a server. promote_head.py archives and
+deliberately never writes the live checkpoint; scripts/serve.sh -- which every launcher in this repo
+execs -- hardcoded the base checkpoint path. So the promotion pipeline terminated one step short of
+having any effect, for eight days. A head nobody serves is not a speedup.
+
+MECHANISM: a staged checkpoint, not a --head flag, and src/engine.cu is the argument. All 2977 mtp.*
+tensors are EMBEDDED in shards 46-48 and those shards hold nothing else, which is why the engine
+reads the head out of the main WeightStore -- a second store "would duplicate ~6.5 GiB against
+~16 GiB of headroom". A flag ADDS a mapping; staging REPLACES one. scripts/stage_head.sh builds
+~/models/ckpt-head-s3 as a symlink farm: 45 shards, tokenizer and config linked to the read-only
+base at the SAME INODE, the three head shards linked to the archive. Resident set is bit-for-bit a
+production load, the checkpoint is never written, no disk is spent, and the A/B runs an identical
+binary. config/live_ckpt -- tracked, one line -- is the single switch serve.sh reads.
+
+tools/verify_staged_ckpt.py gates it on the CPU in seconds, before ten minutes of weight load:
+45,821/45,821 tensors drop-in identical in dtype/shape/byte-length; 45 files the same inode as base;
+the 3 head shards' sha256 equal to what head_card.json recorded at promotion, so what is served is
+provably the artifact that was measured; and the head shards proven DIFFERENT from base -- a no-op
+stage would have measured the shipped head twice and called it a deployment.
+
+MEASURED. The archived numbers (rev 85dbea6c / 2632540) predate 1.0/1.2/1.3/1.4/1.5 and are not an
+admissible before-arm, so both heads were re-measured back to back on 93699e6, same binary, frozen
+protocol (8-prompt suite, block 6, adaptK 1.50, NGEN0 200, clean, cache dropped before each).
+LOSSLESS GATE PASS and first-token GATE PASS on both arms.
+
+                 base AR   suite tau   suite tok/s   tok/s / base AR
+  shipped        11.41     3.5362      22.1425       1.9406
+  s3             11.33     3.8438      24.2512       2.1404
+  delta          -0.70 %   +0.3076     +9.52 %       +10.30 %
+                           (+8.70 %)
+
+The -0.70 % on base AR is the drift control: base AR never touches the draft head, so it measures
+the between-load spread (5.7 % per traps §19) that per-prompt pairing cannot cancel. Paired per
+prompt: d tau = +0.3075 +/- 0.4814, 5/8 legs positive -- and that band is NOT measurement error, it
+is between-PROMPT heterogeneity, because tau is exact. Decided on this corpus; weakly established on
+an arbitrary prompt.
+
+WHAT IMPROVED IS THE FLOOR, NOT THE CEILING. Per-prompt tau shipped 5.15 4.43 1.84 1.75 5.54 4.46
+1.85 3.27 -> s3 3.64 4.20 2.49 3.06 3.94 6.09 3.85 3.48. The three prompts where the shipped head
+barely speculated at all (tau < 2 of a possible 5) are the three largest gains; after s3 no suite
+prompt is below 2; s.d. across the suite falls 1.570 -> 1.056 (-32.8 %) while the mean rises; prompt
+7 goes 14.39 -> 26.33 tok/s, +83 %, which no suite mean will ever show. On real work the worst
+prompts dominate wall-clock, so mean tau understates this.
+
+PROVEN LIVE, NOT ASSERTED. Server started via run_server.sh (detached, ppid systemd, tty ?,
+detach_audit green), log shows "live checkpoint pinned by config/live_ckpt -> .../ckpt-head-s3", and
+a completion on the gate prompt returned tokens_per_verify = 2.857 -- against the shipped head's
+3.61 and s3's 2.87 for that same prompt offline. Behavioural proof of which weights are resident,
+not a path in a log line. Server then stopped: the deployment is the tracked pointer file, not a
+running process, and 100 GiB resident would block the next iteration.
+
+TWO FINDINGS THIS TURNED UP, QUEUED AS 2.4 AND 2.5 RATHER THAN FOLDED IN:
+
+  2.4  promote_head.py's docstring criterion 4 says "suite-mean TAU must exceed the incumbent's by
+       3.5 %"; the code compares suite_tok_s, against an incumbent row recorded on a DIFFERENT
+       engine revision. This iteration measured that axis directly: suite tau reproduced the
+       archived value to FOUR DECIMAL PLACES for both heads across 8 days and five kernel rewrites,
+       while suite tok/s moved -2.3 % and -5.0 % and base AR moved -17.4 %. s2 was refused by a
+       2.5 % margin on exactly this comparison. Three of seven registry rows are verdicts of this
+       shape and one of the refused heads may already beat s3.
+
+  2.5  base AR fell 72.5 -> 87.7/88.2 ms/tok on the identical WARM decode measurement, twice, in two
+       independent loads. Do NOT call it a 17 % regression yet: spec throughput on the same suite in
+       the same runs is flat, and spec runs the same forward. Likeliest a 7-step warm average that
+       is too short for a path 1.0 put a cache on. Either way every "N.NNx vs base AR" figure in
+       this repo has a denominator that moved 17 % while its numerator did not.
+
+Wiki, same commit: kernel-optimisations.md §2.8 (the one adopted win that is not a kernel),
+draft-head-finetuning.md §8 (mechanism, measurement, floor-not-ceiling), measurement-and-traps.md
+§22 (tau reproduces exactly, tok/s does not, and the gate keys on the wrong one),
+HEAD_REGISTRY.md "What is actually being served", README state table.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

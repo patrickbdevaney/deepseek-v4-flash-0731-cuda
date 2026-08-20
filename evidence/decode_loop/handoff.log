@@ -11,3 +11,6 @@
 [handoff 2026-08-20T10:12:58-04:00] still waiting for the current iteration (10 x 5 min)
 [handoff 2026-08-20T10:17:59-04:00] still waiting for the current iteration (11 x 5 min)
 [handoff 2026-08-20T10:22:59-04:00] still waiting for the current iteration (12 x 5 min)
+[handoff 2026-08-20T10:23:59-04:00] loop stopped cleanly
+[handoff 2026-08-20T10:24:01-04:00] starting the loop on the new driver code (priority: 1.5     # in flight; ~9 % of the context term, gates already built -- finish it 2.2     # deploy s3: tau 3.5362 -> 3.8438, 22.66 -> 25.53 tok/s. +12.7 %, all contexts, no kernel. 3.1     # jetson_clocks: GPU 1386->1575, EMC 2750->4266. +3.0-6.4 %, all contexts, no kernel. )
+[handoff 2026-08-20T10:24:06-04:00] loop is up

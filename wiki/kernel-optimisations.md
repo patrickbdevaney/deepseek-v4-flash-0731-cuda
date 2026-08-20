@@ -386,6 +386,33 @@ decimals**, plus `LOSSLESS GATE -> PASS` x3 and `gate_units` / `gate_indexer_dec
 `gate_compressed_decode` / `gate_prefill_len` all green. See
 [`context-scaling.md`](context-scaling.md) for what it did to the term.
 
+### 2.8 The one adopted win that is not a kernel — actually serve the head you trained (ladder 2.2, 2026-08-20)
+
+**+9.52 % on the frozen 8-prompt suite, `tau` 3.5362 -> 3.8438, with no code on the request path
+changed at all.** The `s3` draft head was promoted on 2026-08-12 and had never been loaded by the
+server: `tools/promote_head.py` archives and records but deliberately never writes the live
+checkpoint, and `scripts/serve.sh` — which every server launcher in the repo execs — hardcoded the
+base checkpoint path. The promotion pipeline terminated one step short of having an effect.
+
+Mechanism: `scripts/stage_head.sh` builds a **symlink farm** beside the checkpoint — 45 shards and
+the tokenizer linked to the read-only base at the same inode, the three `mtp.*` shards linked to the
+archived head — and `config/live_ckpt`, a tracked one-line file, tells `serve.sh` which checkpoint to
+load. A `--head DIR` flag on the server would have been the obvious alternative and is the wrong one:
+`src/engine.cu` loads the embedded head out of the main `WeightStore` precisely because a second
+store "would duplicate ~6.5 GiB against ~16 GiB of headroom", and a flag *adds* a mapping where
+staging *replaces* one. Staging also costs no disk and keeps the binary bit-identical across the A/B.
+
+The gate that proved it: both heads re-measured back to back on today's engine (the archived numbers
+predate five ladder items and are not an admissible before-arm), frozen protocol, LOSSLESS and
+first-token gates PASS on both arms, base AR within 0.70 % between the loads as a drift control. The
+suite `tau` of **both** arms reproduced `HEAD_REGISTRY.md` to four decimal places while their tok/s
+did not — see [`measurement-and-traps.md` §22](measurement-and-traps.md). The win is concentrated in
+the prompts the shipped head was worst at: no suite prompt is below `tau` 2 any more, spread across
+the suite falls 32.8 %, and prompt 7 goes 14.39 -> 26.33 tok/s. Deployment confirmed live —
+`tokens_per_verify` 2.857 from the running server on the gate prompt, against the shipped head's
+3.61 offline. Full write-up in
+[`draft-head-finetuning.md` §8](draft-head-finetuning.md).
+
 ---
 
 ## 3. Precision and layout

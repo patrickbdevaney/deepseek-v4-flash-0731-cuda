@@ -1,0 +1,16 @@
+=== live server probe, 2026-08-20 — ladder 2.2 ===
+server started via scripts/run_server.sh with config/live_ckpt -> /home/patrickd/models/ckpt-head-s3
+  live checkpoint pinned by config/live_ckpt -> /home/patrickd/models/ckpt-head-s3
+[engine] loading /home/patrickd/models/ckpt-head-s3 (seqmax=8192, blk=6, adaptK=1.50)...
+[server] listening on http://0.0.0.0:8080   (web UI at /)
+[server] model deepseek-v4-flash-0731-reap, context 8192, block 6, adaptK 1.50
+
+request: prompt 'The capital of France is' (tokenises to the 6 gate ids), max_tokens 200, temperature 0
+  tokens_per_verify = 2.8571
+  tokens_per_second = 19.365
+  prompt_tokens     = 6
+  text[:80]         = ' Paris. The capital of Spain is Madrid. The capital of Italy is Rome. The capita'
+
+offline, identical prompt (blksweep prompt 0), same protocol, same binary:
+  shipped head tau = 3.61      s3 tau = 2.87
+  -> the live engine matches s3 and is 0.75 tau away from the shipped head.

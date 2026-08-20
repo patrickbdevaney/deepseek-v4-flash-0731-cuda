@@ -8,7 +8,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`kernel-optimisations.md`](kernel-optimisations.md) | every **adopted** AR/spec-decode optimisation, by mechanism: mechanism → measured gain → the gate that proved it |
 | [`negative-results.md`](negative-results.md) | levers built and **retired**, with the number that killed each. Longer than the wins list and more useful. |
 | [`prefill-optimisation.md`](prefill-optimisation.md) | B9 — why prefill ran decode-shaped kernels, and the four fixes (+30.3 %) |
-| [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation |
+| [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation, **and §8: how a promoted head finally got served (2.2)** |
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
 | [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the two adoptions (1.0, 1.2) that took `b` down 65 %, and what is left |
@@ -26,6 +26,19 @@ historical measurement; the second is where agentic work actually runs.
 | base AR decode | **13.83 tok/s** | 14.33–15.98 | 97 % |
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
+
+| the frozen 8-prompt suite | shipped head | `s3` (live since 2.2) | |
+|---|---|---|---|
+| suite mean `tau` | 3.5362 | **3.8438** | **+8.70 %**, and both reproduced their archived value to 4 d.p. |
+| suite mean tok/s | 22.1425 | **24.2512** | **+9.52 %** (drift-controlled +10.30 %) |
+| worst prompt `tau` | 1.75 | **2.49** | no suite prompt below 2 any more; spread −32.8 % |
+| base AR (drift control) | 11.41 tok/s | 11.33 tok/s | −0.70 % between the two loads |
+
+Both arms measured back to back on `93699e6`, same binary, same protocol, LOSSLESS and first-token
+gates PASS on both. **This row is a weights change, not a kernel one** — `s3` was promoted on
+2026-08-12 and no server had ever loaded it, because `promote_head.py` only archives and `serve.sh`
+hardcoded the base checkpoint. [`kernel-optimisations.md` §2.8](kernel-optimisations.md),
+[`draft-head-finetuning.md` §8](draft-head-finetuning.md).
 
 | at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | |
 |---|---|---|---|---|---|---|

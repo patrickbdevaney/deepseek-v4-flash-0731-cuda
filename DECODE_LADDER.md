@@ -30,6 +30,15 @@ identical in all 16), so the tracked `b` goes **2.514 -> 1.942** and `b x 6592` 
 arm), and rule 7 applies to your own arms too. Cumulatively `b` is down **73 %** from the 7.220 the
 ladder opened on. Term A is untouched and is now 83 % of the forward.
 
+**2.2 moved NEITHER `a` NOR `b`, by construction, and still bought +9.52 % — read the stop
+condition carefully before concluding it should have moved.** The stop check is about
+`ms_per_forward = a + b*ctx`; 2.2 changes no kernel and no forward, it swaps the draft head's
+weights. Its gain lands entirely in the other factor of `tok/s = tau * 1000 / ms_per_forward`:
+`tau` 3.5362 -> 3.8438 on the frozen suite. **That factor has no floor written into the stop
+condition at all**, which is worth noticing — the ladder can reach "no faster combined decode is
+possible" on both byte floors while acceptance is still 3.84 of a possible 5 or 7. The acceptance
+axis is Phase 2's whole point and the long-horizon pivot below is entirely about it.
+
 **1.3 moved neither term and was pre-registered as unable to** — it is a ~4 us/call kernel saving
 that fires only below ctx 2048, worth 0.07 % of a forward; `b` measured `3.008 +/- 0.241 ->
 3.036 +/- 0.240` across its arms. It is marked done, not skipped, and the ladder rule it produced
@@ -999,12 +1008,95 @@ So, in order:
 
 - [ ] **2.1** Re-tune block width AFTER 1.1/1.2. Verify width is currently free only by accident of
       the broken kernel; with Term B small the optimum returns to ~7-9 from an apparent 11-13.
-- [ ] **2.2** **Deploy `s3`.** It is promoted, archived, measured at tau 3.8438 / 25.53 tok/s
-      against the shipped head's 3.5362 / 22.66 — and `promote_head.py` only archives, it never
-      writes the live checkpoint, so **the server has never run it**. Needs a `--head` path in the
-      server, or a staged checkpoint. Free ~13 % on the bench suite.
+- [x] **2.2** **DEPLOYED, 2026-08-20 — the server has now run it, and this is the first time.**
+      Chose the staged checkpoint over a `--head` flag, and the engine's own source is the argument:
+      on 0731-REAP all 2977 `mtp.*` tensors are EMBEDDED in shards 46-48 and those shards hold
+      nothing else, so `src/engine.cu` reads the head out of the main `WeightStore` precisely
+      because a second store "would duplicate ~6.5 GiB against ~16 GiB of headroom". A flag ADDS a
+      mapping; staging REPLACES one. `scripts/stage_head.sh` builds
+      `~/models/ckpt-head-s3` as a symlink farm — 45 shards, the tokenizer and config linked to the
+      read-only base **at the same inode**, the three head shards linked to
+      `~/model-backups/heads/s3/` — so the resident set is bit-for-bit a production load, the
+      checkpoint is never written, no disk is spent, and **the A/B runs an identical binary**.
+      `config/live_ckpt` (tracked, one line) is what `serve.sh` reads; every launcher in the repo
+      execs `serve.sh`, so this is the single switch. `tools/verify_staged_ckpt.py` gates it on the
+      CPU before any load: **45,821/45,821 tensors drop-in identical** in dtype/shape/byte-length,
+      45 files the same inode as base, the 3 head shards' sha256 equal to what `head_card.json`
+      recorded at promotion, and — the check that matters most — the head shards proven to be
+      DIFFERENT bytes from base, because a no-op stage would have measured the shipped head twice
+      and called it a deployment.
+
+      **The archived numbers were not admissible as a before-arm** (rev `85dbea6c` / `2632540`,
+      before 1.0/1.2/1.3/1.4/1.5), so both heads were re-measured back to back on `93699e6`, same
+      binary, frozen protocol (8-prompt suite, block 6, adaptK 1.50, NGEN0 200, clean, cache dropped
+      before each), LOSSLESS GATE PASS and first-token GATE PASS on both arms:
+
+      | | base AR | suite mean tau | suite mean tok/s | tok/s / base AR |
+      |---|---|---|---|---|
+      | shipped | 11.41 | **3.5362** | 22.1425 | 1.9406 |
+      | `s3` | 11.33 | **3.8438** | 24.2512 | 2.1404 |
+      | delta | **-0.70 %** | **+0.3076 (+8.70 %)** | **+9.52 %** | **+10.30 %** |
+
+      The -0.70 % on base AR is the drift control: base AR never touches the draft head, so it
+      measures the between-load spread (§19 puts that at 5.7 %) that per-prompt pairing cannot
+      cancel. It came in at 0.7 %, so the two loads were unusually well matched and the tok/s gain
+      is not drift. Paired per prompt: **`d tau = +0.3075 +/- 0.4814`, 5/8 legs positive** — and
+      that band is NOT measurement error, it is between-PROMPT heterogeneity, because `tau` is exact
+      (below). Read it as: decided on this corpus, weakly established on an arbitrary prompt.
+
+      **What improved is the floor, not the ceiling, and that is the finding.** Per-prompt `tau`
+      shipped `5.15 4.43 1.84 1.75 5.54 4.46 1.85 3.27` -> s3 `3.64 4.20 2.49 3.06 3.94 6.09 3.85
+      3.48`. The three prompts where the shipped head barely speculated at all (`tau` < 2 of a
+      possible 5) are the three largest gains; **after s3 no suite prompt is below 2**; s.d. across
+      the suite falls **1.570 -> 1.056, -32.8 %** while the mean rises; and prompt 7 goes 14.39 ->
+      26.33 tok/s, **+83 %**, which no suite mean will ever show. On a real workload the worst
+      prompts dominate wall-clock, so mean `tau` understates this.
+
+      **Proven live, not asserted.** Server started via `scripts/run_server.sh` (detached, ppid
+      systemd, tty `?`, `detach_audit.sh` green), log shows `live checkpoint pinned by
+      config/live_ckpt -> /home/patrickd/models/ckpt-head-s3`, and a completion on the gate prompt
+      returned **`tokens_per_verify = 2.857`** against the shipped head's **3.61** and s3's **2.87**
+      for that same prompt offline. That is behavioural proof of which weights are resident, not a
+      path in a log line. Evidence: `evidence/decode_loop/2p2_arm{A_shipped,B_s3}.log`,
+      `2p2_ab.txt`, `2p2_live_proof.txt`, `2p2_live_probe.json`. The server was then stopped — the
+      deployment is the tracked pointer file, not a running process, and leaving 100 GiB resident
+      would block the next iteration's GPU work.
+
+      Wiki: [`kernel-optimisations.md` §2.8], [`draft-head-finetuning.md` §8],
+      [`measurement-and-traps.md` §22], `HEAD_REGISTRY.md` "What is actually being served",
+      README state table.
+
+      **Two things this turned up that are NOT part of 2.2 and are queued as 2.4 and 2.5 below.**
 - [ ] **2.3** Use the confidence head at verify time (EVICT-style `argmax E[A(T_k)]/C(k)`). It
       exists and is unused.
+- [ ] **2.4** **`promote_head.py`'s selection rule compares the wrong column, across the wrong
+      axis.** Its docstring criterion 4 says "suite-mean **tau** must exceed the incumbent's by more
+      than the 3.5 % run-to-run spread"; the code compares `suite_tok_s`, and against an incumbent
+      row read out of `HEAD_REGISTRY.md` — i.e. a number recorded on whatever engine revision was
+      current when THAT head was measured. 2.2 measured the drift on that axis directly: on the same
+      frozen protocol, suite `tau` reproduced the archived value to **four decimal places for both
+      heads** across 8 days and five decode-kernel rewrites, while suite tok/s moved -2.3 % and
+      -5.0 % and base AR moved **-17.4 %**. `s2` was refused by a 2.5 % margin on exactly this
+      comparison. Fix: require the incumbent to be **re-measured in the same session** as the
+      candidate (which is what 2.2 did, and what makes the drift common-mode), and use `tau` as the
+      cross-session anchor that says the re-measurement was faithful. Three of the registry's seven
+      rows are `not promoted` verdicts of this shape and should be re-adjudicated, not overturned by
+      assertion. **Instrument-shaped, so it needs a named unblock: it decides whether s2 and the
+      three ce/tv ablation heads — all measured, all archived, all currently refused — are actually
+      worse than s1, and one of them may already beat the head 2.2 just deployed.**
+      [`measurement-and-traps.md` §22]
+- [ ] **2.5** **Base AR fell 72.5 -> 87.7/88.2 ms/tok on the identical `WARM decode` measurement,
+      and nothing explains it.** Measured twice today in two independent loads, same gate prompt,
+      same 7-step average, -17.4 %. **Do not treat it as a 17 % regression without checking the
+      measurement first**: speculative throughput on the same suite in the same runs is flat
+      (22.655 -> 22.1425, inside the 3.5 % spread), and spec runs the same forward — a real 17 %
+      forward regression cannot leave spec unchanged. Likeliest reading is that a 7-step warm
+      average is too short for a path that 1.0 put a main-KV cache on. Either way **every "N.NNx vs
+      base AR" figure in this repo is a ratio whose denominator moved 17 % while its numerator did
+      not**, and the shipped head's own ratio inflated 1.6464 -> 1.9406 across the ladder without
+      the head changing. Term A is 83 % of the forward, so if it IS the engine this is larger than
+      everything the ladder has won put together — which is the reason it gets its own item and not
+      a footnote. [`measurement-and-traps.md` §22.2]
 
 ## Phase 3 — clocks, then hand back
 

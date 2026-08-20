@@ -1,0 +1,29 @@
+     shipped: evidence/decode_loop/2p2_armA_shipped.log
+              LOSSLESS PASS   first-token gate PASS   base AR 11.41 tok/s   clean=True
+          s3: evidence/decode_loop/2p2_armB_s3.log
+              LOSSLESS PASS   first-token gate PASS   base AR 11.33 tok/s   clean=True
+
+base AR: shipped 11.41 tok/s   s3 11.33 tok/s   (-0.70 % -- head-independent, so this IS the between-load drift)
+
+| prompt | shipped tau | s3 tau | d tau | shipped tok/s | s3 tok/s | d tok/s | d % | shipped x base | s3 x base | d x base |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0  *(control, excluded)* | 3.61 | 2.87 | -0.74 | 22.41 | 19.71 | -2.70 | -12.05 % | 1.964 | 1.740 | -0.224 |
+| 1 | 5.15 | 3.64 | -1.51 | 29.49 | 22.90 | -6.59 | -22.35 % | 2.585 | 2.021 | -0.563 |
+| 2 | 4.43 | 4.20 | -0.23 | 26.36 | 25.36 | -1.00 | -3.79 % | 2.310 | 2.238 | -0.072 |
+| 3 | 1.84 | 2.49 | +0.65 | 13.76 | 17.38 | +3.62 | +26.31 % | 1.206 | 1.534 | +0.328 |
+| 4 | 1.75 | 3.06 | +1.31 | 13.18 | 21.06 | +7.88 | +59.79 % | 1.155 | 1.859 | +0.704 |
+| 5 | 5.54 | 3.94 | -1.60 | 30.24 | 22.99 | -7.25 | -23.97 % | 2.650 | 2.029 | -0.621 |
+| 6 | 4.46 | 6.09 | +1.63 | 27.26 | 33.62 | +6.36 | +23.33 % | 2.389 | 2.967 | +0.578 |
+| 7 | 1.85 | 3.85 | +2.00 | 14.39 | 26.33 | +11.94 | +82.97 % | 1.261 | 2.324 | +1.063 |
+| 8 | 3.27 | 3.48 | +0.21 | 22.46 | 24.37 | +1.91 | +8.50 % | 1.968 | 2.151 | +0.182 |
+
+PAIRED over the 8 suite prompts (prompt 0 excluded, F96):
+  d tau        = +0.3075 +/- 0.4814   (5/8 legs positive)
+  d tok/s      = +2.1087 +/- 2.4027   (5/8 legs positive)
+  d %          = +18.849 +/- 13.373 %
+  d % x base   = +19.688 +/- 13.467 %   (5/8 legs positive)   <- drift-controlled
+
+SUITE MEANS (the registry number):
+  shipped: tau 3.5362  22.1425 tok/s   (n=8)
+  s3: tau 3.8438  24.2512 tok/s   (n=8)
+  ratio 1.0952x  (+9.52 %)   run-to-run spread on this box is 3.5 %

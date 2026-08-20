@@ -98,3 +98,9 @@
 [memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-20T10:02:55-04:00
 [memguard] watching pid 390049 (dsv4-server)
 [memguard] victim gone, exiting. low-water 4472 MB, peak fall rate 5625 MB/s 2026-08-20T10:10:01-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T10:29:25-04:00
+[memguard] watching pid 432784 (decode)
+[memguard] victim gone, exiting. low-water 11993 MB, peak fall rate 8210 MB/s 2026-08-20T10:32:30-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T10:36:10-04:00
+[memguard] watching pid 443532 (decode)
+[memguard] victim gone, exiting. low-water 12230 MB, peak fall rate 11465 MB/s 2026-08-20T10:39:04-04:00
