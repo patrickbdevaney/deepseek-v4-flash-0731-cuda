@@ -1,0 +1,344 @@
+{
+  "mode": "size + presence (use --full to hash)",
+  "results": [
+    {
+      "name": "s1",
+      "kind": "head",
+      "dir": "/home/patrickd/model-backups/heads/s1",
+      "files": [
+        {
+          "file": "config.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00046-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00047-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00048-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model.safetensors.index.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": [],
+      "promoted": true,
+      "manifest": "head_card.json",
+      "rebuildable": true,
+      "shape": "FULL"
+    },
+    {
+      "name": "s2",
+      "kind": "head",
+      "dir": "/home/patrickd/model-backups/heads/s2",
+      "files": [
+        {
+          "file": "config.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00046-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00047-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00048-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model.safetensors.index.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": [],
+      "promoted": false,
+      "manifest": "head_card.json",
+      "rebuildable": true,
+      "shape": "FULL"
+    },
+    {
+      "name": "s2-abl-ce0.5_tv0.5",
+      "kind": "head",
+      "dir": "/home/patrickd/model-backups/heads/s2-abl-ce0.5_tv0.5",
+      "files": [
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "train_metrics.json",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": [],
+      "promoted": false,
+      "manifest": "head_card.json",
+      "rebuildable": true,
+      "shape": "SOURCE-ONLY"
+    },
+    {
+      "name": "s2-abl-ce0.9_tv0.1",
+      "kind": "head",
+      "dir": "/home/patrickd/model-backups/heads/s2-abl-ce0.9_tv0.1",
+      "files": [
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "train_metrics.json",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": [],
+      "promoted": false,
+      "manifest": "head_card.json",
+      "rebuildable": true,
+      "shape": "SOURCE-ONLY"
+    },
+    {
+      "name": "s2-abl-ce1.0_tv0.0",
+      "kind": "head",
+      "dir": "/home/patrickd/model-backups/heads/s2-abl-ce1.0_tv0.0",
+      "files": [
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "train_metrics.json",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": [],
+      "promoted": false,
+      "manifest": "head_card.json",
+      "rebuildable": true,
+      "shape": "SOURCE-ONLY"
+    },
+    {
+      "name": "s3",
+      "kind": "head",
+      "dir": "/home/patrickd/model-backups/heads/s3",
+      "files": [
+        {
+          "file": "config.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00046-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00047-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00048-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model.safetensors.index.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": [],
+      "promoted": true,
+      "manifest": "head_card.json",
+      "rebuildable": true,
+      "shape": "FULL"
+    },
+    {
+      "name": "shipped-dspark-0731reap",
+      "kind": "head",
+      "dir": "/home/patrickd/model-backups/heads/shipped-dspark-0731reap",
+      "files": [
+        {
+          "file": "config.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00046-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00047-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model-00048-of-00048.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "model.safetensors.index.json",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": [],
+      "promoted": null,
+      "manifest": "implicit (card has no files list)",
+      "rebuildable": false,
+      "shape": "DERIVED-ONLY"
+    },
+    {
+      "name": "dspark-mtp-0731reap-bundle",
+      "kind": "release",
+      "dir": "/home/patrickd/model-backups/releases/dspark-mtp-0731reap-bundle",
+      "files": [
+        {
+          "file": "README.md",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "base-stock/eval.log",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "base-stock/mtp_base.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "default-s3/eval.log",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "default-s3/head_card.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "default-s3/mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "default-s3/train_metrics.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "tools/build_trained_head.py",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": []
+    },
+    {
+      "name": "dspark-mtp-draft-head-v0.1-interim",
+      "kind": "release",
+      "dir": "/home/patrickd/model-backups/releases/dspark-mtp-draft-head-v0.1-interim",
+      "files": [
+        {
+          "file": "eval.log",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "head_card.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "train_metrics.json",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": []
+    },
+    {
+      "name": "dspark-mtp-draft-head-v1.0-s3",
+      "kind": "release",
+      "dir": "/home/patrickd/model-backups/releases/dspark-mtp-draft-head-v1.0-s3",
+      "files": [
+        {
+          "file": "config.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "eval.log",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "head_card.json",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "mtp_trained.safetensors",
+          "ok": true,
+          "note": "ok"
+        },
+        {
+          "file": "train_metrics.json",
+          "ok": true,
+          "note": "ok"
+        }
+      ],
+      "problems": []
+    }
+  ],
+  "completeness_gaps": []
+}

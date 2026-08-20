@@ -27,9 +27,52 @@
 1.12    # the ratio-128 emit re-reads 33.55 MB of weights 32x (gemm_fp32 chunks M in 8s, ntok=256).
         # Only ~0.53 ms/forward amortised, so LOW on throughput -- but it is a 40 ms latency spike
         # on one token in 75 and the largest single-kernel inefficiency the profile has named.
-1.10    # name the kernel inside compressed_attn_forward that is racing. Correctness, not speed:
-        # 1.9 bounded the fault to one function and proved it is a race, but did not name it. Ranked
-        # below 1.11/1.12 because it gates nothing currently running -- prefill above ~192 only.
+1.10    # name the kernel inside compressed_attn_forward that is racing. PROMOTED from "correctness,
+        # not speed": it is the gate on the whole eval programme. Accuracy is invariant under every
+        # other item here (spec decode is exact, the kernels are bit-exact), so the battery could
+        # otherwise run at any time -- a non-deterministic forward is the ONLY reason it cannot.
+1.14    # the first arena pass reads scratch it never wrote. Same family as 1.10: the arena slab is
+        # cudaMalloc'd and never zeroed, so the first indexer step in a process differs from every
+        # later one on identical inputs. Both must close before P2 measures anything.
 2.1     # re-tune block width now that 1.1/1.2 changed the shape
 2.3     # confidence head at verify time
-3.2     # final PERF.md re-run, both coefficients, then STOP
+1.13    # resolve whether 1.11's saving is flat or grows with context. Bookkeeping on a shipped win,
+        # so it sorts below the two items that still buy something.
+3.2     # final PERF.md re-run, both coefficients -- then CONTINUE into P2, per the amended entry
+
+# ============================================================================================
+# P2 -- THE ACCEPTANCE PROGRAMME. Authorised by the operator 2026-08-20. The kernel path is at
+# the bandwidth floor; tau is the only multiplier left. Reasoning and arithmetic: PHASE2_PLAN.md.
+# Today 24.7 tok/s at suite tau 3.84; block-6 perfect is 40.6; defensible target 30-33.
+#
+# The numbering in DECODE_LADDER.md is by topic. THIS is the execution order, and it differs on
+# purpose: the two items that cost nothing and protect everything downstream go first, and the
+# prefill profile is pulled forward because it is one checkpoint load and it decides whether the
+# thing is usable as a daily driver at all -- a question no amount of tau answers.
+# ============================================================================================
+P2.0    # verify + baseline the head archive. Nothing trains on top of an archive nobody proved.
+        # The quick pass already passes (10 dirs, 46 files, 0 problems); the --full sha256 pass has
+        # never run and must, ONCE THE LOOP IS IDLE -- it reads ~30 GB and would contend.
+P2.4    # fix promote_head.py (= ladder 2.4) and re-adjudicate the 4 refused heads. OFFLINE, no
+        # model load. It compares suite_tok_s against a row from another engine revision; base AR
+        # moved -17.4 % across the drift while tau reproduced to 4 d.p. Measuring P2 heads on the
+        # current rule grades the programme with a broken ruler, so this precedes every head.
+P2.7    # DSV4_DPROF on a PS=1023 prefill. One load, never taken. 12,282 prompt tokens = 227.6 s
+        # = 3.8 min TTFT, and prefill DECLINES with prompt size. Pre-registered target: TTFT < 30 s
+        # at 12 k uncached, i.e. >= 410 tok/s, a 7.6x. If the cost is diffuse, say so and stop.
+P2.1    # the pattern labeller, as an extension of DSV4_SUFFIXPROBE. Same function offline (labels
+        # the corpus) and online (drives block width) -- two implementations would silently diverge.
+P2.2    # falsify H1 on 40 tasks x 2 harnesses. Also prices S6 for free via SUFFIXPROBE, on exactly
+        # the long-repeated-context workload F80 named as its own reopening condition.
+P2.3    # harvest (h_40/41/42, p_target) from live verify forwards. Zero marginal compute. Ships a
+        # SAMPLING POLICY, not a capture schedule -- the battery alone is 3.46 M tokens / 114 GB.
+P2.5    # the beta sweep {0, 0.1, 0.5} + deficit weighting. The one recipe change, aimed at F117.
+        # beta=0 reproduces the current recipe exactly, so the sweep contains its own control.
+P2.6    # HASS on steps 2-3, then per-bucket block width. Sequenced after P2.5: both act on the
+        # same positions and would confound it. Re-price m16 if the width moves (F129).
+P2.8    # prefix caching under a real 20-turn agentic session, incl. a mid-context compression
+        # event. Also re-decides 1b.2's default against the PRODUCTION context distribution.
+P2.9    # name and package the best head. The promotion rule is written BEFORE the candidates
+        # exist: highest suite mean tau that also holds both per-category floors.
+P2.10   # final PERF.md / HEAD_REGISTRY / PHASE2_PLAN reconciliation, and grade the pre-registered
+        # bands against what happened -- including the ones that were wrong. Then stop.

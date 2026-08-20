@@ -1785,12 +1785,208 @@ So, in order:
       `evidence/decode_loop/clocks_3p1_ab.txt` (the void run, kept), `clocks_emc_report.txt`,
       `clocks_emc_{A2,B2,A2p}.{log,samples}`. Wiki: [`negative-results.md` §4e],
       [`measurement-and-traps.md` §23, §24], [`hardware-sm110a.md` §5], README state table.
-- [ ] **3.2** Final `PERF.md` re-run and both coefficients recorded. Then STOP and hand back.
+- [ ] **3.2** Final `PERF.md` re-run and both coefficients recorded. **Then continue into the P2
+      ladder below — do NOT stop.** (Amended 2026-08-20 on the operator's explicit instruction: the
+      kernel phase closes here, the programme does not. Everything after this point is `tau` and
+      serving, not `ms/forward`.)
 
-## After the roofline — the long-horizon pivot
+## P2 — the acceptance programme
 
-Not part of the decode loop. When the loop stops, the next programme is agentic trace capture and a
-distribution-matched draft-head fine-tune (`S5_RECIPE.md`, `DECODE_ZENITH_FINDINGS.md` Phase 2).
-The highest-leverage change identified: **harvest `(h_40/41/42, p_target)` from live verify
-forwards** — zero marginal compute, on-policy and distribution-matched by construction, and it
-removes the 240-agentic-prompt ceiling that caps the current corpus.
+**Authorised 2026-08-20.** The kernel path is at the bandwidth floor and `tau` is the only
+multiplier left. Full reasoning, arithmetic and citations: [`PHASE2_PLAN.md`](PHASE2_PLAN.md).
+These items are written to the same rules as the ladder above — pre-registered ceiling, named
+instrument, a gate that can fail, evidence path — with two additions the kernel items did not need:
+
+- **Every long stage is DETACHED** (`CLAUDE.md`). Captures, regenerations and fine-tunes are
+  launched with `setsid` and *polled* by a later iteration. An item whose work does not fit the 4 h
+  `ITER_TIMEOUT` must launch, record the pid and log path in its ladder entry, and return; the next
+  iteration picks it up. Add every new stage to `detach_audit.sh`'s `PATTERNS` in the same commit —
+  a stage the audit does not know about reports as detached by never being looked at.
+- **Nothing is ever deleted from `~/model-backups/heads/`.** P2.0 makes that checkable.
+
+The one number to hold onto: today is **24.7 tok/s at suite `tau` 3.84**; block-6 perfect acceptance
+is **40.6**; the defensible target is **30–33** and it is reached by lifting the *constructive*
+categories (`explanation` 1.75, `code_gen` 1.84, `reasoning` 1.85) without losing the
+*reconstructive* ones (`long_context` 5.54, `agentic_format` 5.15) — which is exactly what every
+training session so far has failed to do (F117).
+
+### P2.0 — preserve what exists, before anything trains
+
+- [ ] **P2.0** **Make the head archive self-proving, and keep it that way.** `tools/verify_head_archive.py`
+      exists and passes: 10 directories, 46 files, 0 problems, and the registry and the directory
+      tree agree in both directions. Two things it does not yet do.
+      (a) **The `--full` sha256 pass has never been run** — the quick pass proves presence and size,
+      which catches deletion and truncation but not bit-rot. Run it **only when the loop is idle**
+      (it reads ~30 GB and will contend with any benchmark), record the result under
+      `evidence/head_archive_full.json`, and treat that file as the baseline every later run is
+      compared against.
+      (b) **Nothing runs it automatically.** Wire it into `s5_session.sh` as a preflight (refuse to
+      start a session if the archive is already damaged — training on top of a broken archive is how
+      you lose the only copy) and into the P2.9 release step as a postflight.
+      **Gate: `--full` exits 0, and the baseline JSON is committed.** No head trains until it does.
+
+### P2.1 — the instrument, before the corpus
+
+- [ ] **P2.1** **The pattern labeller.** For every generated token, `recon(i) = 1` iff the 8-gram
+      ending at `t_i` appears anywhere in `prompt + committed output before i`; label each 64-token
+      span by its mean into `R-high` (>= 0.75), `R-mid` (0.35–0.75), `C-low` (< 0.35).
+      **Extend `DSV4_SUFFIXPROBE`, do not write a second matcher** — it already maintains the match
+      machinery, is read-only, and does not perturb GATE or LOSSLESS.
+      **Why this is item one:** it is the same function offline and online. Offline it labels the
+      corpus; online it drives block width (P2.6). If they are two implementations they will
+      disagree, and the disagreement will be discovered in a trained head.
+      **Gate: labelling the frozen 8-category suite reproduces the pattern ordering in
+      `PHASE2_PLAN.md` §1** — the reconstructive categories must land `R-high`/`R-mid` and the
+      constructive ones `C-low`. If it does not, the labeller is wrong, not the table.
+
+- [ ] **P2.2** **Falsify H1: `tau` depends on the generation pattern, not the harness.** Capture the
+      same 40 tasks through **two structurally different harnesses** — a plan-then-edit loop and a
+      single-shot whole-file rewriter — and regress measured `tau` on pattern mix.
+      **Pre-registered: H1 predicts no harness term survives, and the residual is inside the 3.5 %
+      run-to-run spread.** If a harness term does survive, H1 is false, the corpus must be
+      harness-stratified, and the whole programme costs more — which is why this is measured on 40
+      tasks now rather than discovered in a finished head.
+      **This item also prices S6 for free.** Run it with `DSV4_SUFFIXPROBE=1`. F80 retired
+      prompt-lookup at an oracle ceiling of **+0.0 %**, but scoped its own refutation: it was
+      measured on a period-8 degenerate decode, and reopening *"needs a long-repeated-context prompt
+      on which `mlen` routinely reaches the block size — that is the agentic regime SuffixDecoding
+      actually reports."* This capture is that prompt. Zero marginal cost, and acceptance is a
+      counted integer so it is immune to the 1.5 % timing floor (trap 25).
+      Detached. Evidence: `evidence/p2/h1_{harnessA,harnessB}.jsonl`, `h1_regression.txt`,
+      `s6_suffixprobe.txt`.
+
+### P2.3 — the corpus
+
+- [ ] **P2.3** **Harvest `(h_40/41/42, p_target)` from live verify forwards.** The verifier has
+      already computed both, so marginal compute is **zero** and the data is on-policy by
+      construction. This replaces teacher-forced prefill capture, which cost 29.6 h per 5 K
+      sequences and is bounded by a prefill rate P2.7 has not yet fixed.
+      **The constraint inverts and the plan must respect it.** The eval battery alone produced
+      **3,463,648 completion tokens**; at the measured 33 KB/token that is 114 GB against 279 GB
+      free. The problem is now **selection and storage, not collection** — so this item ships a
+      *sampling policy* keyed on the P2.1 buckets, not a capture schedule. fp8 hidden states halve
+      the disk column and cost one numerics check against bf16 on a small sample.
+      **Guard the feedback loop:** version every shard with the sha of the head that produced it,
+      and hold the frozen 8-category suite **completely out** of the harvest. Harvesting from a
+      server running the head you are about to retrain is self-training.
+      **Gate: shard `tau` by bucket reproduces `PHASE2_PLAN.md` §1 within spread** — the proof that
+      the labeller and the engine agree about what the engine just did.
+      Detached. Evidence: `evidence/p2/harvest_manifest.json`, `harvest_tau_by_bucket.txt`.
+
+### P2.4 — training
+
+- [ ] **P2.4** **Fix `promote_head.py` before any P2 head is measured.** This is ladder **2.4** and
+      it is a prerequisite, not a parallel task: its docstring says suite `tau` must beat the
+      incumbent, its code compares `suite_tok_s`, and it reads the incumbent out of
+      `HEAD_REGISTRY.md` — a number recorded on whatever engine revision was current when *that*
+      head was measured. 2.2 measured the drift directly: across 8 days and five decode-kernel
+      rewrites suite `tau` reproduced to **four decimal places for both heads** while suite tok/s
+      moved −2.3 % and −5.0 % and base AR moved **−17.4 %**. `s2` and three ablations were refused
+      on exactly that comparison, one at **25.10 tok/s against an incumbent 24.52**.
+      Fix: require the incumbent to be **re-measured in the same session** as the candidate, and use
+      `tau` as the cross-session anchor proving the re-measurement was faithful. Then re-adjudicate
+      the four refused rows — do not overturn them by assertion.
+      **Gate: re-adjudication reproduces `s3` as incumbent, or names a better head with a
+      same-session re-measurement.** Grading P2 with the current rule grades it with a broken ruler.
+
+- [ ] **P2.5** **The `beta` sweep — the one recipe change, aimed at F117.** Every session so far has
+      traded the strong categories for the weak ones: `s1` (reasoning-only) lost `long_context`
+      **−1.01**, `s2` (8-way balanced) lost it **−1.19**, and balancing did nothing for
+      `agentic_format` either way. F119 then falsified the CE/TV explanation. The current loss has
+      **no term that penalises drift on inputs the head already handles**. Add one:
+      `L = SUM_s w(s)*L_dspark(s) + beta*KL(q_new || q_frozen)` over `R-high` spans, with `q_frozen`
+      the incumbent head cached at capture time (no extra train-time forward), and
+      `w(s) = (1 - tau_bucket/6) / mean(1 - tau/6)` — measured weights `long_context` **0.19**
+      through `explanation` **1.72**, a 9x range, which is the *opposite* of what `make_corpus.py`
+      does today.
+      **Sweep `beta` in {0, 0.1, 0.5}, 1 epoch, everything else per `S5_RECIPE.md` §2.**
+      `beta = 0` reproduces the current recipe exactly, so the sweep contains its own control.
+      **Gate: a `beta > 0` arm holds `long_context` within −0.2 of run-0 WHILE lifting the
+      constructive mean.** If none does, F117 is deeper than the loss, say so, and Track 1 caps at
+      `tau` ~4.0. Detached, one arm at a time. **Archive every arm whether or not it is promoted** —
+      a rejected head is still a measured point on the acceptance-vs-corpus curve.
+
+- [ ] **P2.6** **HASS on draft steps 2–3, and pattern-gated block width.** Two changes, sequenced
+      after P2.5 because both act on the same positions and would confound the `beta` sweep.
+      (a) **HASS** trains later draft steps on imperfect *draft* features rather than clean target
+      features (+8–20 % over EAGLE-2); our chain is depth 3, so steps 2 and 3 already run on their
+      own predecessor's output. Training-loop change, no extra capture.
+      (b) **Block width gated on the P2.1 signal.** The static sweep is done and pooled: F93/F94
+      measured `tau` rising 5 -> 6 on all four realistic prompts and **falling 6 -> 8 on three of
+      four**. But that pools a saturating category against a starving one — `long_context` at 5.54/6
+      is pressing the ceiling while `explanation` at 1.75/6 wastes four verify slots per forward.
+      Re-run the sweep **per bucket**: wide (8–10) on `R-high`, narrow (4–5) on `C-low`.
+      **Caveat, pre-registered (F129):** the suite is verify-dominated — the same NVFP4 change moved
+      M=1 by −1.3 % and M>=2 by **−14 %**. Widening moves more time into M>=2, and the retired
+      `m16` B-repack needs **5.05 rows/expert** against block 6's **1.67** but pays around
+      **block 40**. If width moves materially, **re-price `m16` — do not assume it stayed dead.**
+      **Gate: pattern-gated width beats static block 6 on the suite, outside the 3.5 % spread.**
+
+### P2.7 — the agentic daily driver
+
+- [ ] **P2.7** **Prefill and TTFT — the item that decides whether this is usable at all.** Measured
+      (B9): **52.6 / 50.3 / 47.7 / 43.8 tok/s at PS = 255 / 511 / 1023 / 2047** — it *declines* with
+      prompt size — and today's ladder sweeps reproduce it: **12,282 prompt tokens in 227.6 s**,
+      i.e. 54 tok/s and **3.8 minutes to first token**. A coding agent carrying 12 k of repo context
+      cannot use that, no matter what decode does.
+      **The anomaly is quantified and unexplained.** A batched forward amortising 12.26 GB of weights
+      over 255 positions should be compute-bound and is running at only **3.4x the M=1 decode rate**.
+      Every kernel in the path was tuned for M=1: `RB` is fitted to a 1.71-rows-per-expert histogram
+      prefill does not have, and the grouped GEMV is chosen over the mma GEMM on a decision that
+      inverts at prefill row counts — the retired `m16` repack is alive for prefill at **+16.7 %**
+      (F85).
+      **First measurement, and nobody has ever taken it: `DSV4_DPROF` on a PS=1023 prefill.** One
+      checkpoint load. **Gate: it names the sub-op holding prefill at 3.4x decode. If the cost is
+      diffuse across many sub-ops, say so and stop** — that is a real answer and it retires the
+      lever instead of funding a rewrite on hope.
+      **Pre-registered target, so the item can fail:** an agentic daily driver needs **TTFT under
+      30 s at 12 k uncached context**, i.e. prefill >= 410 tok/s, a **7.6x** improvement. Anything
+      short of that keeps the harness dependent on cache hits.
+
+- [ ] **P2.8** **Prefix caching under an agentic turn structure, and what happens when context is
+      compressed.** The battery measured per-task prefix-cache hit rates, but an agentic loop is the
+      one access pattern it never exercised: a *growing* prefix re-sent every turn, with tool output
+      appended in the middle, and — once long-horizon memory and context compression are in play —
+      a prefix that is periodically **rewritten**, which invalidates every block after the edit
+      point. That is the difference between a 3.8 min cold prefill amortised over a session and one
+      paid repeatedly.
+      **Three measurements, in one harness run:** (a) hit rate and TTFT across a 20-turn agentic
+      session with a growing prefix; (b) the same with a mid-context compression event at turn 10;
+      (c) the KV-eviction behaviour when a harness abandons a generation mid-stream — an unfreed
+      cache degrades the next turn.
+      **Gate: state the measured TTFT distribution across a real 20-turn session, p50 and p90.**
+      Pass is p90 under 30 s; anything else is reported as the number it is, not as a plan.
+      **Also decide `1b.2`'s default here, not on the ladder's terms.** It is banked and OFF:
+      2048 -> 720 B/row, **2.844x**, bit-exact, +3.23 ms flat against −0.50 ms/1000 ctx, break-even
+      **ctx 6,471**. A decode ladder optimising the flat term was right to leave it off; a
+      long-context agentic profile lives above the break-even and gets 3x the context in the same
+      pool. **Re-decide against the production context distribution and record which distribution
+      decided it.**
+
+### P2.9 — the deliverable
+
+- [ ] **P2.9** **Name and package the best head, and make "best" mean something specific.** The
+      programme's output is one uploadable artifact, and today nothing in the repo defines which head
+      that is once `tau` stops being a single number.
+      **The promotion rule, written before the candidates exist (rule 2):** the released head is the
+      one with the highest **suite mean `tau`** that ALSO satisfies both floors —
+      **(i)** no *reconstructive* category (`long_context`, `agentic_format`, `code_edit`) below its
+      run-0 value minus 0.2, and **(ii)** no *constructive* category (`explanation`, `code_gen`,
+      `reasoning`) below the incumbent's. A head that wins on the mean by hollowing out the agentic
+      categories is **not** the best head for this engine's purpose, and the mean alone cannot say so.
+      Both arms measured **in the same session** as the incumbent (P2.4).
+      **Packaging** follows the convention already in `~/model-backups/releases/`: HF model-card
+      frontmatter in `README.md`, `SHA256SUMS`, `provenance.json`, `head_card.json`,
+      `mtp_trained.safetensors`, `train_metrics.json`, `eval.log`. Directory name states the claim:
+      `dspark-mtp-draft-head-v2.0-<name>`, and the bundle README must carry **the per-category table,
+      not just the mean** — it is the number a downstream user needs to predict their own workload.
+      **Gate: `tools/verify_head_archive.py --full` exits 0 over the new bundle, and
+      `tools/verify_staged_ckpt.py` proves the farm is the base checkpoint with exactly one head
+      swapped.** Then, and only then, is it uploadable.
+
+### P2.10 — close
+
+- [ ] **P2.10** **Final `PERF.md`, `HEAD_REGISTRY.md` and `PHASE2_PLAN.md` reconciliation.** Re-run
+      the battery on the released head, record both fit coefficients and both `tau` columns **in one
+      session**, and grade `PHASE2_PLAN.md` §10's pre-registered bands against what actually
+      happened — including the ones that were wrong. Then stop and hand back.

@@ -20,6 +20,60 @@ speculator weights (not in git, therefore at risk). This registry plus
 | `s2-abl-ce1.0_tv0.0` | 3.6712 | 25.1038 | 13.7 | `e2a6cb47a` | not promoted: suite 25.10 tok/s does not beat incumbent 24.52 by the 3.5%  |
 | `s3` | 3.8438 | 25.5312 | 13.8 | `85dbea6cf` | PROMOTED |
 
+## Which head is the *best* one, and where to upload it from
+
+Promotion (above) answers "does this beat the incumbent on the suite mean". It does not answer
+"which head do we publish", and once P2 starts producing heads tuned on a pattern-balanced corpus
+the mean alone **cannot** answer it: a head can win the mean by hollowing out the reconstructive
+categories, which are exactly the ones an agentic coding harness lives in.
+
+**The release rule, written 2026-08-20, before the P2 candidates exist.** The released head is the
+one with the highest **suite mean `tau`** that also clears **both** floors:
+
+| floor | categories | condition |
+|---|---|---|
+| reconstructive | `long_context`, `agentic_format`, `code_edit` | not below run-0 minus **0.2** |
+| constructive | `explanation`, `code_gen`, `reasoning` | not below the **incumbent's** value |
+
+Both arms measured **in the same session** as the incumbent — see ladder item 2.4 for why a
+cross-session comparison is not admissible. A head that fails either floor is archived and recorded,
+never released, however good its mean.
+
+**The pointer.** `~/model-backups/releases/CURRENT_BEST` is a symlink to the release bundle that
+currently satisfies the rule. It is the directory to upload; nothing else in `releases/` is a
+publication candidate.
+
+| | |
+|---|---|
+| `CURRENT_BEST` | -> `dspark-mtp-draft-head-v1.0-s3` |
+| bundle contents | `README.md` (HF model-card frontmatter), `SHA256SUMS`, `provenance.json`, `head_card.json`, `mtp_trained.safetensors`, `train_metrics.json`, `eval.log`, `config.json` |
+| next name | `dspark-mtp-draft-head-v2.0-<name>` — the directory name states the claim |
+
+A P2 bundle's `README.md` must carry **the per-category `tau` table, not just the suite mean**. The
+mean is what promotion is decided on; the table is what a downstream user needs to predict their own
+workload, and it is the number this project learned the hard way is not interchangeable with it.
+
+## Keeping the archive real
+
+The weights are not in git, so nothing about them is recoverable from a clone.
+`tools/verify_head_archive.py` proves the archive is intact and complete — every file present at the
+size and (under `--full`) the sha256 its `head_card.json` or `SHA256SUMS` claims, every registry row
+backed by a directory, and every directory named by a registry row.
+
+    python3 tools/verify_head_archive.py            # size + presence, seconds, safe any time
+    python3 tools/verify_head_archive.py --full     # + sha256; reads ~30 GB, LOOP MUST BE IDLE
+
+First run, 2026-08-20: **10 directories, 46 files, 0 problems, 0 completeness gaps**
+(`evidence/head_archive_quick.json`). Heads archived as `mtp_trained.safetensors` only are complete
+by design — the loadable shards regenerate from it deterministically via
+`tools/build_trained_head.py`, and skipping them saves ~7 GB per head. That is reported
+`SOURCE-ONLY`, not as a failure.
+
+**Nothing is ever deleted from `~/model-backups/heads/`.** Every arm of every sweep is archived
+whether or not it is promoted: a rejected head is still a measured point on the
+acceptance-vs-corpus curve, and three of the rows above are refusals that ladder 2.4 exists to
+re-adjudicate.
+
 ## What is actually being served
 
 The registry records which heads were *promoted*. Promotion is not deployment: `promote_head.py`
