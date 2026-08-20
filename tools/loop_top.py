@@ -19,6 +19,15 @@ disturb the loop.
 """
 import argparse, glob, json, os, re, shutil, sys, time
 
+# LINE-BUFFER STDOUT. Python block-buffers when stdout is not a tty, so piping this into `tee`, or
+# redirecting it to a file, or killing it with a signal, loses everything still in the buffer -- the
+# first version printed NOTHING at all under `timeout ... > file`. A live viewer that only works on
+# a bare terminal is not a live viewer.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGDIR = os.path.join(ROOT, 'evidence', 'decode_loop')
 DRIVER = os.path.join(LOGDIR, 'driver.log')
@@ -74,7 +83,7 @@ def render(ev, st, width):
         for b in (ev.get('message') or {}).get('content') or []:
             if b.get('type') == 'text' and b.get('text', '').strip():
                 for i, ln in enumerate(wrap(b['text'].strip(), 12, width)):
-                    print(f'{dim(ts)}  {mag("think") if i==0 else "     "}   {dim(ln)}')
+                    print(f'{dim(ts)}  {mag("think") if i==0 else "     "}   {dim(ln)}', flush=True)
             elif b.get('type') == 'tool_use':
                 st.ntool += 1
                 name, inp = b.get('name', '?'), b.get('input') or {}
@@ -84,10 +93,10 @@ def render(ev, st, width):
                 arg = ' '.join(str(arg).split())
                 head = f'{dim(ts)}  {col(bold(name[:7].ljust(7)))} '
                 lines = wrap(arg, 12, width) or ['']
-                print(head + lines[0])
+                print(head + lines[0], flush=True)
                 for ln in lines[1:4]:
-                    print(f'{" "*10}{" "*8}{dim(ln)}')
-                if len(lines) > 4: print(f'{" "*18}{dim("…")}')
+                    print(f'{" "*10}{" "*8}{dim(ln)}', flush=True)
+                if len(lines) > 4: print(f'{" "*18}{dim("…")}', flush=True)
     elif t == 'user':
         # Tool results. The compact feed drops these entirely, and they are where a failure first
         # becomes visible -- a non-zero exit, a gate line, a traceback.
@@ -100,16 +109,16 @@ def render(ev, st, width):
             if not body: continue
             bad = b.get('is_error') or re.search(r'\b(error|Error|FAIL|Traceback|denied|fatal)\b', body)
             tag = red('  err  ') if bad else dim('   ->  ')
-            print(f'{" "*10}{tag} {(red if bad else dim)(body[:width-20])}')
+            print(f'{" "*10}{tag} {(red if bad else dim)(body[:width-20])}', flush=True)
     elif t == 'result':
         st.cost = ev.get('total_cost_usd', 0) or 0
         ok = not ev.get('is_error')
         box = grn if ok else red
-        print(box('─' * width))
+        print(box('─' * width), flush=True)
         print(box(bold(f'  {"DONE" if ok else "FAILED"}  ')) +
               f'  turns {ev.get("num_turns")}   tools {st.ntool}   '
-              f'{ev.get("duration_ms",0)/1000:.0f}s   ${st.cost:.2f}   subtype={ev.get("subtype")}')
-        print(box('─' * width))
+              f'{ev.get("duration_ms",0)/1000:.0f}s   ${st.cost:.2f}   subtype={ev.get("subtype")}', flush=True)
+        print(box('─' * width), flush=True)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -135,7 +144,7 @@ def main():
             for ln in lines[-a.tail:]:
                 try: render(json.loads(ln), st, width)
                 except Exception: pass
-            print(dim(f'  ── following {os.path.basename(path)} ' + '─' * max(0, width - 24)))
+            print(dim(f'  ── following {os.path.basename(path)} ' + '─' * max(0, width - 24)), flush=True)
         ln = fh.readline()
         if ln:
             try: render(json.loads(ln), st, width)

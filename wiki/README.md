@@ -11,6 +11,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation |
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
+| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, and the rule it produces |
 
 ## The state in one table
 
@@ -21,9 +22,17 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
 
-The M=1 kernel path is finished — two independent methods agree (an exhausted lever queue, and a
-byte-weighted floor computed from measured per-kernel rates). Everything left is **acceptance**,
-which is a training problem: see [`draft-head-finetuning.md`](draft-head-finetuning.md).
+> ### ⚠️ RETRACTED 2026-08-20 — "the M=1 kernel path is finished"
+>
+> That claim, and the table above it, were true only of the workload they measured: **context ~9**.
+> Every decode profile in this repo before 2026-08-20 was taken at the length of `decode.cu`'s
+> `argv[2]`, and the production server's profiler was writing to nowhere (`dprof_init` was called,
+> `dprof_report` never was). Decode has a context-linear term of **7.362 ± 0.370 ms per 1000
+> tokens** which is 77 ms of a 204 ms step at ctx 12,288, and 55 % of it is a single draft-side
+> recompute that had never been timed. Two levers were retired on numbers wrong by 135× and 330×.
+>
+> See **[`context-scaling.md`](context-scaling.md)**. The acceptance argument still stands on its
+> own terms; it is no longer the *only* thing left.
 
 ## If you read one thing
 
