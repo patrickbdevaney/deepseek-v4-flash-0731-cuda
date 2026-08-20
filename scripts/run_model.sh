@@ -57,6 +57,18 @@ echo "[run_model] ${AVAIL_GB} GiB available; launching detached -> $LOG"
 setsid nohup "$@" > "$LOG" 2>&1 < /dev/null &
 CHILD=$!
 echo "[run_model] pid $CHILD   watch: tail -f $LOG"
+
+# GUARD WHAT WE LAUNCHED, NOT JUST THE SERVER. memguard.sh defaults to PAT=dsv4-server and exits
+# when its victim does, so every benchmark run here -- which loads the same 100.4 GiB into the same
+# 122 GiB unified pool -- was running unguarded. On 2026-08-19 a two-prompt decode run reached
+# `mem 116.5/122.8 GiB` and died with nothing watching it. This box does not OOM gracefully (see
+# memguard.sh: two whole-machine takedowns on 2026-08-12, no oom-kill line in dmesg either time),
+# and the normal operating point is under 3 GiB available -- so the guard is not optional, it is
+# the only thing standing between a bad --seqmax and a reboot.
+GUARD_PAT="$(basename "$1")"
+setsid nohup env PAT="$GUARD_PAT" bash "$(dirname "$0")/memguard.sh" \
+    > "${LOG%.log}.memguard.log" 2>&1 < /dev/null &
+echo "[run_model] memguard armed on '$GUARD_PAT' -> ${LOG%.log}.memguard.log"
 # Keep fd 9 open for the child's lifetime without blocking the caller.
 ( while kill -0 "$CHILD" 2>/dev/null; do sleep 5; done ) >/dev/null 2>&1 &
 disown 2>/dev/null || true

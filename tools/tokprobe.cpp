@@ -61,7 +61,8 @@ static int run_manifest(dsv4tok::Tokenizer& tok, const std::string& path) {
 }
 
 int main(int argc, char** argv) {
-    std::string ckpt, pf, cf, manifest, effort = "low", mode = "thinking";
+    std::string ckpt, pf, cf, manifest, idsfile, effort = "low", mode = "thinking";
+    int ntok = 0;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--ckpt" && i + 1 < argc) ckpt = argv[++i];
@@ -70,8 +71,13 @@ int main(int argc, char** argv) {
         else if (a == "--effort" && i + 1 < argc) effort = argv[++i];
         else if (a == "--mode" && i + 1 < argc) mode = argv[++i];
         else if (a == "--manifest" && i + 1 < argc) manifest = argv[++i];
+        // --ids FILE [--ntok N]: encode a text file and print comma-separated token ids, optionally
+        // truncated to N tokens. This is how DSV4_PROMPTS_FILE gets prompts whose ids come from the
+        // CHECKPOINT'S OWN tokenizer rather than from a guess -- the repo's standing constraint.
+        else if (a == "--ids" && i + 1 < argc) idsfile = argv[++i];
+        else if (a == "--ntok" && i + 1 < argc) ntok = atoi(argv[++i]);
     }
-    if (ckpt.empty() || (pf.empty() && manifest.empty())) {
+    if (ckpt.empty() || (pf.empty() && manifest.empty() && idsfile.empty())) {
         fprintf(stderr, "usage: tokprobe --ckpt DIR --prompt-file F [--content-file F]"
                         " [--effort low|high|max] [--mode thinking|chat]\n");
         return 2;
@@ -79,6 +85,13 @@ int main(int argc, char** argv) {
     dsv4tok::Tokenizer tok;
     tok.load(ckpt + "/tokenizer.json");
     if (!manifest.empty()) return run_manifest(tok, manifest);
+    if (!idsfile.empty()) {
+        auto ids = tok.encode(slurp(idsfile));
+        size_t n = (ntok > 0 && (size_t)ntok < ids.size()) ? (size_t)ntok : ids.size();
+        for (size_t i = 0; i < n; i++) printf("%d%s", ids[i], i + 1 < n ? "," : "\n");
+        fprintf(stderr, "%zu tokens\n", n);
+        return 0;
+    }
 
     const std::string question = slurp(pf);
     const std::string content = cf.empty() ? std::string() : slurp(cf);
