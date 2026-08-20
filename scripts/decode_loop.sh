@@ -105,6 +105,14 @@ kernel over one that measures a kernel. Build an instrument only if you can name
 entry and before building it, the specific optimisation it unblocks. Every kernel change must report
 before/after on the same corpus, with tau, as a band — that is the ratchet.
 
+AND A SPEEDUP THAT IS NOT IN THE WIKI DID NOT HAPPEN. In the SAME iteration that a kernel change is
+measured and kept, write it into wiki/: kernel-optimisations.md for an adopted win (mechanism ->
+measured gain -> the gate that proved it), negative-results.md for a lever built and killed,
+context-scaling.md for anything touching the context term, measurement-and-traps.md for any new way
+a number proved untrustworthy. Update wiki/README.md's state table in the same commit. That wiki
+asserted "the M=1 kernel path is finished" while the largest term in decode had never been timed —
+an unmaintained page becomes confidently wrong, which is worse than an absent one.
+
 NON-NEGOTIABLE:
   * ONE MODEL AT A TIME. 100.4 GiB of weights in a 122 GiB pool; this box does not OOM gracefully.
     Launch full-model runs ONLY via scripts/run_model.sh, which enforces single-tenancy and arms a

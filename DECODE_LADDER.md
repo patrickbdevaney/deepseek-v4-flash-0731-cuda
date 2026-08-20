@@ -46,9 +46,17 @@ So, in order:
 2. **An instrument is justified only by naming the optimisation it unblocks**, in the ladder entry,
    before building it. "We need better data" is not a justification; "we cannot choose between 1.2
    and 1.5 without attributing the residual" is.
-3. **Every iteration that ships a kernel change must report the before/after on the same corpus**,
+3. **A speedup that is not in the wiki did not happen.** The moment a kernel change is measured and
+   kept, write it into `wiki/` in the same iteration -- `kernel-optimisations.md` for an adopted win
+   (mechanism -> measured gain -> the gate that proved it), `negative-results.md` for a lever that
+   was built and killed, `context-scaling.md` for anything that moves the context term, and
+   `measurement-and-traps.md` for any new way a number turned out to be untrustworthy. Update
+   `wiki/README.md`'s state table in the same commit. The wiki said "the M=1 kernel path is
+   finished" for weeks while the largest term in decode had never been timed; a page that is not
+   maintained as the work lands becomes confidently wrong, which is worse than absent.
+4. **Every iteration that ships a kernel change must report the before/after on the same corpus**,
    with tau, as a band. That is the ratchet: a number that went up, on a fit that already exists.
-4. **If two consecutive iterations produce no kernel change, say so at the top of the ladder entry**
+5. **If two consecutive iterations produce no kernel change, say so at the top of the ladder entry**
    and take the highest-expected-value kernel item next even if it is less certain. Thrashing on
    measurement is the failure mode this section exists to prevent.
 
