@@ -204,6 +204,48 @@ common-mode drift cancels leg by leg. So: **`b` 2.514 -> 1.942 ms/1000; `b x 659
 12.80 ms** (the stop condition wants <= 5.0). Cumulatively `b` is down **73 %** from the 7.220 this
 ladder opened on. Rule 7 applies to your own arms too.
 
+## Status — 1.7 moved Term A, and left behind a 6 % Term-B tail with a named mechanism
+
+**Adopted 2026-08-20. `sparse_attn` stages the gathered row in shared memory: paired saving
+4.227 ± 0.121 ms per forward over 16 legs, of which `b` is only 6 %.** This is the item this page
+had ranked last of the four and it is the one that moved the *other* term — which is what the entry
+predicted ("the lever here is the 11 ms FLOOR, not the slope").
+
+The 16 paired legs split at the knee the cost model predicts. `topk = WINDOW(128) +
+min(INDEX_TOPK(512), ctx/ratio)` saturates at ctx 2048, so above it the ratio-4 layers do a
+context-independent amount of work:
+
+```
+ctx 1,528  (topk=510, below the knee, n=2)    -3.127 +/- 0.014 ms
+ctx >=3,069 (topk=640, saturated,   n=14)     -4.384 +/- 0.065 ms
+above the knee:  delta = -3.996 +/- 0.080  -0.0552 +/- 0.0102 x (ctx/1000)   R^2 0.710
+```
+
+**94 % of the win is flat.** The surviving `-0.0552 +/- 0.0102 ms per 1000` is small, five sigma
+from zero, and — unusually for this page — was *predicted from the layer map before it was fitted*,
+which is the only thing that distinguishes it from the artefact rule 7 exists to catch. **20 of the
+43 layers are ratio-128, and their `topk = wmax + ctx/128` has no `index_topk` cap at all**, so
+their `sparse_attn` work really is linear in context:
+
+```
+20 layers x (1000/128 = 7.81 rows per 1000 ctx) x 0.309 us saved per row   =  0.048 ms per 1000
+measured                                                                    =  0.055 +/- 0.010
+```
+
+Inside one SE. That is the second time on this ladder a per-kernel band has predicted an in-situ
+context slope (1.5 was the first), and it is worth noticing *why* it works here: the per-row saving
+is a property of the kernel, and the rows-per-context is a property of the config, so the product is
+falsifiable without running the engine at all.
+
+**Tracked `b` 1.942 -> 1.887 ms/1000; `b x 6592` 12.80 -> 12.44 ms** (stop wants <= 5.0), carried by
+subtraction per rule 7 — 1.7's own arms span ctx 1,528–12,282 against a ~135 ms intercept and fit
+`b` to SE 0.174 and 0.180, i.e. uselessly. Cumulatively `b` is down **74 %** from the 7.220 this
+ladder opened on.
+
+**And the part this page does not own: `a` 129.11 -> 125.11 ms**, 1.571× -> 1.522× the 82.18 ms byte
+floor. Term A had been untouched through six ladder items and is much the larger distance from its
+floor; this is the first thing to move it. [`kernel-optimisations.md` §2.9](kernel-optimisations.md).
+
 ## What is left of the term
 
 Slopes below are 0.4's, fit over ctx 3k–12k. The `now` column is 1.3's re-attribution, 220 verify

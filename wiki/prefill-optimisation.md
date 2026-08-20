@@ -142,3 +142,39 @@ LOSSLESS spec gate as the real backstop.
 
 Remaining marks: `cattn:compress` 2231, `cattn:indexer` 2081, `cattn:sparse` 2011, `cattn:ogroup`
 1866 ms.
+
+## 7. One of B9's four fixes had gone negative, and 1.7 took it back (2026-08-20)
+
+B9's fix (2) was **key reuse in `sparse_attn`**: `num_key_value_heads == 1`, so all 64 heads of a
+query read identical KV rows, and putting `HPB` heads in one block puts them on one SM where the
+2nd..HPB'th reads hit L1. It shipped `HPB=8` at prefill, sized on the 1022-token shape.
+
+**Re-measured 2026-08-20 at exactly that shape, `hpb=8` is 0.80x — a 20 % regression against the
+kernel it replaced.**
+
+```
+m=1022 topk=1277 (1022-token prefill)      m=256 topk=320 (short prefill)
+  hpb=1 smem=0   263.2 ms   1.00x            hpb=1 smem=0    15.78 ms  1.00x
+  hpb=8 smem=0   328.5      0.80x  <-- shipped default
+  hpb=4 smem=1   205.1      1.28x            hpb=4 smem=1    13.03     1.21x  <-- now default
+```
+
+Two things had to be true at once for this to survive. The reuse *mechanism* was never the binding
+constraint — `hpb` on its own is a null at every shape, L1 was already catching it
+([`negative-results.md` §4g](negative-results.md)) — so the only thing `HPB=8` was actually doing
+at prefill was consolidating 65,408 warps onto fewer, wider blocks and losing occupancy. And
+nothing re-ran the sweep after the shape moved ([`measurement-and-traps.md`
+§28](measurement-and-traps.md)).
+
+Ladder 1.7's default — `hpb=4`, with `smem=1` above 1024 warps — is **1.28x at the 1022-token
+prefill and 1.21x at the short one**, bit-exact against the pre-B9 launch by memcmp, and
+`gate_prefill_len` passes with 0 prefix mismatches. So prefill gets B9's claimed win for the first
+time, by a different mechanism than B9 named: shared-memory staging of the gathered row with
+`float4` loads, not L1 reuse. Mechanism in
+[`kernel-optimisations.md` §2.9](kernel-optimisations.md).
+
+**This is not yet an end-to-end prefill number.** The 62.4 tok/s in §4 was measured with the old
+default and has not been re-run; what is measured here is the kernel, at the prefill shapes, in
+`gate_sparse_hpb`. `cattn:sparse` is one mark of a prefill, so the end-to-end gain will be smaller
+than 1.28x and is currently **unmeasured** — stated here rather than estimated, because §4 of this
+page is about exactly that kind of correction.

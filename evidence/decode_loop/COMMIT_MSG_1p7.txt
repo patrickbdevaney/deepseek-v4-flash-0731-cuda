@@ -1,0 +1,80 @@
+1.7: sparse_attn stages the gathered KV row in shared memory -- 4.227 +/- 0.121 ms per forward, 16 of 16 legs byte-identical, and it is the first item on this ladder to move term A
+
+WHAT WAS MEASURED. One server load per arm, control arm FIRST so drift favours the control, four
+reps x three sweep contexts plus two control contexts. Control arm is
+`DSV4_SPARSE_HPB=1 DSV4_SPARSE_SMEM=0`, the pre-1.7 launch bit for bit, on the same binary.
+
+  ctx     ms/forward before -> after   paired    tok/s before -> after      tau
+  1,656   133.46 -> 130.33             -3.13     13.93 -> 14.27 (+2.44 %)   1.861 both
+  3,197   136.89 -> 132.78             -4.10     12.07 -> 12.44 (+3.07 %)   1.652 both
+  6,248   141.46 -> 137.05             -4.40     11.85 -> 12.23 (+3.21 %)   1.681 both
+  6,260   138.49 -> 134.20             -4.29     11.74 -> 12.13 (+3.32 %)   1.620 both
+  12,410  146.90 -> 142.24             -4.66     11.71 -> 12.09 (+3.25 %)   1.736 both
+
+Every one of the 16 legs is faster, and all 16 emitted a BYTE-IDENTICAL text_sha256 with tau and
+mean verify width equal to four decimals -- at ctx up to 12,282, not at ctx 9. This satisfies the
+ladder's PRIMARY bit-exactness invariant rather than its lossless-gate fallback.
+
+WHAT IT MEANS. Split at the knee the cost model predicts (topk = WINDOW(128) +
+min(INDEX_TOPK(512), ctx/ratio) saturates at ctx 2048): -3.127 +/- 0.014 ms below it, -4.384 +/-
+0.065 above it, and above it delta = -3.996 +/- 0.080 flat -0.0552 +/- 0.0102 per 1000. So 94 % of
+the win is the FLOOR -- which is exactly what this ladder entry predicted when it wrote "the lever
+here is the 11 ms FLOOR, not the slope, and it belongs to Term A as much as to Term B".
+
+  a  129.11 -> 125.11 ms   (1.571x -> 1.522x the 82.18 ms byte floor; stop wants <= 1.25)
+  b  1.942  -> 1.887 /1000 (b x 6592: 12.80 -> 12.44 ms; stop wants <= 5.0; -74 % cumulative)
+
+Six items have moved b by 74 %. This is the first to move a at all, and a is 125.11 of a 142.24 ms
+forward at ctx 12,410 -- 88 % -- so it is where the remaining headroom is.
+
+The 6 % that is not flat was PREDICTED FROM THE LAYER MAP BEFORE IT WAS FITTED, which is the only
+thing separating it from the artefact rule 7 exists to catch: 20 of 43 layers are ratio-128, and
+their topk = wmax + ctx/128 has no index_topk cap, so 20 x 7.81 rows per 1000 x 0.309 us saved per
+row = 0.048 ms per 1000 predicted against 0.055 +/- 0.010 measured.
+
+THE MECHANISM, and the part worth remembering: THE HYPOTHESIS IN THE LADDER ENTRY WAS WRONG. Both
+the entry and B9's own comment blamed REUSE -- num_key_value_heads == 1, so topk_idxs is indexed by
+(b,m) and not by head, all 64 heads gather the identical rows, 63/64ths of 168 MB per compressed
+layer is redundant. `hpb`, which is precisely the fix for that, already existed, and it is a
+MEASURED NULL: 1.00x at hpb=2 and hpb=4 at all six engine shapes. L1 was already catching it. The
+binding constraint was instruction ISSUE: 32 scalar loads per warp per gathered row on a kernel
+with 3-6 warps per SM and a 5-deep __shfl_down_sync chain with nothing to hide them behind. The fix
+is to stage the row in shared memory once per block with float4 loads and double buffering, hold it
+in registers across both consumers, and skip the expf when the running max did not move.
+
+VECTORISING THE GLOBAL LOAD WITHOUT LOSING BIT-EXACTNESS IS THE WHOLE TRICK. float4 normally
+destroys it, because it changes which lane owns which element and therefore the shape of the
+partial-sum tree. Staging through smem decouples them: the load pattern becomes a pure
+memory-PLACEMENT decision while the reduction still sees lane l holding {l, l+32, ..., l+480}, the
+same 5-step shuffle tree, and the same online-softmax order over t. Every float operation, in every
+order, is the one the shipped kernel performed.
+
+AND THE OLD DEFAULT WAS A LIVE REGRESSION AT ITS OWN DESIGN POINT. B9 sized the hpb heuristic on a
+1022-token prefill and shipped HPB=8 there; measured today at that exact shape it is 0.80x, and at
+the K=6 verify width 0.52x. Nothing had re-run the sweep after the shape moved. The new default
+(hpb=4, smem=2 below 1024 warps, smem=1 above) is 1.28x at that prefill and 1.21x at the short one,
+so this item also gives prefill back the 20 % the heuristic had been quietly costing it.
+
+THE GATES. tests/gate_sparse_hpb.cu memcmps the ENTIRE output buffer of every (hpb, smem) launch
+against the pre-1.7 launch at six engine shapes -- 0 differing bytes -- and runs a one-ulp negative
+control per shape that must fail. A cosine gate would pass exactly the defect this must catch,
+because sparse_attn sums the gathered rows IN ORDER under a non-associative online softmax. That
+control earned itself immediately: on its first run it came back "0 of 65536 floats differ" at
+topk=320, because the row it perturbed was not in that shape's gathered set -- a perturbation the
+kernel provably cannot see is not a control. Then gate_units, gate_indexer_decode,
+gate_compressed_decode, gate_prefill_len, gate_compressed_graph and gate_indexer_graph all at
+maxabs = 0.00e+00; LOSSLESS GATE -> PASS x3; and both build/decode arms generated the identical ids
+11111 16 455 6102 294 16603 344 29168.
+
+dprof, both arms, ctx 3072/6144/12,288: cattn:sparse 18.66/19.38/20.57 -> 15.27/14.48/15.38, with
+the parent ATTENTION falling 5.75 against the mark's 5.19 at ctx 12,288 and i:score, i:topk, o:rope
+and every moe:* mark unchanged -- no work relocated into an unmarked region. The before-arm also
+reproduces 0.4's original 19.22/19.90/21.17 four iterations and four kernel changes later.
+
+Wiki, same iteration: kernel-optimisations.md 2.9 (adopted win), negative-results.md 4g (hpb alone,
+and the reuse hypothesis), measurement-and-traps.md 28 (a tuning default that expired),
+context-scaling.md (the 6 % Term-B tail), prefill-optimisation.md 7, README.md state table.
+
+Driver scripts/sparse_ab_run.sh, detached and named in detach_audit.sh's PATTERNS in this commit.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

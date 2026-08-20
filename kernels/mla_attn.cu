@@ -1,5 +1,6 @@
 // mla_attn.cu — MLA attention primitives, correctness-first (Gate K oracle: ref/gen_units.py).
 // Optimization (mma, smem KV staging, bf16) comes AFTER these pass their gate (CONSTITUTION Art. I).
+#include <cstdint>
 #include <cstdlib>
 #include <cuda_fp16.h>
 #include "dscratch.h"
@@ -122,31 +123,192 @@ __global__ void sparse_attn_kernel_t(float* __restrict__ o, const float* __restr
     for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) op[j] = acc[r] * inv; }
 }
 
+// ===================== 1.7: the same kernel, but the block reads the row ONCE =================
+// DECODE_LADDER 1.7. `cattn:sparse` is ~20 ms of every forward above ctx 2048 and the shape says
+// why: topk = WINDOW(128) + min(INDEX_TOPK(512), ctx/ratio), so it doubles over the first 2k and is
+// FLAT after -- the ~11 ms floor at ctx 768 and the ~21 ms ceiling are the same kernel at topk 320
+// and 640. What it moves at the ceiling is topk x 2 KB x (m*h) = 168 MB per compressed layer at the
+// K=2 verify width, and 63/64ths of that is the SAME 640 rows re-read once per head, because
+// num_key_value_heads == 1: `ip` is indexed by (b,m) and NOT by head, so every head of a query
+// gathers the identical latent KV rows.
+//
+// TWO SEPARATE THINGS ARE WRONG AND HPB ALONE ONLY FIXES ONE.
+//  (1) REUSE. HPB>1 puts HPB heads of one query in one block, so warps 2..HPB hit L1 instead of L2.
+//      That is `sparse_attn_kernel_t` above and it already exists -- but the launch heuristic gives
+//      HPB=1 below 160 warps, which is exactly the decode/verify regime (b*m*h = 64 at m=1, 128 at
+//      the measured mean verify width of 2).
+//  (2) ISSUE PRESSURE. Every warp issues 32 scalar loads per t (16 for the dot, 16 more for the
+//      accumulate) at stride 128 B. They are perfectly coalesced, so this is not a byte problem --
+//      it is 32 LSU instructions per 2 KB, on a kernel with 3-6 warps per SM and a 5-deep
+//      __shfl_down_sync chain on the critical path, i.e. nothing to hide them behind.
+//
+// This kernel fixes (2) without touching the arithmetic. The block stages the gathered row into
+// shared memory ONCE per t with float4 loads -- 4 vector loads per row for the whole block instead
+// of 32 scalar loads per warp -- double-buffered so t+1's fetch is issued before t's dot product,
+// and then each warp reads its lanes back out of smem IN THE ORIGINAL MAPPING (lane + r*32).
+//
+// WHY THIS IS BIT-EXACT AND NOT MERELY CLOSE. Vectorising the GLOBAL load would normally destroy
+// bit-exactness, because float4 changes which lane owns which element and therefore the shape of
+// the partial-sum tree. Staging through smem decouples the two: the load pattern becomes a pure
+// memory-placement decision, while the reduction still sees lane l holding {l, l+32, ..., l+480},
+// the same 5-step shuffle tree, and the same online-softmax update order over t. Every float
+// operation, in every order, is the one `sparse_attn_kernel_t` performs. `gate_sparse_hpb` proves
+// it by memcmp against the HPB=1 launch rather than by this paragraph.
+//
+// THE PREFETCH BRANCH IS BLOCK-UNIFORM, which is what makes the __syncthreads legal: `ip` does not
+// depend on head, so `idx < 0` (the masked slot) is the same answer for every warp in the block.
+// The dispatcher enforces the other precondition -- h % HPB == 0, so every warp of a block shares
+// one (b, m) and there is no partial block to diverge on.
+template<int PER, int HPB, bool KREG>
+__global__ __launch_bounds__(32*HPB)
+void sparse_attn_kernel_s(float* __restrict__ o, const float* __restrict__ q,
+                          const float* __restrict__ kv, const float* __restrict__ attn_sink,
+                          const int* __restrict__ topk_idxs,
+                          int b, int m, int h, int d, int n, int topk, float scale) {
+    constexpr int D  = PER * 32;
+    constexpr int NV = D / 4;
+    __shared__ __align__(16) float sh[2][D];
+    const int lane = threadIdx.x & 31;
+    const int gid0 = blockIdx.x * HPB;              // block-uniform; h % HPB == 0 => one (bi,mi)
+    const int gid  = gid0 + (int)(threadIdx.x >> 5);
+    const int bm = gid0 / h; const int mi = bm % m, bi = bm / m;
+    const int head = gid % h;
+    const float* qp  = q + (((size_t)(bi * m + mi) * h + head) * d);
+    const int*   ip  = topk_idxs + ((size_t)(bi * m + mi) * topk);
+    const float* kvb = kv + (size_t)bi * n * d;
+    const int nthr = 32 * HPB;
+
+    float qreg[PER];
+    #pragma unroll
+    for (int r = 0; r < PER; ++r) { int j = lane + r * 32; qreg[r] = (j < d) ? qp[j] : 0.f; }
+    float acc[PER];
+    #pragma unroll
+    for (int r = 0; r < PER; ++r) acc[r] = 0.f;
+    float run_max = -1e30f, run_sum = 0.f;
+
+    if (topk > 0) { int i0 = ip[0];
+        if (i0 >= 0) { const float4* src = (const float4*)(kvb + (size_t)i0 * d);
+                       for (int v = threadIdx.x; v < NV; v += nthr) ((float4*)sh[0])[v] = src[v]; } }
+    __syncthreads();
+
+    for (int t = 0; t < topk; ++t) {
+        const int idx = ip[t];
+        const int cur = t & 1;
+        if (t + 1 < topk) { int i1 = ip[t + 1];
+            if (i1 >= 0) { const float4* src = (const float4*)(kvb + (size_t)i1 * d);
+                           for (int v = threadIdx.x; v < NV; v += nthr) ((float4*)sh[cur ^ 1])[v] = src[v]; } }
+        if (idx >= 0) {
+            const float* kp = sh[cur];
+            // KREG: hold this lane's PER elements of the row in registers across BOTH consumers.
+            // The dot product and the accumulate read the identical PER values, but `__shfl_sync`
+            // sits between them and blocks the compiler from reusing the first set of loads, so the
+            // row is fetched from shared memory TWICE -- 32 LSU instructions per t on a kernel whose
+            // measured problem is instruction issue. Same values, same order: bit-exact.
+            float kreg[KREG ? PER : 1];
+            if (KREG) {
+                #pragma unroll
+                for (int r = 0; r < PER; ++r) { int j = lane + r * 32; kreg[KREG ? r : 0] = (j < d) ? kp[j] : 0.f; }
+            }
+            float part = 0.f;
+            #pragma unroll
+            for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) part += qreg[r] * (KREG ? kreg[KREG ? r : 0] : kp[j]); }
+            #pragma unroll
+            for (int o2 = 16; o2 > 0; o2 >>= 1) part += __shfl_down_sync(0xffffffff, part, o2);
+            float score = __shfl_sync(0xffffffff, part, 0) * scale;
+            float new_max = fmaxf(run_max, score);
+            // expf(0.f) is exactly 1.f, so skipping the call when the running max did not move is a
+            // value-preserving branch and not an approximation. It is warp-uniform: `score` is the
+            // lane-0 broadcast, so run_max and new_max are the same in every lane.
+            float corr = (new_max == run_max) ? 1.f : expf(run_max - new_max);
+            float p = expf(score - new_max);
+            run_sum = run_sum * corr + p;
+            #pragma unroll
+            for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) acc[r] = acc[r] * corr + p * (KREG ? kreg[KREG ? r : 0] : kp[j]); }
+            run_max = new_max;
+        }
+        __syncthreads();
+    }
+    run_sum += expf(attn_sink[head] - run_max);
+    float inv = (run_sum > 0.f) ? 1.f / run_sum : 0.f;
+    float* op = o + (((size_t)(bi * m + mi) * h + head) * d);
+    #pragma unroll
+    for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) op[j] = acc[r] * inv; }
+}
+
+void sparse_attn_launch(float* o, const float* q, const float* kv, const float* attn_sink,
+                        const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
+                        float scale, cudaStream_t stream, int hpb, int smem) {
+    long total = (long)b * m * h;
+    if (hpb != 1 && hpb != 2 && hpb != 4 && hpb != 8) hpb = 1;
+    // PER is only specialised for the d this engine actually uses; anything else takes the
+    // original kernel rather than a guessed specialisation.
+    if (d != 512) {
+        sparse_attn_kernel<<<(int)total, 32, 0, stream>>>(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale);
+        return;
+    }
+    if (h % hpb) hpb = 1;                       // every warp of a block must share one (b, m)
+    // The smem path stages the row with float4, so a caller that hands us an unaligned base gets the
+    // scalar path rather than a misaligned access. Every allocator in this engine is 256 B-aligned
+    // and the row stride is d*4 = 2048 B, so this never fires today -- it fires the day it does.
+    if ((((uintptr_t)kv) & 15) || (((size_t)d * 4) & 15)) smem = 0;
+    if (hpb == 1) smem = 0;                     // hpb=1 + smem measured 0.71x: no reuse to pay for the sync
+    int blocks = (int)((total + hpb - 1) / hpb);
+    if (smem >= 2) {
+        switch (hpb) {
+            case 1: sparse_attn_kernel_s<16,1,true><<<blocks, 32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            case 2: sparse_attn_kernel_s<16,2,true><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            case 4: sparse_attn_kernel_s<16,4,true><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            default:sparse_attn_kernel_s<16,8,true><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+        }
+    }
+    if (smem) {
+        switch (hpb) {
+            case 1: sparse_attn_kernel_s<16,1,false><<<blocks, 32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            case 2: sparse_attn_kernel_s<16,2,false><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            case 4: sparse_attn_kernel_s<16,4,false><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            default:sparse_attn_kernel_s<16,8,false><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+        }
+    }
+    switch (hpb) {
+        case 1: sparse_attn_kernel_t<16,1><<<blocks, 32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+        case 2: sparse_attn_kernel_t<16,2><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+        case 4: sparse_attn_kernel_t<16,4><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+        default:sparse_attn_kernel_t<16,8><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+    }
+}
+
+// THE DEFAULT, RETUNED BY `gate_sparse_hpb` 2026-08-20 (DECODE_LADDER 1.7). Every number below is
+// that gate's, at the shapes the engine issues, memcmp-clean against the pre-1.7 launch:
+//
+//   shape                          hpb=1/smem=0   hpb=8/smem=0   hpb=4/smem=1   hpb=4/smem=2
+//   m=1   topk=640  (base AR)         0.737 ms      0.771 (0.96x)  0.593 (1.24x)  0.506 (1.46x)
+//   m=2   topk=640  (mean verify)     0.746         0.773 (0.97x)  0.613 (1.22x)  0.548 (1.36x)
+//   m=6   topk=640  (max verify)      0.818         1.581 (0.52x)  0.734 (1.11x)  0.719 (1.14x)
+//   m=2   topk=320  (ctx 768)         0.375         0.389 (0.96x)  0.309 (1.21x)  0.281 (1.33x)
+//   m=256 topk=320  (short prefill)  15.78         20.47  (0.77x) 13.03  (1.21x) 13.86  (1.14x)
+//   m=1022 topk=1277 (prefill)      263.2         328.5   (0.80x) 205.1  (1.28x) 220.4  (1.19x)
+//
+// TWO THINGS IN THAT TABLE. First, `hpb` ON ITS OWN IS A NULL -- 1.00x at hpb=2 and hpb=4 at every
+// shape -- so B9's REUSE story was not the binding constraint: the redundant per-head re-reads were
+// already being caught by L1. The win is entirely the smem staging, i.e. ISSUE PRESSURE. Second,
+// THE OLD DEFAULT WAS A REGRESSION AT ITS OWN DESIGN POINT: hpb=8/smem=0 is 0.80x of hpb=1 at the
+// 1022-token prefill B9 sized it on, and 0.52x at the K=6 verify. That number was never re-measured
+// after the shape moved. See wiki/measurement-and-traps.md.
+//
+// KREG (smem=2) holds the row in registers across the dot and the accumulate, costing PER=16 extra
+// registers. It wins where the kernel is LATENCY-bound and there are few blocks (decode: 1.36x vs
+// 1.22x) and loses where it is OCCUPANCY-bound and there are thousands (prefill: 1.19x vs 1.28x),
+// which is why the switch is on `total` and not a constant.
 void sparse_attn(float* o, const float* q, const float* kv, const float* attn_sink,
                  const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
                  float scale, cudaStream_t stream) {
     long total = (long)b * m * h;
-    // DSV4_SPARSE_HPB=1 restores the original launch exactly, for the A/B.
-    static const char* hpb_env = getenv("DSV4_SPARSE_HPB");
-    int HPB = hpb_env ? atoi(hpb_env)
-                      : (total >= 80L*8 ? 8 : total >= 80L*4 ? 4 : total >= 80L*2 ? 2 : 1);
-    if (HPB != 1 && HPB != 2 && HPB != 4 && HPB != 8) HPB = 1;
-    // PER is only specialised for the d this engine actually uses; anything else takes the
-    // original kernel rather than a guessed specialisation.
-    if (d != 512 || HPB == 1) {
-        int blocks = (int)((total + HPB - 1) / HPB);
-        if (d == 512) {
-            switch (HPB) { case 1: sparse_attn_kernel_t<16,1><<<blocks,32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return; }
-        }
-        sparse_attn_kernel<<<(int)total, 32, 0, stream>>>(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale);
-        return;
-    }
-    int blocks = (int)((total + HPB - 1) / HPB);
-    switch (HPB) {
-        case 2: sparse_attn_kernel_t<16,2><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); break;
-        case 4: sparse_attn_kernel_t<16,4><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); break;
-        default:sparse_attn_kernel_t<16,8><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); break;
-    }
+    // DSV4_SPARSE_HPB=1 DSV4_SPARSE_SMEM=0 restores the pre-1.7 launch exactly, for the A/B.
+    static const char* hpb_env  = getenv("DSV4_SPARSE_HPB");
+    static const char* smem_env = getenv("DSV4_SPARSE_SMEM");
+    int hpb  = hpb_env  ? atoi(hpb_env)  : 4;
+    int smem = smem_env ? atoi(smem_env) : (total <= 1024L ? 2 : 1);
+    sparse_attn_launch(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale, stream, hpb, smem);
 }
 
 // ---------------- rope_interleaved ----------------

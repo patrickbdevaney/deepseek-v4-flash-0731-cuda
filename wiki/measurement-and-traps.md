@@ -766,3 +766,47 @@ touches the prefill.
 > **Rule.** Name the binary in every bit-exactness claim. "The engine is deterministic" is not a
 > property of the checkpoint or of the kernels; it is a property of a call graph, and this project
 > has two.
+
+## 28. A tuning default that was a regression at its own design point, and the mechanism story that was wrong (ladder 1.7, 2026-08-20)
+
+**Two failures, one kernel, and they compound.**
+
+**First: the heuristic was never re-measured after the shape it was tuned on moved.** B9 added an
+`HPB` (heads-per-block) parameter to `sparse_attn`, sized it on a 1022-token prefill, and shipped
+`total >= 640 -> HPB=8`. That comment is careful and explicitly warns about the *opposite* error —
+"HPB MUST FOLLOW THE BATCH … HPB=8 would launch 8 blocks onto 20 SMs and starve the machine". It
+still shipped a default that, measured today at exactly the shape it was chosen on, is
+
+    hpb=8/smem=0 at m=1022, topk=1277:  328.5 ms   against hpb=1's 263.2 ms   =  0.80x
+    hpb=8/smem=0 at m=6,    topk=640:    1.581 ms  against hpb=1's 0.818 ms   =  0.52x
+
+**A 20 % prefill regression and a 1.9x verify regression, live, under a comment that reasons
+correctly about why they might happen.** Nothing had re-run the numbers since; every intervening
+change to the verify width, the top-k cap and the clock state moved the shape underneath it. The
+rule this produces is narrow and cheap: **a launch-configuration heuristic is a measurement, and it
+expires like one.** If a default is a number chosen from a sweep, the sweep belongs in a gate
+binary that runs in seconds, so re-running it is free — which is what `tests/gate_sparse_hpb.cu`
+now is. `nvcc`-and-run cost 90 seconds and would have caught this at any point in the intervening
+weeks.
+
+**Second: the mechanism in the comment was the wrong one, and it was wrong in the flattering
+direction.** Both B9's comment and `DECODE_LADDER` 1.7 attributed the kernel's cost to **reuse**:
+`num_key_value_heads == 1`, so all 64 heads of a query gather the identical KV rows and 63/64ths of
+the traffic is redundant. It is a correct, checkable, load-bearing-sounding observation. It is also
+**not the binding constraint** — `hpb`, which is precisely the fix for it, measures **1.00x at
+hpb=2 and hpb=4 at every shape**. L1 was already catching the reuse. The actual constraint was
+instruction issue (32 scalar loads per warp per row on a kernel with 3–6 warps per SM), which no
+one had written down anywhere.
+
+What makes this a trap rather than an ordinary wrong guess is that **the redundancy arithmetic is
+spectacular and unfalsifiable by inspection**: 168 MB per compressed layer per step, 63/64ths of it
+"wasted". A number that large reads as a diagnosis. It was a description. The check that separated
+them cost one column in a table — sweep the knob that fixes the hypothesised mechanism *alone*,
+before building anything, and see whether it moves. Compare §16: the same discipline of testing the
+attribution rather than the story.
+
+**Corollary for gates: a control that never fails has not been shown to be able to.**
+`gate_sparse_hpb`'s one-ulp negative control came back "0 of 65536 floats differ" on its fourth
+shape — not because the gate was broken, but because the row it perturbed was outside *that*
+shape's gathered set. A perturbation that the kernel provably cannot see is not a control. Fixed by
+perturbing a sliding-window row, which every shape gathers by construction.

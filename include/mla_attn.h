@@ -11,6 +11,18 @@ void sparse_attn(float* o, const float* q, const float* kv, const float* attn_si
                  const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
                  float scale, cudaStream_t stream = 0);
 
+// Explicit-launch form (DECODE_LADDER 1.7). `sparse_attn` resolves (hpb, smem) from the env and the
+// heuristic and then calls this; a gate/bench calls it directly so it can sweep BOTH knobs inside one
+// process, which `static getenv` caching in `sparse_attn` makes impossible.
+//   hpb  = heads-per-block, 1|2|4|8. hpb==1 is the kernel that shipped before 1.7, byte for byte.
+//   smem = 0 -> every warp re-reads the gathered KV row from global; 1 -> the block stages the row in
+//          shared memory ONCE per t, with float4 loads and double buffering, and each warp reads its
+//          lanes back out in the ORIGINAL lane mapping. Bit-exact with smem=0 by construction: the
+//          per-lane partial sums, the 5-step shuffle tree and the online-softmax order are untouched.
+void sparse_attn_launch(float* o, const float* q, const float* kv, const float* attn_sink,
+                        const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
+                        float scale, cudaStream_t stream, int hpb, int smem);
+
 // In-place interleaved-pair RoPE on the rope_dim slice of each of `rows` rows. inverse => conj.
 // row_stride: element stride between consecutive rows in x (default rope_dim = contiguous). Pass x already
 //   offset to the slice start (e.g. head_base + nope_dim) with row_stride = head_dim for per-head slices.

@@ -413,6 +413,79 @@ the suite falls 32.8 %, and prompt 7 goes 14.39 -> 26.33 tok/s. Deployment confi
 3.61 offline. Full write-up in
 [`draft-head-finetuning.md` §8](draft-head-finetuning.md).
 
+### 2.9 `sparse_attn` — stage the gathered row in shared memory, and vectorise the load without losing bit-exactness (ladder 1.7, 2026-08-20)
+
+**+2.4–3.3 % tok/s across ctx 1,656–12,410, paired saving 4.227 ± 0.121 ms per forward over 16
+legs, every leg faster, all 16 byte-identical.** The first item on this ladder to move **Term A**:
+`a` 129.11 → 125.11 ms (1.571× → 1.522× the 82.18 ms byte floor).
+
+**Mechanism — and the hypothesis it refuted.** `cattn:sparse` is ~20 ms of every forward above
+ctx 2048. Both the ladder entry and B9's own comment in `kernels/mla_attn.cu` blamed **reuse**:
+`num_key_value_heads == 1`, so `topk_idxs` is indexed by `(b, m)` and *not* by head, and all 64
+heads of a query gather the identical latent KV rows — 63/64ths of the traffic redundant. The fix
+for that is `hpb`, putting HPB heads of one query in one block so warps 2..HPB hit L1 instead of
+L2. It already existed. **It is a measured null: 1.00× at hpb=2 and hpb=4, at every shape.** L1 was
+already catching the reuse.
+
+The binding constraint is **instruction issue**. Every warp issued 32 scalar loads per gathered row
+— 16 for the dot product, 16 more for the accumulate — perfectly coalesced, so never a byte
+problem, on a kernel with 3–6 warps per SM and a 5-deep `__shfl_down_sync` chain on the critical
+path with nothing to hide them behind. Three changes, all value-preserving:
+
+1. **The block stages the row into shared memory once per `t`**, with `float4` loads and double
+   buffering, so the fetch for `t+1` is issued before `t`'s dot product. 4 vector loads per *block*
+   replace 32 scalar loads per *warp*.
+2. **`KREG` holds the row in registers across both consumers.** `__shfl_sync` sits between the dot
+   product and the accumulate and blocks the compiler from reusing the first set of loads, so the
+   row was being read from shared memory twice.
+3. **`corr = expf(run_max − new_max)` is skipped when the running max did not move.** `expf(0.f)`
+   is exactly `1.f`, so this is a value-preserving branch and not an approximation, and it is
+   warp-uniform because `score` is the lane-0 broadcast.
+
+**Why it is bit-exact, which is the part worth stealing.** Vectorising the *global* load normally
+destroys bit-exactness: `float4` changes which lane owns which element and therefore the shape of
+the partial-sum tree. **Staging through shared memory decouples the two.** The load pattern becomes
+a pure memory-*placement* decision, while the reduction still sees lane `l` holding
+`{l, l+32, …, l+480}`, the same 5-step shuffle tree, and the same online-softmax update order over
+`t`. Every float operation, in every order, is the one the shipped kernel performed. This is the
+opposite of §2.7's situation, where the speed required accepting a reassociation.
+
+**The kernel band** (`gate_sparse_hpb`, at the shapes the engine issues, memcmp-clean against the
+pre-1.7 launch):
+
+| shape | pre-1.7 | hpb=8/smem=0 *(the old default)* | **hpb=4/smem=2** |
+|---|---|---|---|
+| m=1 topk=640 (base AR) | 0.737 ms | 0.771 (0.96×) | **0.506 (1.46×)** |
+| m=2 topk=640 (mean verify) | 0.746 | 0.773 (0.97×) | **0.548 (1.36×)** |
+| m=6 topk=640 (max verify) | 0.818 | 1.581 (0.52×) | **0.719 (1.14×)** |
+| m=1022 topk=1277 (prefill) | 263.2 | 328.5 (0.80×) | 220.4 (1.19×) — *smem=1 is 205.1 (1.28×)* |
+
+`KREG` wins where the kernel is latency-bound with few blocks and loses where it is
+occupancy-bound with thousands, which is why the default switches on `total` and not on a constant:
+`hpb=4`, `smem=2` below 1024 warps, `smem=1` above.
+
+**The gate that proved it.** `tests/gate_sparse_hpb.cu` — memcmp of the **entire output buffer** of
+every `(hpb, smem)` launch against the pre-1.7 launch at six engine shapes, 0 differing bytes, plus
+a one-ulp negative control per shape that must fail (it caught the gate being blind at topk=320 on
+its first run, because the row it perturbed was not in that shape's gathered set). Then `gate_units`,
+`gate_indexer_decode`, `gate_compressed_decode`, `gate_prefill_len`, `gate_compressed_graph` and
+`gate_indexer_graph` all at `maxabs = 0.00e+00`; `LOSSLESS GATE -> PASS` ×3; both `build/decode`
+arms generating the identical ids; and **16 of 16 server legs emitting a byte-identical
+`text_sha256` with `tau` equal to four decimals at ctx up to 12,282**. A cosine gate would have
+passed a reordering here — `sparse_attn` sums the gathered rows *in order* under a non-associative
+online softmax — which is why the instrument is memcmp, as in §2.5 and §2.6.
+
+**dprof isolates it.** `cattn:sparse` 18.66 / 19.38 / 20.57 → **15.27 / 14.48 / 15.38** ms at ctx
+3072 / 6144 / 12,288; the parent `ATTENTION` falls by 5.75 against the mark's 5.19 at ctx 12,288,
+and `i:score`, `i:topk`, `o:rope` and every `moe:*` mark are unchanged — no work was relocated into
+an unmarked region. The before-arm also **reproduces 0.4's original 19.22 / 19.90 / 21.17**, four
+iterations and four kernel changes later.
+
+See [`measurement-and-traps.md` §28](measurement-and-traps.md) for the old default being a
+regression at its own design point, [`negative-results.md` §4g](negative-results.md) for the reuse
+hypothesis, [`context-scaling.md`](context-scaling.md) for the 6 % of this that is Term B, and
+[`prefill-optimisation.md` §7](prefill-optimisation.md) for what it gives prefill back.
+
 ---
 
 ## 3. Precision and layout

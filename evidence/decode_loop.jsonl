@@ -17,3 +17,4 @@
 {"iter": 2, "rc": 0, "post_ok": true, "commit": "51fe2d5", "dirty": true, "log": "evidence/decode_loop/iter2.log", "ts": "2026-08-20T11:09:46-0400"}
 {"iter": 3, "rc": 0, "post_ok": true, "commit": "8c1867c", "dirty": true, "log": "evidence/decode_loop/iter3.log", "ts": "2026-08-20T11:34:50-0400"}
 {"iter": 4, "rc": 0, "post_ok": true, "commit": "638cd7e", "dirty": true, "log": "evidence/decode_loop/iter4.log", "ts": "2026-08-20T12:44:10-0400"}
+{"iter": 5, "rc": 0, "post_ok": true, "commit": "06098ee", "dirty": true, "log": "evidence/decode_loop/iter5.log", "ts": "2026-08-20T14:28:28-0400"}

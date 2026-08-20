@@ -30,6 +30,21 @@ identical in all 16), so the tracked `b` goes **2.514 -> 1.942** and `b x 6592` 
 arm), and rule 7 applies to your own arms too. Cumulatively `b` is down **73 %** from the 7.220 the
 ladder opened on. Term A is untouched and is now 83 % of the forward.
 
+**1.7 MOVED TERM A, 2026-08-20 — the first item on this ladder to do so.** `sparse_attn` stages the
+gathered KV row in shared memory (`wiki/kernel-optimisations.md` §2.9). The paired saving over 16
+legs is **4.227 +/- 0.121 ms per forward**, every leg faster, all 16 emitting a byte-identical
+`text_sha256` with `tau` equal to four decimals at ctx up to 12,282. Split at the `topk` knee it is
+**-3.996 +/- 0.080 ms flat and -0.0552 +/- 0.0102 per 1000** -- 94 % Term A, and the 6 % that is not
+has a named mechanism (the 20 ratio-128 layers, whose `topk` has no `index_topk` cap, predicted
+0.048 ms per 1000 before it was fitted). So **`a` 129.11 -> 125.11 ms** (1.571x -> **1.522x** the
+82.18 ms floor; stop wants <= 1.25) and **`b` 1.942 -> 1.887** (`b x 6592` 12.80 -> **12.44 ms**;
+stop wants <= 5.0). Cumulatively `b` is down **74 %**.
+
+**Read the two terms against their stop conditions before picking the next item.** `b x 6592` needs
+to fall 2.5x more; `a` needs to fall to 102.7 ms, i.e. by another 22.4 ms. Six items have moved `b`
+by 74 %; one item has moved `a` by 3.1 %. `a` is 125.11 of a 142.24 ms forward at ctx 12,410 --
+**88 %** -- and it is where the remaining headroom is.
+
 **2.2 moved NEITHER `a` NOR `b`, by construction, and still bought +9.52 % — read the stop
 condition carefully before concluding it should have moved.** The stop check is about
 `ms_per_forward = a + b*ctx`; 2.2 changes no kernel and no forward, it swaps the draft head's
@@ -1078,24 +1093,108 @@ So, in order:
       `NO_IXGEMM=1`. Each is one existing env flag and one pair of ~3-minute runs, and either one
       coming back clean names the kernel outright.
 
-- [ ] **1.7** `cattn:sparse` — **0.709 +/- 0.050 ms per 1000 context (10 % of the term), measured
-      by 0.4**: 11.00 ms at ctx 768 rising to 21.17 ms at 12,288. Note the shape: it nearly
-      DOUBLES over the first 3k and then almost flattens (19.22 at 3072, 19.90 at 6144, 21.17 at
-      12,288), which is the signature of a top-`k` gather saturating once context exceeds `k`
-      rather than of a full scan. So the lever here is the 11 ms FLOOR, not the slope, and it
-      belongs to Term A as much as to Term B. Do not open this until 1.0/1.2/1.5 are done — it is
-      the smallest of the four and the only one whose mechanism is not yet understood.
+- [x] **1.7** **DONE 2026-08-20. `sparse_attn` stages the gathered KV row in shared memory: paired
+      saving 4.227 +/- 0.121 ms per forward over 16 legs, every leg faster, all 16 byte-identical.**
 
-      **CONFIRMED CONCAVE, 2026-08-20 by 1.3's re-attribution, and this is why the rank does not
-      change.** A fresh dprof over ctx 369..6255 fits `cattn:sparse` at **1.694 +/- 0.065 ms per
-      1000** — 2.4x what 0.4 reported and, taken at face value, 2.7x `i:score`, which would promote
-      this item above 1.5. It is an artefact of the fitting range. Per-point medians 9.35 / 15.72 /
-      19.89 ms at ctx 768 / 1536 / 6144 are **8.29 ms per 1000 across the first leg and 0.905
-      across the second**, joining continuously onto 0.4's flat 19.22 / 19.90 / 21.17 at 3072 /
-      6144 / 12,288. One curve, two ranges. The paragraph above called this in advance — "the
-      signature of a top-`k` gather saturating once context exceeds `k`" — and the new data is that
-      signature measured on its steep side. **The lever is still the ~20 ms floor, this is still
-      Term A, and this item is still ranked below 1.5.**
+      ```
+      ctx     ms/forward before -> after   paired    tok/s before -> after      tau
+      1,656   133.46 -> 130.33             -3.13     13.93 -> 14.27 (+2.44 %)   1.861 both
+      3,197   136.89 -> 132.78             -4.10     12.07 -> 12.44 (+3.07 %)   1.652 both
+      6,248   141.46 -> 137.05             -4.40     11.85 -> 12.23 (+3.21 %)   1.681 both
+      6,260   138.49 -> 134.20             -4.29     11.74 -> 12.13 (+3.32 %)   1.620 both
+      12,410  146.90 -> 142.24             -4.66     11.71 -> 12.09 (+3.25 %)   1.736 both
+      ```
+
+      **16 of 16 legs emitted a byte-identical `text_sha256`, with `tau` and mean verify width equal
+      to four decimals in every one, at ctx up to 12,282.** This is the ladder's PRIMARY invariant
+      satisfied, not its lossless-gate fallback: the change is bit-exact by construction and the
+      engine agrees. `gate_sparse_hpb` memcmps the whole output buffer of every (hpb, smem) launch
+      against the pre-1.7 launch at six engine shapes -- 0 differing bytes -- and its one-ulp
+      negative control fails as it must. All four in-situ engine gates report `maxabs = 0.00e+00`,
+      LOSSLESS x3 on `build/decode`, and both `build/decode` arms generated the identical ids
+      `11111 16 455 6102 294 16603 344 29168`.
+
+      **THE MECHANISM, and note that the ladder entry's own hypothesis was WRONG.** This entry, and
+      B9's comment in `kernels/mla_attn.cu`, both said the problem was REUSE: `num_key_value_heads
+      == 1`, `ip` is indexed by (b,m) and not by head, so all 64 heads of a query gather the
+      identical rows and 63/64ths of the traffic is redundant. `hpb` -- putting HPB heads in one
+      block so they share L1 -- is the fix for that, it already existed, and it is **a measured NULL:
+      1.00x at hpb=2 and hpb=4 at every shape.** L1 was already catching the reuse. The real
+      constraint is ISSUE PRESSURE: 32 scalar loads per warp per gathered row (16 for the dot, 16
+      more for the accumulate), on a kernel with 3-6 warps per SM and a 5-deep `__shfl_down_sync`
+      chain on the critical path. Staging the row into shared memory once per block, with `float4`
+      loads and double buffering, and holding it in registers across both consumers, cuts that to 4
+      vector loads per block plus 16 smem loads per warp. **1.36x at the mean verify shape.**
+
+      **VECTORISING THE LOAD WITHOUT LOSING BIT-EXACTNESS IS THE WHOLE TRICK.** `float4` normally
+      destroys it, because it changes which lane owns which element and therefore the shape of the
+      partial-sum tree. Staging through smem decouples the two: the global load pattern becomes a
+      pure memory-placement decision while the reduction still sees lane `l` holding
+      `{l, l+32, ..., l+480}`, the same 5-step shuffle tree, and the same online-softmax order over
+      `t`. See `wiki/kernel-optimisations.md` §2.9.
+
+      **THE ENTRY'S SHAPE CALL WAS RIGHT, AND IT IS WHY THIS IS TERM A.** Splitting the 16 paired
+      legs at the knee the entry predicted (`topk = WINDOW(128) + min(INDEX_TOPK(512), ctx/ratio)`
+      saturates at ctx 2048): **-3.127 +/- 0.014 ms below it (2 legs), -4.384 +/- 0.065 above it
+      (14).** Above the knee the residual context term is
+      **-3.996 +/- 0.080 flat, -0.0552 +/- 0.0102 per 1000** -- i.e. 94 % of the win is the FLOOR,
+      exactly as the entry said. The small surviving slope is not noise and not a fitting artefact:
+      **20 of the 43 layers are ratio-128, where `topk = wmax + ctx/128` has no `index_topk` cap at
+      all.** 20 layers x 7.81 rows per 1000 ctx x 0.309 us saved per row = **0.048 ms per 1000
+      predicted, 0.0552 +/- 0.0102 measured** -- inside one SE.
+
+      **dprof isolates it to the changed launch and nothing else.** Medians, both arms, same
+      protocol, ctx 3072 / 6144 / 12,288:
+
+      | mark | before | after |
+      |---|---|---|
+      | `cattn:sparse` | 18.66 / 19.38 / **20.57** | 15.27 / 14.48 / **15.38** |
+      | `ATTENTION` (parent) | 59.71 / 62.36 / **68.38** | 56.03 / 57.05 / **62.63** |
+      | `i:score` (untouched control) | 0.98 / 1.11 / 1.34 | 0.97 / 1.11 / 1.34 |
+      | `i:topk` (untouched control) | 0.71 / 0.73 / 0.76 | 0.71 / 0.72 / 0.75 |
+      | `STEP` | 137.31 / 132.16 / 136.94 | 133.67 / 126.79 / 131.75 |
+
+      The saving lands inside the parent (`ATTENTION` -5.75 against `cattn:sparse` -5.19 at ctx
+      12,288) and every other mark is unchanged, so no work was relocated into an unmarked region.
+      **`cattn:sparse` at 18.66 / 19.38 / 20.57 also reproduces 0.4's 19.22 / 19.90 / 21.17 four
+      iterations and four kernel changes later**, which is an independent check on the cost model
+      this ladder is ordered by.
+
+      **THE OLD DEFAULT WAS A REGRESSION AT ITS OWN DESIGN POINT.** B9 sized the `hpb` heuristic on
+      a 1022-token prefill and shipped HPB=8 there. Measured today: **hpb=8/smem=0 is 0.80x of
+      hpb=1 at that prefill, and 0.52x at the K=6 verify width.** The number was never re-measured
+      after the shape moved. The new default is `hpb=4` with `smem=2` below 1024 warps and `smem=1`
+      above, which is 1.28x at the 1022-token prefill and 1.21x at the short one -- so this item
+      also gives prefill back the 20 % B9's heuristic had been quietly costing it. See
+      `wiki/measurement-and-traps.md` §28 and `wiki/prefill-optimisation.md` §7.
+
+      Ratchet, carried by SUBTRACTION of the paired numbers per rule 7 (this item's own sweep spans
+      ctx 1,528-12,282 and fits `b` badly on either arm): **`a` 129.11 -> 125.11 ms** (1.571x ->
+      1.522x the 82.18 ms byte floor; stop wants <= 1.25) and **`b` 1.942 -> 1.887 ms/1000**
+      (`b x 6592` 12.80 -> 12.44 ms; stop wants <= 5.0). This is the first item on the ladder to
+      move Term A at all.
+
+      Arms, both in one session on one build: control `DSV4_SPARSE_HPB=1 DSV4_SPARSE_SMEM=0`
+      (the pre-1.7 launch, bit for bit), run FIRST so drift favours it. Driver
+      `scripts/sparse_ab_run.sh`; evidence `evidence/decode_loop/{gate_sparse_hpb_1p7.log,
+      fit_1p7_*,dprof_ctx_1p7_*.txt,decode_1p7_*.log,sparse_ab.log}`.
+
+      *(The original entry is preserved below, because its two calls -- the concave shape and "the
+      lever is the FLOOR, not the slope" -- were both confirmed, and its third, the reuse mechanism,
+      was refuted. That is worth keeping visible.)*
+
+      > **0.709 +/- 0.050 ms per 1000 context (10 % of the term), measured by 0.4**: 11.00 ms at ctx
+      > 768 rising to 21.17 ms at 12,288. Note the shape: it nearly DOUBLES over the first 3k and
+      > then almost flattens (19.22 at 3072, 19.90 at 6144, 21.17 at 12,288), which is the signature
+      > of a top-`k` gather saturating once context exceeds `k` rather than of a full scan. So the
+      > lever here is the 11 ms FLOOR, not the slope, and it belongs to Term A as much as to Term B.
+      >
+      > **CONFIRMED CONCAVE, 2026-08-20 by 1.3's re-attribution.** A fresh dprof over ctx 369..6255
+      > fits `cattn:sparse` at **1.694 +/- 0.065 ms per 1000** -- 2.4x what 0.4 reported. It is an
+      > artefact of the fitting range. Per-point medians 9.35 / 15.72 / 19.89 ms at ctx 768 / 1536 /
+      > 6144 are **8.29 ms per 1000 across the first leg and 0.905 across the second**, joining
+      > continuously onto 0.4's flat 19.22 / 19.90 / 21.17. One curve, two ranges.
+
 - [ ] **1.8** **Explain the `cattn:q_proj` bimodality 0.4 found.** At ctx 6144, at the SAME verify
       width VB=2, 18 steps ran `q:wq_a` at 1.71 ms and 17 at 5.47 ms — a 3.2x swing in one fp8 GEMM
       at fixed shape and fixed context, with `cattn:compress` splitting the same way (0.05 vs

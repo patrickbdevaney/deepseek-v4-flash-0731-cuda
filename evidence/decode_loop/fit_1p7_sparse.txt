@@ -1,0 +1,10 @@
+### arm=off
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                   3072     6144    12288
+  cattn:sparse        18.66    19.38    20.57
+STEP (tot+draft)     137.31   132.16   136.94
+### arm=on
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                   3072     6144    12288
+  cattn:sparse        15.27    14.48    15.38
+STEP (tot+draft)     133.67   126.79   131.75

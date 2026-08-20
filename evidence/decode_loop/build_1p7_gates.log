@@ -1,0 +1,32 @@
+built build/gate_topk_radix
+built build/gate_topk_smem_ctx
+built build/gate_sdpa_smem
+built build/gate_index_score
+tests/gate_units.cu(421): warning #177-D: variable "half" was declared but never referenced
+      const auto& dm=S.get("dims"); int seqlen=i32(dm,0), dim=i32(dm,1); int half=dim/2;
+                                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+built build/gate_units
+built build/gate_encoding
+built build/gate_bf16w
+built build/gate_api
+built build/gate_suffix_draft
+built build/gate_forkjoin_graph
+built build/gate_ogroup_gemv
+built build/gate_tc_fp8_smem
+built build/gate_prefill_len
+built build/gate_moe_scan
+built build/gate_tc_fp8_kc
+built build/gate_og_ws1
+built build/gate_sparse_hpb
+built build/gate_compressed_decode
+built build/gate_indexer_decode
+built build/gate_scratch_init
+built build/gate_compressed_graph
+built build/gate_indexer_graph
+built build/gate_compressor_emit
+built build/gate_grouped_moe
+built build/gate_mainkv_incr
+built build/gate_fp4_gemv

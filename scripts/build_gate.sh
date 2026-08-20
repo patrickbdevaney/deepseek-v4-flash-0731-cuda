@@ -113,6 +113,19 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   -o build/gate_og_ws1
 echo "built build/gate_og_ws1"
 
+# Gate SPARSE_HPB (DECODE_LADDER 1.7) -- `sparse_attn` now has THREE launch shapes (per-warp block,
+# HPB-heads-per-block, and HPB + shared-memory row staging) and the claim binding them is VALUE
+# EQUALITY: the online softmax is not associative and the gathered rows are summed IN ORDER, so a
+# cosine gate passes exactly the reordering this must catch (the same lesson as gate_topk_radix,
+# gate_tc_fp8_kc and gate_og_ws1). memcmp of the whole output buffer against the pre-1.7 launch, at
+# the six shapes the engine issues -- m=1/2/6 verify, the pre-knee topk=320, and both prefill widths
+# -- and it TIMES them, which is what chose the default. `--control` bumps one gathered row by one
+# ulp and the memcmp must fail; that control caught the gate being blind at topk=320 on its first run.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_sparse_hpb.cu kernels/mla_attn.cu kernels/dscratch.cu kernels/nvfp4_dense.cu \
+  -o build/gate_sparse_hpb
+echo "built build/gate_sparse_hpb"
+
 # ---------------------------------------------------------------------------------------------
 # THE OTHER EIGHT (Finding 76). Before this block, build_gate.sh built 10 of the 18 gate binaries
 # and the rest went stale SILENTLY: F74 found gate_compressed_decode and gate_indexer_decode a day

@@ -1,0 +1,7 @@
+built build/gate_tokenizer
+built build/gate_stream
+built build/gate_encoding
+built build/gate_api
+built build/dsv4-chat
+built build/dsv4-server
+built build/gate_engine

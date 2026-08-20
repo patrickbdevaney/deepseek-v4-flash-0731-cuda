@@ -267,6 +267,37 @@ What survives is stated in the ladder entry: the divergence is confined to `comp
 layers, so the shortlist is `compressor_forward`, `indexer_forward` and `sparse_attn` over the
 combined index list, and nothing else in `compressed_attn_forward`.
 
+## 4g. Retired on a null before it was built on — `hpb` alone, and the reuse hypothesis (ladder 1.7, 2026-08-20)
+
+**The lever:** `sparse_attn` gathers the same `topk` latent KV rows for all 64 heads of a query
+(`num_key_value_heads == 1`, so `topk_idxs` is indexed by `(b, m)` and not by head). At the
+saturated shape that is `topk x 2 KB x m x h` = 168 MB per compressed layer per step, of which
+63/64ths is the same rows re-read. `HPB` — put HPB heads of one query in one block so warps
+2..HPB hit L1 instead of L2 — is the exact fix, it already existed in the kernel, and the launch
+heuristic was giving `HPB=1` across the whole decode/verify regime.
+
+**The number that killed it:** **1.00x.** `gate_sparse_hpb`, hpb ∈ {2,4} against hpb=1, at all six
+shapes the engine issues:
+
+    m=1  topk=640   0.737 -> 0.736 / 0.737     m=6    topk=640    0.818 -> 0.822 / 0.821
+    m=2  topk=640   0.746 -> 0.754 / 0.754     m=256  topk=320   15.78 -> 15.76 / 15.83
+    m=2  topk=320   0.375 -> 0.382 / 0.381     m=1022 topk=1277 263.2  -> 263.5 / 264.3
+
+L1 was already catching the reuse; the redundancy was real and cost nothing. `HPB=8` is worse than
+null — 0.80x at the 1022-token prefill and **0.52x** at the K=6 verify — which is separately why
+the shipped default had been a live regression (`measurement-and-traps.md` §28).
+
+**Why it is here and not in the wins list:** the *shape* `hpb` provides turned out to be necessary
+for the win that did land — the smem staging in `kernel-optimisations.md` §2.9 needs several warps
+per block to amortise one vector load of the row, and is itself **0.71x at hpb=1**. So `hpb` is
+load-bearing scaffolding for a different mechanism, and worth exactly nothing for the one it was
+built for. Two levers with the same knob and opposite stories: the honest record is that the
+attribution was wrong and the parameter survived by accident.
+
+**The generalisation:** *sweep the knob that fixes your hypothesised mechanism, alone, before
+building on it.* One column in one table, 90 seconds, no checkpoint. The redundancy arithmetic was
+large enough (168 MB, 63/64ths) to read as a diagnosis; it was a description.
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

@@ -1,0 +1,87 @@
+device NVIDIA Thor  SMs 20  L2 33.6 MB
+
+=== m=1  topk=640 (base AR, ctx>=2048)   (blocks at hpb: 64/32/16/8 on 20 SMs) ===
+  hpb=1 smem=0    0.7364 ms    1.00x    113.9 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=0    0.7366 ms    1.00x    113.9 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=0    0.7371 ms    1.00x    113.8 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=0    0.7707 ms    0.96x    108.8 GB/s(no-reuse)  bytediff=0 
+  hpb=1 smem=1    0.7363 ms    1.00x    113.9 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=1    0.7560 ms    0.97x    111.0 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=1    0.5925 ms    1.24x    141.6 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=1    0.6151 ms    1.20x    136.4 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=2    0.6655 ms    1.11x    126.1 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=2    0.5060 ms    1.46x    165.8 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=2    0.5532 ms    1.33x    151.6 GB/s(no-reuse)  bytediff=0 
+  [control] one ulp on kv row 5 -> 4 of 32768 floats differ (gate can fail: good)
+
+=== m=2  topk=640 (mean verify width)   (blocks at hpb: 128/64/32/16 on 20 SMs) ===
+  hpb=1 smem=0    0.7463 ms    1.00x    224.8 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=0    0.7531 ms    0.99x    222.8 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=0    0.7532 ms    0.99x    222.7 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=0    0.7723 ms    0.97x    217.2 GB/s(no-reuse)  bytediff=0 
+  hpb=1 smem=1    0.7463 ms    1.00x    224.8 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=1    0.7773 ms    0.96x    215.8 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=1    0.6120 ms    1.22x    274.2 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=1    0.6143 ms    1.21x    273.1 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=2    0.6867 ms    1.09x    244.3 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=2    0.5544 ms    1.35x    302.6 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=2    0.5530 ms    1.35x    303.4 GB/s(no-reuse)  bytediff=0 
+  [control] one ulp on kv row 5 -> 1 of 65536 floats differ (gate can fail: good)
+
+=== m=6  topk=640 (max verify width)   (blocks at hpb: 384/192/96/48 on 20 SMs) ===
+  hpb=1 smem=0    0.8181 ms    1.00x    615.2 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=0    0.8218 ms    1.00x    612.5 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=0    0.8217 ms    1.00x    612.5 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=0    1.5831 ms    0.52x    317.9 GB/s(no-reuse)  bytediff=0 
+  hpb=1 smem=1    0.8181 ms    1.00x    615.2 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=1    0.9129 ms    0.90x    551.3 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=1    0.7343 ms    1.11x    685.5 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=1    0.8255 ms    0.99x    609.7 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=2    0.8265 ms    0.99x    609.0 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=2    0.7192 ms    1.14x    699.8 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=2    1.1586 ms    0.71x    434.4 GB/s(no-reuse)  bytediff=0 
+  [control] one ulp on kv row 5 -> 67 of 196608 floats differ (gate can fail: good)
+
+=== m=2  topk=320 (ctx 768, pre-knee)   (blocks at hpb: 128/64/32/16 on 20 SMs) ===
+  hpb=1 smem=0    0.3749 ms    1.00x    223.8 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=0    0.3816 ms    0.98x    219.8 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=0    0.3812 ms    0.98x    220.1 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=0    0.3890 ms    0.96x    215.7 GB/s(no-reuse)  bytediff=0 
+  hpb=1 smem=1    0.3748 ms    1.00x    223.8 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=1    0.3923 ms    0.96x    213.8 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=1    0.3094 ms    1.21x    271.1 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=1    0.3098 ms    1.21x    270.8 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=2    0.3477 ms    1.08x    241.3 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=2    0.2805 ms    1.34x    299.1 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=2    0.2788 ms    1.34x    300.9 GB/s(no-reuse)  bytediff=0 
+  [control] one ulp on kv row 5 -> 16 of 65536 floats differ (gate can fail: good)
+
+=== m=1022 topk=1277 (1022-tok prefill)   (blocks at hpb: 65408/32704/16352/8176 on 20 SMs) ===
+  hpb=1 smem=0  263.3513 ms    1.00x    649.6 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=0  263.5955 ms    1.00x    649.0 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=0  264.3833 ms    1.00x    647.0 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=0  328.6194 ms    0.80x    520.5 GB/s(no-reuse)  bytediff=0 
+  hpb=1 smem=1  263.2521 ms    1.00x    649.8 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=1  254.9550 ms    1.03x    670.9 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=1  205.1221 ms    1.28x    833.9 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=1  210.4224 ms    1.25x    812.9 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=2  257.8250 ms    1.02x    663.5 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=2  220.3818 ms    1.19x    776.2 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=2  259.9517 ms    1.01x    658.1 GB/s(no-reuse)  bytediff=0 
+  [control] one ulp on kv row 5 -> 10507 of 33488896 floats differ (gate can fail: good)
+
+=== m=256  topk=320  (short prefill)   (blocks at hpb: 16384/8192/4096/2048 on 20 SMs) ===
+  hpb=1 smem=0   15.7796 ms    1.00x    680.5 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=0   15.7706 ms    1.00x    680.9 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=0   15.8325 ms    1.00x    678.2 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=0   20.4564 ms    0.77x    524.9 GB/s(no-reuse)  bytediff=0 
+  hpb=1 smem=1   15.7468 ms    1.00x    681.9 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=1   16.0218 ms    0.98x    670.2 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=1   13.0354 ms    1.21x    823.7 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=1   13.3667 ms    1.18x    803.3 GB/s(no-reuse)  bytediff=0 
+  hpb=2 smem=2   16.3309 ms    0.97x    657.5 GB/s(no-reuse)  bytediff=0 
+  hpb=4 smem=2   13.8557 ms    1.14x    774.9 GB/s(no-reuse)  bytediff=0 
+  hpb=8 smem=2   16.4147 ms    0.96x    654.1 GB/s(no-reuse)  bytediff=0 
+  [control] one ulp on kv row 5 -> 2697 of 8388608 floats differ (gate can fail: good)
+
+GATE SPARSE_HPB: PASS  (bit-exactness failures 0, blind-control failures 0)

@@ -1,0 +1,2 @@
+[igraph] captured compressed_decode_step_indexer_dp OK
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
