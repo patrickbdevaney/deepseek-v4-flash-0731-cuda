@@ -246,6 +246,60 @@ ladder opened on.
 floor. Term A had been untouched through six ladder items and is much the larger distance from its
 floor; this is the first thing to move it. [`kernel-optimisations.md` §2.9](kernel-optimisations.md).
 
+## Status — 1b.2 moved this term by a QUARTER, and paid for it in Term A (2026-08-20)
+
+The section above ends with "there is no longer a named, linear, kernel-shaped context item
+waiting." 1b.2 was not one — it is a **storage** change, ranked for capacity, and
+`KV_PRECISION_FINDINGS.md` §4 explicitly told it not to expect a throughput result. It produced the
+largest single move in `b` since 1.0 anyway, and the shape of the result is the finding.
+
+**Packing the main KV cache** (2048 → 720 B per row, FP8 E4M3 + 7 x UE8M0 + FP32 RoPE, bit-exact,
+`DSV4_KV_PACK=1`) measured over 16 legs, both arms in one session on one build, every leg
+byte-identical with `tau` and mean verify width equal on every one:
+
+```
+ctx      before -> after   delta   tok/s before -> after
+ 1,656   130.27  132.45    +2.18    14.27 -> 14.04
+ 3,197   132.77  134.74    +1.97    12.44 -> 12.26
+ 6,248   137.07  137.18    +0.10    12.23 -> 12.22
+ 6,260   134.16  134.17    +0.01    12.13 -> 12.12
+12,410   142.27  139.31    -2.97    12.09 -> 12.34
+```
+
+Regressed on context, the delta is **+3.233 ± 0.203 ms per forward, −0.4996 ± 0.0290 per 1000
+context, R² 0.990** (2 SE bands `[+2.83, +3.64]` and `[−0.558, −0.442]`; both exclude zero). Read
+off the independent per-arm fits with the width term controlled it is `b` **0.924 → 0.381** and `a`
+**82.83 → 85.74**, which is the same answer by a different route.
+
+**So `b` falls 1.887 → 1.387 (−26 %, `b × 6592` 12.44 → 9.15) and `a` rises 125.11 → 128.34
+(+2.6 %). Break-even is ctx 6,471.** Above it packing is a throughput win — +2.1 % tok/s at 12,410 —
+and below it a loss.
+
+**Why a byte reduction moved the CONTEXT term and not the flat one, which is the whole mechanism.**
+The flat cost is instructions: `sparse_attn` unpacks each gathered row, and 1.7 established that
+kernel is issue-bound, so more instructions cost time regardless of context
+([`negative-results.md` §4i](negative-results.md) has the microbenchmark — the packed reader is
+0.78-0.87x of the FP32 reader at every shape). The context-dependent saving is bytes: the gathered
+working set is `topk` rows and `topk` grows with context until it saturates, so what packing shrinks
+is precisely the part of the traffic that scales. That is
+`KV_PRECISION_FINDINGS.md` §4's L2-residency hypothesis — *"packing the whole context-dependent
+working set to 16.2 MB brings it inside Thor's 24 MB persistable L2 window. Hypothesis, not
+measurement"* — now measured, and it lands on the term the hypothesis named.
+
+**The Term-A half is a tuning cost, not a floor, and 1b.2 already bought 1.77 ms of it back.** The
+first staging loop read a `uint4` per thread (16 codes), which minimises the load count and starves
+the block: 28 of 128 threads working. Four codes per thread took the paired flat cost from
+**+4.998 ± 0.374 to +3.233 ± 0.203** while leaving the slope alone (**−0.4653 ± 0.0534 →
+−0.4996 ± 0.0290**, overlapping) — a clean separation, because the fix touched issue and not bytes.
+Whatever is left of the +3.23 is the same currency, and it is what would move the break-even below
+the operating context.
+
+**Shipped default OFF.** The trade is real in both directions and where it lands depends on the
+operating context, which is an operator decision and is recorded here rather than made silently. The
+one place it is unambiguous is capacity: `EVALS.md` records `seqmax` as *the* binding constraint on
+which eval items can run at all, and packing is 2.844x on every KV allocation with zero accuracy
+exposure.
+
 ## What is left of the term
 
 Slopes below are 0.4's, fit over ctx 3k–12k. The `now` column is 1.3's re-attribution, 220 verify

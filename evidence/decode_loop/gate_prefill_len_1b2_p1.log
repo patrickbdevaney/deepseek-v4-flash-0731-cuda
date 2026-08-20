@@ -1,0 +1,43 @@
+[prefill_len off=0] reference s=20 (T4=5, T128=0)
+  s= 1 T4=0 PASS
+  s= 2 T4=0 PASS
+  s= 3 T4=0 PASS
+  s= 4 T4=1 PASS
+  s= 5 T4=1 PASS
+  s= 6 T4=1 PASS
+  s= 7 T4=1 PASS
+  s= 8 T4=2 PASS
+  s= 9 T4=2 PASS
+  s=10 T4=2 PASS
+  s=11 T4=2 PASS
+  s=12 T4=3 PASS
+  s=13 T4=3 PASS
+  s=14 T4=3 PASS
+  s=15 T4=3 PASS
+  s=16 T4=4 PASS
+  s=17 T4=4 PASS
+  s=18 T4=4 PASS
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len off=4] reference s=20 (T4=5, T128=0)
+  s= 1 T4=0 PASS
+  s= 2 T4=0 PASS
+  s= 3 T4=0 PASS
+  s= 4 T4=1 PASS
+  s= 5 T4=1 PASS
+  s= 6 T4=1 PASS
+  s= 7 T4=1 PASS
+  s= 8 T4=2 PASS
+  s= 9 T4=2 PASS
+  s=10 T4=2 PASS
+  s=11 T4=2 PASS
+  s=12 T4=3 PASS
+  s=13 T4=3 PASS
+  s=14 T4=3 PASS
+  s=15 T4=3 PASS
+  s=16 T4=4 PASS
+  s=17 T4=4 PASS
+  s=18 T4=4 PASS
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)

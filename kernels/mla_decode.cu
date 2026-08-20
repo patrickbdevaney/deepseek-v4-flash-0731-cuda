@@ -3,6 +3,7 @@
 #include "dprof.h"
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"
+#include "kv_pack.h"
 #include "deepseek_v4.h"
 #include "dscratch.h"
 #include <vector>
@@ -27,11 +28,12 @@ void mla_cache_kv(float* kvcache, const float* x, const MLAWeights& w, int s, cu
     uint8_t* xq; float* xs;
     xq=(decltype(xq))dmalloc((size_t)s*DIM); xs=(decltype(xs))dmalloc((size_t)s*(DIM/128)*4);
     act_quant_fp8(xq, xs, x, s, DIM, 128, stream);
-    fp8_block_gemm(kvcache, xq, xs, w.wkv, w.wkv_s, s, HEAD_DIM, DIM, stream);
-    rmsnorm(kvcache, kvcache, w.kv_norm, s, HEAD_DIM, EPS, true, stream);
-    rope_interleaved(kvcache + NOPE_DIM, w.cosT, w.sinT, s, ROPE_DIM, false, HEAD_DIM, 1, stream);   // 1 cos row per token
-    act_quant_fp8sim(kvcache, s, NOPE_DIM, 64, HEAD_DIM, stream);
-    dsync(stream); dfree(xq); dfree(xs);
+    float* kvst = kv_stage(kvcache, s);          // == kvcache when the cache is FP32 (1b.2)
+    fp8_block_gemm(kvst, xq, xs, w.wkv, w.wkv_s, s, HEAD_DIM, DIM, stream);
+    rmsnorm(kvst, kvst, w.kv_norm, s, HEAD_DIM, EPS, true, stream);
+    rope_interleaved(kvst + NOPE_DIM, w.cosT, w.sinT, s, ROPE_DIM, false, HEAD_DIM, 1, stream);   // 1 cos row per token
+    kv_commit(kvcache, kvst, s, stream);
+    dsync(stream); kv_stage_free(kvst, kvcache); dfree(xq); dfree(xs);
 }
 
 // ---- decode step: one token at position `pos` ----
@@ -58,17 +60,18 @@ void mla_decode_step(float* out, const float* x, const MLAWeights& w, float* kvc
     rope_interleaved(q + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream);  // all heads share pos row
 
     // 3. new token's KV -> append to cache[pos]
-    float* kvn = kvcache + (size_t)pos*HEAD_DIM;
+    float* kvrow = kv_row(kvcache, pos);
+    float* kvn = kv_stage(kvrow, 1);
     fp8_block_gemm(kvn, xq, xs, w.wkv, w.wkv_s, 1, HEAD_DIM, DIM, stream);
     rmsnorm(kvn, kvn, w.kv_norm, 1, HEAD_DIM, EPS, true, stream);
     rope_interleaved(kvn + NOPE_DIM, cosP, sinP, 1, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(kvn, 1, NOPE_DIM, 64, HEAD_DIM, stream);
+    kv_commit(kvrow, kvn, 1, stream); kv_stage_free(kvn, kvrow);
 
     // 4. sparse attention over the sliding window [base..pos]
     int base = pos - WINDOW + 1; if(base < 0) base = 0; int width = pos + 1 - base;
     int* didx; didx=(decltype(didx))dmalloc( width*4);
     k_win_idx<<<(width+63)/64,64,0,stream>>>(didx, base, width);
-    sparse_attn(o, q, kvcache, w.attn_sink, didx, 1, 1, N_HEADS, HEAD_DIM, pos+1, width, scale, stream);
+    sparse_attn_kv(o, q, kvcache, w.attn_sink, didx, 1, 1, N_HEADS, HEAD_DIM, pos+1, width, scale, stream);
 
     // 5. de-rotate o, grouped o-LoRA, wo_b
     rope_interleaved(o + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
@@ -105,18 +108,19 @@ void mla_verify_step(float* out, const float* x, const MLAWeights& w, float* kvc
     dprof_end(DP_A_QPROJ,stream);
     // new tokens' KV -> cache[pos..pos+K-1]
     dprof_begin(DP_A_KV,stream);
-    float* kvn = kvcache + (size_t)pos*HEAD_DIM;
+    float* kvrow = kv_row(kvcache, pos);
+    float* kvn = kv_stage(kvrow, K);
     fp8_block_gemm(kvn, xq, xs, w.wkv, w.wkv_s, K, HEAD_DIM, DIM, stream);
     rmsnorm(kvn, kvn, w.kv_norm, K, HEAD_DIM, EPS, true, stream);
     rope_interleaved(kvn + NOPE_DIM, cosP, sinP, K, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(kvn, K, NOPE_DIM, 64, HEAD_DIM, stream);
+    kv_commit(kvrow, kvn, K, stream); kv_stage_free(kvn, kvrow);
     dprof_end(DP_A_KV,stream);
     // per-query window idxs
     dprof_begin(DP_A_SPARSE,stream);
     int ncache = pos + K; int topk = (ncache < WINDOW) ? ncache : WINDOW;
     int* didx; didx=(int*)dmalloc((size_t)K*topk*4);
     k_verify_win_idx<<<((size_t)K*topk+63)/64,64,0,stream>>>(didx, pos, K, topk);
-    sparse_attn(o, q, kvcache, w.attn_sink, didx, 1, K, N_HEADS, HEAD_DIM, ncache, topk, scale, stream);
+    sparse_attn_kv(o, q, kvcache, w.attn_sink, didx, 1, K, N_HEADS, HEAD_DIM, ncache, topk, scale, stream);
     dprof_end(DP_A_SPARSE,stream);
     dprof_begin(DP_A_OGROUP,stream);
     rope_interleaved(o + NOPE_DIM, cosP, sinP, K*N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
@@ -154,10 +158,14 @@ void mla_decode_step_dp(float* out, const float* x, const MLAWeights& w, float* 
     // new KV -> scratch -> append at *d_pos
     fp8_block_gemm(kvs,xq,xs,w.wkv,w.wkv_s,1,HEAD_DIM,DIM,stream); rmsnorm(kvs,kvs,w.kv_norm,1,HEAD_DIM,EPS,true,stream);
     rope_interleaved_dp(kvs+NOPE_DIM,w.cosT,w.sinT,1,ROPE_DIM,false,HEAD_DIM,1,d_pos,stream);
-    act_quant_fp8sim(kvs,1,NOPE_DIM,64,HEAD_DIM,stream);
-    k_append_at<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvcache,kvs,d_pos,HEAD_DIM);
+    // 1b.2: on the packed path the quantise and the append are ONE kernel -- kv_store_at computes
+    // the identical amax/scale/e4m3 code act_quant_fp8sim would have and stores the code, so the
+    // separate act_quant would be a no-op re-quantisation of its own output.
+    if (g_kv_pack) kv_store_at(kvcache, kvs, d_pos, stream);
+    else { act_quant_fp8sim(kvs,1,NOPE_DIM,64,HEAD_DIM,stream);
+           k_append_at<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvcache,kvs,d_pos,HEAD_DIM); }
     k_win_idx_dp<<<(WINDOW+63)/64,64,0,stream>>>(didx,d_pos);
-    sparse_attn(o,q,kvcache,w.attn_sink,didx,1,1,N_HEADS,HEAD_DIM,nkv,WINDOW,scale,stream);
+    sparse_attn_kv(o,q,kvcache,w.attn_sink,didx,1,1,N_HEADS,HEAD_DIM,nkv,WINDOW,scale,stream);
     rope_interleaved_dp(o+NOPE_DIM,w.cosT,w.sinT,N_HEADS,ROPE_DIM,true,HEAD_DIM,N_HEADS,d_pos,stream);
     if(w.wo_a_native) ogroup_gemm_fp8(og,o,w.wo_a_fp8,w.wo_a_sc,1,O_GROUPS,O_LORA,GKd,stream);
     else              ogroup_gemm    (og,o,w.wo_a,               1,O_GROUPS,O_LORA,GKd,stream);

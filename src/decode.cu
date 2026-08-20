@@ -35,6 +35,7 @@
 #define CU_V(x) do{ cudaError_t e_=(x); if(e_){ fprintf(stderr,"cuda %s @%d\n",cudaGetErrorString(e_),__LINE__); abort(); } }while(0)
 #include "dspark_real.h"   // DSpark head: main_x, tap_pool, forward_head, markov
 #include "dspark_attn.h"   // dspark_main_kv, dspark_block_forward
+#include "kv_pack.h"       // DECODE_LADDER 1b.2 packed KV storage
 #include "yarn.h"
 #include <cuda_fp8.h>
 #include <cuda_bf16.h>
@@ -242,12 +243,18 @@ int main(int argc, char** argv){
     const float *cc4c=up_f(stride_rows(cqc_h,seqmax,half,4),keep), *cc4s=up_f(stride_rows(cqs_h,seqmax,half,4),keep);
     const float *cc128c=up_f(stride_rows(cqc_h,seqmax,half,128),keep), *cc128s=up_f(stride_rows(cqs_h,seqmax,half,128),keep);
 
+    // DECODE_LADDER 1b.2. Must run BEFORE the first KV allocation: it sets the row stride every
+    // allocation, memcpy and kernel below reads out of `g_kv_rowf`. See include/kv_pack.h.
+    kv_pack_init();
+    printf("[decode] KV layout: %s, %d B/row, %.3f GiB for %d rows x %d layers\n",
+           g_kv_pack ? "PACKED fp8+ue8m0 (1b.2)" : "fp32",
+           g_kv_rowf*4, (double)kv_rows_bytes((size_t)seqmax*N_LAYERS)/1073741824.0, seqmax, N_LAYERS);
     // per-layer KV caches
     std::vector<LayerKV> KV(N_LAYERS);
     for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ int ratio=compress_ratio(Lyr);
-        CU(cudaMalloc(&KV[Lyr].win_kv,(size_t)seqmax*HEAD_DIM*4));
+        CU(cudaMalloc(&KV[Lyr].win_kv,kv_rows_bytes(seqmax)));
         if(ratio){ CU(cudaMalloc(&KV[Lyr].xin,(size_t)seqmax*DIM*4));
-            CU(cudaMalloc(&KV[Lyr].comp_kv,(size_t)(seqmax/ratio+2)*HEAD_DIM*4));
+            CU(cudaMalloc(&KV[Lyr].comp_kv,kv_rows_bytes(seqmax/ratio+2)));
             if(ratio==4) CU(cudaMalloc(&KV[Lyr].idx_ckv,(size_t)(seqmax/ratio+2)*INDEX_HEAD_DIM*4)); }
     }
     int* d_ids; CU(cudaMalloc(&d_ids,seqmax*4));
@@ -440,7 +447,7 @@ int main(int argc, char** argv){
         const int winmax=seqmax, Tmax=seqmax/4+2;
         int *d_pos,*d_g,*d_curid; CU(cudaMalloc(&d_pos,4)); CU(cudaMalloc(&d_g,4)); CU(cudaMalloc(&d_curid,4));
         for(int L=0;L<N_LAYERS;++L){ int ratio=compress_ratio(L); if(!ratio) continue;
-            CU(cudaMalloc(&KV[L].kvc,(size_t)(winmax+Tmax)*HEAD_DIM*4)); CU(cudaMalloc(&KV[L].d_T,4));
+            CU(cudaMalloc(&KV[L].kvc,kv_rows_bytes((size_t)winmax+Tmax))); CU(cudaMalloc(&KV[L].d_T,4));
             if(ratio==4) CU(cudaMalloc(&KV[L].idx_kvc,(size_t)Tmax*INDEX_HEAD_DIM*4)); }
         // dp prefill: reset + re-run normal prefill, then copy separate caches -> combined kvc/idx_kvc + device d_T
         for(int L=0;L<N_LAYERS;++L) KV[L].T=0;
@@ -448,8 +455,8 @@ int main(int argc, char** argv){
         k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PS); std::swap(h,h2); }
         for(int L=0;L<N_LAYERS;++L){ int ratio=compress_ratio(L); if(!ratio) continue;
-            CU(cudaMemcpy(KV[L].kvc,KV[L].win_kv,(size_t)PS*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
-            CU(cudaMemcpy(KV[L].kvc+(size_t)winmax*HEAD_DIM,KV[L].comp_kv,(size_t)KV[L].T*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
+            CU(cudaMemcpy(KV[L].kvc,KV[L].win_kv,kv_rows_bytes(PS),cudaMemcpyDeviceToDevice));
+            CU(cudaMemcpy(kv_row(KV[L].kvc,winmax),KV[L].comp_kv,kv_rows_bytes(KV[L].T),cudaMemcpyDeviceToDevice));
             if(ratio==4) CU(cudaMemcpy(KV[L].idx_kvc,KV[L].idx_ckv,(size_t)KV[L].T*INDEX_HEAD_DIM*4,cudaMemcpyDeviceToDevice));
             CU(cudaMemcpy(KV[L].d_T,&KV[L].T,4,cudaMemcpyHostToDevice)); }
         // build + capture the 43-layer step (input hd, device-pos)
@@ -467,8 +474,8 @@ int main(int argc, char** argv){
         k_embed<<<((size_t)PS*d+255)/256,256>>>(h0,(const __nv_bfloat16*)W.get("embed.weight").dev,d_ids,PS,d); k_hc_expand<<<((size_t)PS*hc*d+255)/256,256>>>(h,h0,PS,hc,d); CU(cudaDeviceSynchronize());
         for(int Lyr=0; Lyr<N_LAYERS; ++Lyr){ arena_reset(); run_layer(Lyr,true,0,h,h2,d_ids,PS); std::swap(h,h2); }
         for(int L=0;L<N_LAYERS;++L){ int ratio=compress_ratio(L); if(!ratio) continue;
-            CU(cudaMemcpy(KV[L].kvc,KV[L].win_kv,(size_t)PS*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
-            CU(cudaMemcpy(KV[L].kvc+(size_t)winmax*HEAD_DIM,KV[L].comp_kv,(size_t)KV[L].T*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
+            CU(cudaMemcpy(KV[L].kvc,KV[L].win_kv,kv_rows_bytes(PS),cudaMemcpyDeviceToDevice));
+            CU(cudaMemcpy(kv_row(KV[L].kvc,winmax),KV[L].comp_kv,kv_rows_bytes(KV[L].T),cudaMemcpyDeviceToDevice));
             if(ratio==4) CU(cudaMemcpy(KV[L].idx_kvc,KV[L].idx_ckv,(size_t)KV[L].T*INDEX_HEAD_DIM*4,cudaMemcpyDeviceToDevice));
             CU(cudaMemcpy(KV[L].d_T,&KV[L].T,4,cudaMemcpyHostToDevice)); }
         arena_reset(); float* fbuf; CU(cudaStreamBeginCapture(cap,cudaStreamCaptureModeThreadLocal)); fbuf=build_step(cap);
@@ -716,7 +723,7 @@ int main(int argc, char** argv){
             std::string sp2=fp+"shared_experts."; m.sw1=LH.raw(sp2+"w1.weight");m.sw2=LH.raw(sp2+"w2.weight");m.sw3=LH.raw(sp2+"w3.weight");
             m.sw1s=LH.scale(sp2+"w1.scale");m.sw2s=LH.scale(sp2+"w2.scale");m.sw3s=LH.scale(sp2+"w3.scale");
             m.n_routed=NE;m.n_act=N_ACT;m.dim=DIM;m.inter=MOE_INTER;m.vocab=VOCAB;m.route_scale=ROUTE_SCALE;m.swiglu_limit=SWIGLU_LIMIT;
-            m.use_tc_pp=true;m.batched=true;m.device_route=true; CU(cudaMalloc(&mkv[st],(size_t)seqmax*HEAD_DIM*4));
+            m.use_tc_pp=true;m.batched=true;m.device_route=true; CU(cudaMalloc(&mkv[st],kv_rows_bytes(seqmax)));
         }
         std::string LS="mtp."+std::to_string(NSTAGE-1)+".";
         const float* hh_fn=LH.f32(LS+"hc_head_fn");const float* hh_sc=LH.f32(LS+"hc_head_scale");const float* hh_ba=LH.f32(LS+"hc_head_base");
@@ -825,9 +832,9 @@ int main(int argc, char** argv){
         // 8/8 distinct margin vectors to 5/8, so it is part of it. This covers the rest.
         if(getenv("DSV4_ZERO_CACHES")){
             for(int L=0;L<N_LAYERS;++L){ int r=compress_ratio(L);
-                if(KV[L].win_kv) CU(cudaMemset(KV[L].win_kv,0,(size_t)seqmax*HEAD_DIM*4));
+                if(KV[L].win_kv) CU(cudaMemset(KV[L].win_kv,0,kv_rows_bytes(seqmax)));
                 if(KV[L].xin)    CU(cudaMemset(KV[L].xin,0,(size_t)seqmax*DIM*4));
-                if(r && KV[L].comp_kv) CU(cudaMemset(KV[L].comp_kv,0,(size_t)(seqmax/r+2)*HEAD_DIM*4));
+                if(r && KV[L].comp_kv) CU(cudaMemset(KV[L].comp_kv,0,kv_rows_bytes(seqmax/r+2)));
                 if(r==4 && KV[L].idx_ckv) CU(cudaMemset(KV[L].idx_ckv,0,(size_t)(seqmax/r+2)*INDEX_HEAD_DIM*4)); }
             CU(cudaMemset(main_x,0,(size_t)seqmax*d*4));
             CU(cudaMemset(mh_pre,0,(size_t)(SMAX-1)*3*d*4));
@@ -1214,7 +1221,7 @@ int main(int argc, char** argv){
             // LADDER 1.9. The draft's two persistent inputs, hashed BEFORE the draft reads them.
             unsigned long long sh_mkv=0, sh_mx=0, sh_din=0;
             if(stephash_lvl>=2){ CU(cudaDeviceSynchronize());
-                sh_mkv = dhash(mkv[0], (size_t)ctx*HEAD_DIM);
+                sh_mkv = dhash(mkv[0], (size_t)ctx*(size_t)g_kv_rowf);
                 sh_mx  = dhash(main_x, (size_t)ctx*d); }
             if(specprof) cudaEventRecord(p1);
             // DRAFT: block [cur, noise x (BLK-1)].

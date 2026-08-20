@@ -11,7 +11,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation, **and §8: how a promoted head finally got served (2.2)** |
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
-| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, and **1.7, the item that moved Term A instead** |
+| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, **1.7, the item that moved Term A instead**, and **1b.2, which moves `b` another 26 % and charges Term A for it** |
 | [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
 | [`hardware-sm110a.md` §5](hardware-sm110a.md) | operating rules, **including what the clocks actually do under load (3.1) — the governed box already runs at the pinned frequencies 97.7 % of the time** |
 | [`oom-and-memory-safety.md`](oom-and-memory-safety.md) | why the OOM killer never fires here (unified memory is invisible to the cgroup), and the two guards that replace it |
@@ -58,6 +58,19 @@ hardcoded the base checkpoint. [`kernel-optimisations.md` §2.8](kernel-optimisa
 | spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | not swept | the pre-knee leg |
 | **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | 1.571× → **1.522×** its 82.18 ms floor |
 | context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | *untouched* (the swing is flat in context) | **−74 % cumulative** |
+
+| the one switchable row — `DSV4_KV_PACK` (1b.2, default **OFF**) | default | packed | |
+|---|---|---|---|
+| KV cache row | 2048 B | **720 B** | **2.844×**, bit-exact; 16/16 legs byte-identical, `tau` equal on every leg |
+| forward term `a` | 125.11 ms | 128.34 ms | **+3.233 ± 0.203 paired** — `sparse_attn` unpacks each gathered row and that kernel is issue-bound |
+| context term `b` | 1.887 ms/1000 | **1.387 ms/1000** | **−0.4996 ± 0.0290 paired**, R² 0.990 — the L2-residency effect `KV_PRECISION_FINDINGS` §4 predicted |
+| net | — | — | **break-even at ctx 6,471**; +2.1 % tok/s at 12,410, −1.4 % at 3,197 |
+
+> **1b.2 is the first row here that is a TRADE rather than a win, and it is off by default for that
+> reason.** It is also the answer to "does packing the KV cache make decode faster": below ctx 6.5k,
+> no — a 2.84× byte reduction made the reader kernel *slower at every shape*
+> (0.78–0.90×), because bytes are not what it is short of.
+> [`negative-results.md` §4i](negative-results.md), [`context-scaling.md`](context-scaling.md).
 
 **1.7 is the first item on this ladder to move Term A, and it is the term with the headroom.** `b ×
 6592` is now 12.44 ms against a stop condition of 5.0; `a` is 125.11 against a byte floor of 82.18

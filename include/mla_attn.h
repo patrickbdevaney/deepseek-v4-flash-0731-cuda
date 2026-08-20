@@ -19,9 +19,18 @@ void sparse_attn(float* o, const float* q, const float* kv, const float* attn_si
 //          shared memory ONCE per t, with float4 loads and double buffering, and each warp reads its
 //          lanes back out in the ORIGINAL lane mapping. Bit-exact with smem=0 by construction: the
 //          per-lane partial sums, the 5-step shuffle tree and the online-softmax order are untouched.
+//   packed = the KV cache is in the 720 B FP8+UE8M0 layout of include/kv_pack.h (DECODE_LADDER
+//          1b.2). Changes only how the block STAGES a gathered row; the lane mapping, the shuffle
+//          tree and the online-softmax order are the same source lines, so it is bit-exact by
+//          construction and `gate_kv_pack` proves it by memcmp against the FP32 launch.
 void sparse_attn_launch(float* o, const float* q, const float* kv, const float* attn_sink,
                         const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
-                        float scale, cudaStream_t stream, int hpb, int smem);
+                        float scale, cudaStream_t stream, int hpb, int smem, bool packed = false);
+
+// KV-CACHE entry point: `sparse_attn` with the layout taken from `g_kv_pack` (see include/kv_pack.h).
+void sparse_attn_kv(float* o, const float* q, const float* kv, const float* attn_sink,
+                    const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
+                    float scale, cudaStream_t stream = 0);
 
 // In-place interleaved-pair RoPE on the rope_dim slice of each of `rows` rows. inverse => conj.
 // row_stride: element stride between consecutive rows in x (default rope_dim = contiguous). Pass x already

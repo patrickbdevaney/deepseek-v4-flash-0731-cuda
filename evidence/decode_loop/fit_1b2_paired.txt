@@ -1,0 +1,12 @@
+corpus sha256: before ['79ac6563f97e53e5', 'ac10134c87e3d0fe']  after ['79ac6563f97e53e5', 'ac10134c87e3d0fe']
+
+token identity: 16/16 legs proven byte-identical, 0 differ, 0 unproven (no hash on record)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+control     6144  2   6248    137.07    137.18    +0.10   0.999x   1.681   1.681   2.78   2.78    12.23    12.22
+control     1536  2   1656    130.27    132.45    +2.18   0.984x   1.861   1.861   2.79   2.79    14.27    14.04
+sweep      12288  4  12410    142.27    139.31    -2.97   1.021x   1.736   1.736   2.80   2.80    12.09    12.34
+sweep       6144  4   6260    134.16    134.17    +0.01   1.000x   1.620   1.620   2.66   2.66    12.13    12.12
+sweep       3072  4   3197    132.77    134.74    +1.97   0.985x   1.652   1.652   2.73   2.73    12.44    12.26
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.

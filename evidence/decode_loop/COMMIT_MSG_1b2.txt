@@ -1,0 +1,84 @@
+1b.2: the KV cache packs 2048 -> 720 B per row bit-exactly, and it buys the context term at the flat term's expense -- +3.233 +/- 0.203 ms/forward against -0.4996 +/- 0.0290 per 1000 ctx, break-even at ctx 6,471
+
+WHAT SHIPPED. include/kv_pack.h and DSV4_KV_PACK=1. The main KV cache already stored values that sit
+exactly on the E4M3 grid with an exact power-of-two scale, and then kept them in FP32 -- 8 bits of
+information in 32 bits per element. Now it stores what was computed: 448 E4M3 bytes + 7 UE8M0 scale
+bytes + the 64 RoPE dims still FP32 = 711 B of payload in a 720 B stride, 2.844x. 720 is the
+smallest 16 B-aligned stride, which is what lets sparse_attn gather a row with vector loads, and it
+is divisible by 4, so a cache row stays `base + row * g_kv_rowf` FLOATS in both layouts -- the one
+decision that kept this to a stride substitution at ~30 call sites instead of a retyping of every
+cache pointer in the engine. The producer seam is kv_stage/kv_commit, and in the FP32 arm kv_stage
+returns the cache row itself while kv_commit IS the act_quant_fp8sim call that was already there:
+the before-arm is unchanged CODE, not merely unchanged behaviour.
+
+BIT-EXACT, PROVEN FOUR WAYS AND THEN BY THE ENGINE. Packing keeps the e4m3 byte and the exponent
+byte; unpacking replays the same two conversions and the same multiply the write path performed. So
+the acceptance test is memcmp, and required n is zero at a flip rate of zero.
+  * gate_kv_pack -- round trip vs act_quant_fp8sim on 524,288 floats x 5 distributions x {raw,
+    re-quantised}, 0 mismatches; reader vs FP32 reader at 11 (hpb,smem) launches x 5 engine shapes,
+    0 differing bytes. Two negative controls (code byte, scale byte) both fail as they must.
+  * gate_kv_pack_e2e -- the WIRING, which the first gate says nothing about: the real
+    compressed_attn_cache[_r4] / decode_step_{strided,indexer} / verify_step_* functions, once per
+    layout, 0 of 114,688 floats differ, and again with --swap on the arm order.
+  * gate_compressed_graph / gate_indexer_graph now call kv_pack_init() and PRINT the layout, which
+    is what turns them into a real test of kv_store_at/kv_store_comp -- the device-pos store kernels
+    nothing else exercises. PASS, maxabs 0.00e+00, both layouts.
+  * Engine: identical generated ids on both build/decode arms, tau 2.87 on all six replicates,
+    LOSSLESS x3 on both, and 16 of 16 server legs byte-identical with tau and mean verify width
+    equal on every leg.
+
+THE BAND, both arms in one session on one build, control arm first so drift flatters the OLD layout:
+  ctx      before -> after   paired   tok/s
+   1,656   130.27  132.45    +2.18    14.27 -> 14.04
+   3,197   132.77  134.74    +1.97    12.44 -> 12.26
+   6,248   137.07  137.18    +0.10    12.23 -> 12.22
+   6,260   134.16  134.17    +0.01    12.13 -> 12.12
+  12,410   142.27  139.31    -2.97    12.09 -> 12.34  (+2.1 %)
+Regressed on context: +3.233 +/- 0.203 flat, -0.4996 +/- 0.0290 per 1000, R^2 0.990, both 2 SE bands
+excluding zero. The independent per-arm fits with the width term controlled give b 0.924 -> 0.381
+and a 82.83 -> 85.74 -- the same answer by a different route. So b 1.887 -> 1.387 (b x 6592
+12.44 -> 9.15, -26 %) and a 125.11 -> 128.34 (+2.6 %). Break-even ctx 6,471.
+
+WHY A BYTE REDUCTION MOVED b AND COST a. KV_PRECISION_FINDINGS section 4 said in advance this is not
+a bandwidth-bound path, and half of that was right. The FLAT cost is instructions: sparse_attn
+unpacks every gathered row and 1.7 established that kernel is issue-bound. gate_kv_pack --bench
+prices it without a checkpoint -- the packed reader is 0.776x / 0.805x / 0.866x / 0.820x / 0.904x of
+the FP32 reader at the five engine shapes. A third fewer bytes, and the kernel got SLOWER at every
+one of them. The CONTEXT saving is bytes: the gathered set is topk rows and topk grows with context,
+so packing shrinks exactly the part that scales -- that section's own L2-residency hypothesis,
+labelled "hypothesis, not measurement", now measured and landing on the term it named.
+
+THE FIRST IMPLEMENTATION WAS 55 % WORSE ON TERM A, AND THE FIX INVERTS AN INSTINCT. The staging loop
+read a uint4 -- 16 codes per thread, only 28 vector loads for 448 codes, the better number by every
+roofline metric. The block is 128 threads at hpb=4, so 28 threads did sixteen unpacks each while 100
+waited, on the double-buffered prefetch's critical path: 0.699x on the bench, +4.998 +/- 0.374
+ms/forward in the engine (that arm is kept at fit_1b2_*_v1*). Four codes per thread -- FOUR TIMES
+the load instructions -- took it to +3.233 +/- 0.203 while leaving the slope alone
+(-0.4653 +/- 0.0534 -> -0.4996 +/- 0.0290, overlapping). A clean separation: the fix touched issue,
+not bytes. The (hpb,smem) retune was then checked rather than assumed and is a NULL -- the packed
+optimum is the same hpb=4/smem=2 launch 1.7 chose for FP32.
+
+DEFAULT OFF. a is 88 % of the forward and the ladder's binding term; this makes a worse to make b
+better, and the two cancel almost exactly at the ladder's own 6592 reference (net -0.06 ms). Where
+that trade lands depends on the operating context, so it is written down rather than decided
+silently: above ctx ~6.5k DSV4_KV_PACK=1 is a throughput win, below it a loss.
+
+AND THE ITEM'S OWN JUSTIFICATION WAS WRONG, SO IT IS CORRECTED RATHER THAN QUIETLY DROPPED.
+"Unlocks seqmax 32k-64k, which does not fit today" came from KV_PRECISION_FINDINGS section 3, which
+priced the KV cache in isolation and never checked the resident set. Both layouts load at seqmax
+32768 and serve a completion -- FP32 mem 115.3/122.8 GiB, packed 115.1. What packing buys is
+headroom and 65536, not 32768. And that mem line does NOT show the 2.08 GiB the arithmetic predicts
+between those arms, because cudaMalloc on this unified pool costs no physical page until it is
+TOUCHED: a capacity claim taken at load time measures the allocator, not the machine. The saving is
+claimed from the allocation arithmetic instead -- 2.844x on every KV allocation, 1.61 -> 0.57 GiB at
+seqmax 16384, 3.21 -> 1.13 at 32768, 6.43 -> 2.26 at 65536.
+
+ONE GAP, STATED. mla_decode_step_dp -- the sliding-layer device-pos path, 2 of 43 layers, reachable
+only through build/decode GRAPH=1 -- is wired but has no gate in EITHER layout, because none existed
+before this item either. The compressed device-pos paths, the other 41 layers, are covered.
+
+Wiki: kernel-optimisations.md section 3, negative-results.md 4i, context-scaling.md,
+measurement-and-traps.md 30 and 31, KV_PRECISION_FINDINGS.md section 3 correction, README state
+table.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

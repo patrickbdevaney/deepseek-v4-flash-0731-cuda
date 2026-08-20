@@ -876,3 +876,62 @@ arms across two separate checkpoint loads**, which is what says the arms are com
 What it saved: a 4.4 ms/step phantom deleted from the ladder's headroom, and a first price on the
 compressed-KV emit — **7.02 ms on the 64.9 % of forwards that carry one, 4.56 ms/forward amortised,
 52 % of its 880 MB byte roofline** — which nothing had ever timed.
+
+## 30. A two-arm gate sweep in which the arms were identical by construction (ladder 1b.2, 2026-08-20)
+
+1b.2's battery ran eight in-situ engine gates **twice**, once with `DSV4_KV_PACK=0` and once with
+`=1`, and reported sixteen passes. Fourteen of them were the same run twice.
+
+The switch is read by `kv_pack_init()`, and `kv_pack_init()` is called by exactly two translation
+units — `src/engine.cu` and `src/decode.cu`, i.e. the two binaries that own a KV allocation. A gate
+binary links `kernels/` and calls the decode functions directly; it never calls `kv_pack_init()`, so
+`g_kv_pack` stayed 0 no matter what the environment said. **The environment variable was set, the
+process read no environment variable, and the log printed `pack=1 ... PASS`.**
+
+Nothing was wrong with those gates and nothing they proved was false — they are a regression check on
+the FP32 path, which is worth having. What was false was the *shape* of the evidence: a table with
+two arms in it, where one arm did not exist. An A/B whose arms are set by a mechanism the binary
+under test does not participate in will report agreement forever.
+
+**The fix is the one that generalises: make the arm OBSERVABLE in the artefact.** The two graph
+gates now call `kv_pack_init()` and print `[graph-gate] KV layout: PACKED (1b.2), 720 B/row` before
+they run, so the log says which arm ran rather than which arm was requested — and with that in
+place they became a real test of the device-pos store kernels (`kv_store_at`, `kv_store_comp`),
+which nothing else exercises. `build/decode` prints the same line for the same reason, and it is how
+the engine A/B is known to have actually switched layouts:
+
+    [decode] KV layout: fp32, 2048 B/row, 0.007 GiB for 85 rows x 43 layers
+    [decode] KV layout: PACKED fp8+ue8m0 (1b.2), 720 B/row, 0.002 GiB for 85 rows x 43 layers
+
+Same lesson as §22's `tokens_per_verify` probe and 2.2's live proof: **prove which configuration is
+resident from a behaviour it changes, not from the flag you passed.**
+
+## 31. The resident-set line cannot price a cache that has not been touched (ladder 1b.2, 2026-08-20)
+
+1b.2's whole justification is capacity, so the natural instrument is the engine's own
+`[engine] ready. mem X/Y GiB` line, measured with the packed layout on and off at a fixed `seqmax`.
+The arithmetic says the two arms differ by **1.04 GiB at seqmax 16384 and 2.08 GiB at 32768** — 43
+window caches, 41 compressed caches and 3 draft main-KV caches, all at 2048 B/row against 720.
+
+Measured: **112.4 vs 112.0** at 16384 and **115.3 vs 115.1** at 32768. A fifth of the predicted
+difference, and in one case less.
+
+Nothing is wrong with the arithmetic and nothing is wrong with the line. They measure different
+things. `mem` is `cudaMemGetInfo` — physical pages — and on this unified pool a `cudaMalloc` costs
+no physical page until something WRITES to it. At `[engine] ready` the KV caches have been
+allocated and are empty; the first token of the first prompt is what starts faulting them in. **A
+capacity claim measured at load time measures the allocator's promises, not the machine's memory.**
+
+Two consequences, both of which apply beyond this item:
+
+1. **Price a cache from the allocation arithmetic, or from a resident set taken after the cache is
+   FULL** — not from the load-time line. The arithmetic here is exact and checkable at two lines of
+   `src/engine.cu`; filling a 32,768-row cache to measure the same number costs a 32k-token prefill.
+2. **The converse is the dangerous one: an OOM check at load time is not a safety margin.** A
+   `seqmax` that loads may still exhaust the pool once the context is actually used, and on this box
+   that failure is a whole-machine takedown with no oom-kill line
+   ([`oom-and-memory-safety.md`](oom-and-memory-safety.md)). "It came up" is evidence about the
+   loader, not about the run.
+
+The same distinction is why `EVALS.md`'s seqmax ceiling was ever a real constraint: it binds when
+the context is used, not when it is reserved.

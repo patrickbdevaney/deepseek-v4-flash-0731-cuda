@@ -470,6 +470,7 @@ void compressor_pool_overlap(float* pooled, const float* kv, const float* score,
 
 // ---------------- full Compressor forward ----------------
 #include "mla_attn.h"     // rmsnorm, rope_interleaved, act_quant_fp8sim/fp4sim
+#include "kv_pack.h"     // 1b.2 packed main-KV store
 #include "indexer.h"      // hadamard
 #include <cstdio>
 #define CU2(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
@@ -535,11 +536,20 @@ void compressor_emit_group(float* out_row, const float* x, int g, int ratio, con
     if(overlap) compressor_pool_overlap(pooled, kv, score, ape, localg+1, ratio, d, stream);
     else        compressor_pool(pooled, kv, score, ape, 1, ratio, d, stream);
     float* prow = pooled + (size_t)localg*d;                 // the target group's pooled row
-    rmsnorm(out_row, prow, norm_w, 1, d, eps, true, stream);
-    rope_interleaved(out_row + (d - rope_dim), cc_cos + (size_t)g*(rope_dim/2), cc_sin + (size_t)g*(rope_dim/2),
+    // 1b.2. `rotate` is the INDEXER compressor and its cache is 1b.1's format, untouched here. The
+    // non-rotate, d == HEAD_DIM case is the MAIN compressed-KV cache and nothing else: every caller
+    // of it in this engine passes a `comp_kv` row (kernels/compressed_decode.cu), and the one-shot
+    // prefill uses `compressor_forward` next door, not this function. So the pack switch is the
+    // global one and there is no second source of truth about which buffer this is.
+    const bool packed_out = (g_kv_pack && !rotate && d == (int)dsv4::HEAD_DIM);
+    float* dst = packed_out ? kv_stage(out_row, 1) : out_row;
+    rmsnorm(dst, prow, norm_w, 1, d, eps, true, stream);
+    rope_interleaved(dst + (d - rope_dim), cc_cos + (size_t)g*(rope_dim/2), cc_sin + (size_t)g*(rope_dim/2),
                      1, rope_dim, false, d, 1, stream);
-    if(rotate){ hadamard(out_row, out_row, 1, d, stream); act_quant_fp4sim(out_row, 1, d, 32, d, stream); }
-    else      { act_quant_fp8sim(out_row, 1, d - rope_dim, 64, d, stream); }
+    if(rotate){ hadamard(dst, dst, 1, d, stream); act_quant_fp4sim(dst, 1, d, 32, d, stream); }
+    else if(packed_out) { kv_commit(out_row, dst, 1, stream); }
+    else      { act_quant_fp8sim(dst, 1, d - rope_dim, 64, d, stream); }
     dsync(stream);
+    if(packed_out) kv_stage_free(dst, out_row);
     dfree(kv); dfree(score); dfree(pooled);
 }

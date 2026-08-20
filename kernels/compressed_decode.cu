@@ -25,6 +25,7 @@ int g_kv_winmax = 0;
 #include "indexer.h"
 #include "topk_radix.h"
 #include "deepseek_v4.h"
+#include "kv_pack.h"
 #include "dscratch.h"
 #include "dprof.h"
 #include <vector>
@@ -159,15 +160,16 @@ void compressed_attn_cache(float* win_kv, float* comp_kv, int* T, const float* x
     uint8_t* xq; float* xs;
     xq=(decltype(xq))dmalloc((size_t)s0*DIM); xs=(decltype(xs))dmalloc((size_t)s0*(DIM/128)*4);
     act_quant_fp8(xq, xs, x, s0, DIM, 128, stream);
-    fp8_block_gemm(win_kv, xq, xs, a.wkv, a.wkv_s, s0, HEAD_DIM, DIM, stream);
-    rmsnorm(win_kv, win_kv, a.kv_norm, s0, HEAD_DIM, eps, true, stream);
-    rope_interleaved(win_kv + NOPE_DIM, a.cosT, a.sinT, s0, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(win_kv, s0, NOPE_DIM, 64, HEAD_DIM, stream);
-    dsync(stream); dfree(xq); dfree(xs);
+    float* wst = kv_stage(win_kv, s0);           // == win_kv when the cache is FP32 (1b.2)
+    fp8_block_gemm(wst, xq, xs, a.wkv, a.wkv_s, s0, HEAD_DIM, DIM, stream);
+    rmsnorm(wst, wst, a.kv_norm, s0, HEAD_DIM, eps, true, stream);
+    rope_interleaved(wst + NOPE_DIM, a.cosT, a.sinT, s0, ROPE_DIM, false, HEAD_DIM, 1, stream);
+    kv_commit(win_kv, wst, s0, stream);
+    dsync(stream); kv_stage_free(wst, win_kv); dfree(xq); dfree(xs);
     // compressed rows for every COMPLETE group (group g's last token g*ratio+ratio-1 <= s0-1)
     int Tc = 0;
     for(int g=0; g*ratio + ratio - 1 <= s0 - 1; ++g){
-        compressor_emit_group(comp_kv + (size_t)g*HEAD_DIM, x, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
+        compressor_emit_group(kv_row(comp_kv, g), x, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
                               w.mc_norm, w.cc_cos, w.cc_sin, DIM, HEAD_DIM, false, ROPE_DIM, eps, false, stream);
         ++Tc;
     }
@@ -198,15 +200,16 @@ void compressed_decode_step_strided(float* out, const float* x_cur, const float*
     rmsnorm(q, q, nullptr, N_HEADS, HEAD_DIM, eps, false, stream);
     rope_interleaved(q + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream);
     // window kv new -> win_kv[pos]
-    float* kvn = win_kv + (size_t)pos*HEAD_DIM;
+    float* kvrow = kv_row(win_kv, pos);
+    float* kvn = kv_stage(kvrow, 1);
     fp8_block_gemm(kvn, xq, xs, a.wkv, a.wkv_s, 1, HEAD_DIM, DIM, stream);
     rmsnorm(kvn, kvn, a.kv_norm, 1, HEAD_DIM, eps, true, stream);
     rope_interleaved(kvn + NOPE_DIM, cosP, sinP, 1, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(kvn, 1, NOPE_DIM, 64, HEAD_DIM, stream);
+    kv_commit(kvrow, kvn, 1, stream); kv_stage_free(kvn, kvrow);
     // emit compressed row if this token completes a group
     if((pos+1) % ratio == 0){
         int g = pos / ratio;
-        compressor_emit_group(comp_kv + (size_t)(*T)*HEAD_DIM, x_full, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
+        compressor_emit_group(kv_row(comp_kv, *T), x_full, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
                               w.mc_norm, w.cc_cos, w.cc_sin, DIM, HEAD_DIM, false, ROPE_DIM, eps, false, stream);
         ++(*T);
     }
@@ -217,9 +220,9 @@ void compressed_decode_step_strided(float* out, const float* x_cur, const float*
     float* kv_all;
     if (g_kv_winmax) { kv_all = win_kv; }
     else {
-        kv_all=(decltype(kv_all))dmalloc((size_t)ntot*HEAD_DIM*4);
-        CU(cudaMemcpyAsync(kv_all, win_kv, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
-        CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, comp_kv, (size_t)Tn*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+        kv_all=(decltype(kv_all))dmalloc(kv_rows_bytes(ntot));
+        CU(cudaMemcpyAsync(kv_all, win_kv, kv_rows_bytes(nwin), cudaMemcpyDeviceToDevice, stream));
+        CU(cudaMemcpyAsync(kv_row(kv_all, nwin), comp_kv, kv_rows_bytes(Tn), cudaMemcpyDeviceToDevice, stream));
     }
     // combined idxs: window [base..pos] ⊕ compressed [nwin + t] for t<Tn (strided: all t<(pos+1)/ratio == Tn)
     int base = pos - WINDOW + 1; if(base<0) base=0; int wwidth = pos+1-base;
@@ -229,7 +232,7 @@ void compressed_decode_step_strided(float* out, const float* x_cur, const float*
     for(int t=0;t<Tn;++t) comb[wwidth+t]=coff+t;
     int* dcomb; dcomb=(decltype(dcomb))dmalloc((size_t)tot*4);
     CU(cudaMemcpyAsync(dcomb, comb, (size_t)tot*4, cudaMemcpyHostToDevice, stream));
-    sparse_attn(o, q, kv_all, a.attn_sink, dcomb, 1, 1, N_HEADS, HEAD_DIM, ntot, tot, scale, stream);
+    sparse_attn_kv(o, q, kv_all, a.attn_sink, dcomb, 1, 1, N_HEADS, HEAD_DIM, ntot, tot, scale, stream);
     // de-rotate, grouped o-LoRA, wo_b
     rope_interleaved(o + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og, o, a.wo_a_fp8, a.wo_a_sc, 1, O_GROUPS, O_LORA, GKd, stream);
@@ -251,14 +254,15 @@ void compressed_attn_cache_r4(float* win_kv, float* comp_kv, float* idx_ckv, int
     uint8_t* xq; float* xs;
     xq=(decltype(xq))dmalloc((size_t)s0*DIM); xs=(decltype(xs))dmalloc((size_t)s0*(DIM/128)*4);
     act_quant_fp8(xq, xs, x, s0, DIM, 128, stream);
-    fp8_block_gemm(win_kv, xq, xs, a.wkv, a.wkv_s, s0, HEAD_DIM, DIM, stream);
-    rmsnorm(win_kv, win_kv, a.kv_norm, s0, HEAD_DIM, eps, true, stream);
-    rope_interleaved(win_kv + NOPE_DIM, a.cosT, a.sinT, s0, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(win_kv, s0, NOPE_DIM, 64, HEAD_DIM, stream);
-    dsync(stream); dfree(xq); dfree(xs);
+    float* wst = kv_stage(win_kv, s0);           // == win_kv when the cache is FP32 (1b.2)
+    fp8_block_gemm(wst, xq, xs, a.wkv, a.wkv_s, s0, HEAD_DIM, DIM, stream);
+    rmsnorm(wst, wst, a.kv_norm, s0, HEAD_DIM, eps, true, stream);
+    rope_interleaved(wst + NOPE_DIM, a.cosT, a.sinT, s0, ROPE_DIM, false, HEAD_DIM, 1, stream);
+    kv_commit(win_kv, wst, s0, stream);
+    dsync(stream); kv_stage_free(wst, win_kv); dfree(xq); dfree(xs);
     int Tc = 0;
     for(int g=0; g*ratio + ratio - 1 <= s0 - 1; ++g){
-        compressor_emit_group(comp_kv + (size_t)g*HEAD_DIM, x, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
+        compressor_emit_group(kv_row(comp_kv, g), x, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
                               w.mc_norm, w.cc_cos, w.cc_sin, DIM, HEAD_DIM, true, ROPE_DIM, eps, false, stream);
         compressor_emit_group(idx_ckv + (size_t)g*idx_hd, x, g, ratio, w.idx_c_wkv, w.idx_c_wgate, w.idx_c_ape,
                               w.idx_c_norm, w.cc_cos, w.cc_sin, DIM, idx_hd, true, ROPE_DIM, eps, true, stream);
@@ -295,15 +299,16 @@ void compressed_decode_step_indexer(float* out, const float* x_cur, const float*
     rmsnorm(q, q, nullptr, N_HEADS, HEAD_DIM, eps, false, stream);
     rope_interleaved(q + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream);
     // window kv new -> win_kv[pos]
-    float* kvn = win_kv + (size_t)pos*HEAD_DIM;
+    float* kvrow = kv_row(win_kv, pos);
+    float* kvn = kv_stage(kvrow, 1);
     fp8_block_gemm(kvn, xq, xs, a.wkv, a.wkv_s, 1, HEAD_DIM, DIM, stream);
     rmsnorm(kvn, kvn, a.kv_norm, 1, HEAD_DIM, eps, true, stream);
     rope_interleaved(kvn + NOPE_DIM, cosP, sinP, 1, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(kvn, 1, NOPE_DIM, 64, HEAD_DIM, stream);
+    kv_commit(kvrow, kvn, 1, stream); kv_stage_free(kvn, kvrow);
     // emit compressed rows (main overlap + indexer overlap+rotate) if group completes
     if((pos+1) % ratio == 0){
         int g = pos / ratio; int Tn = *T;
-        compressor_emit_group(comp_kv + (size_t)Tn*HEAD_DIM, x_full, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
+        compressor_emit_group(kv_row(comp_kv, Tn), x_full, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
                               w.mc_norm, w.cc_cos, w.cc_sin, DIM, HEAD_DIM, true, ROPE_DIM, eps, false, stream);
         compressor_emit_group(idx_ckv + (size_t)Tn*idx_hd, x_full, g, ratio, w.idx_c_wkv, w.idx_c_wgate,
                               w.idx_c_ape, w.idx_c_norm, w.cc_cos, w.cc_sin, DIM, idx_hd, true, ROPE_DIM, eps, true, stream);
@@ -332,9 +337,9 @@ void compressed_decode_step_indexer(float* out, const float* x_cur, const float*
     float* kv_all;
     if (g_kv_winmax) { kv_all = win_kv; }
     else {
-        kv_all=(decltype(kv_all))dmalloc((size_t)ntot*HEAD_DIM*4);
-        CU(cudaMemcpyAsync(kv_all, win_kv, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
-        CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, comp_kv, (size_t)Tn*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
+        kv_all=(decltype(kv_all))dmalloc(kv_rows_bytes(ntot));
+        CU(cudaMemcpyAsync(kv_all, win_kv, kv_rows_bytes(nwin), cudaMemcpyDeviceToDevice, stream));
+        CU(cudaMemcpyAsync(kv_row(kv_all, nwin), comp_kv, kv_rows_bytes(Tn), cudaMemcpyDeviceToDevice, stream));
     }
     // --- combined idxs: window [base..pos] ⊕ indexer topk ---
     int base = pos - WINDOW + 1; if(base<0) base=0; int wwidth = pos+1-base;
@@ -343,7 +348,7 @@ void compressed_decode_step_indexer(float* out, const float* x_cur, const float*
     int* comb; comb=(decltype(comb))dmalloc((size_t)tot*4);
     CU(cudaMemcpyAsync(comb, hwin, (size_t)wwidth*4, cudaMemcpyHostToDevice, stream));
     CU(cudaMemcpyAsync(comb + wwidth, dtop, (size_t)topk*4, cudaMemcpyDeviceToDevice, stream));
-    sparse_attn(o, q, kv_all, a.attn_sink, comb, 1, 1, N_HEADS, HEAD_DIM, ntot, tot, scale, stream);
+    sparse_attn_kv(o, q, kv_all, a.attn_sink, comb, 1, 1, N_HEADS, HEAD_DIM, ntot, tot, scale, stream);
     rope_interleaved(o + NOPE_DIM, cosP, sinP, N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og, o, a.wo_a_fp8, a.wo_a_sc, 1, O_GROUPS, O_LORA, GKd, stream);
     else              ogroup_gemm    (og, o, a.wo_a,                1, O_GROUPS, O_LORA, GKd, stream);
@@ -382,13 +387,14 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
     // NO_KV_SPLIT=1 restores the serial order for A/B.
     const bool kvsplit = g_side2 && !getenv("NO_KV_SPLIT");
     cudaStream_t ks = kvsplit ? g_side2 : stream;
-    float* kvn=win_kv+(size_t)pos*HEAD_DIM;
+    float* kvrow=kv_row(win_kv,pos);
+    float* kvn=kv_stage(kvrow,K);
     if(kvsplit){
         cudaEventRecord(g_side2_fork,stream); cudaStreamWaitEvent(ks,g_side2_fork,0);
         fp8_block_gemm(kvn,xq,xs,a.wkv,a.wkv_s,K,HEAD_DIM,DIM,ks);
         rmsnorm(kvn,kvn,a.kv_norm,K,HEAD_DIM,eps,true,ks);
         rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,ks);
-        act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,ks);
+        kv_commit(kvrow,kvn,K,ks);
         cudaEventRecord(g_side2_join,ks);
     }
     dprof_begin(DP_Q_WQA,stream);
@@ -415,8 +421,9 @@ static void build_qKV(const CompressedAttnWeights& w, const float* xK, int K, in
         fp8_block_gemm(kvn,xq,xs,a.wkv,a.wkv_s,K,HEAD_DIM,DIM,stream);
         rmsnorm(kvn,kvn,a.kv_norm,K,HEAD_DIM,eps,true,stream);
         rope_interleaved(kvn+NOPE_DIM,cosP,sinP,K,ROPE_DIM,false,HEAD_DIM,1,stream);
-        act_quant_fp8sim(kvn,K,NOPE_DIM,64,HEAD_DIM,stream);
+        kv_commit(kvrow,kvn,K,stream);
     }
+    kv_stage_free(kvn,kvrow);
     dprof_end(DP_Q_KVJOIN,stream);
     dprof_end(DP_C_QPROJ,stream);
     // The indexer needs act_quant(rmsnorm(wq_a @ x)) — byte-for-byte what `qrq/qrs` already hold.
@@ -433,7 +440,7 @@ static void finish_attn(const CompressedAttnWeights& w, const float* q, const fl
     float *o,*og; uint8_t *ogq; float *ogs;
     o=(float*)dmalloc((size_t)K*Kd*4); og=(float*)dmalloc((size_t)K*OB*4); ogq=(uint8_t*)dmalloc((size_t)K*OB); ogs=(float*)dmalloc((size_t)K*(OB/128)*4);
     dprof_begin(DP_C_SPARSE,stream);
-    sparse_attn(o,q,kv_all,a.attn_sink,comb,1,K,N_HEADS,HEAD_DIM,ntot,topk,scale,stream);
+    sparse_attn_kv(o,q,kv_all,a.attn_sink,comb,1,K,N_HEADS,HEAD_DIM,ntot,topk,scale,stream);
     dprof_end(DP_C_SPARSE,stream);
     dprof_begin(DP_C_OGROUP,stream);
     dprof_begin(DP_O_ROPE,stream);
@@ -458,7 +465,7 @@ void compressed_verify_step_strided(float* out, const float* x_cur, const float*
     build_qKV(w, x_cur, K, pos, q, win_kv, nullptr, nullptr, eps, stream);
     dprof_begin(DP_C_COMPRESS,stream);
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){                         // emit groups completing in the block
-        compressor_emit_group(comp_kv+(size_t)(*T)*HEAD_DIM, x_full, j/ratio, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,
+        compressor_emit_group(kv_row(comp_kv, *T), x_full, j/ratio, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,
                               w.mc_norm,w.cc_cos,w.cc_sin, DIM,HEAD_DIM,false,ROPE_DIM,eps,false,stream); ++(*T); }
     dprof_end(DP_C_COMPRESS,stream);
     int Tf=*T, nwin=pos+K;
@@ -467,9 +474,9 @@ void compressed_verify_step_strided(float* out, const float* x_cur, const float*
     float* kv_all;
     if (g_kv_winmax) { kv_all = win_kv; }
     else {
-        kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
-        CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
-        CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+        kv_all=(float*)dmalloc(kv_rows_bytes(ntot));
+        CU(cudaMemcpyAsync(kv_all,win_kv,kv_rows_bytes(nwin),cudaMemcpyDeviceToDevice,stream));
+        CU(cudaMemcpyAsync(kv_row(kv_all,nwin),comp_kv,kv_rows_bytes(Tf),cudaMemcpyDeviceToDevice,stream));
     }
     int wmax=0,tmax=0; for(int i=0;i<K;++i){int ig=pos+i,b=ig-WINDOW+1;if(b<0)b=0;int wid=ig+1-b;if(wid>wmax)wmax=wid;int Ti=(ig+1)/ratio;if(Ti>tmax)tmax=Ti;}
     int topk=wmax+tmax; int* comb = comb_pinned((size_t)K*topk);
@@ -510,7 +517,7 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     dprof_begin(DP_C_COMPRESS,stream);
     // emit main + indexer compressed rows for groups completing in the block
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){ int g=j/ratio; int t=*T;
-        compressor_emit_group(comp_kv+(size_t)t*HEAD_DIM, x_full, g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,ROPE_DIM,eps,false,cs);
+        compressor_emit_group(kv_row(comp_kv, t), x_full, g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,ROPE_DIM,eps,false,cs);
         compressor_emit_group(idx_ckv+(size_t)t*ihd, x_full, g, ratio, w.idx_c_wkv,w.idx_c_wgate,w.idx_c_ape,w.idx_c_norm,w.cc_cos,w.cc_sin,DIM,ihd,true,ROPE_DIM,eps,true,cs); ++(*T); }
     if(asplit){ cudaEventRecord(g_side_join,cs); cudaStreamWaitEvent(stream,g_side_join,0); }
     dprof_end(DP_C_COMPRESS,stream);
@@ -551,9 +558,9 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     float* kv_all;
     if (g_kv_winmax) { kv_all = win_kv; }
     else {
-        kv_all=(float*)dmalloc((size_t)ntot*HEAD_DIM*4);
-        CU(cudaMemcpyAsync(kv_all,win_kv,(size_t)nwin*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
-        CU(cudaMemcpyAsync(kv_all+(size_t)nwin*HEAD_DIM,comp_kv,(size_t)Tf*HEAD_DIM*4,cudaMemcpyDeviceToDevice,stream));
+        kv_all=(float*)dmalloc(kv_rows_bytes(ntot));
+        CU(cudaMemcpyAsync(kv_all,win_kv,kv_rows_bytes(nwin),cudaMemcpyDeviceToDevice,stream));
+        CU(cudaMemcpyAsync(kv_row(kv_all,nwin),comp_kv,kv_rows_bytes(Tf),cudaMemcpyDeviceToDevice,stream));
     }
     int wmax=0; for(int i=0;i<K;++i){int ig=pos+i,b=ig-WINDOW+1;if(b<0)b=0;int wid=ig+1-b;if(wid>wmax)wmax=wid;}
     int topk=wmax+topkc;
@@ -601,8 +608,12 @@ static void emit_group_dp(float* comp_region, const float* xin, const int* d_pos
     k_dg<<<1,1,0,stream>>>(d_g,d_pos,ratio);
     rope_interleaved_dp(cand+(d-ROPE_DIM),cc_cos,cc_sin,1,ROPE_DIM,false,d,1,d_g,stream);   // rope at compressed pos g
     if(rotate){ hadamard(cand,cand,1,d,stream); act_quant_fp4sim(cand,1,d,32,d,stream); }
-    else       act_quant_fp8sim(cand,1,d-ROPE_DIM,64,d,stream);
-    k_commit_comp<<<(d+255)/256,256,0,stream>>>(comp_region,cand,d_T,d_pos,ratio,d);   // commit at *d_T; caller advances
+    else if(!g_kv_pack) act_quant_fp8sim(cand,1,d-ROPE_DIM,64,d,stream);
+    // 1b.2: on the packed MAIN-KV path the quantise and the conditional commit are ONE kernel, and
+    // it carries k_commit_comp's own predicate -- see kv_store_comp. The `rotate` branch is the
+    // INDEXER cache, which is 1b.1's format and is untouched here.
+    if(!rotate && g_kv_pack) kv_store_comp(comp_region,cand,d_T,d_pos,ratio,stream);
+    else k_commit_comp<<<(d+255)/256,256,0,stream>>>(comp_region,cand,d_T,d_pos,ratio,d);   // commit at *d_T; caller advances
     dfree(scr);dfree(kv);dfree(score);dfree(pooled);dfree(cand);
 }
 
@@ -622,14 +633,17 @@ void compressed_decode_step_strided_dp(float* out, const float* x, const float* 
     rope_interleaved_dp(q+NOPE_DIM,a.cosT,a.sinT,N_HEADS,ROPE_DIM,false,HEAD_DIM,N_HEADS,d_pos,stream);
     // window kv -> kvc[*d_pos]
     fp8_block_gemm(kvs,xq,xs,a.wkv,a.wkv_s,1,HEAD_DIM,DIM,stream); rmsnorm(kvs,kvs,a.kv_norm,1,HEAD_DIM,eps,true,stream);
-    rope_interleaved_dp(kvs+NOPE_DIM,a.cosT,a.sinT,1,ROPE_DIM,false,HEAD_DIM,1,d_pos,stream); act_quant_fp8sim(kvs,1,NOPE_DIM,64,HEAD_DIM,stream);
-    k_append_at2<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvc,kvs,d_pos,HEAD_DIM); dprobe(stream);
+    rope_interleaved_dp(kvs+NOPE_DIM,a.cosT,a.sinT,1,ROPE_DIM,false,HEAD_DIM,1,d_pos,stream);
+    if(g_kv_pack) kv_store_at(kvc,kvs,d_pos,stream);
+    else { act_quant_fp8sim(kvs,1,NOPE_DIM,64,HEAD_DIM,stream);
+           k_append_at2<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvc,kvs,d_pos,HEAD_DIM); }
+    dprobe(stream);
     // compressor emit (device-conditional) into the compressed region [winmax..]
-    emit_group_dp(kvc+(size_t)winmax*HEAD_DIM, xin, d_pos, d_T, d_g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,false,0,eps,stream);
+    emit_group_dp(kv_row(kvc, winmax), xin, d_pos, d_T, d_g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,false,0,eps,stream);
     k_advance_T<<<1,1,0,stream>>>(d_T,d_pos,ratio); dprobe(stream);
     // attention over combined cache
     k_comb_strided_dp<<<(wtop+Tmax+63)/64,64,0,stream>>>(comb,d_pos,d_T,winmax,wtop,Tmax);
-    sparse_attn(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+Tmax,scale,stream);
+    sparse_attn_kv(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+Tmax,scale,stream);
     rope_interleaved_dp(o+NOPE_DIM,a.cosT,a.sinT,N_HEADS,ROPE_DIM,true,HEAD_DIM,N_HEADS,d_pos,stream); dprobe(stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og,o,a.wo_a_fp8,a.wo_a_sc,1,O_GROUPS,O_LORA,GKd,stream);
     else              ogroup_gemm    (og,o,a.wo_a,               1,O_GROUPS,O_LORA,GKd,stream);
@@ -674,10 +688,12 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     act_quant_fp8(qrq,qrs,qr,1,Q_LORA,128,stream); fp8_block_gemm(q,qrq,qrs,a.wq_b,a.wq_b_s,1,Kd,Q_LORA,stream);
     rmsnorm(q,q,nullptr,N_HEADS,HEAD_DIM,eps,false,stream); rope_interleaved_dp(q+NOPE_DIM,a.cosT,a.sinT,N_HEADS,ROPE_DIM,false,HEAD_DIM,N_HEADS,d_pos,stream);
     fp8_block_gemm(kvs,xq,xs,a.wkv,a.wkv_s,1,HEAD_DIM,DIM,stream); rmsnorm(kvs,kvs,a.kv_norm,1,HEAD_DIM,eps,true,stream);
-    rope_interleaved_dp(kvs+NOPE_DIM,a.cosT,a.sinT,1,ROPE_DIM,false,HEAD_DIM,1,d_pos,stream); act_quant_fp8sim(kvs,1,NOPE_DIM,64,HEAD_DIM,stream);
-    k_append_at2<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvc,kvs,d_pos,HEAD_DIM);
+    rope_interleaved_dp(kvs+NOPE_DIM,a.cosT,a.sinT,1,ROPE_DIM,false,HEAD_DIM,1,d_pos,stream);
+    if(g_kv_pack) kv_store_at(kvc,kvs,d_pos,stream);
+    else { act_quant_fp8sim(kvs,1,NOPE_DIM,64,HEAD_DIM,stream);
+           k_append_at2<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvc,kvs,d_pos,HEAD_DIM); }
     // main (overlap) + indexer (overlap+rotate) emits at the SAME *d_T, then advance once
-    emit_group_dp(kvc+(size_t)winmax*HEAD_DIM, xin, d_pos, d_T, d_g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,0,eps,stream);
+    emit_group_dp(kv_row(kvc, winmax), xin, d_pos, d_T, d_g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,0,eps,stream);
     emit_group_dp(idx_kvc, xin, d_pos, d_T, d_g, ratio, w.idx_c_wkv,w.idx_c_wgate,w.idx_c_ape,w.idx_c_norm,w.cc_cos,w.cc_sin,DIM,ihd,true,1,eps,stream);
     k_advance_T<<<1,1,0,stream>>>(d_T,d_pos,ratio);
     // indexer scoring for the single query -> select main-compressed rows
@@ -691,7 +707,7 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     dprobe(stream);
     k_comb_strided_dp<<<(wtop+63)/64,64,0,stream>>>(win,d_pos,d_T,winmax,wtop,0); dprobe(stream);   // window part only (Tmax=0)
     k_comb_join<<<(wtop+topk_c+63)/64,64,0,stream>>>(comb,win,sel,wtop,topk_c); dprobe(stream);
-    sparse_attn(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+topk_c,scale,stream); dprobe(stream);
+    sparse_attn_kv(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+topk_c,scale,stream); dprobe(stream);
     rope_interleaved_dp(o+NOPE_DIM,a.cosT,a.sinT,N_HEADS,ROPE_DIM,true,HEAD_DIM,N_HEADS,d_pos,stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og,o,a.wo_a_fp8,a.wo_a_sc,1,O_GROUPS,O_LORA,GKd,stream);
     else              ogroup_gemm    (og,o,a.wo_a,               1,O_GROUPS,O_LORA,GKd,stream);

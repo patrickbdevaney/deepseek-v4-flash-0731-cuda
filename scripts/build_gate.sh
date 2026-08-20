@@ -126,6 +126,30 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   -o build/gate_sparse_hpb
 echo "built build/gate_sparse_hpb"
 
+# Gate KV_PACK (DECODE_LADDER 1b.2) -- the packed FP8+UE8M0 main-KV cache. TWO memcmp claims and an
+# idempotence one: unpack(pack(x)) == what act_quant_fp8sim stores, on all 512 dims and five
+# distributions; and `sparse_attn` over the packed cache == `sparse_attn` over the FP32 cache
+# holding the same values, at all 11 (hpb,smem) launches and the shapes the engine issues. Same
+# reasoning as gate_idx_pack next door: a TOLERANCE gate passes a dropped sign bit at |delta| = 0,
+# which is exactly the bug 1b.1's first implementation had. `--control` flips one code byte and one
+# scale byte and both memcmps must fail.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_kv_pack.cu kernels/mla_attn.cu kernels/dscratch.cu kernels/nvfp4_dense.cu \
+  -o build/gate_kv_pack
+echo "built build/gate_kv_pack"
+
+# Gate KV_PACK_E2E (DECODE_LADDER 1b.2) -- the WIRING, which gate_kv_pack says nothing about. Drives
+# compressed_attn_cache[_r4] + compressed_decode_step_{strided,indexer} + compressed_verify_step_*
+# on synthetic weights, once FP32 and once packed, and memcmps the outputs. A wrong row stride in
+# one of the ~30 touched call sites produces a plausible number, not a crash, and the only other
+# instrument that would catch it is a 15-minute checkpoint load. `--swap` reverses the arm order,
+# which is the control for state left in a static or an allocator between arms.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_kv_pack_e2e.cu kernels/compressed_decode.cu kernels/compressed_attn.cu kernels/compressor.cu \
+  kernels/indexer.cu kernels/mla_attn.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu \
+  kernels/dscratch.cu kernels/dprof.cu kernels/nvfp4_dense.cu -o build/gate_kv_pack_e2e
+echo "built build/gate_kv_pack_e2e"
+
 # ---------------------------------------------------------------------------------------------
 # THE OTHER EIGHT (Finding 76). Before this block, build_gate.sh built 10 of the 18 gate binaries
 # and the rest went stale SILENTLY: F74 found gate_compressed_decode and gate_indexer_decode a day

@@ -1,0 +1,11 @@
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+control    6248  2      137.07    6.5%   1.681   2.781   12.23
+control    1656  2      130.27    1.8%   1.861   2.795   14.27
+sweep     12410  4      142.27    4.6%   1.736   2.796   12.09
+sweep      6260  4      134.16    4.3%   1.620   2.659   12.13
+sweep      3197  4      132.77    2.6%   1.652   2.726   12.44
+
+  context only   fwd = 129.06 + 0.999 x (ctx/1000)                    R^2 0.751  SE(b) 0.182
+  + verify width fwd = 82.83 + 0.924 x (ctx/1000) + 17.14 x width   R^2 0.994  SE(b) 0.031  SE(c) 0.92
+
+  corr(mean_width, ctx) = +0.130   corr(tau, ctx) = +0.214

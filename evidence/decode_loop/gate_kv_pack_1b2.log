@@ -1,0 +1,190 @@
+device NVIDIA Thor  SMs 20
+layout: 711 B payload in a 720 B stride (180 floats/row); FP32 row is 2048 B -> 2.844x
+
+  uniform                  [raw]           0 / 524288 floats differ
+  uniform                  [requantised]   0 / 524288 floats differ
+  tiny 1e-6                [raw]           0 / 524288 floats differ
+  tiny 1e-6                [requantised]   0 / 524288 floats differ
+  large 1e5                [raw]           0 / 524288 floats differ
+  large 1e5                [requantised]   0 / 524288 floats differ
+  zero-heavy signed        [raw]           0 / 524288 floats differ
+  zero-heavy signed        [requantised]   0 / 524288 floats differ
+  one outlier per group    [raw]           0 / 524288 floats differ
+  one outlier per group    [requantised]   0 / 524288 floats differ
+  [control] flip 1 bit of the CODE byte -> 1 of 512 floats differ (gate can fail: good)
+  [control] flip 1 bit of the SCALE byte -> 1 of 512 floats differ (gate can fail: good)
+
+=== m=1  topk=640 (base AR, ctx>=2048) ===
+  packed hpb=1 smem=0  bytediff=0 / 32768
+  packed hpb=2 smem=0  bytediff=0 / 32768
+  packed hpb=4 smem=0  bytediff=0 / 32768
+  packed hpb=8 smem=0  bytediff=0 / 32768
+  packed hpb=1 smem=1  bytediff=0 / 32768
+  packed hpb=2 smem=1  bytediff=0 / 32768
+  packed hpb=4 smem=1  bytediff=0 / 32768
+  packed hpb=8 smem=1  bytediff=0 / 32768
+  packed hpb=2 smem=2  bytediff=0 / 32768
+  packed hpb=4 smem=2  bytediff=0 / 32768
+  packed hpb=8 smem=2  bytediff=0 / 32768
+  [control] 1 bit on packed row 5 -> 32478 of 32768 floats differ (gate can fail: good)
+
+=== m=2  topk=640 (mean verify width) ===
+  packed hpb=1 smem=0  bytediff=0 / 65536
+  packed hpb=2 smem=0  bytediff=0 / 65536
+  packed hpb=4 smem=0  bytediff=0 / 65536
+  packed hpb=8 smem=0  bytediff=0 / 65536
+  packed hpb=1 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=1  bytediff=0 / 65536
+  packed hpb=4 smem=1  bytediff=0 / 65536
+  packed hpb=8 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=2  bytediff=0 / 65536
+  packed hpb=4 smem=2  bytediff=0 / 65536
+  packed hpb=8 smem=2  bytediff=0 / 65536
+  [control] 1 bit on packed row 5 -> 64408 of 65536 floats differ (gate can fail: good)
+
+=== m=6  topk=640 (max verify width) ===
+  packed hpb=1 smem=0  bytediff=0 / 196608
+  packed hpb=2 smem=0  bytediff=0 / 196608
+  packed hpb=4 smem=0  bytediff=0 / 196608
+  packed hpb=8 smem=0  bytediff=0 / 196608
+  packed hpb=1 smem=1  bytediff=0 / 196608
+  packed hpb=2 smem=1  bytediff=0 / 196608
+  packed hpb=4 smem=1  bytediff=0 / 196608
+  packed hpb=8 smem=1  bytediff=0 / 196608
+  packed hpb=2 smem=2  bytediff=0 / 196608
+  packed hpb=4 smem=2  bytediff=0 / 196608
+  packed hpb=8 smem=2  bytediff=0 / 196608
+  [control] 1 bit on packed row 5 -> 195754 of 196608 floats differ (gate can fail: good)
+
+=== m=2  topk=320 (ctx 768, pre-knee) ===
+  packed hpb=1 smem=0  bytediff=0 / 65536
+  packed hpb=2 smem=0  bytediff=0 / 65536
+  packed hpb=4 smem=0  bytediff=0 / 65536
+  packed hpb=8 smem=0  bytediff=0 / 65536
+  packed hpb=1 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=1  bytediff=0 / 65536
+  packed hpb=4 smem=1  bytediff=0 / 65536
+  packed hpb=8 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=2  bytediff=0 / 65536
+  packed hpb=4 smem=2  bytediff=0 / 65536
+  packed hpb=8 smem=2  bytediff=0 / 65536
+  [control] 1 bit on packed row 5 -> 65157 of 65536 floats differ (gate can fail: good)
+
+=== m=256 topk=320 (short prefill) ===
+  packed hpb=1 smem=0  bytediff=0 / 8388608
+  packed hpb=2 smem=0  bytediff=0 / 8388608
+  packed hpb=4 smem=0  bytediff=0 / 8388608
+  packed hpb=8 smem=0  bytediff=0 / 8388608
+  packed hpb=1 smem=1  bytediff=0 / 8388608
+  packed hpb=2 smem=1  bytediff=0 / 8388608
+  packed hpb=4 smem=1  bytediff=0 / 8388608
+  packed hpb=8 smem=1  bytediff=0 / 8388608
+  packed hpb=2 smem=2  bytediff=0 / 8388608
+  packed hpb=4 smem=2  bytediff=0 / 8388608
+  packed hpb=8 smem=2  bytediff=0 / 8388608
+  [control] 1 bit on packed row 5 -> 8353614 of 8388608 floats differ (gate can fail: good)
+
+GATE KV_PACK: PASS  (bit-exactness failures 0, blind-control failures 0)
+device NVIDIA Thor  SMs 20
+layout: 711 B payload in a 720 B stride (180 floats/row); FP32 row is 2048 B -> 2.844x
+
+  uniform                  [raw]           0 / 524288 floats differ
+  uniform                  [requantised]   0 / 524288 floats differ
+  tiny 1e-6                [raw]           0 / 524288 floats differ
+  tiny 1e-6                [requantised]   0 / 524288 floats differ
+  large 1e5                [raw]           0 / 524288 floats differ
+  large 1e5                [requantised]   0 / 524288 floats differ
+  zero-heavy signed        [raw]           0 / 524288 floats differ
+  zero-heavy signed        [requantised]   0 / 524288 floats differ
+  one outlier per group    [raw]           0 / 524288 floats differ
+  one outlier per group    [requantised]   0 / 524288 floats differ
+
+=== m=1  topk=640 (base AR, ctx>=2048) ===
+  packed hpb=1 smem=0  bytediff=0 / 32768
+  packed hpb=2 smem=0  bytediff=0 / 32768
+  packed hpb=4 smem=0  bytediff=0 / 32768
+  packed hpb=8 smem=0  bytediff=0 / 32768
+  packed hpb=1 smem=1  bytediff=0 / 32768
+  packed hpb=2 smem=1  bytediff=0 / 32768
+  packed hpb=4 smem=1  bytediff=0 / 32768
+  packed hpb=8 smem=1  bytediff=0 / 32768
+  packed hpb=2 smem=2  bytediff=0 / 32768
+  packed hpb=4 smem=2  bytediff=0 / 32768
+  packed hpb=8 smem=2  bytediff=0 / 32768
+
+=== m=2  topk=640 (mean verify width) ===
+  packed hpb=1 smem=0  bytediff=0 / 65536
+  packed hpb=2 smem=0  bytediff=0 / 65536
+  packed hpb=4 smem=0  bytediff=0 / 65536
+  packed hpb=8 smem=0  bytediff=0 / 65536
+  packed hpb=1 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=1  bytediff=0 / 65536
+  packed hpb=4 smem=1  bytediff=0 / 65536
+  packed hpb=8 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=2  bytediff=0 / 65536
+  packed hpb=4 smem=2  bytediff=0 / 65536
+  packed hpb=8 smem=2  bytediff=0 / 65536
+
+=== m=6  topk=640 (max verify width) ===
+  packed hpb=1 smem=0  bytediff=0 / 196608
+  packed hpb=2 smem=0  bytediff=0 / 196608
+  packed hpb=4 smem=0  bytediff=0 / 196608
+  packed hpb=8 smem=0  bytediff=0 / 196608
+  packed hpb=1 smem=1  bytediff=0 / 196608
+  packed hpb=2 smem=1  bytediff=0 / 196608
+  packed hpb=4 smem=1  bytediff=0 / 196608
+  packed hpb=8 smem=1  bytediff=0 / 196608
+  packed hpb=2 smem=2  bytediff=0 / 196608
+  packed hpb=4 smem=2  bytediff=0 / 196608
+  packed hpb=8 smem=2  bytediff=0 / 196608
+
+=== m=2  topk=320 (ctx 768, pre-knee) ===
+  packed hpb=1 smem=0  bytediff=0 / 65536
+  packed hpb=2 smem=0  bytediff=0 / 65536
+  packed hpb=4 smem=0  bytediff=0 / 65536
+  packed hpb=8 smem=0  bytediff=0 / 65536
+  packed hpb=1 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=1  bytediff=0 / 65536
+  packed hpb=4 smem=1  bytediff=0 / 65536
+  packed hpb=8 smem=1  bytediff=0 / 65536
+  packed hpb=2 smem=2  bytediff=0 / 65536
+  packed hpb=4 smem=2  bytediff=0 / 65536
+  packed hpb=8 smem=2  bytediff=0 / 65536
+
+=== m=256 topk=320 (short prefill) ===
+  packed hpb=1 smem=0  bytediff=0 / 8388608
+  packed hpb=2 smem=0  bytediff=0 / 8388608
+  packed hpb=4 smem=0  bytediff=0 / 8388608
+  packed hpb=8 smem=0  bytediff=0 / 8388608
+  packed hpb=1 smem=1  bytediff=0 / 8388608
+  packed hpb=2 smem=1  bytediff=0 / 8388608
+  packed hpb=4 smem=1  bytediff=0 / 8388608
+  packed hpb=8 smem=1  bytediff=0 / 8388608
+  packed hpb=2 smem=2  bytediff=0 / 8388608
+  packed hpb=4 smem=2  bytediff=0 / 8388608
+  packed hpb=8 smem=2  bytediff=0 / 8388608
+
+=== BAND: reader, default launch (hpb=4, smem = total<=1024 ? 2 : 1) ===
+  m=1  topk=640 (base AR, ctx>=2048)     fp32   0.5104 ms   packed   0.6580 ms   0.776x   delta +0.1476 ms/call
+      packed sweep:  h2/s1 0.9270  h2/s2 0.8303  h4/s1 0.7559  h4/s2 0.6580  h8/s1 0.7669  h8/s2 0.6747
+      fp32   sweep:  h2/s1 0.7641  h2/s2 0.6719  h4/s1 0.5983  h4/s2 0.5106  h8/s1 0.6192  h8/s2 0.5577
+  m=2  topk=640 (mean verify width)      fp32   0.5522 ms   packed   0.6881 ms   0.802x   delta +0.1360 ms/call
+      packed sweep:  h2/s1 0.9508  h2/s2 0.8567  h4/s1 0.7727  h4/s2 0.6882  h8/s1 0.7670  h8/s2 0.6747
+      fp32   sweep:  h2/s1 0.7852  h2/s2 0.6937  h4/s1 0.6167  h4/s2 0.5521  h8/s1 0.6183  h8/s2 0.5571
+  m=6  topk=640 (max verify width)       fp32   0.7248 ms   packed   0.8372 ms   0.866x   delta +0.1123 ms/call
+      packed sweep:  h2/s1 1.1097  h2/s2 1.0299  h4/s1 0.8821  h4/s2 0.8372  h8/s1 0.9139  h8/s2 1.4471
+      fp32   sweep:  h2/s1 0.9207  h2/s2 0.8334  h4/s1 0.7403  h4/s2 0.7251  h8/s1 0.8318  h8/s2 1.1869
+  m=2  topk=320 (ctx 768, pre-knee)      fp32   0.2829 ms   packed   0.3456 ms   0.819x   delta +0.0627 ms/call
+      packed sweep:  h2/s1 0.4799  h2/s2 0.4312  h4/s1 0.3879  h4/s2 0.3454  h8/s1 0.3892  h8/s2 0.3457
+      fp32   sweep:  h2/s1 0.4039  h2/s2 0.3590  h4/s1 0.3189  h4/s2 0.2898  h8/s1 0.3192  h8/s2 0.2871
+  m=256 topk=320 (short prefill)         fp32  13.1591 ms   packed  14.5662 ms   0.903x   delta +1.4071 ms/call
+      packed sweep:  h2/s1 20.0060  h2/s2 18.6214  h4/s1 14.5539  h4/s2 15.3962  h8/s1 14.1436  h8/s2 17.7244
+      fp32   sweep:  h2/s1 16.1924  h2/s2 16.5164  h4/s1 13.2451  h4/s2 13.9928  h8/s1 13.4690  h8/s2 16.5365
+
+=== BAND: writer, act_quant_fp8sim vs k_kv_pack ===
+  rows=1     act_quant_fp8sim  0.00412 ms   k_kv_pack  0.00822 ms   delta +0.00411 ms/call
+  rows=2     act_quant_fp8sim  0.00410 ms   k_kv_pack  0.00835 ms   delta +0.00426 ms/call
+  rows=6     act_quant_fp8sim  0.00420 ms   k_kv_pack  0.00832 ms   delta +0.00412 ms/call
+  rows=64    act_quant_fp8sim  0.00626 ms   k_kv_pack  0.00828 ms   delta +0.00202 ms/call
+
+GATE KV_PACK: PASS  (bit-exactness failures 0, blind-control failures 0)

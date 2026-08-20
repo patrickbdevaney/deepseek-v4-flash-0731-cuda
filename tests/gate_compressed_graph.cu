@@ -5,6 +5,7 @@
 #include "compressed_decode.h"
 #include "deepseek_v4.h"
 #include "dscratch.h"
+#include "kv_pack.h"
 #include <cuda_runtime.h>
 #include <vector>
 #include <cstdio>
@@ -20,6 +21,12 @@ static const float* upFv(std::vector<float>&h){ float*d; CU(cudaMalloc(&d,h.size
 static const float* upR(size_t n,float sc){ std::vector<float> h(n); for(auto&v:h)v=sc*((rand()%200)-100)/100.f; return upFv(h); }
 static const float* upN(int n){ std::vector<float> v(n); for(auto&e:v)e=0.5f+0.01f*(rand()%100); return upFv(v); }
 int main(){
+    // DECODE_LADDER 1b.2. The device-pos graph path has its OWN KV store kernels (kv_store_at and
+    // kv_store_comp replace k_append_at2 and k_commit_comp), and nothing else exercises them.
+    // DSV4_KV_PACK=1 runs this whole gate on the packed layout, so the graph-vs-sequential
+    // comparison below covers those two kernels against kv_stage/kv_commit.
+    kv_pack_init();
+    printf("[graph-gate] KV layout: %s, %d B/row\n", g_kv_pack?"PACKED (1b.2)":"fp32", g_kv_rowf*4);
     const int ratio=8, s=32, K=16, PS=s-K, half=ROPE_DIM/2, Kd=N_HEADS*HEAD_DIM, GKd=Kd/O_GROUPS, OB=O_GROUPS*O_LORA; srand(23);
     CompressedAttnWeights w{}; MLAWeights& a=w.attn;
     a.wq_a=upW((size_t)Q_LORA*DIM);a.wq_a_s=upS((size_t)(Q_LORA/128)*(DIM/128)); a.wq_b=upW((size_t)Kd*Q_LORA);a.wq_b_s=upS((size_t)(Kd/128)*(Q_LORA/128));
@@ -32,17 +39,17 @@ int main(){
     std::vector<float> xh((size_t)s*DIM);for(auto&e:xh)e=0.1f*((rand()%200)-100)/100.f; const float* x=upFv(xh);
     // sequential (non-dp)
     int winmax=s, Tmax=s/ratio+2;
-    float *win_kv,*comp_kv,*outS; CU(cudaMalloc(&win_kv,(size_t)s*HEAD_DIM*4)); CU(cudaMalloc(&comp_kv,(size_t)Tmax*HEAD_DIM*4)); CU(cudaMalloc(&outS,(size_t)K*DIM*4));
+    float *win_kv,*comp_kv,*outS; CU(cudaMalloc(&win_kv,kv_rows_bytes(s))); CU(cudaMalloc(&comp_kv,kv_rows_bytes(Tmax))); CU(cudaMalloc(&outS,(size_t)K*DIM*4));
     int Th=0; compressed_attn_cache(win_kv,comp_kv,&Th,x,w,PS,ratio,EPS); int T0=Th;
     for(int i=0;i<K;++i) compressed_decode_step_strided(outS+(size_t)i*DIM,x+(size_t)(PS+i)*DIM,x,PS+i,w,win_kv,comp_kv,&Th,ratio,EPS);
     CU(cudaDeviceSynchronize());
     // dp: combined cache seeded from the SAME prefill, captured graph
     arena_init((size_t)128<<20);
-    float *kvc,*xbuf,*outg; int *d_pos,*d_T,*d_g; CU(cudaMalloc(&kvc,(size_t)(winmax+Tmax)*HEAD_DIM*4)); CU(cudaMalloc(&xbuf,(size_t)DIM*4)); CU(cudaMalloc(&outg,(size_t)DIM*4));
+    float *kvc,*xbuf,*outg; int *d_pos,*d_T,*d_g; CU(cudaMalloc(&kvc,kv_rows_bytes((size_t)winmax+Tmax))); CU(cudaMalloc(&xbuf,(size_t)DIM*4)); CU(cudaMalloc(&outg,(size_t)DIM*4));
     CU(cudaMalloc(&d_pos,4)); CU(cudaMalloc(&d_T,4)); CU(cudaMalloc(&d_g,4));
-    auto seed=[&](){ int Tp=0; float* wk; float* ck; CU(cudaMalloc(&wk,(size_t)s*HEAD_DIM*4)); CU(cudaMalloc(&ck,(size_t)Tmax*HEAD_DIM*4));
+    auto seed=[&](){ int Tp=0; float* wk; float* ck; CU(cudaMalloc(&wk,kv_rows_bytes(s))); CU(cudaMalloc(&ck,kv_rows_bytes(Tmax)));
         compressed_attn_cache(wk,ck,&Tp,x,w,PS,ratio,EPS); CU(cudaDeviceSynchronize());
-        CU(cudaMemcpy(kvc,wk,(size_t)PS*HEAD_DIM*4,cudaMemcpyDeviceToDevice)); CU(cudaMemcpy(kvc+(size_t)winmax*HEAD_DIM,ck,(size_t)Tp*HEAD_DIM*4,cudaMemcpyDeviceToDevice));
+        CU(cudaMemcpy(kvc,wk,kv_rows_bytes(PS),cudaMemcpyDeviceToDevice)); CU(cudaMemcpy(kv_row(kvc,winmax),ck,kv_rows_bytes(Tp),cudaMemcpyDeviceToDevice));
         CU(cudaMemcpy(d_T,&Tp,4,cudaMemcpyHostToDevice)); cudaFree(wk); cudaFree(ck); };
     seed();
     cudaStream_t cap; CU(cudaStreamCreate(&cap));

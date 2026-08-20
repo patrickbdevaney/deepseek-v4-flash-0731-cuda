@@ -1,0 +1,4 @@
+gate_mainkv_incr: S=2048 DIM=4096 HEAD_DIM=512 NOPE_DIM=448 ROPE_DIM=64
+  [oracle  g_tc_fp8=0] PASS: 2048 x 512 floats byte-identical across 22 split points
+  [tensorcore g_tc_fp8=1] PASS: 2048 x 512 floats byte-identical across 22 split points
+gate_mainkv_incr: PASS

@@ -327,6 +327,64 @@ byte roofline**) and leaves two honestly-small follow-ups on the ladder (1.11, 1
 pre-registered ceilings of 1.29 and 0.53 ms/forward. Deleting a phantom is not progress on the
 clock, but it is progress on the ladder, and it is cheaper to do before the kernel work than after.
 
+## 4i. Packing the KV cache is a CAPACITY lever, not a throughput one — and the kernel it feeds says why (ladder 1b.2, 2026-08-20)
+
+**The change.** `KV_PRECISION_FINDINGS.md` found that the main KV cache already stores values that
+sit exactly on the E4M3 grid with an exact power-of-two scale, and then keeps them in FP32 — 8 bits
+of information in 32 bits per element. 1b.2 stores what was computed: 448 E4M3 bytes + 7 UE8M0 scale
+bytes + the 64 FP32 RoPE dims = **711 B of payload in a 720 B row against 2048 B, 2.844x**, behind
+`DSV4_KV_PACK=1`. It is BIT-EXACT, and that is not an argument, it is four memcmp gates and a
+16-of-16-leg engine A/B (see [`kernel-optimisations.md` §3](kernel-optimisations.md)).
+
+**What killed it as a throughput lever, measured in seconds and not in checkpoint loads.**
+`gate_kv_pack --bench` times `sparse_attn` over the packed cache against `sparse_attn` over the FP32
+cache holding the identical values, at the shapes the engine issues:
+
+```
+  shape                            fp32       packed     ratio
+  m=1   topk=640 (base AR)       0.5098 ms   0.6565 ms   0.776x
+  m=2   topk=640 (mean verify)   0.5540      0.6883      0.805x
+  m=6   topk=640 (max verify)    0.7249      0.8373      0.866x
+  m=2   topk=320 (ctx 768)       0.2830      0.3452      0.820x
+  m=256 topk=320 (prefill)      13.169      14.561       0.904x
+```
+
+**A third fewer bytes per row, and the kernel got SLOWER at every shape.** That is
+`COMPRESSION_PLAYBOOK.md` §0's standing rule paying out on itself — *byte reduction pays in
+proportion to how bandwidth-bound you already are* — and 1.7 had already established that this
+particular kernel is not bandwidth-bound but ISSUE-bound. Staging a 2048 B row costs one `float4`
+load and one `float4` shared store per four elements; staging a 720 B row costs one 4 B load, one
+scale byte, two `cvt.rn.f16x2.e4m3x2`, four multiplies and the same store. **Fewer bytes, more
+instructions, on a kernel whose constraint is instructions.** §5 rule 4 ("instruction count is free
+in a latency-bound kernel") turns out to have a converse.
+
+**The retune was checked, not assumed.** A packed row has a different cost structure from an FP32
+one, and the unpack is paid once per block per gathered row — so `hpb`, which is exactly how many
+heads share a block, is the parameter that could amortise it. Swept: at the decode shapes the packed
+optimum is `hpb=4, smem=2`, **the same launch 1.7 chose for FP32**, and `hpb=8` is worse in both
+layouts. There is no packed-specific launch to recover.
+
+**The first implementation was 30 % worse than that and the fix is worth recording**, because the
+instinct it violates is a common one. The staging loop originally read a `uint4` — 16 codes per
+thread, only 28 vector loads for the 448 codes, which is the *better* number by every metric a
+roofline argument uses. But the block is 128 threads at `hpb=4`, so **28 threads did sixteen unpacks
+each while 100 waited**, on a step that sits on the double-buffered prefetch's critical path:
+0.699x, and +5.00 ± 0.37 ms per forward in the engine. Four elements per thread — 112 loads instead
+of 28, i.e. *four times the load instructions* — put 112 of 128 threads to work for one round each
+and took it to 0.776x. **Minimising the load count was the wrong objective; occupying the block was
+the right one.**
+
+**What it IS worth, and why it ships default OFF rather than not at all.** The saving is real and it
+is capacity: **2.844x on every KV allocation** — 1.61 → 0.57 GiB at seqmax 16384, 3.21 → 1.13 GiB at
+32768, 6.43 → 2.26 GiB at 65536 — with no accuracy exposure of any kind, because the stored values
+do not change. And the byte reduction does buy something in the engine that the microbench cannot
+see: the paired sweep splits into a **flat Term-A cost and a Term-B saving that grows with context**
+(numbers in [`context-scaling.md`](context-scaling.md)), which is the L2-residency second-order
+effect `KV_PRECISION_FINDINGS.md` §4 hypothesised, now measured. So the switch exists, it is proven
+bit-exact, and it is the thing to reach for when `seqmax` is the binding constraint — which
+`EVALS.md` records that it is for GPQA-Diamond. It is not the thing to reach for to make decode
+faster at the contexts this ladder measures.
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

@@ -1,14 +1,14 @@
        T     topk   shipped us      warp us   speedup   indices
 ------------------------------------------------------------------------------
       64       64         49.2         32.8      1.5x   identical
-     128      128        163.8         63.3      2.6x   identical
-     512      512       2292.7        258.1      8.9x   identical
-    1024      512       4498.9        324.1     13.9x   identical
-    1648      512       7188.0        502.0     14.3x   identical
-    2048      512       8912.0        458.9     19.4x   identical
+     128      128        163.8         63.4      2.6x   identical
+     512      512       2292.4        258.1      8.9x   identical
+    1024      512       4499.0        324.2     13.9x   identical
+    1648      512       7188.3        501.8     14.3x   identical
+    2048      512       8911.9        458.8     19.4x   identical
     4096      512      17737.6        725.8     24.4x   identical
-    6000      512      25943.2       1076.4     24.1x   identical
-    8192      512      35389.4       1260.3     28.1x   identical
+    6000      512      25942.9       1076.2     24.1x   identical
+    8192      512      35389.1       1259.7     28.1x   identical
 
 k_topk_verify  K=5 Tf=1648 topkc=512 : identical
 k_topk_decode  T=1648 topk=512          : identical

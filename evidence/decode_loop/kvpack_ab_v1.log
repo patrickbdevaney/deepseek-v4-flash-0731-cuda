@@ -1,0 +1,240 @@
+[1b.2] 2026-08-20T15:55:31-04:00 binaries: server 2026-08-20T15:53:14-04:00, decode 2026-08-20T15:18:06-04:00
+[1b.2] 2026-08-20T15:55:31-04:00 === PHASE 0: gate_kv_pack + gate_kv_pack_e2e + gate_sparse_hpb (no checkpoint) ===
+GATE KV_PACK: PASS  (bit-exactness failures 0, blind-control failures 0)
+GATE KV_PACK_E2E: PASS  (arm mismatches 0)
+GATE KV_PACK_E2E: PASS  (arm mismatches 0)  [--swap arm order]
+GATE SPARSE_HPB: PASS  (bit-exactness failures 0, blind-control failures 0)
+[1b.2] 2026-08-20T15:56:46-04:00 === PHASE 1: in-situ engine gates, BOTH arms (no checkpoint) ===
+[1b.2] 2026-08-20T15:56:46-04:00 pack=0 gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1b.2] 2026-08-20T15:56:50-04:00 pack=0 gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1b.2] 2026-08-20T15:56:55-04:00 pack=0 gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1b.2] 2026-08-20T15:57:07-04:00 pack=0 gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1b.2] 2026-08-20T15:57:08-04:00 pack=0 gate_mainkv_incr rc=0
+  [oracle  g_tc_fp8=0] PASS: 2048 x 512 floats byte-identical across 22 split points
+  [tensorcore g_tc_fp8=1] PASS: 2048 x 512 floats byte-identical across 22 split points
+gate_mainkv_incr: PASS
+[1b.2] 2026-08-20T15:57:12-04:00 pack=0 gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1b.2] 2026-08-20T15:57:17-04:00 pack=0 gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1b.2] 2026-08-20T15:57:17-04:00 pack=0 gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1b.2] 2026-08-20T15:57:17-04:00 pack=1 gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1b.2] 2026-08-20T15:57:22-04:00 pack=1 gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1b.2] 2026-08-20T15:57:27-04:00 pack=1 gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1b.2] 2026-08-20T15:57:39-04:00 pack=1 gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1b.2] 2026-08-20T15:57:39-04:00 pack=1 gate_mainkv_incr rc=0
+  [oracle  g_tc_fp8=0] PASS: 2048 x 512 floats byte-identical across 22 split points
+  [tensorcore g_tc_fp8=1] PASS: 2048 x 512 floats byte-identical across 22 split points
+gate_mainkv_incr: PASS
+[1b.2] 2026-08-20T15:57:43-04:00 pack=1 gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1b.2] 2026-08-20T15:57:48-04:00 pack=1 gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1b.2] 2026-08-20T15:57:49-04:00 pack=1 gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1b.2] 2026-08-20T15:57:49-04:00 === PHASE 2: build/decode, CONTROL (FP32 KV rows) ===
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 112 GiB available; launching detached -> evidence/decode_loop/decode_1b2_off.log
+[run_model] pid 1060541   watch: tail -f evidence/decode_loop/decode_1b2_off.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/decode_1b2_off.memguard.log
+[decode] KV layout: fp32, 2048 B/row, 0.007 GiB for 85 rows x 43 layers
+[decode] structs built. mem 113.0/122.8 GiB
+[decode] PREFILL: 5 positions in 191.4 ms = 26.1 tok/s (38.285 ms/tok)
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.6 ms/tok = 13.77 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 113.1/122.8 GiB
+[decode] PREFILL: 5 positions in 138.4 ms = 36.1 tok/s (27.681 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.6 ms/tok = 20.16 tok/s  (vs base M=1 72.6 ms/tok = 13.77 tok/s -> 1.46x)
+[decode] PREFILL: 5 positions in 138.8 ms = 36.0 tok/s (27.760 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.5 ms/tok = 20.21 tok/s  (vs base M=1 72.6 ms/tok = 13.77 tok/s -> 1.47x)
+[decode] PREFILL: 5 positions in 139.0 ms = 36.0 tok/s (27.802 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.4 ms/tok = 20.23 tok/s  (vs base M=1 72.6 ms/tok = 13.77 tok/s -> 1.47x)
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.77 tok/s
+[decode] mem 112.8/122.8 GiB
+[1b.2] 2026-08-20T15:59:30-04:00 === PHASE 3: build/decode, PACKED (1b.2) ===
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 111 GiB available; launching detached -> evidence/decode_loop/decode_1b2_on.log
+[run_model] pid 1064316   watch: tail -f evidence/decode_loop/decode_1b2_on.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/decode_1b2_on.memguard.log
+[decode] KV layout: PACKED fp8+ue8m0 (1b.2), 720 B/row, 0.002 GiB for 85 rows x 43 layers
+[decode] structs built. mem 112.9/122.8 GiB
+[decode] PREFILL: 5 positions in 195.3 ms = 25.6 tok/s (39.059 ms/tok)
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.6 ms/tok = 13.77 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 113.0/122.8 GiB
+[decode] PREFILL: 5 positions in 140.4 ms = 35.6 tok/s (28.073 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.8 ms/tok = 20.07 tok/s  (vs base M=1 72.6 ms/tok = 13.77 tok/s -> 1.46x)
+[decode] PREFILL: 5 positions in 139.7 ms = 35.8 tok/s (27.931 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.6 ms/tok = 20.15 tok/s  (vs base M=1 72.6 ms/tok = 13.77 tok/s -> 1.46x)
+[decode] PREFILL: 5 positions in 138.0 ms = 36.2 tok/s (27.592 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.6 ms/tok = 20.18 tok/s  (vs base M=1 72.6 ms/tok = 13.77 tok/s -> 1.47x)
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.77 tok/s
+[decode] mem 112.9/122.8 GiB
+[1b.2] 2026-08-20T16:01:10-04:00 --- generated ids, both arms (must be IDENTICAL: 1b.2 is bit-exact) ---
+off: [decode] generated: 11111 16 455 6102 294 16603 344 29168
+ on: [decode] generated: 11111 16 455 6102 294 16603 344 29168
+[1b.2] 2026-08-20T16:01:10-04:00 TOKEN-ID GATE: PASS (identical)
+[1b.2] 2026-08-20T16:01:10-04:00 === PHASE 4: tok/s sweep, CONTROL (FP32 KV rows) ===
+[1b.2] 2026-08-20T16:01:10-04:00 starting server [off] seqmax=16384 KV_PACK=0 -> evidence/decode_loop/server_1b2_off.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1b2_off.log
+[run_server] pid=1068073 ppid=1067458 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1b2_off.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1b.2] 2026-08-20T16:02:33-04:00 healthy [off]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=227385ms decode=20957ms tau=1.766 -> 144.53 ms/forward  (248s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21319ms tau=1.707 -> 142.13 ms/forward  (21s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=19712ms tau=1.842 -> 141.82 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=23463ms tau=1.506 -> 138.02 ms/forward  (23s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=20051ms tau=1.707 -> 133.68 ms/forward  (20s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=20622ms tau=1.620 -> 130.52 ms/forward  (21s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=21587ms tau=1.590 -> 134.08 ms/forward  (22s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=21519ms tau=1.620 -> 136.20 ms/forward  (22s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=20566ms tau=1.652 -> 132.68 ms/forward  (21s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=19597ms tau=1.766 -> 135.15 ms/forward  (20s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=20506ms tau=1.652 -> 132.30 ms/forward  (21s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=20920ms tau=1.610 -> 131.57 ms/forward  (21s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=110579ms decode=19202ms tau=1.882 -> 141.19 ms/forward  (130s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=22914ms tau=1.480 -> 132.45 ms/forward  (23s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=16160ms tau=2.081 -> 131.39 ms/forward  (16s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=20133ms tau=1.641 -> 129.06 ms/forward  (20s)
+[probe] wrote 16 usable records -> evidence/decode_loop/fit_1b2_off/postfix.sweep.jsonl and evidence/decode_loop/fit_1b2_off/control.fresh.jsonl
+[1b.2] 2026-08-20T16:13:42-04:00 control probe rc=0
+[1b.2] 2026-08-20T16:13:42-04:00 server down
+[1b.2] 2026-08-20T16:13:47-04:00 === PHASE 5: tok/s sweep, PACKED (1b.2) ===
+[1b.2] 2026-08-20T16:13:48-04:00 starting server [on] seqmax=16384 KV_PACK=1 -> evidence/decode_loop/server_1b2_on.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1b2_on.log
+[run_server] pid=1091563 ppid=1090944 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1b2_on.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1b.2] 2026-08-20T16:15:01-04:00 healthy [on]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=239940ms decode=20826ms tau=1.766 -> 143.63 ms/forward  (261s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21186ms tau=1.707 -> 141.24 ms/forward  (21s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=19602ms tau=1.842 -> 141.02 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=23325ms tau=1.506 -> 137.21 ms/forward  (23s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=20372ms tau=1.707 -> 135.81 ms/forward  (20s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=20961ms tau=1.620 -> 132.66 ms/forward  (21s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=21898ms tau=1.590 -> 136.01 ms/forward  (22s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=21863ms tau=1.620 -> 138.37 ms/forward  (22s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=21201ms tau=1.652 -> 136.78 ms/forward  (21s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=20167ms tau=1.766 -> 139.08 ms/forward  (20s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=21141ms tau=1.652 -> 136.39 ms/forward  (21s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=21563ms tau=1.610 -> 135.62 ms/forward  (22s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=116501ms decode=19497ms tau=1.882 -> 143.36 ms/forward  (136s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=23261ms tau=1.480 -> 134.46 ms/forward  (23s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=16623ms tau=2.081 -> 135.14 ms/forward  (17s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=20716ms tau=1.641 -> 132.79 ms/forward  (21s)
+[probe] wrote 16 usable records -> evidence/decode_loop/fit_1b2_on/postfix.sweep.jsonl and evidence/decode_loop/fit_1b2_on/control.fresh.jsonl
+[1b.2] 2026-08-20T16:26:32-04:00 packed probe rc=0
+[1b.2] 2026-08-20T16:26:32-04:00 server down
+[1b.2] 2026-08-20T16:26:37-04:00 === PHASE 6: capacity ===
+### seqmax=16384 arm=off
+[engine] ready. mem 112.4/122.8 GiB  (seqmax 16384, batch 64, arena 640 MiB)
+### seqmax=16384 arm=on
+[engine] ready. mem 112.0/122.8 GiB  (seqmax 16384, batch 64, arena 640 MiB)
+[1b.2] 2026-08-20T16:26:38-04:00 starting server [packed-32768] seqmax=32768 KV_PACK=1 -> evidence/decode_loop/server_1b2_big.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=32768 ext_chunk=64, log -> evidence/decode_loop/server_1b2_big.log
+[run_server] pid=1115389 ppid=1114763 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1b2_big.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1b.2] 2026-08-20T16:27:51-04:00 healthy [packed-32768]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":32768,"busy":true}
+[engine] ready. mem 113.1/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
+{"id":"cmpl-afb0581b5fa9ccc3406b2a9d","object":"text_completion","created":1787257672,"model":"deepseek-v4-flash-0731-reap","choices":[{"index":0,"text":" Paris. The capital of Spain is Madrid. The capital of Italy is Rome.","finish_reason":"stop","logprobs":null}],"usage":{"prompt_tokens":6,"completion_tokens":16,"total_tokens":22},"timings":{"prefill_ms":146.080234,"decode_ms":925.370665,"tokens_per_second":17.290368719436337,"tokens_per_verify":2.0},"spec_profile":{"accept_joint":[[2,0,1],[2,1,3],[3,0,1],[3,1,1],[4,1,1],[5,4,1]],"verifies":8,"mean_width":2.875,"mean_accepted":1.125}}
+[1b.2] 2026-08-20T16:27:53-04:00 server down
+[1b.2] 2026-08-20T16:27:58-04:00 === PHASE 7: reports ===
+[1b.2] 2026-08-20T16:27:58-04:00 --- BEFORE (FP32 KV rows) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+control    6248  2      136.82    6.4%   1.681   2.781   12.25
+control    1656  2      130.22    1.8%   1.861   2.795   14.28
+sweep     12410  4      141.97    4.6%   1.736   2.796   12.11
+sweep      6260  4      133.88    4.2%   1.620   2.659   12.16
+sweep      3197  4      132.49    2.7%   1.652   2.726   12.47
+
+  context only   fwd = 128.80 + 0.995 x (ctx/1000)                    R^2 0.751  SE(b) 0.181
+  + verify width fwd = 82.75 + 0.921 x (ctx/1000) + 17.07 x width   R^2 0.993  SE(b) 0.032  SE(c) 0.97
+
+  corr(mean_width, ctx) = +0.130   corr(tau, ctx) = +0.214
+[1b.2] 2026-08-20T16:27:58-04:00 --- AFTER (packed KV rows) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+control    6248  2      138.91    6.4%   1.681   2.781   12.07
+control    1656  2      133.97    1.8%   1.861   2.795   13.88
+sweep     12410  4      141.13    4.5%   1.736   2.796   12.19
+sweep      6260  4      135.91    4.2%   1.620   2.659   11.96
+sweep      3197  4      136.59    2.5%   1.652   2.726   12.09
+
+  context only   fwd = 134.38 + 0.472 x (ctx/1000)                    R^2 0.393  SE(b) 0.185
+  + verify width fwd = 87.40 + 0.396 x (ctx/1000) + 17.42 x width   R^2 0.980  SE(b) 0.036  SE(c) 1.07
+
+  corr(mean_width, ctx) = +0.130   corr(tau, ctx) = +0.214
+[1b.2] 2026-08-20T16:27:58-04:00 --- paired, per (target, rep), tau and width reported per leg ---
+corpus sha256: before ['79ac6563f97e53e5', 'ac10134c87e3d0fe']  after ['79ac6563f97e53e5', 'ac10134c87e3d0fe']
+
+token identity: 16/16 legs proven byte-identical, 0 differ, 0 unproven (no hash on record)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+control     6144  2   6248    136.82    138.91    +2.09   0.985x   1.681   1.681   2.78   2.78    12.25    12.07
+control     1536  2   1656    130.22    133.97    +3.75   0.972x   1.861   1.861   2.79   2.79    14.28    13.88
+sweep      12288  4  12410    141.97    141.13    -0.84   1.006x   1.736   1.736   2.80   2.80    12.11    12.19
+sweep       6144  4   6260    133.88    135.91    +2.04   0.985x   1.620   1.620   2.66   2.66    12.16    11.96
+sweep       3072  4   3197    132.49    136.59    +4.10   0.970x   1.652   1.652   2.73   2.73    12.47    12.09
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.
+[1b.2] 2026-08-20T16:27:58-04:00 --- generated ids and tau, both build/decode arms ---
+### evidence/decode_loop/decode_1b2_off.log
+[decode] KV layout: fp32, 2048 B/row, 0.007 GiB for 85 rows x 43 layers
+[decode] structs built. mem 113.0/122.8 GiB
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.6 ms/tok = 13.77 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 113.1/122.8 GiB
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.77 tok/s
+[decode] mem 112.8/122.8 GiB
+### evidence/decode_loop/decode_1b2_on.log
+[decode] KV layout: PACKED fp8+ue8m0 (1b.2), 720 B/row, 0.002 GiB for 85 rows x 43 layers
+[decode] structs built. mem 112.9/122.8 GiB
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.6 ms/tok = 13.77 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 113.0/122.8 GiB
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.77 tok/s
+[decode] mem 112.9/122.8 GiB
+[1b.2] 2026-08-20T16:27:58-04:00 done.

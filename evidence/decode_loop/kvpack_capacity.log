@@ -1,0 +1,25 @@
+[1b.2-cap] 2026-08-20T17:18:28-04:00 === seqmax=32768 DSV4_KV_PACK=0 ===
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=32768 ext_chunk=64, log -> evidence/decode_loop/server_1b2_cap_p0.log
+[run_server] pid=1213893 ppid=1213277 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1b2_cap_p0.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1b.2-cap] 2026-08-20T17:19:41-04:00 healthy at seqmax 32768 pack=0
+[engine] ready. mem 115.3/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
+{"id":"cmpl-5ba4325c7cde52504a724502","object":"text_completion","created":1787260782,"model":"deepseek-v4-flash-0731-reap","choices":[{"index":0,"text":" Paris. The capital of Spain is Madrid","finish_reason":"stop","logprobs":null}],"usage":{"prompt_tokens":6,"completion_tokens":8,"total_tokens":14},"timings":{"prefill_ms":145.764838,"decode_ms":550.015458,"tokens_per_second":14.54504575033235,"tokens_per_verify":1.6},"spec_profile":{"accept_joint":[[2,0,1],[2,1,2],[3,0,1],[3,1,1]],"verifies":5,"mean_width":2.4,"mean_accepted":0.6}}
+[1b.2-cap] 2026-08-20T17:19:47-04:00 waiting for page cache: 50 GiB
+[1b.2-cap] 2026-08-20T17:20:02-04:00 === seqmax=32768 DSV4_KV_PACK=1 ===
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=32768 ext_chunk=64, log -> evidence/decode_loop/server_1b2_cap_p1.log
+[run_server] pid=1217603 ppid=1216995 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1b2_cap_p1.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1b.2-cap] 2026-08-20T17:21:15-04:00 healthy at seqmax 32768 pack=1
+[engine] ready. mem 115.1/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
+{"id":"cmpl-5714842d595b476663ef778a","object":"text_completion","created":1787260876,"model":"deepseek-v4-flash-0731-reap","choices":[{"index":0,"text":" Paris. The capital of Spain is Madrid","finish_reason":"stop","logprobs":null}],"usage":{"prompt_tokens":6,"completion_tokens":8,"total_tokens":14},"timings":{"prefill_ms":156.902152,"decode_ms":564.172099,"tokens_per_second":14.180070255477133,"tokens_per_verify":1.6},"spec_profile":{"accept_joint":[[2,0,1],[2,1,2],[3,0,1],[3,1,1]],"verifies":5,"mean_width":2.4,"mean_accepted":0.6}}
+[1b.2-cap] 2026-08-20T17:21:21-04:00 --- both arms, resident set at seqmax 32768 ---
+### pack=0
+[engine] ready. mem 115.3/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
+### pack=1
+[engine] ready. mem 115.1/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
+[1b.2-cap] 2026-08-20T17:21:21-04:00 done.

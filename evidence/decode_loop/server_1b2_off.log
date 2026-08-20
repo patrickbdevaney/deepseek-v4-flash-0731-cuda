@@ -1,0 +1,18 @@
+[model-lock] acquired (1166119) — 112 GiB available
+  live checkpoint pinned by config/live_ckpt -> /home/patrickd/models/ckpt-head-s3
+  preflight gate_tokenizer ok
+  preflight gate_encoding ok
+  preflight gate_api ok
+  preflight gate_stream ok
+[server] tokenizer /home/patrickd/models/ckpt-head-s3/tokenizer.json
+[server] tokenizer ok (vocab 128000, 1283 added)
+[engine] loading /home/patrickd/models/ckpt-head-s3 (seqmax=16384, blk=6, adaptK=1.50)...
+[engine] loaded 100.40 GiB, 45821 tensors (MANAGED device-preferred)
+[engine] building 43 layer structs (persistent)...
+[engine] DSpark head: NSTAGE=3 experts=160
+[engine] ready. mem 113.1/122.8 GiB  (seqmax 16384, batch 64, arena 640 MiB)
+
+[server] listening on http://0.0.0.0:8080   (web UI at /)
+[server] model deepseek-v4-flash-0731-reap, context 16384, block 6, adaptK 1.50
+[engine] prefill 12281 tok, arena high-water 103 MiB of 640 MiB
+[engine] prefill 6119 tok, arena high-water 243 MiB of 640 MiB

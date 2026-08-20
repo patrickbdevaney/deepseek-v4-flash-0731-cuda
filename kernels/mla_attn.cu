@@ -5,6 +5,7 @@
 #include <cuda_fp16.h>
 #include "dscratch.h"
 #include "mla_attn.h"
+#include "kv_pack.h"
 #include "nvfp4_dense.h"
 
 // ---------------- sparse_attn ----------------
@@ -77,7 +78,7 @@ __global__ void sparse_attn_kernel(float* __restrict__ o, const float* __restric
 // total, so HPB=8 would launch 8 blocks onto 20 SMs and starve the machine. Size HPB so the grid
 // still covers the device (>= 4 blocks/SM), which gives HPB=1 at decode -- the original kernel,
 // byte for byte -- and HPB=8 at a 1022-token prefill.
-template<int PER, int HPB>
+template<int PER, int HPB, bool PACKED = false>
 __global__ void sparse_attn_kernel_t(float* __restrict__ o, const float* __restrict__ q,
                                      const float* __restrict__ kv, const float* __restrict__ attn_sink,
                                      const int* __restrict__ topk_idxs,
@@ -102,9 +103,12 @@ __global__ void sparse_attn_kernel_t(float* __restrict__ o, const float* __restr
         int idx = ip[t];
         if (idx < 0) continue;
         const float* kp = kv + (((size_t)bi * n + idx) * d);
+        // 1b.2. With PACKED=false the ternary folds away at compile time, so the FP32 path below is
+        // the identical instruction stream `gate_sparse_hpb` uses as its memcmp oracle.
+        const uint8_t* kp8 = (const uint8_t*)kv + ((size_t)bi * (size_t)n + idx) * dsv4kv::KVP_ROWB;
         float part = 0.f;
         #pragma unroll
-        for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) part += qreg[r] * kp[j]; }
+        for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) part += qreg[r] * (PACKED ? dsv4kv::kv_unpack(kp8, j) : kp[j]); }
         #pragma unroll
         for (int o2 = 16; o2 > 0; o2 >>= 1) part += __shfl_down_sync(0xffffffff, part, o2);
         float score = __shfl_sync(0xffffffff, part, 0) * scale;
@@ -113,7 +117,7 @@ __global__ void sparse_attn_kernel_t(float* __restrict__ o, const float* __restr
         float p = expf(score - new_max);
         run_sum = run_sum * corr + p;
         #pragma unroll
-        for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) acc[r] = acc[r] * corr + p * kp[j]; }
+        for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) acc[r] = acc[r] * corr + p * (PACKED ? dsv4kv::kv_unpack(kp8, j) : kp[j]); }
         run_max = new_max;
     }
     run_sum += expf(attn_sink[head] - run_max);
@@ -121,6 +125,42 @@ __global__ void sparse_attn_kernel_t(float* __restrict__ o, const float* __restr
     float* op = o + (((size_t)(bi * m + mi) * h + head) * d);
     #pragma unroll
     for (int r = 0; r < PER; ++r) { int j = lane + r * 32; if (j < d) op[j] = acc[r] * inv; }
+}
+
+// ---- 1b.2: stage one PACKED (720 B) KV row into the shared FP32 row the kernel already uses ----
+// 112 uchar4 loads for the 448 E4M3 codes + 16 float4 loads for the FP32 RoPE half = 128 vector
+// loads per row, the SAME COUNT the FP32 layout issues, over 720 B instead of 2048 B.
+//
+// THE SHAPE OF THIS LOOP IS THE WHOLE COST, AND THE FIRST VERSION GOT IT WRONG. It read a uint4 --
+// 16 codes per thread -- which is only 28 vector loads for the 448 codes and looks like the better
+// number. It is not: the block is 32*HPB threads (128 at the default HPB=4), so 28 of 128 threads
+// did SIXTEEN unpacks each while 100 waited, on a staging step that sits on the double-buffered
+// prefetch's critical path. `gate_kv_pack --bench` measured that at **0.70-0.79x of the FP32
+// launch** -- 0.509 -> 0.728 ms at the base-AR shape -- and the engine agreed: +5.00 +/- 0.37 ms
+// per forward, which is 43 sparse_attn calls x ~0.19 ms. Four elements per thread instead of
+// sixteen puts 112 of 128 threads to work for one round each.
+//
+// Per thread: one 4 B load, TWO `cvt.rn.f16x2.e4m3x2` (the packed-pair intrinsic converts two
+// codes per instruction), four multiplies by the group's power-of-two scale, and one 16 B shared
+// store -- `sh` is __align__(16) and j is a multiple of 4, so the float4 store is aligned. The four
+// elements a thread owns never straddle a 64-wide quant group (4 divides 64), so one scale byte is
+// read per thread and the whole row costs 112 scale-byte reads, all L1 hits.
+__device__ __forceinline__ void kvp_stage_row(float* sh, const uint8_t* p, int tid, int nthr) {
+    using namespace dsv4kv;
+    for (int v = tid; v < KVP_NOPE / 4; v += nthr) {
+        const uchar4 c = ((const uchar4*)p)[v];
+        const int j = v * 4;
+        const float sc = kv_pow2(p[KVP_OFF_SCALE + (j >> 6)]);
+        __half2_raw h0 = __nv_cvt_fp8x2_to_halfraw2(
+            (__nv_fp8x2_storage_t)((uint16_t)c.x | ((uint16_t)c.y << 8)), __NV_E4M3);
+        __half2_raw h1 = __nv_cvt_fp8x2_to_halfraw2(
+            (__nv_fp8x2_storage_t)((uint16_t)c.z | ((uint16_t)c.w << 8)), __NV_E4M3);
+        const float2 f0 = __half22float2(*reinterpret_cast<__half2*>(&h0));
+        const float2 f1 = __half22float2(*reinterpret_cast<__half2*>(&h1));
+        *(float4*)(sh + j) = make_float4(f0.x * sc, f0.y * sc, f1.x * sc, f1.y * sc);
+    }
+    for (int v = tid; v < KVP_ROPE / 4; v += nthr)
+        ((float4*)(sh + KVP_NOPE))[v] = ((const float4*)(p + KVP_OFF_ROPE))[v];
 }
 
 // ===================== 1.7: the same kernel, but the block reads the row ONCE =================
@@ -159,7 +199,13 @@ __global__ void sparse_attn_kernel_t(float* __restrict__ o, const float* __restr
 // depend on head, so `idx < 0` (the masked slot) is the same answer for every warp in the block.
 // The dispatcher enforces the other precondition -- h % HPB == 0, so every warp of a block shares
 // one (b, m) and there is no partial block to diverge on.
-template<int PER, int HPB, bool KREG>
+//
+// PACKED (DECODE_LADDER 1b.2) changes ONLY the staging loop: the block reads a 720 B packed row and
+// writes the SAME 512 floats into the SAME shared buffer, so every line below the staging -- the
+// lane mapping, the shuffle tree, the online-softmax order over t -- is one copy of the source, not
+// two that have to be argued equal. The unpack is exact (kv_pack.h), so the floats in `sh` are
+// bit-identical to the ones the FP32 path stages, and therefore so is the output.
+template<int PER, int HPB, bool KREG, bool PACKED = false>
 __global__ __launch_bounds__(32*HPB)
 void sparse_attn_kernel_s(float* __restrict__ o, const float* __restrict__ q,
                           const float* __restrict__ kv, const float* __restrict__ attn_sink,
@@ -176,6 +222,7 @@ void sparse_attn_kernel_s(float* __restrict__ o, const float* __restrict__ q,
     const float* qp  = q + (((size_t)(bi * m + mi) * h + head) * d);
     const int*   ip  = topk_idxs + ((size_t)(bi * m + mi) * topk);
     const float* kvb = kv + (size_t)bi * n * d;
+    const uint8_t* kvb8 = (const uint8_t*)kv + (size_t)bi * (size_t)n * dsv4kv::KVP_ROWB;
     const int nthr = 32 * HPB;
 
     float qreg[PER];
@@ -187,16 +234,20 @@ void sparse_attn_kernel_s(float* __restrict__ o, const float* __restrict__ q,
     float run_max = -1e30f, run_sum = 0.f;
 
     if (topk > 0) { int i0 = ip[0];
-        if (i0 >= 0) { const float4* src = (const float4*)(kvb + (size_t)i0 * d);
-                       for (int v = threadIdx.x; v < NV; v += nthr) ((float4*)sh[0])[v] = src[v]; } }
+        if (i0 >= 0) {
+            if (PACKED) kvp_stage_row(sh[0], kvb8 + (size_t)i0 * dsv4kv::KVP_ROWB, threadIdx.x, nthr);
+            else { const float4* src = (const float4*)(kvb + (size_t)i0 * d);
+                   for (int v = threadIdx.x; v < NV; v += nthr) ((float4*)sh[0])[v] = src[v]; } } }
     __syncthreads();
 
     for (int t = 0; t < topk; ++t) {
         const int idx = ip[t];
         const int cur = t & 1;
         if (t + 1 < topk) { int i1 = ip[t + 1];
-            if (i1 >= 0) { const float4* src = (const float4*)(kvb + (size_t)i1 * d);
-                           for (int v = threadIdx.x; v < NV; v += nthr) ((float4*)sh[cur ^ 1])[v] = src[v]; } }
+            if (i1 >= 0) {
+                if (PACKED) kvp_stage_row(sh[cur ^ 1], kvb8 + (size_t)i1 * dsv4kv::KVP_ROWB, threadIdx.x, nthr);
+                else { const float4* src = (const float4*)(kvb + (size_t)i1 * d);
+                       for (int v = threadIdx.x; v < NV; v += nthr) ((float4*)sh[cur ^ 1])[v] = src[v]; } } }
         if (idx >= 0) {
             const float* kp = sh[cur];
             // KREG: hold this lane's PER elements of the row in registers across BOTH consumers.
@@ -237,12 +288,13 @@ void sparse_attn_kernel_s(float* __restrict__ o, const float* __restrict__ q,
 
 void sparse_attn_launch(float* o, const float* q, const float* kv, const float* attn_sink,
                         const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
-                        float scale, cudaStream_t stream, int hpb, int smem) {
+                        float scale, cudaStream_t stream, int hpb, int smem, bool packed) {
     long total = (long)b * m * h;
     if (hpb != 1 && hpb != 2 && hpb != 4 && hpb != 8) hpb = 1;
     // PER is only specialised for the d this engine actually uses; anything else takes the
     // original kernel rather than a guessed specialisation.
     if (d != 512) {
+        if (packed) { fprintf(stderr, "sparse_attn: packed KV requires d==512, got %d\n", d); abort(); }
         sparse_attn_kernel<<<(int)total, 32, 0, stream>>>(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale);
         return;
     }
@@ -250,9 +302,34 @@ void sparse_attn_launch(float* o, const float* q, const float* kv, const float* 
     // The smem path stages the row with float4, so a caller that hands us an unaligned base gets the
     // scalar path rather than a misaligned access. Every allocator in this engine is 256 B-aligned
     // and the row stride is d*4 = 2048 B, so this never fires today -- it fires the day it does.
-    if ((((uintptr_t)kv) & 15) || (((size_t)d * 4) & 15)) smem = 0;
+    // A packed row is 720 B, also a multiple of 16, and the same test covers it (1b.2).
+    if ((((uintptr_t)kv) & 15) || ((size_t)(packed ? dsv4kv::KVP_ROWB : d * 4) & 15)) smem = 0;
     if (hpb == 1) smem = 0;                     // hpb=1 + smem measured 0.71x: no reuse to pay for the sync
     int blocks = (int)((total + hpb - 1) / hpb);
+    if (packed) {
+        if (smem >= 2) {
+            switch (hpb) {
+                case 1: sparse_attn_kernel_s<16,1,true,true><<<blocks, 32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+                case 2: sparse_attn_kernel_s<16,2,true,true><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+                case 4: sparse_attn_kernel_s<16,4,true,true><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+                default:sparse_attn_kernel_s<16,8,true,true><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            }
+        }
+        if (smem) {
+            switch (hpb) {
+                case 1: sparse_attn_kernel_s<16,1,false,true><<<blocks, 32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+                case 2: sparse_attn_kernel_s<16,2,false,true><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+                case 4: sparse_attn_kernel_s<16,4,false,true><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+                default:sparse_attn_kernel_s<16,8,false,true><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            }
+        }
+        switch (hpb) {
+            case 1: sparse_attn_kernel_t<16,1,true><<<blocks, 32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            case 2: sparse_attn_kernel_t<16,2,true><<<blocks, 64,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            case 4: sparse_attn_kernel_t<16,4,true><<<blocks,128,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+            default:sparse_attn_kernel_t<16,8,true><<<blocks,256,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
+        }
+    }
     if (smem >= 2) {
         switch (hpb) {
             case 1: sparse_attn_kernel_s<16,1,true><<<blocks, 32,0,stream>>>(o,q,kv,attn_sink,topk_idxs,b,m,h,d,n,topk,scale); return;
@@ -308,7 +385,23 @@ void sparse_attn(float* o, const float* q, const float* kv, const float* attn_si
     static const char* smem_env = getenv("DSV4_SPARSE_SMEM");
     int hpb  = hpb_env  ? atoi(hpb_env)  : 4;
     int smem = smem_env ? atoi(smem_env) : (total <= 1024L ? 2 : 1);
-    sparse_attn_launch(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale, stream, hpb, smem);
+    sparse_attn_launch(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale, stream, hpb, smem, false);
+}
+
+// DECODE_LADDER 1b.2. The KV-CACHE entry point: identical to `sparse_attn` except that it honours
+// `g_kv_pack`, so the cache call sites read whichever layout the caches were allocated in while
+// every other caller (the one-shot prefill temporaries, the unit gates) keeps calling `sparse_attn`
+// and keeps its FP32 contract.
+void sparse_attn_kv(float* o, const float* q, const float* kv, const float* attn_sink,
+                    const int* topk_idxs, int b, int m, int h, int d, int n, int topk,
+                    float scale, cudaStream_t stream) {
+    long total = (long)b * m * h;
+    static const char* hpb_env  = getenv("DSV4_SPARSE_HPB");
+    static const char* smem_env = getenv("DSV4_SPARSE_SMEM");
+    int hpb  = hpb_env  ? atoi(hpb_env)  : 4;
+    int smem = smem_env ? atoi(smem_env) : (total <= 1024L ? 2 : 1);
+    sparse_attn_launch(o, q, kv, attn_sink, topk_idxs, b, m, h, d, n, topk, scale, stream, hpb, smem,
+                       g_kv_pack != 0);
 }
 
 // ---------------- rope_interleaved ----------------
@@ -1040,4 +1133,85 @@ void act_quant_fp4sim(float* x, int rows, int active_dim, int block, int row_str
     if (row_stride < 0) row_stride = active_dim;
     int threads = block < 32 ? 32 : block;
     act_quant_fp4sim_kernel<<<rows * (active_dim / block), threads, threads * sizeof(float), stream>>>(x, rows, active_dim, block, row_stride);
+}
+
+// ================== DECODE_LADDER 1b.2 — packed KV storage ====================================
+// The format, the exactness argument and the byte arithmetic are in include/kv_pack.h and
+// KV_PRECISION_FINDINGS.md. What lives here is the one kernel that writes it and the four host
+// entry points the cache call sites use.
+int g_kv_pack = 0;
+int g_kv_rowf = dsv4::HEAD_DIM;
+void kv_pack_init() {
+    const char* e = getenv("DSV4_KV_PACK");
+    g_kv_pack = (e && atoi(e)) ? 1 : 0;
+    g_kv_rowf = g_kv_pack ? dsv4kv::KVP_ROWF : dsv4::HEAD_DIM;
+}
+
+// k_kv_pack IS act_quant_fp8sim, with the store changed and nothing else.
+//
+// Same 64-thread block per (row, 64-wide group), same shared max-reduction over the same 64 |x|
+// values, same `fmaxf(amax, 1e-4f)`, the same `exp2f(ceilf(log2f(amax/448)))` scale, the same clamp
+// and the same `__nv_fp8_e4m3` conversion. act_quant_fp8sim then converts the e4m3 code BACK to a
+// float and stores 4 bytes; this stores the code itself plus one exponent byte per group, and the
+// consumer redoes that conversion at read time. A max-reduction is exact and order-independent, so
+// `amax` is bit-identical whatever order the tree runs in, and every step after it is a pure
+// function of amax and x. The value a reader sees is therefore the value act_quant_fp8sim would
+// have written -- which is what makes memcmp, and not a tolerance, the acceptance test for 1b.2.
+//
+// d_idx  : destination row index read from device memory (the CUDA-graph decode paths).
+// d_pos  : when non-null with ratio>0, the whole store is skipped unless (*d_pos+1)%ratio==0 --
+//          k_commit_comp's "append only when a group completes" predicate, unchanged.
+__global__ void k_kv_pack(uint8_t* __restrict__ dst, const float* __restrict__ src,
+                          int rows, int src_stride, long long dst_row0,
+                          const int* __restrict__ d_idx, const int* __restrict__ d_pos, int ratio) {
+    using namespace dsv4kv;
+    if (d_pos && ratio > 0 && (((*d_pos) + 1) % ratio) != 0) return;
+    const int r = blockIdx.x; if (r >= rows) return;
+    const long long drow = (d_idx ? (long long)(*d_idx) : dst_row0) + r;
+    const float* xr = src + (size_t)r * (size_t)src_stride;
+    uint8_t* p = dst + (size_t)drow * (size_t)KVP_ROWB;
+    const int tid = threadIdx.x;                      // blockDim.x == KVP_BLOCK == 64
+    __shared__ float red[KVP_BLOCK];
+    for (int g = 0; g < KVP_NB; ++g) {
+        const float x = xr[g * KVP_BLOCK + tid];
+        red[tid] = fabsf(x); __syncthreads();
+        for (int s = KVP_BLOCK / 2; s > 0; s >>= 1) {
+            if (tid < s) red[tid] = fmaxf(red[tid], red[tid + s]);
+            __syncthreads();
+        }
+        const float amax  = fmaxf(red[0], 1e-4f);
+        const float scale = exp2f(ceilf(log2f(amax * (1.f / 448.f))));
+        const float q     = fminf(fmaxf(x / scale, -448.f), 448.f);
+        p[g * KVP_BLOCK + tid] = (uint8_t)(__nv_fp8_e4m3(q).__x);
+        if (tid == 0) p[KVP_OFF_SCALE + g] = kv_ue8m0(scale);
+        __syncthreads();
+    }
+    for (int j = tid; j < KVP_ROPE; j += KVP_BLOCK)   // RoPE half: exact fp32 copy, never quantised
+        ((float*)(p + KVP_OFF_ROPE))[j] = xr[KVP_NOPE + j];
+}
+
+float* kv_stage(float* cache_row, int rows) {
+    if (!g_kv_pack) return cache_row;                 // write in place, exactly as before 1b.2
+    return (float*)dmalloc((size_t)rows * (size_t)dsv4::HEAD_DIM * 4);
+}
+void kv_commit(float* cache_row, float* staged, int rows, cudaStream_t stream) {
+    if (!g_kv_pack) { act_quant_fp8sim(cache_row, rows, dsv4::NOPE_DIM, 64, dsv4::HEAD_DIM, stream); return; }
+    if (rows <= 0) return;
+    k_kv_pack<<<rows, dsv4kv::KVP_BLOCK, 0, stream>>>((uint8_t*)cache_row, staged, rows,
+                                                      dsv4::HEAD_DIM, 0, nullptr, nullptr, 0);
+}
+void kv_stage_free(float* staged, float* cache_row) {
+    if (g_kv_pack && staged != cache_row) dfree(staged);
+}
+// Device-index store (replaces k_append_at2 on the packed path). `src_row` is the un-quantised
+// fp32 row: the pack kernel does the quantisation the caller would otherwise have done.
+void kv_store_at(float* cache_base, const float* src_row, const int* d_idx, cudaStream_t stream) {
+    k_kv_pack<<<1, dsv4kv::KVP_BLOCK, 0, stream>>>((uint8_t*)cache_base, src_row, 1,
+                                                   dsv4::HEAD_DIM, 0, d_idx, nullptr, 0);
+}
+// Conditional compressed-row store (replaces k_commit_comp on the packed path).
+void kv_store_comp(float* comp_base, const float* cand, const int* d_T, const int* d_pos,
+                   int ratio, cudaStream_t stream) {
+    k_kv_pack<<<1, dsv4kv::KVP_BLOCK, 0, stream>>>((uint8_t*)comp_base, cand, 1,
+                                                   dsv4::HEAD_DIM, 0, d_T, d_pos, ratio);
 }

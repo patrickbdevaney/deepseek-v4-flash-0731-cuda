@@ -2,6 +2,7 @@
 #include "dspark_attn.h"
 #include "fp8_block_gemm.h"
 #include "mla_attn.h"
+#include "kv_pack.h"
 #include "deepseek_v4.h"
 #include <vector>
 #include <cmath>
@@ -17,10 +18,11 @@ void dspark_main_kv(float* main_kv, const float* main_x, const MLAWeights& w, in
     uint8_t* xq; float* xs;
     CU(dkmalloc(&xq,(size_t)s*DIM)); CU(dkmalloc(&xs,(size_t)s*(DIM/128)*4));
     act_quant_fp8(xq, xs, main_x, s, DIM, 128, stream);
-    fp8_block_gemm(main_kv, xq, xs, w.wkv, w.wkv_s, s, HEAD_DIM, DIM, stream);
-    rmsnorm(main_kv, main_kv, w.kv_norm, s, HEAD_DIM, eps, true, stream);
-    rope_interleaved(main_kv + NOPE_DIM, w.cosT, w.sinT, s, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(main_kv, s, NOPE_DIM, 64, HEAD_DIM, stream);
+    float* mst = kv_stage(main_kv, s);          // == main_kv when the cache is FP32 (1b.2)
+    fp8_block_gemm(mst, xq, xs, w.wkv, w.wkv_s, s, HEAD_DIM, DIM, stream);
+    rmsnorm(mst, mst, w.kv_norm, s, HEAD_DIM, eps, true, stream);
+    rope_interleaved(mst + NOPE_DIM, w.cosT, w.sinT, s, ROPE_DIM, false, HEAD_DIM, 1, stream);
+    kv_commit(main_kv, mst, s, stream); kv_stage_free(mst, main_kv);
     dksync(stream); dkfree(xq); dkfree(xs);
 }
 
@@ -74,13 +76,14 @@ static void main_kv_rows(float* main_kv, const float* main_x, const MLAWeights& 
     const int half = ROPE_DIM / 2;
     uint8_t* xq; float* xs;
     CU(dkmalloc(&xq,(size_t)m*DIM)); CU(dkmalloc(&xs,(size_t)m*(DIM/128)*4));
-    float* kv = main_kv + (size_t)r0*HEAD_DIM;
+    float* krow = kv_row(main_kv, r0);
+    float* kv = kv_stage(krow, m);
     act_quant_fp8(xq, xs, main_x + (size_t)r0*DIM, m, DIM, 128, stream);
     main_kv_gemm(kv, xq, xs, w.wkv, w.wkv_s, m, HEAD_DIM, DIM, stream);
     rmsnorm(kv, kv, w.kv_norm, m, HEAD_DIM, eps, true, stream);
     rope_interleaved(kv + NOPE_DIM, w.cosT + (size_t)r0*half, w.sinT + (size_t)r0*half,
                      m, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(kv, m, NOPE_DIM, 64, HEAD_DIM, stream);
+    kv_commit(krow, kv, m, stream); kv_stage_free(kv, krow);
     dksync(stream); dkfree(xq); dkfree(xs);
 }
 
@@ -103,7 +106,10 @@ static void mainkv_gate_check(const float* main_kv, const float* main_x, const M
     // churn worth not introducing there.
     static float* ref = nullptr; static size_t refcap = 0;
     static std::vector<float> a, b;
-    const size_t n = (size_t)s*HEAD_DIM;
+    // 1b.2: `n` is the cache in FLOAT-STRIDE units, which is 512/row unpacked and 180/row packed.
+    // The memcmp is over whatever the cache actually holds, so the gate is layout-agnostic and
+    // proves the PACKED bytes identical when the packed path is on.
+    const size_t n = (size_t)s*(size_t)g_kv_rowf;
     if(n > refcap){ if(ref) cudaFree(ref); CU(cudaMalloc(&ref, n*4)); refcap = n; }
     if(a.size() < n){ a.resize(n); b.resize(n); }
     const bool saved = g_draft_raw; g_draft_raw = true;
@@ -116,7 +122,7 @@ static void mainkv_gate_check(const float* main_kv, const float* main_x, const M
     if(memcmp(a.data(), b.data(), n*4) != 0){
         size_t i = 0; while(i < n && memcmp(&a[i], &b[i], 4) == 0) ++i;
         fprintf(stderr, "[mainkv-gate] FAIL s=%d kept=%d first diff at row %zu col %zu: %.9g vs %.9g\n",
-                s, r0, i/HEAD_DIM, i%HEAD_DIM, a[i], b[i]);
+                s, r0, i/(size_t)g_kv_rowf, i%(size_t)g_kv_rowf, a[i], b[i]);
         fflush(stderr); abort();
     }
     if(checks <= 3 || checks % 64 == 0){
@@ -158,8 +164,8 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
     uint8_t *xq,*qrq,*ogq; float *xs,*qrs,*ogs,*qr,*q,*bkv,*kv_all,*o,*og;
     CU(dkmalloc(&xq,(size_t)block*DIM)); CU(dkmalloc(&xs,(size_t)block*(DIM/128)*4));
     CU(dkmalloc(&qr,(size_t)block*Q_LORA*4)); CU(dkmalloc(&qrq,(size_t)block*Q_LORA)); CU(dkmalloc(&qrs,(size_t)block*(Q_LORA/128)*4));
-    CU(dkmalloc(&q,(size_t)block*Kd*4)); CU(dkmalloc(&bkv,(size_t)block*HEAD_DIM*4));
-    CU(dkmalloc(&kv_all,(size_t)n*HEAD_DIM*4)); CU(dkmalloc(&o,(size_t)block*Kd*4)); CU(dkmalloc(&og,(size_t)block*OB*4));
+    CU(dkmalloc(&q,(size_t)block*Kd*4)); CU(dkmalloc(&bkv,kv_rows_bytes(block)));
+    CU(dkmalloc(&kv_all,kv_rows_bytes(n))); CU(dkmalloc(&o,(size_t)block*Kd*4)); CU(dkmalloc(&og,(size_t)block*OB*4));
     CU(dkmalloc(&ogq,(size_t)block*OB)); CU(dkmalloc(&ogs,(size_t)block*(OB/128)*4));
 
     // q
@@ -171,10 +177,15 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
     rmsnorm(q, q, nullptr, block*N_HEADS, HEAD_DIM, eps, false, stream);
     rope_interleaved(q + NOPE_DIM, cosB, sinB, block*N_HEADS, ROPE_DIM, false, HEAD_DIM, N_HEADS, stream);
     // block kv
-    fp8_block_gemm(bkv, xq, xs, w.wkv, w.wkv_s, block, HEAD_DIM, DIM, stream);
-    rmsnorm(bkv, bkv, w.kv_norm, block, HEAD_DIM, eps, true, stream);
-    rope_interleaved(bkv + NOPE_DIM, cosB, sinB, block, ROPE_DIM, false, HEAD_DIM, 1, stream);
-    act_quant_fp8sim(bkv, block, NOPE_DIM, 64, HEAD_DIM, stream);
+    // 1b.2. `bkv` is a temporary, but it is concatenated into `kv_all` which `sparse_attn_kv`
+    // reads, so it has to be in the SAME layout as the main-KV window it sits next to. Staged in
+    // fp32 and committed into a packed block region.
+    float* bkvp = bkv;
+    float* bst = kv_stage(bkvp, block);
+    fp8_block_gemm(bst, xq, xs, w.wkv, w.wkv_s, block, HEAD_DIM, DIM, stream);
+    rmsnorm(bst, bst, w.kv_norm, block, HEAD_DIM, eps, true, stream);
+    rope_interleaved(bst + NOPE_DIM, cosB, sinB, block, ROPE_DIM, false, HEAD_DIM, 1, stream);
+    kv_commit(bkvp, bst, block, stream); kv_stage_free(bst, bkvp);
     if(g_dspark_dump){ cudaStreamSynchronize(stream);
         // The SHAPE is the hypothesis: nwin = min(t+1, win) context keys plus `block` block-keys.
         // If the port attends to a different COUNT the output magnitude changes by orders of
@@ -184,15 +195,15 @@ void dspark_attn_forward(float* out, const float* xin, const float* main_kv, int
         uint32_t L=8,N=4; fwrite(&L,4,1,g_dspark_dump); fwrite("a_shape",1,7,g_dspark_dump);
         fwrite("",1,1,g_dspark_dump); fwrite(&N,4,1,g_dspark_dump); fwrite(shp,4,4,g_dspark_dump);
         dsp_dump("a_q", q, (size_t)block*Kd);
-        dsp_dump("a_bkv", bkv, (size_t)block*HEAD_DIM); }
+        if(!g_kv_pack) dsp_dump("a_bkv", bkv, (size_t)block*HEAD_DIM); }
     // kv = [main-KV window ⊕ block-KV]
-    CU(cudaMemcpyAsync(kv_all, main_kv + (size_t)wstart*HEAD_DIM, (size_t)nwin*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
-    CU(cudaMemcpyAsync(kv_all + (size_t)nwin*HEAD_DIM, bkv, (size_t)block*HEAD_DIM*4, cudaMemcpyDeviceToDevice, stream));
-    if(g_dspark_dump){ cudaStreamSynchronize(stream); dsp_dump("a_kv_all", kv_all, (size_t)n*HEAD_DIM); }
+    CU(cudaMemcpyAsync(kv_all, kv_row(main_kv, wstart), kv_rows_bytes(nwin), cudaMemcpyDeviceToDevice, stream));
+    CU(cudaMemcpyAsync(kv_row(kv_all, nwin), bkv, kv_rows_bytes(block), cudaMemcpyDeviceToDevice, stream));
+    if(g_dspark_dump && !g_kv_pack){ cudaStreamSynchronize(stream); dsp_dump("a_kv_all", kv_all, (size_t)n*HEAD_DIM); }
     // dense idxs [block, n]: every block query attends to all n (window ⊕ block), per get_dspark_topk_idxs
     std::vector<int> hidx((size_t)block*n); for(int m=0;m<block;++m) for(int k=0;k<n;++k) hidx[(size_t)m*n+k]=k;
     int* idx; CU(dkmalloc(&idx,(size_t)block*n*4)); CU(cudaMemcpyAsync(idx,hidx.data(),(size_t)block*n*4,cudaMemcpyHostToDevice,stream));
-    sparse_attn(o, q, kv_all, w.attn_sink, idx, 1, block, N_HEADS, HEAD_DIM, n, n, scale, stream);
+    sparse_attn_kv(o, q, kv_all, w.attn_sink, idx, 1, block, N_HEADS, HEAD_DIM, n, n, scale, stream);
     rope_interleaved(o + NOPE_DIM, cosB, sinB, block*N_HEADS, ROPE_DIM, true, HEAD_DIM, N_HEADS, stream);
     ogroup_gemm(og, o, w.wo_a, block, O_GROUPS, O_LORA, GKd, stream);
     act_quant_fp8(ogq, ogs, og, block, OB, 128, stream);

@@ -520,9 +520,28 @@ hypothesis, [`context-scaling.md`](context-scaling.md) for the 6 % of this that 
 | F66 | expert pointers are misaligned by a **constant 8 bytes** (43,470 of 44,436 tensors at `data_offset%16==8`) | the funnel shift was buying alignment that was already there |
 | F72 | so: two `uint2` loads instead of two `uint4` + funnel shift | same instruction count, **half the bytes requested**, +1.4 % |
 | F56 | the shared expert was never dependent on the routed ones | run them concurrently |
+| 1b.2 | the main KV cache stores E4M3-grid values with a power-of-two scale **in FP32** — 8 bits of information in 32 | packed to 448xE4M3 + 7xUE8M0 + 64 fp32 RoPE = **711 B of payload in a 720 B row, 2.844x**, BIT-EXACT |
 
 F66 → F72 is the cleanest example of the project's method: **measure the property you are
 compensating for before writing the compensation.**
+
+**1b.2 is the cleanest example of a bit-exactness claim being cheap to PROVE rather than to argue.**
+The stored value does not change — the write path already computed `e4m3(x/scale) * scale` and threw
+the code away — so the acceptance test is `memcmp`, not a benchmark and not a tolerance, and the
+required `n` is zero at a flip rate of zero. Four gates, none needing a checkpoint:
+`gate_kv_pack` (round trip on 5.24 M floats per distribution across five distributions, plus the
+reader against the FP32 reader at 11 launch shapes x 5 problem shapes), `gate_kv_pack_e2e` (the
+~30 WIRING sites, driving the real decode/verify functions in both layouts and memcmping the
+outputs), and the two graph gates for the device-pos store kernels. Every one runs a negative
+control that must fail. The engine then agreed: **16 of 16 legs byte-identical with `tau` and mean
+verify width equal on every leg**, identical generated ids on `build/decode`, LOSSLESS x3 on both
+arms. A tolerance gate would have passed the sign-bit bug that `gate_idx_pack` caught in 1b.1 at
+**worst |delta| = 0** — numerically perfect, bitwise wrong.
+
+**It is not an adopted throughput win and it ships default OFF**; the measured trade is
++3.233 ± 0.203 ms/forward flat against −0.4996 ± 0.0290 per 1000 context, break-even ctx 6,471.
+[`negative-results.md` §4i](negative-results.md) for why a 2.84x byte reduction made the reader
+kernel *slower*, [`context-scaling.md`](context-scaling.md) for the half of it that is a win.
 
 ---
 

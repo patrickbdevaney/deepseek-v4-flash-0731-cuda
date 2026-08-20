@@ -1,0 +1,4 @@
+### pack=0
+[engine] ready. mem 115.3/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)
+### pack=1
+[engine] ready. mem 115.1/122.8 GiB  (seqmax 32768, batch 64, arena 640 MiB)

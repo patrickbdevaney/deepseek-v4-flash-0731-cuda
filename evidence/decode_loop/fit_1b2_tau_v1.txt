@@ -1,0 +1,22 @@
+### evidence/decode_loop/decode_1b2_off.log
+[decode] KV layout: fp32, 2048 B/row, 0.007 GiB for 85 rows x 43 layers
+[decode] structs built. mem 113.0/122.8 GiB
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.6 ms/tok = 13.77 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 113.1/122.8 GiB
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.77 tok/s
+[decode] mem 112.8/122.8 GiB
+### evidence/decode_loop/decode_1b2_on.log
+[decode] KV layout: PACKED fp8+ue8m0 (1b.2), 720 B/row, 0.002 GiB for 85 rows x 43 layers
+[decode] structs built. mem 112.9/122.8 GiB
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 72.6 ms/tok = 13.77 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 113.0/122.8 GiB
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.77 tok/s
+[decode] mem 112.9/122.8 GiB

@@ -78,6 +78,32 @@ validation of the arithmetic. Packed: **27.9 KiB/token, 3.56x**.
 items that fit: **0 at seqmax 4096, 198 at 8192**) **[R]**. **Packing is what buys 32k-64k context**,
 and it costs no accuracy at all.
 
+> **CORRECTION, 2026-08-20 (ladder 1b.2) — "does not fit" was inherited, not measured, and at 32768
+> it is wrong.** The table prices the KV cache in isolation; what binds is the whole resident set,
+> and that was never checked. So it was checked. Both layouts were loaded at **seqmax 32768** on this
+> box, same checkpoint, same binary, and **both came up and served a completion**
+> (`evidence/decode_loop/kvpack_1b2_capacity.txt`):
+>
+> | arm | seqmax | `[engine] ready` |
+> |---|---:|---|
+> | FP32 | 16384 | mem **112.4** / 122.8 GiB |
+> | packed | 16384 | mem **112.0** / 122.8 GiB |
+> | FP32 | 32768 | mem **115.3** / 122.8 GiB |
+> | packed | 32768 | mem **115.1** / 122.8 GiB |
+>
+> **The item's stated justification was over-claimed by one power of two: what packing buys is
+> headroom and 65536, not 32768.** 65536 stays arithmetic and is deliberately NOT measured in the
+> FP32 layout — it predicts ~117.7 of 122.8 GiB and this box does not OOM gracefully
+> (`wiki/oom-and-memory-safety.md`).
+>
+> **And note what that table does NOT show: the 2.08 GiB the arithmetic says separates the two
+> 32768 arms.** It shows 0.2. The `mem` line is `cudaMemGetInfo` at the end of load, and a
+> `cudaMalloc` on this unified pool is not resident until it is TOUCHED — the KV caches have been
+> allocated and not yet written at that point. So the resident-set line cannot price a cache that
+> has not been filled, and the saving has to be claimed from the allocation arithmetic (exact, and
+> checkable from `src/engine.cu:337` and `:341`) plus the fact that both arms load. See
+> `wiki/measurement-and-traps.md` §31.
+
 ## 4. Bandwidth is NOT the reason to do this
 
 Context-dependent bytes at 24k go **89.8 MB → 18.0 MB (4.99x)**, i.e. 0.392 → 0.071 ms at 240 GB/s

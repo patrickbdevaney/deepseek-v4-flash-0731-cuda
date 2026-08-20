@@ -6,6 +6,7 @@
 // is the same call, in the same order, with the same arguments as src/decode.cu's shipping path --
 // tests/gate_engine.cu is what holds that claim to account.
 #include "dsv4_engine.h"
+#include "kv_pack.h"
 #include "dsv4_load.h"
 #include "nvfp4_dense.h"
 #include "block.h"
@@ -329,16 +330,19 @@ void Engine::Impl::load() {
     // is the DSA index path, which scores every compressed row to select top-k -- O(context/ratio)
     // by construction -- with a `<<<1,32>>>` top-k on one warp on top of it. That is where the next
     // measurement goes. Kept behind DSV4_KV_COMBINED=1 so the experiment is repeatable.
+    // DECODE_LADDER 1b.2. Must run BEFORE any KV cache is allocated: it is what sets the row
+    // stride every allocation, memcpy and kernel below uses. See include/kv_pack.h.
+    kv_pack_init();
     g_kv_winmax = (getenv("DSV4_KV_COMBINED") && atoi(getenv("DSV4_KV_COMBINED")) == 1) ? seqmax : 0;
     const size_t comp_rows = (size_t)(seqmax / 4 + 2);   // widest compressed cache (ratio 4)
     for (int Lyr = 0; Lyr < N_LAYERS; ++Lyr) {
         const int ratio = compress_ratio(Lyr);
         // One allocation: [seqmax window rows][comp_rows compressed rows]. comp_kv is a VIEW.
         CU(cudaMalloc(&KV[Lyr].win_kv,
-                      ((size_t)seqmax + ((ratio && g_kv_winmax) ? comp_rows : 0)) * HEAD_DIM * 4));
+                      kv_rows_bytes((size_t)seqmax + ((ratio && g_kv_winmax) ? comp_rows : 0))));
         if (ratio) {
-            if (g_kv_winmax) KV[Lyr].comp_kv = KV[Lyr].win_kv + (size_t)seqmax * HEAD_DIM;
-            else CU(cudaMalloc(&KV[Lyr].comp_kv, comp_rows * HEAD_DIM * 4));
+            if (g_kv_winmax) KV[Lyr].comp_kv = kv_row(KV[Lyr].win_kv, seqmax);
+            else CU(cudaMalloc(&KV[Lyr].comp_kv, kv_rows_bytes(comp_rows)));
             // xin is the compressor's attention-input history. After the x_cur/x_full split its
             // only reader is compressor_emit_group, which never looks back further than 2*ratio
             // positions, so a ring of 2*ratio rows plus a `ratio`-row mirrored margin holds
@@ -422,7 +426,7 @@ void Engine::Impl::load() {
         m.n_routed = NE; m.n_act = N_ACT; m.dim = DIM; m.inter = MOE_INTER; m.vocab = VOCAB;
         m.route_scale = ROUTE_SCALE; m.swiglu_limit = SWIGLU_LIMIT;
         m.use_tc_pp = true; m.batched = true; m.device_route = true;
-        CU(cudaMalloc(&mkv[st], (size_t)seqmax * HEAD_DIM * 4));
+        CU(cudaMalloc(&mkv[st], kv_rows_bytes(seqmax)));
     }
     const std::string LS = "mtp." + std::to_string(NSTAGE - 1) + ".";
     hh_fn = L.f32(LS + "hc_head_fn"); hh_sc = L.f32(LS + "hc_head_scale"); hh_ba = L.f32(LS + "hc_head_base");

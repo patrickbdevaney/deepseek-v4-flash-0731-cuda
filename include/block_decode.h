@@ -7,12 +7,22 @@
 #include "block.h"
 #include "compressed_block.h"
 
-// Per-layer KV cache (append-only). win_kv:[seqmax,HEAD_DIM]; comp_kv:[Tmax,HEAD_DIM] (compressed);
+// Per-layer KV cache (append-only).
+//
+// ROW STRIDE IS `g_kv_rowf` FLOATS, NOT HEAD_DIM (DECODE_LADDER 1b.2, include/kv_pack.h). The main
+// KV rows are 512 fp32 (2048 B) in the default layout and 180 fp32 (720 B, FP8 E4M3 + 7 x UE8M0 +
+// fp32 RoPE) under DSV4_KV_PACK=1, and the two hold the IDENTICAL float values -- the FP32 layout
+// was already storing values that sit exactly on the E4M3 grid. Address a row with `kv_row(base, i)`
+// and size an allocation or a memcpy with `kv_rows_bytes(rows)`; `+ i * HEAD_DIM` is wrong in one of
+// the two layouts. `idx_ckv` is NOT covered by this -- it is the DSA index cache, 1b.1's format,
+// still [Tmax, index_head_dim] fp32.
+//
+// win_kv:[seqmax,row]; comp_kv:[Tmax,row] (compressed);
 // idx_ckv:[Tmax,index_head_dim] (ratio-4 only); xin:[seqmax,DIM] = per-position ATTENTION-INPUT history that
 // the compressor pools (overlap groups span the prefill/decode boundary, so prefill x1 must be retained).
 // T = compressed rows emitted so far.
 struct LayerKV { float* win_kv=nullptr; float* comp_kv=nullptr; float* idx_ckv=nullptr; float* xin=nullptr; int T=0;
-    // device-pos / CUDA-graph fields: combined cache [seqmax(window) + Tmax(compressed)][HEAD_DIM] so attention
+    // device-pos / CUDA-graph fields: combined cache [seqmax(window) + Tmax(compressed)][row] so attention
     // needs no per-step copy; d_T = device compressed-row count (graph reads it, the emit advances it on device).
     float* kvc=nullptr; float* idx_kvc=nullptr; int* d_T=nullptr; int winmax=0; };
 
