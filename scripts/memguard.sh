@@ -51,23 +51,35 @@
 #   MEMINFO     meminfo path, overridable for testing    (default /proc/meminfo)
 #   POLL_S      seconds between samples                  (default 0.2)
 #   PAT         victim's `comm`                          (default dsv4-server)
+# THE GUARD MUST NOT PERTURB WHAT IT WATCHES. At POLL_S=0.2 a naive loop spawns `awk` and `ps` five
+# times a second -- ~9000 processes per 30-minute model run -- and this project's run-to-run spread is
+# 3.5 %. So the hot path is spawn-free: MemAvailable is read with bash builtins, and the victim lookup
+# (the expensive part, a full `ps`) is refreshed on a slow cadence and forced immediately on a trip.
 set -u
 FLOOR_MB="${FLOOR_MB:-1500}"
 BREACHES="${BREACHES:-3}"
 DANGER_MB="${DANGER_MB:-2000}"
 RATE_MB_S="${RATE_MB_S:-400}"
 POLL_S="${POLL_S:-0.2}"
+POLL_MS=$(awk -v p="$POLL_S" 'BEGIN{printf "%d",p*1000}')   # once, at startup
 SLOPE_N="${SLOPE_N:-2}"
 MEMINFO="${MEMINFO:-/proc/meminfo}"
 PAT="${PAT:-dsv4-server}"
 LOG="${LOG:-evidence/memguard.log}"
 
 cd "$(dirname "$0")/.."
+# SPAWN-FREE WAIT. `sleep` is not a bash builtin, so one per poll is 5 forks/s for the whole run.
+# `read -t` on a fifo nobody writes to blocks for exactly the timeout and costs nothing.
+_FIFO=$(mktemp -u); mkfifo "$_FIFO" 2>/dev/null && exec 8<>"$_FIFO" && rm -f "$_FIFO"
+napp(){ if [ -e /proc/self/fd/8 ]; then read -t "$POLL_S" -u 8 _x 2>/dev/null; else sleep "$POLL_S"; fi; return 0; }
 echo "[memguard] floor=${FLOOR_MB}MB x${BREACHES} slope=<-${RATE_MB_S}MB/s below ${DANGER_MB}MB poll=${POLL_S}s pat=${PAT} started $(date -Is)" | tee -a "$LOG"
 
 low=999999999
 bad=0
 srate=0
+tick=0
+pid=""
+VICTIM_EVERY="${VICTIM_EVERY:-10}"   # 10 x 0.2 s = 2 s
 prev=""
 maxrate=0
 kill_victim(){
@@ -78,7 +90,10 @@ kill_victim(){
   exit 1
 }
 while true; do
-  avail=$(awk '/MemAvailable/{print int($2/1024)}' "$MEMINFO") || true
+  avail=""
+  while read -r _k _v _; do
+    if [ "$_k" = "MemAvailable:" ]; then avail=$((_v/1024)); break; fi
+  done < "$MEMINFO"
   [ -n "$avail" ] || { echo "[memguard] meminfo exhausted, exiting" | tee -a "$LOG"; exit 0; }
   # SELECT THE VICTIM BY `comm`, NOT BY COMMAND LINE. `pgrep -f decode` matches every shell whose
   # command line merely CONTAINS "decode" -- and Claude Code's bash wrapper embeds the text of the
@@ -86,8 +101,12 @@ while true; do
   # shell as its "victim", never exit when the real model did, and -- since this script's whole job
   # is `kill -9` -- eventually kill that shell instead of the loader. `comm` is the executable name
   # as the kernel reports it; a shell is `bash` regardless of what it is typing.
-  pid=$(ps -eo pid=,comm= | awk -v p="$PAT" '$2==p {print $1; exit}')
-  [ -n "$pid" ] || pid=$(ps -eo pid=,comm= | awk -v p="$(basename "$PAT")" '$2==p {print $1; exit}')
+  # Refresh at most every VICTIM_EVERY polls; a `ps` per poll is the expensive part.
+  if [ $((tick % VICTIM_EVERY)) -eq 0 ] || { [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; }; then
+    pid=$(ps -eo pid=,comm= | awk -v p="$PAT" '$2==p {print $1; exit}')
+    [ -n "$pid" ] || pid=$(ps -eo pid=,comm= | awk -v p="$(basename "$PAT")" '$2==p {print $1; exit}')
+  fi
+  tick=$((tick+1))
 
   if [ -z "$pid" ]; then
     if [ "${seen:-0}" = "1" ]; then
@@ -95,16 +114,19 @@ while true; do
       exit 0
     fi
   else
+    if [ "${seen:-0}" != 1 ]; then
+      echo "[memguard] watching pid $pid ($PAT)" | tee -a "$LOG"
+    fi
     seen=1
     [ "$avail" -lt "$low" ] && low=$avail
 
     # SLOPE. Rate over one poll interval, in MB/s, positive = falling.
     if [ -n "$prev" ]; then
-      rate=$(awk -v a="$prev" -v b="$avail" -v p="$POLL_S" 'BEGIN{printf "%d",(a-b)/p}')
+      rate=$(( (prev - avail) * 1000 / POLL_MS ))
       [ "$rate" -gt "$maxrate" ] && maxrate=$rate
       if [ "$avail" -lt "$DANGER_MB" ] && [ "$rate" -gt "$RATE_MB_S" ]; then srate=$((srate+1)); else srate=0; fi
       if [ "$srate" -ge "$SLOPE_N" ]; then
-        kill_victim "MemAvailable ${avail} MB falling ${rate} MB/s (< ${DANGER_MB} MB and faster than ${RATE_MB_S} MB/s): ~$(awk -v a="$avail" -v r="$rate" 'BEGIN{printf "%.1f",a/r}') s from zero" "$pid"
+        kill_victim "MemAvailable ${avail} MB falling ${rate} MB/s (< ${DANGER_MB} MB and faster than ${RATE_MB_S} MB/s): ~$(( avail * 10 / rate )) tenths of a second from zero" "$pid"
       fi
     fi
     prev=$avail
@@ -113,5 +135,5 @@ while true; do
     if [ "$avail" -lt "$FLOOR_MB" ]; then bad=$((bad+1)); else bad=0; fi
     [ "$bad" -ge "$BREACHES" ] && kill_victim "MemAvailable ${avail} MB < floor ${FLOOR_MB} MB x${bad}" "$pid"
   fi
-  sleep "$POLL_S"
+  napp
 done

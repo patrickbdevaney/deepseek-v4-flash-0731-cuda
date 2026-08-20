@@ -15,6 +15,10 @@
 #
 # Floors sit BELOW memguard's so the armed guard always acts first and this only catches what it
 # missed. Same slope-vs-level reasoning as memguard.
+# THE GUARD MUST NOT PERTURB WHAT IT WATCHES. At POLL_S=0.2 a naive loop spawns `awk` and `ps` five
+# times a second -- ~9000 processes per 30-minute model run -- and this project's run-to-run spread is
+# 3.5 %. So the hot path is spawn-free: MemAvailable is read with bash builtins, and the victim lookup
+# (the expensive part, a full `ps`) is refreshed on a slow cadence and forced immediately on a trip.
 set -u
 ALLOW="${ALLOW:-dsv4-server decode decode_probe decode_prechange decode_pre1p4_ref forward load_device}"
 FLOOR_MB="${FLOOR_MB:-1200}"
@@ -23,17 +27,25 @@ RATE_MB_S="${RATE_MB_S:-400}"
 BREACHES="${BREACHES:-3}"
 SLOPE_N="${SLOPE_N:-2}"
 POLL_S="${POLL_S:-0.2}"
+POLL_MS=$(awk -v p="$POLL_S" 'BEGIN{printf "%d",p*1000}')   # once, at startup
 MEMINFO="${MEMINFO:-/proc/meminfo}"
 LOG="${LOG:-evidence/oomsentry.log}"
 cd "$(dirname "$0")/.."
+# SPAWN-FREE WAIT. `sleep` is not a bash builtin, so one per poll is 5 forks/s for the whole run.
+# `read -t` on a fifo nobody writes to blocks for exactly the timeout and costs nothing.
+_FIFO=$(mktemp -u); mkfifo "$_FIFO" 2>/dev/null && exec 8<>"$_FIFO" && rm -f "$_FIFO"
+napp(){ if [ -e /proc/self/fd/8 ]; then read -t "$POLL_S" -u 8 _x 2>/dev/null; else sleep "$POLL_S"; fi; return 0; }
 mkdir -p "$(dirname "$LOG")"
 say(){ echo "[oomsentry $(date -Is)] $*" >> "$LOG"; }
 say "started: floor=${FLOOR_MB}MB slope=<-${RATE_MB_S}MB/s below ${DANGER_MB}MB poll=${POLL_S}s allow='${ALLOW}'"
 
 bad=0; srate=0; prev=""; warned=0
 while true; do
-  avail=$(awk '/MemAvailable/{print int($2/1024)}' "$MEMINFO" 2>/dev/null) || avail=""
-  if [ -z "$avail" ]; then sleep "$POLL_S"; continue; fi
+  avail=""
+  while read -r _k _v _; do
+    if [ "$_k" = "MemAvailable:" ]; then avail=$((_v/1024)); break; fi
+  done < "$MEMINFO" 2>/dev/null
+  if [ -z "$avail" ]; then napp; continue; fi
 
   trip=""
   if [ -n "$prev" ]; then
@@ -64,5 +76,5 @@ while true; do
   else
     warned=0
   fi
-  sleep "$POLL_S"
+  napp
 done

@@ -44,6 +44,9 @@ run_arm(){
   kill -9 "$vic" "$guard" 2>/dev/null; wait 2>/dev/null
 
   local got=killed; [ "$alive" = yes ] && got=survived
+  if ! grep -q "watching pid" "$glog" 2>/dev/null; then
+    echo "  FAIL  $name: the guard never adopted a victim, so this arm proves nothing"; fail=1; return
+  fi
   local lvl; lvl=$(grep -ho "MemAvailable -\?[0-9]* MB" "$glog" 2>/dev/null | head -1 | awk '{print $2}')
   if [ "$got" = "$expect" ] && { [ -z "$minlevel" ] || { [ -n "$lvl" ] && [ "$lvl" -ge "$minlevel" ]; }; }; then
     echo "  PASS  $name: victim $got (expected $expect)${lvl:+, killed at MemAvailable ${lvl} MB${minlevel:+ >= ${minlevel}}}"
