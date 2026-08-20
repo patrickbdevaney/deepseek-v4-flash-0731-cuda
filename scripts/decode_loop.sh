@@ -75,7 +75,10 @@ cpu_gates(){
     [ -x "build/$g" ] || continue
     if ! ./build/"$g" > "$LOGDIR/$g.log" 2>&1; then say "GATE FAIL: $g (see $LOGDIR/$g.log)"; ok=1; fi
   done
-  [ -x build/gate_topk_warp ] && { ./build/gate_topk_warp > "$LOGDIR/gate_topk_warp.log" 2>&1 || { say "GATE FAIL: gate_topk_warp"; ok=1; }; }
+  for g in gate_topk_warp gate_idx_pack; do
+    [ -x "build/$g" ] || continue
+    ./build/"$g" > "$LOGDIR/$g.log" 2>&1 || { say "GATE FAIL: $g"; ok=1; }
+  done
   return $ok
 }
 
