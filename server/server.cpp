@@ -472,6 +472,19 @@ int main(int argc, char** argv) {
                  {"usage", json{{"prompt_tokens", r.stats.prompt_tokens},
                                 {"completion_tokens", r.stats.completion_tokens},
                                 {"total_tokens", r.stats.prompt_tokens + r.stats.completion_tokens}}}};
+        // TIMINGS ON THIS PATH ARE NOT COSMETIC -- THEY ARE THE ONLY WINDOW INTO DEEP CONTEXT.
+        // /v1/chat/completions has always returned them; this endpoint never did, and it is the
+        // endpoint tools/eval_extend.py drives. Every continuation leg the project has ever run --
+        // the ONLY decode above the 8k base budget, i.e. the entire 8k-24k regime -- therefore
+        // recorded nothing, and tools/decode_model.py can fit decode cost against context only out
+        // to ~6.6k. The context-linear term is already 59% of a forward there and rising, so the
+        // regime that matters most is the one that was invisible. Same fields as the chat path so
+        // the two are directly comparable.
+        out["timings"] = json{{"prefill_ms", r.stats.prefill_ms},
+                              {"decode_ms", r.stats.decode_ms},
+                              {"tokens_per_second", r.stats.tok_per_s},
+                              {"tokens_per_verify", r.stats.tok_per_verify}};
+        out["spec_profile"] = spec_profile_json(r.stats.spec);
         res.set_content(dump_lossy(out), "application/json");
         } catch (const std::exception& e) {
             ++m_errors;

@@ -321,6 +321,9 @@ def main():
                            # is measured at that depth. Overwriting the top-level `timings` would
                            # change what a landed benchmark row means, so the leg is recorded
                            # alongside instead: scoring reads `timings`, perf_ingest.py reads this.
+                           # Empty until the server carrying timings on /v1/completions is
+                           # deployed; a record either has the leg's timings or predates the fix,
+                           # and decode_model.py must be able to tell which.
                            ext_timings=dict(
                                (resp.get('timings') or {}),
                                cached_tokens=(u.get('prompt_tokens_details') or {})
