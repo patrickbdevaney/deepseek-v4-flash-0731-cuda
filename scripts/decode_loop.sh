@@ -161,6 +161,13 @@ a number proved untrustworthy. Update wiki/README.md's state table in the same c
 asserted "the M=1 kernel path is finished" while the largest term in decode had never been timed —
 an unmaintained page becomes confidently wrong, which is worse than an absent one.
 
+NEVER WAIT WITH `pgrep -f`. Claude Code's bash wrapper embeds the text of the command into its own
+command line, so `until ! pgrep -f "build_decode.sh"; do sleep 20; done` MATCHES ITSELF and never
+returns. Iteration 8 hung exactly this way, with zero compilers running, and would have burned its
+whole 4 h timeout waiting on its own shell. The same trap has bitten memguard's victim selection and
+the watchdog's residency check. Use `scripts/wait_build.sh [timeout]` to wait for a build, and match
+`comm` (`ps -eo comm=`), never a command line, for anything else. Every wait needs a timeout.
+
 NON-NEGOTIABLE:
   * ONE MODEL AT A TIME. 100.4 GiB of weights in a 122 GiB pool; this box does not OOM gracefully.
     Launch full-model runs ONLY via scripts/run_model.sh, which enforces single-tenancy and arms a
