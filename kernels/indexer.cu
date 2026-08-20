@@ -180,7 +180,8 @@ void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, con
     k_causal_mask<<<(s*T+255)/256,256,0,stream>>>(index_score_out, s, T, ratio); dprobe(stream);
     int topk = index_topk < T ? index_topk : T;
     if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_offset_rx<<<s, TOPK_RADIX_NT, 0, stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset, topk_early_on());
-    else                                        k_topk_offset<<<s, 32, topk_scan_smem(T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
+    else{ k_topk_offset<<<s, 32, TOPK_SMEM(k_topk_offset, T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
+          TOPK_LAUNCHED(k_topk_offset, T); }
     dprobe(stream);
     CUI(cudaStreamSynchronize(stream));
     cudaFree(qrq);cudaFree(qrs);cudaFree(q);cudaFree(qtmp);cudaFree(ckv);cudaFree(weights);

@@ -92,6 +92,43 @@ lower still — `comp_kv` + `idx_ckv` + a fixed window is ~13 KiB/token. That ha
 verified against the attention kernels and is not counted in any number above; the 99.4 KiB/token
 figure charges `win_kv` at full `seqmax` and is therefore the conservative one.
 
+## The second ceiling, which is not memory at all: 49,140 tokens of shared memory
+
+**Added 2026-08-20 by DECODE_LADDER item 1.4.** Everything above this line is about *allocation* —
+how many GiB a context costs. There is a second, entirely independent context ceiling in this engine
+that costs nothing and fails differently, and it is lower than most of the seqmax figures the page
+argues for.
+
+The four warp selection-sort top-k kernels (`k_topk_offset`, `k_topk_decode`, `k_topk_verify`,
+`k_topk_masked`) stage the whole indexer score row in **dynamic shared memory**: `~4T` bytes, where
+`T` is the compressed-row count, `context / ratio`. The per-block default on this device is 49,152 B:
+
+| limit | bytes | T | context at ratio 4 |
+|---|---:|---:|---:|
+| `cudaDevAttrMaxSharedMemoryPerBlock` (default) | 49,152 | 12,285 | **49,140** |
+| `cudaDevAttrMaxSharedMemoryPerBlockOptin` | 232,448 | 58,109 | **232,436** |
+
+Above 49,140 the launch fails, `cudaDeviceSynchronize()` returns **success**, and the output index
+array is left untouched — see [`measurement-and-traps.md` §17](measurement-and-traps.md). So the
+"seqmax ~40,000 in the same memory" this page ends on was, before 1.4, the largest context that
+would have worked *by luck*: the arena fix and the `xin` ring buffer would have bought memory
+headroom and then walked into a silent wrong answer 9,000 tokens later.
+
+Two things about it are worth carrying:
+
+* **It is not the shipped path.** Item 1.2 replaced all four with a single-CTA radix select that uses
+  ~7 KiB of *static* shared memory whatever `T` is. The engine's default path has no context ceiling
+  from shared memory at all. What retained the defect was the `DSV4_TOPK_RADIX=0` A/B arm and the
+  `DSV4_TOPK_GATE=1` in-situ reference.
+* **The fix is an opt-in, and it is 4.7×, not infinite.** `topk_scan_smem_optin` in
+  `include/indexer.h` raises those arms to 232,436 tokens of context and *aborts* above it.
+  Bit-exactness against the radix select is gated at T = 12,286 / 16,381 / 24,570 / 58,045 on six
+  distributions, under CUDA-graph capture as well as direct launch.
+
+The transferable form: **a context ceiling need not be a memory ceiling.** Before raising `seqmax`,
+grep for launch configurations computed from a runtime quantity — dynamic shared memory, grid size,
+block size — because those fail at a fixed number that no allocation table will tell you about.
+
 ## Why this matters beyond memory
 
 Every number in `EVALS.md` is capped by the 4096-token context, and DeepSeek recommends 384K output

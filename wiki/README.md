@@ -12,6 +12,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
 | [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the two adoptions (1.0, 1.2) that took `b` down 65 %, and what is left |
+| [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
 
 ## The state in one table
 
@@ -31,6 +32,17 @@ historical measurement; the second is where agentic work actually runs.
 | spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | +21.7 % then +6.7 % |
 | spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | **11.77 tok/s** | *unchanged* | +15.8 % then +5.8 % |
 | context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | **2.514 ms/1000** | 3.008 → 3.036, its own arms | **−65 % cumulative** |
+
+**1.4 is not in that table at all, and that is the correct place for it.** It is a correctness item,
+not a throughput one: it removes a silent garbage-return above context 49,140 from the two top-k
+*instruments* (the `DSV4_TOPK_RADIX=0` A/B arm and the `DSV4_TOPK_GATE=1` in-situ reference), which
+requested `~4T` bytes of dynamic shared memory against a 49,152 B default. The shipped path has
+requested **zero** dynamic shared memory since 1.2, so no measured number in this table moves and
+none was claimed. What the item is worth is that the arms which certify every *future* top-k change
+now work above the context they were only ever run below. See
+[`measurement-and-traps.md` §17](measurement-and-traps.md) — a failed launch that
+`cudaStreamSynchronize` reports as success — and
+[`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md).
 
 **1.3 is in that table as a blank on purpose.** It shipped, it is bit-exact across 66.9 M gated
 index slots, and it is worth 0.07 % of a forward — a correct optimisation of a term 1.2 had already

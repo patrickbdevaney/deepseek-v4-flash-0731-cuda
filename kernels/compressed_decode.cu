@@ -125,7 +125,8 @@ static void topk_gate_verify(const int* got, const float* score, int K, int Tf, 
                              int pos, int ratio, int nwin, cudaStream_t stream){
     size_t n = (size_t)K*topkc;
     int* ref = nullptr; CU(cudaMalloc(&ref, n*4));
-    k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(ref, score, K, Tf, topkc, pos, ratio, nwin);
+    k_topk_verify<<<K,32,TOPK_SMEM(k_topk_verify,Tf),stream>>>(ref, score, K, Tf, topkc, pos, ratio, nwin);
+    TOPK_LAUNCHED(k_topk_verify, Tf);
     CU(cudaStreamSynchronize(stream));
     std::vector<int> a(n), b(n);
     CU(cudaMemcpy(a.data(), got, n*4, cudaMemcpyDeviceToHost));
@@ -139,7 +140,8 @@ static void topk_gate_decode(const int* got, const float* score, int T, int topk
                              int pos, cudaStream_t stream){
     size_t n = (size_t)topk;
     int* ref = nullptr; CU(cudaMalloc(&ref, n*4));
-    k_topk_decode<<<1,32,topk_scan_smem(T),stream>>>(ref, score, T, topk, offset);
+    k_topk_decode<<<1,32,TOPK_SMEM(k_topk_decode,T),stream>>>(ref, score, T, topk, offset);
+    TOPK_LAUNCHED(k_topk_decode, T);
     CU(cudaStreamSynchronize(stream));
     std::vector<int> a(n), b(n);
     CU(cudaMemcpy(a.data(), got, n*4, cudaMemcpyDeviceToHost));
@@ -322,7 +324,8 @@ void compressed_decode_step_indexer(float* out, const float* x_cur, const float*
     int* dtop; dtop=(decltype(dtop))dmalloc((size_t)topk*4);
     const int coff = g_kv_winmax ? g_kv_winmax : nwin;      // row where compressed rows begin
     if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_decode_rx<<<1,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, Tn, topk, coff, topk_early_on());
-    else                                       k_topk_decode<<<1,32,topk_scan_smem(Tn),stream>>>(dtop, iscore, Tn, topk, coff);
+    else{ k_topk_decode<<<1,32,TOPK_SMEM(k_topk_decode,Tn),stream>>>(dtop, iscore, Tn, topk, coff);
+          TOPK_LAUNCHED(k_topk_decode, Tn); }
     if(topk_gate_on() && topk_radix_on() && topk<=TOPK_RADIX_CAP) topk_gate_decode(dtop, iscore, Tn, topk, coff, pos, stream);
     // --- kv_all = [win_kv ; comp_kv] -- contiguous already when g_kv_winmax is set ---
     int ntot = coff + Tn;
@@ -539,7 +542,8 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     dprof_begin(DP_I_TOPK,stream);
     const int coff = g_kv_winmax ? g_kv_winmax : nwin;
     if(topk_radix_on() && topkc<=TOPK_RADIX_CAP) k_topk_verify_rx<<<K,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff, topk_early_on());
-    else                                         k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);   // device top-k (no D2H sync)
+    else{ k_topk_verify<<<K,32,TOPK_SMEM(k_topk_verify,Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);   // device top-k (no D2H sync)
+          TOPK_LAUNCHED(k_topk_verify, Tf); }
     if(topk_gate_on() && topk_radix_on() && topkc<=TOPK_RADIX_CAP) topk_gate_verify(dtop, iscore, K, Tf, topkc, pos, ratio, coff, stream);
     dprof_end(DP_I_TOPK,stream);
     dprof_end(DP_C_INDEXER,stream);
@@ -682,7 +686,8 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     gemm_fp32(iw,x,w.idx_weights_proj,1,nH,DIM,stream); dprobe(stream); k_iw_scale<<<(nH+63)/64,64,0,stream>>>(iw,wscale,nH); dprobe(stream);
     index_score(isc,qtmp,idx_kvc,iw,1,Tmax,nH,ihd,stream); dprobe(stream); k_mask_scores<<<(Tmax+63)/64,64,0,stream>>>(isc,d_T,Tmax); dprobe(stream);
     if(topk_radix_on() && topk_c<=TOPK_RADIX_CAP) k_topk_masked_rx<<<1,TOPK_RADIX_NT,0,stream>>>(sel,isc,Tmax,topk_c,winmax,topk_early_on());
-    else                                          k_topk_masked<<<1,32,topk_scan_smem(Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax);
+    else{ k_topk_masked<<<1,32,TOPK_SMEM(k_topk_masked,Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax);
+          TOPK_LAUNCHED(k_topk_masked, Tmax); }   // NOTE: sized by Tmax (=seqmax/ratio), not the live T
     dprobe(stream);
     k_comb_strided_dp<<<(wtop+63)/64,64,0,stream>>>(win,d_pos,d_T,winmax,wtop,0); dprobe(stream);   // window part only (Tmax=0)
     k_comb_join<<<(wtop+topk_c+63)/64,64,0,stream>>>(comb,win,sel,wtop,topk_c); dprobe(stream);

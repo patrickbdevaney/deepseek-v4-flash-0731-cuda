@@ -307,3 +307,52 @@ the identical samples: 0.88 → 1.25 → 3.53 ms at ctx 768/1536/6144, i.e. **0.
 This trap is the direct counterweight to rule 6 in `DECODE_LADDER.md`: re-attributing before you
 pick is free and necessary, and it will hand you a number that re-ranks the list for the wrong
 reason if you do not check the shape.
+
+---
+
+## 17. A launch that failed, and a `cudaStreamSynchronize` that called it success
+
+DECODE_LADDER item 1.4, 2026-08-20. The four warp selection-sort top-k kernels stage the whole score
+row in **dynamic** shared memory, so they are launched with `~4T` bytes. Measured on this box
+(`/tmp/smem_probe.cu`, reproduced as a permanent leg of `tests/gate_topk_radix.cu`):
+
+| T | dynamic smem | `cudaGetLastError()` after the launch | `cudaDeviceSynchronize()` | output buffer |
+|---:|---:|---|---|---|
+| 12,288 | 49,152 B | `cudaSuccess` | `cudaSuccess` | correct |
+| 16,384 | 65,536 B | **`cudaErrorInvalidValue`** | **`cudaSuccess`** | **untouched** |
+
+Read the third and fourth columns together. **The launch never happened, and the synchronize said
+everything was fine.** A shared-memory over-request is caught at *launch configuration* time, on the
+host, before anything is enqueued — so there is no device-side work to fault, nothing for the stream
+to report, and the error sits in the thread's error slot until somebody calls `cudaGetLastError()`.
+The output buffer keeps whatever it held. Here that is `zalloc`'s zeros, so `sparse_attn` would have
+attended to KV row 0 for every head, at full speed, forever, with no diagnostic anywhere.
+
+**This defeats every defence this repo had.** `dprobe()` is compiled into the path but inert unless
+`DSV4_SYNCPROBE` is set. `dsync()` does read the error slot, but only *warns* unless
+`DSV4_STRICT_LAUNCH` is set, and it skips its synchronize entirely while the arena is on. And the
+bit-exactness gates cannot see it either: a gate that compares two paths would have had to run
+*above* the ceiling to notice, and nothing did, because `seqmax` is 16,384 and the ceiling is
+context 49,140.
+
+That last point is the general one and it is why this sits next to §11:
+
+> **Rule.** A launch-configuration failure is invisible to a stream synchronize. Check
+> `cudaGetLastError()` immediately after any launch whose *configuration* — dynamic shared memory,
+> block size, grid size — is computed from a runtime quantity. And note that the quantity here is
+> **context**, which no gate in the suite varied past the engine's own `seqmax`: a limit that only
+> bites outside the range your harness spans is a limit your harness certifies as absent.
+
+The fix is `cudaFuncSetAttribute(..., cudaFuncAttributeMaxDynamicSharedMemorySize, ...)`, which on
+this device moves the ceiling from 49,152 B to 232,448 B — context 49,140 to 232,436. Above *that*
+there is no opt-in on any device, so `topk_scan_smem_optin` (`include/indexer.h`) aborts with the
+numbers rather than returning a size whose launch will fail silently. The abort is not defensive
+decoration: it is exercised by a forked child in `tests/gate_topk_radix.cu`, which requires
+`SIGABRT`. Error handling that is never executed is not error handling.
+
+**Why the shipped path was never affected, and why the item was still worth closing.** Item 1.2's
+radix select uses ~7 KiB of *static* shared memory whatever `T` is, so the engine's default path
+cannot reach this at any context. What retained the defect was the `DSV4_TOPK_RADIX=0` A/B arm and
+the `DSV4_TOPK_GATE=1` in-situ reference — the two instruments that exist to prove a *future* top-k
+change still matches the original selection sort. An instrument that silently produces zeros above a
+context nobody has tried yet is worse than no instrument, because it will agree with anything.

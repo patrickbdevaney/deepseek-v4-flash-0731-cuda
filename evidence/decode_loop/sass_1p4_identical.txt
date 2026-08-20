@@ -1,0 +1,19 @@
+== item 1.4 device-code equivalence: SASS of the two changed TUs, HEAD vs working tree ==
+   pre  = git archive HEAD -> /tmp/pre14 (includes the pre-change include/indexer.h)
+   post = working tree
+   nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -cubin ; cuobjdump -sass ; addresses stripped
+
+kernels/indexer.cu   pre   5847 lines   post   5847 lines   IDENTICAL
+kernels/compressed_decode.cu pre  12612 lines   post  12612 lines   IDENTICAL
+
+sha256 of the stripped SASS:
+c9c877f122934ecd6d7e1ca001750eecfe2458aa26dc2071043b4f01ec098440  compressed_decode.post.sass
+c9c877f122934ecd6d7e1ca001750eecfe2458aa26dc2071043b4f01ec098440  compressed_decode.pre.sass
+acbb6c88daec6280fbbc64026d2378e673981d86686f4549fec893ca872bcf34  indexer.post.sass
+acbb6c88daec6280fbbc64026d2378e673981d86686f4549fec893ca872bcf34  indexer.pre.sass
+
+CONCLUSION: item 1.4 changed no device code. Every kernel in both translation units compiles
+to byte-identical SASS; the only change is the host-side launch CONFIGURATION of the four
+fallback/reference launches (dynamic shared memory opt-in + a post-launch error check), and
+the shipped radix branch does not evaluate either macro. Bit-exactness is therefore a property
+of the compiled artefact here, not an inference from a token comparison.

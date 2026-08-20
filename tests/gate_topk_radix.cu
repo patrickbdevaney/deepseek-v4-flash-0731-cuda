@@ -28,7 +28,11 @@
 #include <vector>
 #include <algorithm>
 #include <cuda_runtime.h>
+#include <unistd.h>
+#include <csignal>
+#include <sys/wait.h>
 #include "topk_radix.h"
+#include "indexer.h"     // item 1.4: topk_scan_smem_optin / TOPK_SMEM / TOPK_LAUNCHED
 
 #define CU_(x) do{ cudaError_t e=(x); if(e){ printf("CUDA %s @%d\n", cudaGetErrorString(e), __LINE__); exit(1);} }while(0)
 
@@ -318,6 +322,144 @@ int main(){
             printf("%6d %6d %5s   %-22s %-22s %+9.2f\n", T, topk, (T<=topk)?"yes":"no", fb, eb, f_md-e_md);
             CU_(cudaFree(ds)); CU_(cudaFree(o));
         }
+    }
+
+    // ================= ITEM 1.4: ABOVE THE 48 KiB CEILING ========================================
+    // The whole point of the item. The four warp kernels stage the score row in DYNAMIC shared
+    // memory, so they ask for ~4T bytes against a 49,152 B per-block default -- T 12,288, context
+    // 49,152 at ratio 4. Nothing in this repo has ever run the engine that high (`seqmax` is
+    // 16,384, T 4,096), which is exactly why the defect survived: it is unreachable from the
+    // engine and therefore untested by every gate that goes through the engine. This leg reaches
+    // it directly, because a ceiling you have not crossed is a ceiling you have not measured.
+    //
+    // THREE THINGS ARE PROVED HERE, IN THIS ORDER, AND THE FIRST IS THE ONE THAT MATTERS:
+    //   1. WITHOUT the opt-in the launch fails, the following cudaDeviceSynchronize returns
+    //      SUCCESS, and the output buffer is returned to the caller UNCHANGED. That is the silent
+    //      garbage-return. It is asserted, not narrated: if a future CUDA release starts making
+    //      this launch work, or starts making the sync report it, this gate fails and says so.
+    //   2. WITH the opt-in (`TOPK_SMEM`, the engine's own macro, from include/indexer.h -- not a
+    //      copy) the same launch runs and is BIT-IDENTICAL to the radix select at every T above the
+    //      ceiling, on all six distributions.
+    //   3. The opt-in survives CUDA-GRAPH CAPTURE. `k_topk_masked` is reached from
+    //      `compressed_decode_step_indexer_dp`, which is captured; `cudaFuncSetAttribute` is a host
+    //      call and is documented as not stream-ordered, but "documented" is not "measured", and
+    //      the failure mode would be a capture that aborts the whole decode path.
+    printf("\n== item 1.4: the four warp kernels above the default dynamic-shared-memory ceiling ==\n");
+    {
+        int dev=0; CU_(cudaGetDevice(&dev));
+        int lim_def=0, lim_opt=0;
+        CU_(cudaDeviceGetAttribute(&lim_def, cudaDevAttrMaxSharedMemoryPerBlock,      dev));
+        CU_(cudaDeviceGetAttribute(&lim_opt, cudaDevAttrMaxSharedMemoryPerBlockOptin, dev));
+        const int T_def = (int)(lim_def/4) - 3, T_opt = (int)(lim_opt/4) - 3;
+        printf("  default limit %d B -> T <= %d (context <= %d at ratio 4)\n", lim_def, T_def, T_def*4);
+        printf("  opt-in  limit %d B -> T <= %d (context <= %d at ratio 4), %.1fx more headroom\n",
+               lim_opt, T_opt, T_opt*4, (double)lim_opt/lim_def);
+
+        // ---- 1. the defect, demonstrated on the shipped kernel BEFORE anything opts it in -------
+        const int Tbad = T_def + 4096;                     // comfortably over, still far under opt-in
+        const int topkb = TOPK;
+        std::vector<float> hb(Tbad); fill(hb,0,Tbad);
+        float* dsb; int* ob;
+        CU_(cudaMalloc(&dsb,(size_t)Tbad*4)); CU_(cudaMemcpy(dsb,hb.data(),(size_t)Tbad*4,cudaMemcpyHostToDevice));
+        CU_(cudaMalloc(&ob,(size_t)topkb*4));
+        CU_(cudaMemset(ob,0xA5,(size_t)topkb*4));          // poison: an un-run kernel leaves this intact
+        std::vector<int> before(topkb), after(topkb);
+        CU_(cudaMemcpy(before.data(),ob,(size_t)topkb*4,cudaMemcpyDeviceToHost));
+        cudaGetLastError();
+        old_masked<<<1,32,smem(Tbad)>>>(ob,dsb,Tbad,topkb,WINMAX);      // RAW size, no opt-in
+        cudaError_t le = cudaGetLastError();
+        cudaError_t se = cudaDeviceSynchronize();
+        CU_(cudaMemcpy(after.data(),ob,(size_t)topkb*4,cudaMemcpyDeviceToHost));
+        bool untouched = (before == after);
+        bool defect_ok = (le == cudaErrorInvalidValue) && (se == cudaSuccess) && untouched;
+        printf("  no opt-in, T=%d (%zu B): launch=%s  sync=%s  output=%s  -> %s\n",
+               Tbad, smem(Tbad), cudaGetErrorName(le), cudaGetErrorName(se),
+               untouched? "UNTOUCHED" : "written",
+               defect_ok? "defect reproduced (launch fails, sync says success, buffer is stale)"
+                        : "UNEXPECTED - the failure mode has changed, re-read item 1.4");
+        all_ok &= defect_ok;
+        cudaGetLastError();
+
+        // ---- 2. the fix: identical results at every T above the ceiling -------------------------
+        // T_opt-64 is one block under the hardware opt-in maximum: the last T that can work at all.
+        int Thi[] = { T_def+1, T_def+4096, 2*T_def, T_opt-64 };
+        for(int T : Thi){
+            int topk = TOPK<T? TOPK : T;
+            bool ok_all = true;
+            for(int mode=0; mode<6; ++mode){
+                std::vector<float> h(T); fill(h,mode,T);
+                float* ds; int *o1,*o2;
+                CU_(cudaMalloc(&ds,(size_t)T*4)); CU_(cudaMemcpy(ds,h.data(),(size_t)T*4,cudaMemcpyHostToDevice));
+                CU_(cudaMalloc(&o1,(size_t)topk*4)); CU_(cudaMalloc(&o2,(size_t)topk*4));
+                old_masked<<<1,32,TOPK_SMEM(old_masked,T)>>>(o1,ds,T,topk,WINMAX);
+                TOPK_LAUNCHED(old_masked,T);
+                CU_(cudaDeviceSynchronize());
+                std::vector<int> a(topk),b(topk);
+                CU_(cudaMemcpy(a.data(),o1,(size_t)topk*4,cudaMemcpyDeviceToHost));
+                for(int ea=0; ea<2; ++ea){
+                    new_masked<<<1,TOPK_RADIX_NT>>>(o2,ds,T,topk,WINMAX,ea!=0);
+                    CU_(cudaDeviceSynchronize()); CU_(cudaGetLastError());
+                    CU_(cudaMemcpy(b.data(),o2,(size_t)topk*4,cudaMemcpyDeviceToHost));
+                    ok_all &= cmp(ea? "over-ceiling/early" : "over-ceiling/full",a,b,T,mode);
+                }
+                CU_(cudaFree(ds)); CU_(cudaFree(o1)); CU_(cudaFree(o2));
+            }
+            all_ok &= ok_all;
+            printf("  opted in,  T=%6d (%7zu B, context %7d): %s\n",
+                   T, smem(T), T*4, ok_all? "identical to radix on all 6 distributions" : "DIFFER");
+        }
+
+        // ---- 3. the opt-in under CUDA-graph capture ---------------------------------------------
+        {
+            const int T = T_def + 4096, topk = TOPK;
+            std::vector<float> h(T); fill(h,0,T);
+            float* ds; int *o1,*o2;
+            CU_(cudaMalloc(&ds,(size_t)T*4)); CU_(cudaMemcpy(ds,h.data(),(size_t)T*4,cudaMemcpyHostToDevice));
+            CU_(cudaMalloc(&o1,(size_t)topk*4)); CU_(cudaMalloc(&o2,(size_t)topk*4));
+            cudaStream_t st; CU_(cudaStreamCreate(&st));
+            cudaGraph_t g; cudaGraphExec_t ge;
+            CU_(cudaStreamBeginCapture(st, cudaStreamCaptureModeRelaxed));
+            old_masked<<<1,32,TOPK_SMEM(old_masked,T),st>>>(o1,ds,T,topk,WINMAX);
+            cudaError_t ce = cudaStreamEndCapture(st,&g);
+            bool cap_ok = (ce == cudaSuccess);
+            if(cap_ok){
+                CU_(cudaGraphInstantiate(&ge,g,nullptr,nullptr,0));
+                CU_(cudaGraphLaunch(ge,st)); CU_(cudaStreamSynchronize(st));
+                new_masked<<<1,TOPK_RADIX_NT,0,st>>>(o2,ds,T,topk,WINMAX,true);
+                CU_(cudaStreamSynchronize(st));
+                std::vector<int> a(topk),b(topk);
+                CU_(cudaMemcpy(a.data(),o1,(size_t)topk*4,cudaMemcpyDeviceToHost));
+                CU_(cudaMemcpy(b.data(),o2,(size_t)topk*4,cudaMemcpyDeviceToHost));
+                cap_ok = cmp("graph-captured over-ceiling",a,b,T,0);
+                CU_(cudaGraphExecDestroy(ge)); CU_(cudaGraphDestroy(g));
+            } else printf("   capture FAILED: %s\n", cudaGetErrorName(ce));
+            all_ok &= cap_ok;
+            printf("  graph capture, T=%d: %s\n", T,
+                   cap_ok? "captured, replayed, identical to radix" : "FAILED");
+            CU_(cudaStreamDestroy(st)); CU_(cudaFree(ds)); CU_(cudaFree(o1)); CU_(cudaFree(o2));
+        }
+        // ---- 4. NEGATIVE CONTROL: above the OPT-IN maximum it must ABORT, not launch --------------
+        // Untested error handling is decoration. This forks a child, asks the engine's own helper
+        // for a T that no device can satisfy, and requires the child to die on SIGABRT -- i.e. that
+        // `topk_scan_smem_optin` refuses rather than handing back a size whose launch will fail and
+        // leave the buffer stale, which is the exact failure this item exists to remove.
+        {
+            fflush(stdout); fflush(stderr);
+            pid_t pid = fork();
+            if(pid == 0){
+                if(!freopen("/dev/null","w",stderr)) _exit(120);
+                volatile size_t r = topk_scan_smem_optin((const void*)old_masked, T_opt + 1024, "old_masked");
+                _exit((int)(r & 0x7f));            // reached only if the helper failed to refuse
+            }
+            int st = 0; waitpid(pid, &st, 0);
+            bool aborted = WIFSIGNALED(st) && WTERMSIG(st) == SIGABRT;
+            all_ok &= aborted;
+            printf("  above the opt-in max, T=%d: %s\n", T_opt + 1024,
+                   aborted ? "child aborted (helper refuses to size an impossible launch)"
+                           : "NO ABORT - the helper returned a size that cannot be launched");
+        }
+
+        CU_(cudaFree(dsb)); CU_(cudaFree(ob));
     }
 
     printf("\nGATE: %s\n", all_ok? "PASS — radix select is bit-identical to the shipped warp scan on every shape and distribution,\n        with the item-1.3 early-out both ON and OFF"

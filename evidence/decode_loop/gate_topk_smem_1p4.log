@@ -1,0 +1,73 @@
+[topk-smem] old_masked opted in to 232448 B dynamic shared memory (needed 49168 B at T=12286; default limit is 49152 B)
+== k_topk_masked: correctness on 6 distributions, then timing on mode 0 ==
+       T     topk   shipped us     radix us   speedup   all modes
+---------------------------------------------------------------------------
+       1        1          8.2         10.8      0.8x   identical
+       3        3         12.3         14.4      0.9x   identical
+      17       17         38.9         22.7      1.7x   identical
+      64       64        137.7         26.7      5.2x   identical
+     128      128         62.8         10.2      6.2x   identical
+     512      512        259.5         14.7     17.6x   identical
+    1024      512        324.0         28.7     11.3x   identical
+    1648      512        501.6         24.7     20.3x   identical
+    2048      512        458.7         24.6     18.7x   identical
+    3072      512        591.6         32.8     18.1x   identical
+    4096      512        725.4         37.0     19.6x   identical
+    6000      512       1075.9         36.0     29.9x   identical
+    8192      512       1259.1         37.0     34.1x   identical
+
+== k_topk_verify (K queries, per-query causal limit) ==
+  Tf=1648  mode=0 K=5 topkc=512 : identical
+  Tf=3072  mode=0 K=5 topkc=512 : identical
+  Tf=1648  mode=1 K=5 topkc=512 : identical
+  Tf=3072  mode=1 K=5 topkc=512 : identical
+  Tf=1648  mode=2 K=5 topkc=512 : identical
+  Tf=3072  mode=2 K=5 topkc=512 : identical
+  Tf=1648  mode=3 K=5 topkc=512 : identical
+  Tf=3072  mode=3 K=5 topkc=512 : identical
+  Tf=1648  mode=4 K=5 topkc=512 : identical
+  Tf=3072  mode=4 K=5 topkc=512 : identical
+  Tf=1648  mode=5 K=5 topkc=512 : identical
+  Tf=3072  mode=5 K=5 topkc=512 : identical
+  short causal limit (lim=200 < topkc=512)          : identical
+
+== k_topk_decode / k_topk_offset ==
+  k_topk_decode  T=1648 mode=0 : identical
+  k_topk_decode  T=1648 mode=1 : identical
+  k_topk_decode  T=1648 mode=2 : identical
+  k_topk_decode  T=1648 mode=3 : identical
+  k_topk_decode  T=1648 mode=4 : identical
+  k_topk_decode  T=1648 mode=5 : identical
+  k_topk_offset  s=64 T=400 mode=0 : identical
+  k_topk_offset  s=64 T=400 mode=1 : identical
+  k_topk_offset  s=64 T=400 mode=2 : identical
+  k_topk_offset  s=64 T=400 mode=3 : identical
+  k_topk_offset  s=64 T=400 mode=4 : identical
+  k_topk_offset  s=64 T=400 mode=5 : identical
+
+== item 1.3: full threshold search vs `lim <= topk` early-out (k_topk_decode shape) ==
+     T   topk fires   full us (min/med/max)  early us (min/med/max) saving us
+------------------------------------------------------------------------------------------
+    32     32   yes   10.26/10.26/10.31      6.94/6.99/7.08             +3.27
+    64     64   yes   12.26/12.28/12.31      8.20/8.21/8.24             +4.07
+   128    128   yes   12.30/12.31/12.36      10.19/10.21/10.22          +2.10
+   256    256   yes   14.35/14.40/14.87      12.21/12.22/12.65          +2.18
+   384    384   yes   18.38/18.39/18.43      14.34/14.34/14.37          +4.04
+   512    512   yes   18.39/18.53/18.75      14.34/14.36/14.73          +4.18
+  1024    512    no   28.70/28.75/28.80      28.69/28.75/28.77          +0.00
+  2048    512    no   24.53/24.55/24.57      24.53/24.57/25.40          -0.02
+  3072    512    no   32.76/32.77/32.82      32.76/32.77/32.78          +0.00
+
+== item 1.4: the four warp kernels above the default dynamic-shared-memory ceiling ==
+  default limit 49152 B -> T <= 12285 (context <= 49140 at ratio 4)
+  opt-in  limit 232448 B -> T <= 58109 (context <= 232436 at ratio 4), 4.7x more headroom
+  no opt-in, T=16381 (65536 B): launch=cudaErrorInvalidValue  sync=cudaSuccess  output=UNTOUCHED  -> defect reproduced (launch fails, sync says success, buffer is stale)
+  opted in,  T= 12286 (  49168 B, context   49144): identical to radix on all 6 distributions
+  opted in,  T= 16381 (  65536 B, context   65524): identical to radix on all 6 distributions
+  opted in,  T= 24570 (  98304 B, context   98280): identical to radix on all 6 distributions
+  opted in,  T= 58045 ( 232192 B, context  232180): identical to radix on all 6 distributions
+  graph capture, T=16381: captured, replayed, identical to radix
+  above the opt-in max, T=59133: child aborted (helper refuses to size an impossible launch)
+
+GATE: PASS — radix select is bit-identical to the shipped warp scan on every shape and distribution,
+        with the item-1.3 early-out both ON and OFF
