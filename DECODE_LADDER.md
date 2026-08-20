@@ -79,35 +79,41 @@ items on this ladder and the loop should hand back rather than thrash.
       (658 us -> 39 us at T=6000). **FP32/TF32 accumulation only** — an external ablation shows
       FP16 dropping perfect-recall rows from 99.99 % to 91.82 % on this exact operation.
 
-- [ ] **1.6** **OPEN DEFECT — pre-existing, NOT caused by the top-k change.** `pending CUDA error:
-      invalid argument`, 42x at `mla_attn.cu:711` and 42x at `:820`, both of which are the `dsync`
-      on a return path of **`ogroup_gemm_fp8`** — a function this work never touched.
+- [x] **1.6** **RESOLVED as pre-existing — proven by a control build, not by argument.**
+      Built `build/decode_prechange` from `1a33cfe^` (the two kernel files and the header, before the
+      warp top-k) and ran it: **`err711=42`, `err820=21` — the same fault.** The launch error has
+      nothing to do with this work. Two earlier calls of mine on this ("it is mine", then "it is
+      pre-existing because mla_attn.cu changed") were both reasoning from circumstance; this is the
+      experiment that should have been run first and it took one model load.
 
-      **The "it is new" conclusion was wrong and is retracted.** It rested on older DPROF runs
-      (`dbuf.log`, `kchunk.log`, 2026-08-08) being clean while the reporting was already live from
-      2026-08-07. But `mla_attn.cu` was modified on **2026-08-11** (NVFP4 dense overlay) and
-      **2026-08-12** (F128, ogroup M=K), i.e. *after* those logs, and no DPROF run has been taken
-      on this binary since. The clean logs simply predate the change that introduced it.
+      Still latent: output correct, LOSSLESS gate passes on every run including the control, tau
+      normal. Both sites are `dsync` on return paths of `ogroup_gemm_fp8`, and the bs==1 kernel
+      launched there has no launch bounds, no static shared memory and a 1024-block grid, so it
+      cannot fail on its own — the flag is stale from an unprobed launch, plausibly a side stream
+      (Finding 55 forks one). **Tracked, not blocking.** Worth asking whether the failing launch is
+      a dead branch: the NVFP4 wo_a overlay in that function is documented DEFAULT OFF.
 
-      Confirmed by measurement, not argument: `DSV4_SYNCPROBE=1` against `build/decode_probe`,
-      with a probe after **every** launch in `compressed_decode_step_indexer_dp` including
-      `sparse_attn`, ran to completion with **no fault attributed**. The indexer decode path is
-      clean; the fault is downstream of it.
-
-      Ruled out so far, each by arithmetic rather than by guess: the bs==1 GEMV grid
-      (`G*R*32/256` = 1024 blocks, no overflow); the `__launch_bounds__(256, 4)` = 1024 threads/SM
-      against Thor's 1536 cap (satisfiable); and dynamic shared memory (the M=K launches pass 0).
-      A bisecting probe after the o-rope is in flight to separate `rope_interleaved_dp` from the
-      launches inside `ogroup_gemm_fp8` itself.
-
-      **Severity: latent.** Output is correct, both LOSSLESS gates pass on every run, and tau is
-      normal. It is a launch that fails and whose absence does not change the answer — which is
-      its own question worth asking, since a kernel nobody needs is a kernel to delete.
+      Free A/B from the control, ctx 480: base AR **92.6 -> 89.3 ms/tok**, spec **67.2 -> 65.9**.
+      Small here by construction — at short context the top-k was never the cost. The win is the
+      slope, and 0.2 measured that as flat.
 
 ## Phase 1b — bit-exact packing (`KV_PRECISION_FINDINGS.md`)
 
-- [ ] **1b.1** Pack the DSA index cache as real MXFP4: 128xE2M1 + 4xUE8M0 = **68 B** (was 512 B).
-      Values already on the E2M1 grid with exact pow2 scales. Acceptance: `memcmp`.
+- [~] **1b.1** Pack the DSA index cache as real MXFP4: 128xE2M1 + 4xUE8M0 = **68 B** (was 512 B).
+      **Primitives done and gated; wiring still to do.** `include/idx_pack.h` carries the layout and
+      the exact inverse of the write path; `tests/gate_idx_pack.cu` proves
+      **unpack(pack(x)) == x bit-for-bit on 524,288 elements, 0 mismatches**, across tiny (1e-6),
+      large (1e5) and zero-heavy rows. 512 B -> 68 B, **7.53x** — the same 68 B/token SGLang ships
+      for the DeepSeek-V4 FP4 indexer pool, which is an independent check on the arithmetic.
+
+      **The gate immediately earned itself.** The first implementation took the sign from `v < 0`,
+      but `round_e2m1` returns NEGATIVE ZERO for a negative input that rounds to zero, and
+      `-0.0f < 0.0f` is false — so the sign was dropped. 16,011 mismatches at **worst |delta| = 0**:
+      numerically perfect, bitwise wrong, and invisible to any tolerance. Fixed with `signbit`.
+
+      Remaining: 6 allocation/memcpy sites bake in the 4-byte stride (`src/engine.cu:346`,
+      `src/decode.cu:251/444/453/472/831`), the write path in `compressor_emit_group`, and both
+      `index_score` read kernels. Acceptance stays `memcmp` on generated token ids.
 - [ ] **1b.2** Pack KV dims 0-447 as real FP8 E4M3 + 7xUE8M0 = **711 B** (was 2048 B); RoPE stays
       FP32. Acceptance: `memcmp`. **Unlocks seqmax 32k-64k, which does not fit today.**
 
