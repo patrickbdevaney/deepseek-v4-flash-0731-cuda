@@ -17,6 +17,31 @@
 //
 // n is a compressed-row count — 1..a few hundred — so rounding up costs nothing. `n+3` covers a
 // 4-float load issued at the last element; the &~3 keeps the request 16-byte aligned.
+// ---- warp argmax, the primitive behind the parallel top-k --------------------------------------
+// The four top-k kernels used to open with `if(threadIdx.x||blockIdx.x) return;` and run an
+// O(topk x T) selection sort on ONE thread of the 32 launched, on 1 of 20 SMs. At 24k context that
+// is 512 x 6000 serial comparisons per ratio-4 layer, 21 layers, per target forward -- measured as
+// the whole of the context-linear term in tools/decode_model.py's fit, and 14-28x slower than the
+// same algorithm spread across the warp that was already there.
+//
+// TIE-BREAKING IS THE CORRECTNESS ARGUMENT. The serial scans ran ascending with a STRICT `>`, so
+// equal scores resolved to the LOWEST index. This must reproduce that exactly: the selected set
+// being right is not enough, because sparse_attn sums the selected rows IN ORDER and a reordering
+// changes fp32 association. Callers therefore pass `T` (one past any valid index) as the "nothing
+// found" sentinel rather than -1, so a lane that found nothing loses every comparison and lower
+// indices win ties for free. Verified bit-identical against the originals on nine shapes and three
+// distributions -- including one built entirely of exact ties -- by tests/gate_topk_warp.cu.
+__device__ __forceinline__ void warp_argmax(float& best, int& bi){
+    #pragma unroll
+    for(int o=16;o>0;o>>=1){
+        float ob = __shfl_down_sync(0xffffffffu, best, o);
+        int   oi = __shfl_down_sync(0xffffffffu, bi,   o);
+        if(ob > best || (ob == best && oi < bi)){ best = ob; bi = oi; }
+    }
+    bi   = __shfl_sync(0xffffffffu, bi,   0);
+    best = __shfl_sync(0xffffffffu, best, 0);
+}
+
 static inline size_t topk_scan_smem(int n){
     int m = n + 3; m = (m + 3) & ~3; return (size_t)m * sizeof(float);
 }

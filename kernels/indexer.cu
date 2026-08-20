@@ -118,15 +118,23 @@ __global__ void k_causal_mask(float* score, int s, int T, int ratio){
 }
 // per query: descending top-k of score[si,:T]; then idx = (t >= (si+1)/ratio) ? -1 : t+offset.
 __global__ void k_topk_offset(int* out, const float* score, int s, int T, int topk, int ratio, int offset){
-    int si=blockIdx.x; if(si>=s || threadIdx.x) return;
-    extern __shared__ float sh[];
-    for(int t=0;t<T;++t) sh[t]=score[(size_t)si*T+t];
+    int si=blockIdx.x; if(si>=s) return;
+    extern __shared__ float sh[]; const int L=threadIdx.x;
+    for(int t=L;t<T;t+=32) sh[t]=score[(size_t)si*T+t];
+    __syncwarp();
     int thr=(si+1)/ratio;
     for(int k=0;k<topk;++k){
-        float best=-1e30f; int bi=-1;
-        for(int t=0;t<T;++t) if(sh[t]>best){best=sh[t];bi=t;}
-        if(bi>=0) sh[bi]=-1e30f;
-        out[(size_t)si*topk+k] = (bi<0 || bi>=thr) ? -1 : bi+offset;
+        float best=-1e30f; int bi=T;
+        // NOTE the asymmetry, preserved verbatim: the scan covers the FULL row, and out-of-range
+        // picks are rejected only at the OUTPUT. They still consume a slot. Bounding the scan by
+        // `thr` here would change which rows land in later slots.
+        for(int t=L;t<T;t+=32) if(sh[t]>best){best=sh[t];bi=t;}
+        warp_argmax(best,bi);
+        if(L==0){
+            if(bi<T) sh[bi]=-1e30f;
+            out[(size_t)si*topk+k] = (bi>=T || bi>=thr) ? -1 : bi+offset;
+        }
+        __syncwarp();
     }
 }
 

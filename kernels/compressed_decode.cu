@@ -45,21 +45,29 @@ using namespace dsv4;
 // single-query descending top-k over score[0..T-1]; out[k] = (k-th best t) + offset (or -1 if none left).
 // Decode-time: all T cached rows are already causal-valid (t < (pos+1)/ratio == T), so no mask needed here.
 __global__ void k_topk_decode(int* out, const float* score, int T, int topk, int offset){
-    if(threadIdx.x||blockIdx.x) return;
-    extern __shared__ float sh[];
-    for(int t=0;t<T;++t) sh[t]=score[t];
-    for(int k=0;k<topk;++k){ float best=-1e30f; int bi=-1;
-        for(int t=0;t<T;++t) if(sh[t]>best){best=sh[t];bi=t;}
-        if(bi>=0) sh[bi]=-1e30f;
-        out[k] = (bi<0)? -1 : bi+offset; }
+    if(blockIdx.x) return;
+    extern __shared__ float sh[]; const int L=threadIdx.x;
+    for(int t=L;t<T;t+=32) sh[t]=score[t];
+    __syncwarp();
+    for(int k=0;k<topk;++k){ float best=-1e30f; int bi=T;
+        for(int t=L;t<T;t+=32) if(sh[t]>best){best=sh[t];bi=t;}
+        warp_argmax(best,bi);
+        if(L==0){ if(bi<T) sh[bi]=-1e30f; out[k] = (bi>=T)? -1 : bi+offset; }
+        __syncwarp(); }
 }
 __global__ void k_iw_scale(float* y, float sc, int n){ int i=blockIdx.x*blockDim.x+threadIdx.x; if(i<n) y[i]*=sc; }
 // device verify top-k (per query, global causal threshold) + combined-idx build -> removes the host D2H sync.
 __global__ void k_topk_verify(int* dtop, const float* score, int K, int Tf, int topkc, int pos, int ratio, int nwin){
-    int i=blockIdx.x; if(i>=K||threadIdx.x) return; extern __shared__ float sh[]; const float* s=score+(size_t)i*Tf;
-    for(int t=0;t<Tf;++t) sh[t]=s[t]; int thr=(pos+i+1)/ratio;
-    for(int k=0;k<topkc;++k){ float best=-1e30f;int bi=-1; for(int t=0;t<thr&&t<Tf;++t) if(sh[t]>best){best=sh[t];bi=t;}
-        if(bi>=0){ sh[bi]=-1e30f; dtop[(size_t)i*topkc+k]=nwin+bi; } else dtop[(size_t)i*topkc+k]=-1; } }
+    int i=blockIdx.x; if(i>=K) return; extern __shared__ float sh[]; const int L=threadIdx.x;
+    const float* s=score+(size_t)i*Tf;
+    for(int t=L;t<Tf;t+=32) sh[t]=s[t];
+    __syncwarp();
+    const int thr=(pos+i+1)/ratio; const int lim = thr<Tf? thr : Tf;
+    for(int k=0;k<topkc;++k){ float best=-1e30f; int bi=Tf;
+        for(int t=L;t<lim;t+=32) if(sh[t]>best){best=sh[t];bi=t;}
+        warp_argmax(best,bi);
+        if(L==0){ if(bi<Tf){ sh[bi]=-1e30f; dtop[(size_t)i*topkc+k]=nwin+bi; } else dtop[(size_t)i*topkc+k]=-1; }
+        __syncwarp(); } }
 __global__ void k_comb_verify(int* dcomb, const int* dtop, int K, int topk, int wmax, int topkc, int pos){
     int gid=blockIdx.x*blockDim.x+threadIdx.x; if(gid>=K*topk) return; int i=gid/topk, k=gid%topk;
     int ig=pos+i, base=ig-WINDOW+1; if(base<0)base=0; int wid=ig+1-base;
@@ -548,9 +556,14 @@ void compressed_decode_step_strided_dp(float* out, const float* x, const float* 
 // device-pos indexer (ratio-4) compressed decode.
 __global__ void k_mask_scores(float* score, const int* d_T, int Tmax){ int t=blockIdx.x*blockDim.x+threadIdx.x; if(t<Tmax && t>=*d_T) score[t]=-1e30f; }
 __global__ void k_topk_masked(int* out, const float* score, int Tmax, int topk, int winmax){   // top-k valid rows -> winmax+t, else -1
-    if(threadIdx.x||blockIdx.x) return; extern __shared__ float sh[]; for(int t=0;t<Tmax;++t) sh[t]=score[t];
-    for(int k=0;k<topk;++k){ float best=-1e29f; int bi=-1; for(int t=0;t<Tmax;++t) if(sh[t]>best){best=sh[t];bi=t;}
-        if(bi>=0){ sh[bi]=-1e30f; out[k]=winmax+bi; } else out[k]=-1; } }
+    if(blockIdx.x) return; extern __shared__ float sh[]; const int L=threadIdx.x;
+    for(int t=L;t<Tmax;t+=32) sh[t]=score[t];
+    __syncwarp();
+    for(int k=0;k<topk;++k){ float best=-1e29f; int bi=Tmax;      // Tmax == "nothing found"; see warp_argmax
+        for(int t=L;t<Tmax;t+=32) if(sh[t]>best){best=sh[t];bi=t;}
+        warp_argmax(best,bi);
+        if(L==0){ if(bi<Tmax){ sh[bi]=-1e30f; out[k]=winmax+bi; } else out[k]=-1; }
+        __syncwarp(); } }
 __global__ void k_comb_join(int* comb, const int* win, const int* sel, int wtop, int topk_c){   // [window ⊕ selected]
     int k=blockIdx.x*blockDim.x+threadIdx.x; int tot=wtop+topk_c; if(k>=tot) return; comb[k]=(k<wtop)?win[k]:sel[k-wtop]; }
 
