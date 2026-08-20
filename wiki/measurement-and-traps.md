@@ -233,3 +233,77 @@ reported FATAL.
 > **Rule.** An unattended phase must fail loudly when it did **not run**, and its success pattern
 > must be pasted from real output rather than remembered. "Finished" and "checked" are different
 > claims, and only the log can tell them apart.
+
+---
+
+## 15. Put a leg the change *cannot* touch inside the same sweep
+
+Ladder 1.3 was a ~4 µs/call kernel saving expected to be worth 0.07 % of a forward, against a
+measured 3.5 % run-to-run spread. The usual write-up for that is "the delta is inside the noise",
+which quotes a spread measured on some other day, on some other corpus, and invites the reader to
+take it on faith.
+
+The A/B was instead built so the noise was measured **inside the experiment**. The early-out fires
+only at `T ≤ 512`, i.e. ctx ≤ 2048. Two of the seven targets were placed at ctx ~6,250, where
+`T = 1565` and both arms therefore execute **provably identical code** — same kernel, same branch,
+same instruction stream. Those two legs measured:
+
+| leg | fires | delta ms/forward |
+|---|---|---|
+| control, ctx 6248 | **no — identical code** | **+0.24** |
+| sweep, ctx 6260 | **no — identical code** | **+0.35** |
+| sweep, ctx 1664 | yes | +0.10 |
+| sweep, ctx 889 | yes | +0.11 |
+| sweep, ctx 492 | yes | −0.53 |
+| sweep, ctx 249 | yes | −0.21 |
+| control, ctx 1656 | yes | −0.06 |
+
+So the statement is not "the effect is within a spread I am quoting at you" but **"the effect is
+the same size as the delta between two arms that ran the same code"** — an upper bound on the
+instrument established by the instrument, in the same session, at the same clocks, on the same
+corpus, with the same thermal history. It also rules out the failure mode a pure noise argument
+cannot: a change that is *net negative* somewhere it was not supposed to reach would show as a
+control leg moving differently from the affected ones.
+
+> **Rule.** When you expect a small effect, choose at least one point in the sweep where the change
+> is structurally inert, and report it in the same table. A null is only credible next to a
+> measured zero.
+
+The corollary is a design constraint on the sweep, not just the report: **an A/B whose every leg is
+in the affected regime cannot distinguish a real saving from drift.** 1.3's script says so in its
+header, before the run.
+
+---
+
+## 16. A fitted slope is only "cost per 1000 context" if the mark is linear in context
+
+1.3's re-attribution fit `cattn:sparse` at **1.694 ± 0.065 ms per 1000 context** (R² 0.731, width
+held fixed, 220 verify samples). Item 0.4 had fit the same mark at **0.709 ± 0.050**. Two clean fits
+with tight standard errors, non-overlapping by 15 SE, on the same engine and the same kernel — and
+taken at face value the new one promotes ladder item 1.7 above 1.5, because 1.694 is 2.7× `i:score`.
+
+Neither fit is wrong and nothing drifted. They cover different context ranges:
+
+| ctx | 768 | 1,536 | 3,072 | 6,144 | 12,288 |
+|---|---|---|---|---|---|
+| `cattn:sparse` ms | 9.35 | 15.72 | 19.22 | 19.89 | 21.17 |
+| implied ms per 1000 across the leg | — | **8.29** | 2.28 | **0.905** | 0.208 |
+
+One concave curve. 0.4 fit ctx 3k–12k, the flat part; 1.3 fit ctx 0.4k–6k, which is dominated by the
+steep first leg. `cattn:sparse` is a top-`k` gather: it grows with context until context exceeds
+`k × ratio` and then stops, because after that it always gathers `k` rows. A linear coefficient for
+it is a property of the *fitting window*, not of the kernel, and comparing two such coefficients
+across windows is meaningless.
+
+The contrast in the same table is what makes this checkable rather than a caution. `i:score` over
+the identical samples: 0.88 → 1.25 → 3.53 ms at ctx 768/1536/6144, i.e. **0.482 then 0.495 ms per
+1000**. That is linear, its fitted `b` means what it says, and item 1.5 keeps its rank.
+
+> **Rule.** Before ranking work on a fitted `b`, read the per-point medians and check the leg-to-leg
+> slopes agree. If they do not, you have a shape, not a slope — and the lever is probably the
+> *floor* (Term A) rather than the coefficient (Term B), which is a different item with a different
+> mechanism.
+
+This trap is the direct counterweight to rule 6 in `DECODE_LADDER.md`: re-attributing before you
+pick is free and necessary, and it will hand you a number that re-ranks the list for the wrong
+reason if you do not check the shape.

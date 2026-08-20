@@ -299,6 +299,13 @@ shipped path cannot hit that ceiling. 1.4 stays open for the fallback arm, which
 `__match_any_sync` warp-aggregated histogram (slower — 43.0 vs 39.0 µs at T=3072), and block sizes
 128/256/1024 (53.3 / 38.9 / 31.6 µs at T=3072 against 512's 32.0).
 
+**One thing shipped inside this kernel and worth nothing** (ladder 1.3, 2026-08-20): a `lim <= topk`
+early-out that skips the threshold search entirely below ctx 2048, bit-exact and worth +2.1 to
++4.1 µs per call standalone — **and 0.07 % of a forward in situ, which no end-to-end instrument
+here can resolve.** It is default-on because it is strictly less work, but it is not a win and it is
+written up in [`negative-results.md` §4c](negative-results.md), because §2.6 above had already taken
+the money it was aimed at.
+
 ---
 
 ## 3. Precision and layout

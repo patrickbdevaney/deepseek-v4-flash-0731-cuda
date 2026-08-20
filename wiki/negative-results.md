@@ -116,6 +116,43 @@ sit in.
 
 ---
 
+## 4c. Adopted, bit-exact, and worth nothing — the `lim <= topk` early-out (ladder 1.3, 2026-08-20)
+
+This one is not a lever that lost a race. It won its race, by 22 %, and the race did not matter.
+
+**The change.** `topk_radix_select` with `lim <= topk` cannot exclude anything — every candidate is
+in the top-k before a score is read. The full path still spent one entire radix level discovering
+that: clear 256 bins, one strided pass with a shared `atomicAdd` per surviving element, a serial
+scan on thread 0, and the only conclusion is `hist[d] == need`. Skipping that level is a strict work
+reduction with provably identical output (the threshold it would have computed is `<=` every
+candidate's composite, so `thr = 0` picks the same set; the bitonic sort that orders it is
+untouched). Standalone it is worth **+2.1 to +4.1 µs per call at T ≤ 512, and +0.00 ± 0.03 µs above
+it** — clean, reproducible, and exactly where the theory says.
+
+**In situ it is worth nothing, and this was stated before the run rather than after.** 21 ratio-4
+layers × 4.05 µs ≈ **0.085 ms of a ~130 ms forward = 0.07 %**, against a 3.5 % run-to-run spread.
+The paired sweep found deltas of −0.53 to +0.35 ms across seven targets with `tau` identical to
+three decimals and 34/34 legs byte-identical; the fitted context term went `3.008 ± 0.241 →
+3.036 ± 0.240`. The `i:topk` dprof mark — the only instrument that brackets the changed launch —
+did see it, **0.42 → 0.28 ms at ctx 768 and 0.52 → 0.34 at 1536**, and 0.72 → 0.72 at 6144 where it
+cannot fire. So the change works, at the size predicted, and that size is below the floor of every
+end-to-end instrument this project has.
+
+**It is kept, at default-on**, because it is less work for identical output behind an env arm
+(`DSV4_TOPK_EARLY=0`) and reverting it would cost more than it saves. It is filed here rather than
+in the wins list because **it is not a win**, and a wins list that admits 0.07 % stops meaning
+anything.
+
+**The actual finding is why it was built.** 1.3 was ranked above 1.5 on 0.4's attribution of
+`i:topk` at **13.47 ms at ctx 12,288**. The iteration immediately before it took `i:topk` to
+**0.72 ms at ctx 6144** — so by the time 1.3 was picked, its headroom was 0.5 ms and nobody
+re-derived it. **A ranked work list is a function of a cost model, and the item above just changed
+the cost model.** The re-check is free: every A/B here already runs a dprof pair, so the previous
+iteration's attribution is sitting on disk. This produced ladder rule 6, and it generalises past
+this repo — the more effective a queue of optimisations is, the faster its own ordering rots.
+
+---
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).
@@ -123,6 +160,8 @@ sit in.
    systematically.
 3. **Occupancy is not throughput** (F81, F30). More blocks/SM can be slower.
 4. **Instruction count is free in a latency-bound kernel** (F76).
+5. **A correct optimisation of a term that is already spent is a null result** (ladder 1.3). Rank on
+   a cost model measured *after* the last thing you shipped, not the one that ordered the list.
 5. **Host time is not critical-path time** (F83).
 6. **A probe whose input distribution differs from production selects the wrong parameter** (F65,
    F70, F59).

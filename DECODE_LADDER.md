@@ -22,6 +22,11 @@ down 65 % from the 7.220 the ladder opened on.** Term A is untouched and is now 
 distance from its floor — it is 129.11 of a 154.66 ms forward at ctx 12,410, i.e. **83 %**. The fit
 reaches context 12,410, so the stop check does not extrapolate.
 
+**1.3 moved neither term and was pre-registered as unable to** — it is a ~4 us/call kernel saving
+that fires only below ctx 2048, worth 0.07 % of a forward; `b` measured `3.008 +/- 0.241 ->
+3.036 +/- 0.240` across its arms. It is marked done, not skipped, and the ladder rule it produced
+(re-attribute before you pick) is above.
+
 *(The 1.2 before-arm slope, 3.488, is not the 4.006 that 1.0 reported after. Same protocol, same
 corpus sha, an independent server start eight hours later; the gap is one run-to-run spread on a
 fitted coefficient and both arms of 1.2's comparison are inside the same run, which is why the
@@ -73,6 +78,19 @@ So, in order:
 5. **If two consecutive iterations produce no kernel change, say so at the top of the ladder entry**
    and take the highest-expected-value kernel item next even if it is less certain. Thrashing on
    measurement is the failure mode this section exists to prevent.
+6. **RE-ATTRIBUTE BEFORE YOU PICK, not after you build. ADDED 2026-08-20 by 1.3, which is the
+   counter-example.** A ladder ordering is a function of a cost model, and every landed item
+   changes the cost model. 1.3 was ranked where it was because `i:topk` measured 13.47 ms at ctx
+   12,288; 1.2 took `i:topk` to 0.72 ms at ctx 6144 and 1.3 was built the next iteration against a
+   headroom that no longer existed. It shipped, it is bit-exact, and it moved nothing. **The check
+   costs nothing** -- every A/B in this ladder already runs a dprof pair, so the *previous*
+   iteration's dprof is on disk and re-ranks the list for free. Read it before choosing.
+   Then read rule 7, because the number you read is not always what it looks like.
+7. **A slope only means "cost per 1000 context" if the mark is linear in context.** Check the
+   per-point medians before you rank on a fitted `b`. `cattn:sparse` fits 0.709 over ctx 3k-12k and
+   1.694 over ctx 0.4k-6k -- not a contradiction and not drift, but one concave curve read over two
+   ranges, and ranking on the larger number would have promoted item 1.7 over 1.5 on an artefact.
+   See `wiki/measurement-and-traps.md` §16.
 
 ## Hard invariants — the loop must never violate these
 
@@ -468,8 +486,112 @@ So, in order:
       Evidence: `evidence/decode_loop/fit_1p2_paired.txt`, `fit_1p2_base.txt`, `fit_1p2_radix.txt`,
       `fit_1p2_identity.txt`, `gate_topk_radix.log`, `server_1p2_gate.log`,
       `decode_1p2_lossless.log`.
-- [ ] **1.3** `seq_len <= topk` early-out. Below ctx 2048 every row survives and the kernel still
-      does the full scan to discover it.
+- [x] **1.3** `seq_len <= topk` early-out — **SHIPPED, BIT-EXACT, AND END-TO-END NULL.**
+      **DONE 2026-08-20.** The kernel change is real and the throughput change is not: the term it
+      attacks was already spent by 1.2, one iteration earlier, and nobody re-derived its headroom
+      before it was built. Kept because it is strictly less work and provably identical output;
+      recorded here as a null so the next item is not chosen the same way.
+
+      **The change.** In `topk_radix_select`, `lim <= topk` means `k_eff == #candidates` before a
+      single score has been read — the threshold search cannot exclude anything. The full path
+      still had to *discover* that: one whole radix level (clear 256 bins, one strided pass with a
+      shared `atomicAdd` per surviving element, then a 256-iteration serial scan on thread 0) whose
+      only conclusion is `hist[d] == need`. The early-out skips that level and gathers
+      unconditionally. Bit-exactness is structural, not checked afterwards: the level that is
+      skipped would have set `thr = lowest_non_empty_top_byte << 56`, which is `<=` every
+      candidate's composite, so `thr = 0` selects the identical set, and the bitonic sort that
+      orders it is untouched. Fires at `T <= 512`, i.e. **ctx <= 2048** at ratio 4 with
+      `INDEX_TOPK` 512, and on the verify side for any query whose causal limit is under 512.
+      Arm: `DSV4_TOPK_EARLY=0` restores the full search on the same binary.
+
+      **The kernel band, `tests/gate_topk_radix.cu`, re-run first-hand this iteration:**
+
+      | T | 32 | 64 | 128 | 256 | 384 | **512** | 1024 | 2048 | 3072 |
+      |---|---|---|---|---|---|---|---|---|---|
+      | fires | yes | yes | yes | yes | yes | **yes** | no | no | no |
+      | full us | 10.26 | 12.27 | 12.31 | 14.36 | 18.40 | **18.41** | 28.73 | 24.54 | 32.76 |
+      | early us | 6.88 | 8.21 | 10.20 | 12.17 | 14.34 | **14.34** | 28.73 | 24.58 | 32.78 |
+      | saving us | +3.38 | +4.06 | +2.11 | +2.18 | +4.06 | **+4.06** | +0.00 | -0.03 | -0.02 |
+
+      **THE SWEEP WAS PRE-REGISTERED AS UNABLE TO RESOLVE THIS, in the script header, before the
+      run.** 21 ratio-4 layers x ~4.05 us = **~0.085 ms of a ~130 ms forward = 0.07 %**, against a
+      3.5 % run-to-run spread. It was run anyway because the ladder requires `tau` and a band in
+      every A/B and because a *regression* at that scale would show.
+
+      **Paired A/B, `scripts/topk_early_ab_run.sh`, OFF arm first so drift penalises the early-out.
+      34 of 34 legs byte-identical in generated token ids; `tau` identical to three decimals on
+      every leg.**
+
+      | kind | ctx | fires | before ms/fwd | after | delta | tau b / a | tok/s b -> a |
+      |---|---|---|---|---|---|---|---|
+      | control | 6248 | **no** | 147.45 | 147.69 | **+0.24** | 1.772 / 1.772 | 12.02 -> 12.00 |
+      | sweep | 6260 | **no** | 144.48 | 144.83 | **+0.35** | 1.625 / 1.625 | 11.27 -> 11.26 |
+      | control | 1656 | yes | 141.17 | 141.11 | -0.06 | 1.958 / 1.958 | 13.87 -> 13.87 |
+      | sweep | 1664 | yes | 135.72 | 135.81 | +0.10 | 1.636 / 1.636 | 11.99 -> 12.00 |
+      | sweep | 889 | yes | 131.72 | 131.83 | +0.11 | 1.690 / 1.690 | 12.71 -> 12.70 |
+      | sweep | 492 | yes | 126.86 | 126.33 | -0.53 | 1.590 / 1.590 | 12.58 -> 12.61 |
+      | sweep | 249 | yes | 127.29 | 127.08 | -0.21 | 1.612 / 1.612 | 12.64 -> 12.64 |
+
+      **The two ctx-6144 legs are the measurement, not the background.** `T = 1565 > 512` there, so
+      the early-out cannot fire and both arms run provably identical code — yet they measured
+      **+0.24 and +0.35 ms**. The five legs where the code *does* differ measured -0.53 to +0.11.
+      The effect is smaller than the instrument, and the instrument's size was established inside
+      the same experiment rather than quoted from the 3.5 % spread. Fit unmoved:
+      `b = 3.008 +/- 0.241 -> 3.036 +/- 0.240` context-only, `2.977 +/- 0.143 -> 3.006 +/- 0.147`
+      width-controlled, `a = 127.92 -> 127.84`. **Everything is inside one SE of nothing.**
+
+      **`i:topk`, the dprof mark that brackets the changed launch, is the only instrument that saw
+      it** — and it agrees with the kernel band, which is the check that the null is a
+      not-worth-anything and not a not-working:
+
+      | ctx | 768 | 1536 | 6144 |
+      |---|---|---|---|
+      | `i:topk` off | 0.42 | 0.52 | 0.72 |
+      | `i:topk` on | **0.28** | **0.34** | 0.72 |
+      | | -33 % | -35 % | 0 %, as predicted |
+
+      **BIT-EXACTNESS: four gates, zero failures.**
+
+      | gate | scope | result |
+      |---|---|---|
+      | `tests/gate_topk_radix.cu` | 4 kernel shapes x 13 lengths x 6 distributions, early-out **both ON and OFF** | PASS |
+      | `build/dsv4-server`, `DSV4_TOPK_GATE=1`, early ON | 125 PASS lines, **7,808 checks, 66,972,918 index slots**, ctx to 1,590 — the regime where it fires | 0 FAIL |
+      | paired token ids | 34/34 legs, both arms, whole sweep | identical |
+      | standing GATE + LOSSLESS (`build/decode`) | argmax 11111; spec vs base AR | PASS, tau 2.87 tok/verify |
+
+      **WHY IT IS NULL, AND THE LESSON THAT IS WORTH MORE THAN THE ITEM.** 1.3 was ranked above 1.5
+      when `i:topk` was **13.47 ms at ctx 12,288** (0.4's attribution). 1.2 then took `i:topk` to
+      **0.72 ms at ctx 6144** — and 1.3 was next on the list, so it was built against a headroom
+      that had ceased to exist one commit earlier. **A ladder ordering is a function of a cost
+      model, and 1.2 changed the cost model.** The re-attribution that should have been done before
+      picking this item costs nothing — it is one dprof run that the A/B was going to do anyway.
+      See the new rule 6 above and `wiki/measurement-and-traps.md` §15-16.
+
+      **THE RE-ATTRIBUTION, from this iteration's own dprof (220 verify samples, ctx 369..6255,
+      width-held-fixed slopes, `evidence/decode_loop/dprof_ctx_1p3_on.txt`).** This is the steering
+      data for the next iteration:
+
+      | mark | 0.4 said (to ctx 12,288) | now | status |
+      |---|---|---|---|
+      | `draft:main_kv` | 3.867 | **-0.000** | spent by 1.0 |
+      | `i:topk` | 0.872 | **0.084 +/- 0.001** | spent by 1.2, then 1.3 |
+      | `cattn:sparse` | 0.709 +/- 0.050 | **1.694 +/- 0.065** | see the warning below — item 1.7 |
+      | `i:score` | 0.644 +/- 0.018 | **0.629 +/- 0.018** | unchanged — **item 1.5 is still the next kernel** |
+
+      **DO NOT RE-RANK 1.7 ABOVE 1.5 ON THAT 1.694.** It is a linear coefficient fitted to a mark
+      that is not linear. Per-point medians: `cattn:sparse` 9.35 -> 15.72 -> 19.89 ms at ctx
+      768/1536/6144, i.e. **8.29 ms per 1000 over the first leg and 0.905 over the second**; 0.4
+      measured 19.22/19.90/21.17 at 3072/6144/12,288, which is flat. The two "disagreeing" slopes
+      are the same concave curve fitted over different ranges, and 1.7 already says so — the lever
+      there is the ~20 ms FLOOR (Term A), not a slope. `i:score` by contrast is genuinely linear:
+      0.88 -> 1.25 -> 3.53 ms is **0.482 and 0.495 ms per 1000** across the two legs. **The ladder
+      order stands.**
+
+      Scripts, detached and named in `detach_audit.sh`: `topk_early_ab_run.sh`.
+      Evidence: `evidence/decode_loop/fit_1p3_paired.txt`, `fit_1p3_on.txt`, `fit_1p3_off.txt`,
+      `fit_1p3_itopk.txt`, `gate_topk_radix_1p3.log`, `server_1p3_gate.log`,
+      `dprof_ctx_1p3_on.txt`, `dprof_ctx_1p3_off.txt`, `decode_1p3_lossless.log`,
+      `topk_early_ab.log`.
 - [ ] **1.4** `cudaFuncSetAttribute` opt-in for dynamic shared memory, or drop the requirement
       entirely (1.2 does). Removes a silent garbage-return above ~49k context.
       **NARROWED, NOT CLOSED, by 1.2 (2026-08-20).** The shipped path now requests **zero** dynamic
@@ -533,6 +655,17 @@ So, in order:
       rather than of a full scan. So the lever here is the 11 ms FLOOR, not the slope, and it
       belongs to Term A as much as to Term B. Do not open this until 1.0/1.2/1.5 are done — it is
       the smallest of the four and the only one whose mechanism is not yet understood.
+
+      **CONFIRMED CONCAVE, 2026-08-20 by 1.3's re-attribution, and this is why the rank does not
+      change.** A fresh dprof over ctx 369..6255 fits `cattn:sparse` at **1.694 +/- 0.065 ms per
+      1000** — 2.4x what 0.4 reported and, taken at face value, 2.7x `i:score`, which would promote
+      this item above 1.5. It is an artefact of the fitting range. Per-point medians 9.35 / 15.72 /
+      19.89 ms at ctx 768 / 1536 / 6144 are **8.29 ms per 1000 across the first leg and 0.905
+      across the second**, joining continuously onto 0.4's flat 19.22 / 19.90 / 21.17 at 3072 /
+      6144 / 12,288. One curve, two ranges. The paragraph above called this in advance — "the
+      signature of a top-`k` gather saturating once context exceeds `k`" — and the new data is that
+      signature measured on its steep side. **The lever is still the ~20 ms floor, this is still
+      Term A, and this item is still ranked below 1.5.**
 - [ ] **1.8** **Explain the `cattn:q_proj` bimodality 0.4 found.** At ctx 6144, at the SAME verify
       width VB=2, 18 steps ran `q:wq_a` at 1.71 ms and 17 at 5.47 ms — a 3.2x swing in one fp8 GEMM
       at fixed shape and fixed context, with `cattn:compress` splitting the same way (0.05 vs

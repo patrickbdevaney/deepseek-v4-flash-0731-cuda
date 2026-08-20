@@ -11,7 +11,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation |
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
-| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, and the two adoptions (1.0, 1.2) that took `b` down 65 % |
+| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the two adoptions (1.0, 1.2) that took `b` down 65 %, and what is left |
 
 ## The state in one table
 
@@ -25,12 +25,18 @@ historical measurement; the second is where agentic work actually runs.
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
 
-| at real context | ladder open | after 1.0 | after 1.2 | |
-|---|---|---|---|---|
-| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | **10.69 tok/s** | +24.4 % then **+8.2 %** |
-| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | +21.7 % then +6.7 % |
-| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | **11.77 tok/s** | +15.8 % then +5.8 % |
-| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | **2.514 ms/1000** | **−65 % cumulative** |
+| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | |
+|---|---|---|---|---|---|
+| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | **10.69 tok/s** | *unchanged* | +24.4 % then **+8.2 %** then nothing |
+| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | +21.7 % then +6.7 % |
+| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | **11.77 tok/s** | *unchanged* | +15.8 % then +5.8 % |
+| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | **2.514 ms/1000** | 3.008 → 3.036, its own arms | **−65 % cumulative** |
+
+**1.3 is in that table as a blank on purpose.** It shipped, it is bit-exact across 66.9 M gated
+index slots, and it is worth 0.07 % of a forward — a correct optimisation of a term 1.2 had already
+spent, picked off a ranking that went stale one commit earlier. It is the reason the ladder now has
+a rule 6 ("re-attribute before you pick"), and the reason a wins table has to be able to show a
+zero. [`negative-results.md` §4c](negative-results.md).
 
 Each arrow is a separate paired A/B on its own before-arm; the columns are not one continuous
 sweep, and 1.2's before-arm measured `b = 3.488` where 1.0's after-arm reported 4.006 — one
@@ -38,10 +44,18 @@ run-to-run spread on a fitted coefficient, which is why the *paired* saving and 
 difference is the ratchet in both cases.
 
 **The context term is no longer where the money is.** Of the 6.97 ms/1000 that 0.4 attributed, the
-two large items — `draft:main_kv` (3.867) and `i:topk` (0.872) — are both spent. What is named and
-left is `cattn:sparse` (0.709) and `i:score` (0.644), **1.35 of a measured 2.514**, so about half
-the surviving slope is still unattributed. Term A is now 129.11 ms of a 154.66 ms forward at ctx
-12,410 — **83 %** — and it is 1.57× its byte floor. See [`context-scaling.md`](context-scaling.md).
+two large items — `draft:main_kv` (3.867) and `i:topk` (0.872) — are both spent, and a fresh
+attribution confirms them dead at **−0.000** and **0.084 ± 0.001**. What is named and left is
+`cattn:sparse` (0.709) and `i:score` (0.644 → re-measured 0.629 ± 0.018), **1.35 of a measured
+2.514**, so about half the surviving slope is still unattributed. Term A is now 129.11 ms of a
+154.66 ms forward at ctx 12,410 — **83 %** — and it is 1.57× its byte floor. See
+[`context-scaling.md`](context-scaling.md).
+
+`cattn:sparse` re-fits at **1.694 ± 0.065** over ctx 0.4k–6k against 0.4's **0.709 ± 0.050** over
+3k–12k. **That is one concave curve read over two windows, not a regression and not drift**, and
+ranking on the bigger number would promote the wrong item — see
+[`measurement-and-traps.md` §16](measurement-and-traps.md), which is the second new trap this week
+where a clean fit with a tight SE meant something other than it looked like.
 
 > ### ⚠️ RETRACTED 2026-08-20 — "the M=1 kernel path is finished"
 >

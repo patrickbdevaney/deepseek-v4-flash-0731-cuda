@@ -141,14 +141,45 @@ means the profile is still incomplete**, and this is the second time that has be
 User-visible: **9.88 → 10.69 tok/s at ctx 12,410 (+8.2 %)**, +6.7 % at 9,341, +5.8 % at 6,260,
 tapering to +1.9 % at 889.
 
+## Status — 1.3 did not move this term, and that is the entry
+
+**Adopted 2026-08-20, measured null.** The `lim <= topk` early-out inside the radix select skips a
+whole discovery level below ctx 2048. It is bit-exact (34/34 legs byte-identical, 66.9 M gated index
+slots, 0 FAIL) and it is worth **+2.1 to +4.1 µs per call** standalone — and the context term did
+not notice:
+
+```
+before (DSV4_TOPK_EARLY=0)  fwd = 127.92 + 3.008 x (ctx/1000)   SE(b) 0.241
+after                       fwd = 127.84 + 3.036 x (ctx/1000)   SE(b) 0.240
+```
+
+`b` is unchanged inside a tenth of an SE, and it was pre-registered as unable to move: 21 ratio-4
+layers × ~4 µs is 0.085 ms of a ~130 ms forward. The one instrument that could see it, the `i:topk`
+mark, did: **0.42 → 0.28 ms at ctx 768, 0.52 → 0.34 at 1536, 0.72 → 0.72 at 6144** where it cannot
+fire. The change works; the term it optimises was already spent by 1.2 one iteration earlier. See
+[`negative-results.md` §4c](negative-results.md) for why it was built anyway, which is the part
+worth reading.
+
 ## What is left of the term
 
-| mark | ms/1000 ctx | status |
-|---|---|---|
-| ~~`draft:main_kv`~~ | ~~3.867~~ → ~0 | **done, §2.5** |
-| ~~`i:topk`~~ | ~~0.872 ± 0.021~~ → ~0.08 | **done, §2.6** |
-| `cattn:sparse` | 0.709 ± 0.050 | ladder 1.7 — the lever is its 11 ms *floor*, not its slope |
-| `i:score` | 0.644 ± 0.018 | ladder 1.5 |
+Slopes below are 0.4's, fit over ctx 3k–12k. The `now` column is 1.3's re-attribution, 220 verify
+samples over ctx 369–6255, width held fixed
+(`evidence/decode_loop/dprof_ctx_1p3_on.txt`).
+
+| mark | 0.4, ms/1000 ctx | now | status |
+|---|---|---|---|
+| ~~`draft:main_kv`~~ | ~~3.867~~ | **−0.000** | **done, §2.5** |
+| ~~`i:topk`~~ | ~~0.872 ± 0.021~~ | **0.084 ± 0.001** | **done, §2.6 + 1.3** |
+| `cattn:sparse` | 0.709 ± 0.050 | 1.694 ± 0.065 ⚠ | ladder 1.7 — the lever is its ~20 ms *floor*, not its slope |
+| `i:score` | 0.644 ± 0.018 | **0.629 ± 0.018** | ladder 1.5 — **linear, and the next kernel** |
+
+⚠ **The two `cattn:sparse` numbers are one concave curve read over two windows, not a disagreement,
+and the larger one must not be used to re-rank.** Per-point medians run 9.35 → 15.72 → 19.89 ms at
+ctx 768/1536/6144 and then 19.22 → 19.90 → 21.17 at 3072/6144/12,288: **8.29 ms per 1000 across the
+first leg, 0.208 across the last.** That is a top-`k` gather saturating once context exceeds
+`k × ratio`, which is what this page predicted of it. `i:score` over the identical samples is
+0.88 → 1.25 → 3.53 ms, i.e. 0.482 then 0.495 per 1000 — genuinely linear, so its `b` means what it
+says. Full argument in [`measurement-and-traps.md` §16](measurement-and-traps.md).
 
 The four were 6.09 of the 6.97 ms/1000 step slope that 0.4 attributed. Both large ones are now
 spent, and what remains is **1.35 ms/1000 of identified work inside a measured 2.514** — so about
