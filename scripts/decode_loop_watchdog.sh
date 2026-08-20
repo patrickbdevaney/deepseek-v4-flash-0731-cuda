@@ -21,7 +21,7 @@ set -u
 cd "$(dirname "$0")/.."
 LOG=evidence/decode_loop/watchdog.log
 STAMP=evidence/decode_loop/.watchdog_restarts
-MAX_RESTARTS="${MAX_RESTARTS:-4}"
+MAX_RESTARTS="${MAX_RESTARTS:-8}"
 FLOOR_GB="${FLOOR_GB:-100}"
 mkdir -p evidence/decode_loop
 say(){ echo "[watchdog $(date -Is)] $*" >> "$LOG"; }
@@ -44,6 +44,21 @@ done
 if [ -f "$LOG" ] && tail -40 evidence/decode_loop/driver.log 2>/dev/null | grep -qiE "usage/session limit"; then
   say "last stop was a usage limit, not a fault; clearing the restart counter"
   rm -f "$STAMP"
+fi
+# A CAP THAT NEVER RESETS BECOMES A PERMANENT STAND-DOWN. The cap exists so a loop that fails
+# instantly is not restarted forever -- but a loop that ran healthily for hours and then died (a
+# reboot, a crash) is not that case, and after four such events over a multi-day run the watchdog
+# would stand down for good with nobody told. So: if the loop completed an iteration since the last
+# restart, the previous failures are ancient history and the counter resets.
+if [ -f "$STAMP" ] && [ evidence/decode_loop/driver.log -nt "$STAMP" ] \
+   && grep -q "iteration .* — next item" evidence/decode_loop/driver.log 2>/dev/null \
+   && [ "$(find evidence/decode_loop/driver.log -newer "$STAMP" -mmin -1440 2>/dev/null)" ]; then
+  last_start=$(grep -c "invoking headless claude" evidence/decode_loop/driver.log 2>/dev/null || echo 0)
+  prev=$(cat "$STAMP.iters" 2>/dev/null || echo 0)
+  if [ "$last_start" -gt "$prev" ]; then
+    say "the loop has started $((last_start-prev)) iteration(s) since the last restart; clearing the counter"
+    rm -f "$STAMP"; echo "$last_start" > "$STAMP.iters"
+  fi
 fi
 n=$(cat "$STAMP" 2>/dev/null || echo 0)
 if [ "$n" -ge "$MAX_RESTARTS" ]; then

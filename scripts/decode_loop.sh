@@ -25,7 +25,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-MAX_ITERS="${MAX_ITERS:-40}"
+MAX_ITERS="${MAX_ITERS:-120}"
 # PER-ITERATION TIMEOUT. Iteration 1 ran 30+ minutes on a context sweep with nothing bounding it;
 # at that rate the 48h budget buys ~90 iterations of an unknown mix. A stuck iteration is worse than
 # a failed one because it looks identical to a working one, so it gets a wall.
@@ -33,7 +33,7 @@ MAX_ITERS="${MAX_ITERS:-40}"
 # and a cached load, ~10 min each before any sweep runs. 5400s killed iteration 2 mid-experiment.
 ITER_TIMEOUT="${ITER_TIMEOUT:-14400}"
 LIMIT_BACKOFF="${LIMIT_BACKOFF:-900}"   # wait out a usage limit rather than treating it as fatal
-MAX_HOURS="${MAX_HOURS:-48}"
+MAX_HOURS="${MAX_HOURS:-336}"   # 14 days; the ladder, not the clock, should end this
 FLOOR_GB="${FLOOR_GB:-100}"          # refuse to start an iteration below this MemAvailable
 NOISE_PCT="${NOISE_PCT:-2.0}"        # below this, an iteration counts as no-improvement
 DRY="${DRY:-0}"
@@ -89,7 +89,53 @@ cpu_gates(){
   return $ok
 }
 
-next_item(){ grep -n '^- \[ \]' DECODE_LADDER.md | head -1; }
+# AN ITEM THAT CANNOT BE FINISHED MUST NOT BE RE-SELECTED FOREVER. next_item takes the topmost
+# unchecked entry, and the prompt tells the agent to leave an item it cannot complete UNCHECKED
+# rather than fake progress. Those two rules together are a livelock: the next iteration picks the
+# same item, fails the same way, forever, and the ladder never advances. So an item that survives
+# MAX_ATTEMPTS iterations without being checked is rewritten `- [!]` (deferred) and skipped. Nothing
+# is lost -- `[!]` is still visible in the ladder and can be reopened by hand -- but the loop moves on.
+# NOT `[~]`: that already means "primitives done, wiring still to do" (item 1b.1), and one marker
+# cannot carry two meanings. Note that `[~]` items are ALSO skipped by next_item, so partial work
+# parked there is invisible to the loop until someone reopens it.
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
+ATTEMPTS="$LOGDIR/.attempts"
+# PRIORITY IS DATA, NOT TEXT ORDER. "Topmost unchecked" hard-codes the order the ladder was written
+# in, and that order is stale: it was set when the context term was 41 % of the forward and it is now
+# 19.5 %, while two larger, already-measured, context-independent wins (2.2, 3.1) sit at the back.
+# Physically reordering the ladder would mean large edits to a file the agent also rewrites every
+# iteration. DECODE_PRIORITY lists item ids, one per line, most important first; anything unlisted
+# falls back to ladder order. Editing it re-prioritises the programme without touching the ladder.
+next_item(){
+  if [ -s DECODE_PRIORITY ]; then
+    local id line
+    while read -r id _; do
+      case "$id" in ''|'#'*) continue;; esac
+      line=$(grep -n "^- \[ \] \*\*${id}\*\*" DECODE_LADDER.md | head -1)
+      [ -n "$line" ] && { printf '%s\n' "$line"; return 0; }
+    done < DECODE_PRIORITY
+  fi
+  grep -n '^- \[ \]' DECODE_LADDER.md | head -1
+}
+item_id(){ printf '%s' "$1" | sed -n 's/^[0-9]*:- \[ \] \*\*\([^*]*\)\*\*.*/\1/p'; }
+attempts_of(){ awk -v k="$1" '$1==k{print $2; f=1} END{if(!f) print 0}' "$ATTEMPTS" 2>/dev/null | head -1; }
+bump_attempt(){ local k="$1" n; n=$(( $(attempts_of "$k") + 1 ))
+  { grep -v "^$k " "$ATTEMPTS" 2>/dev/null; echo "$k $n"; } > "$ATTEMPTS.tmp" && mv "$ATTEMPTS.tmp" "$ATTEMPTS"; echo "$n"; }
+defer_item(){ # $1 = item id, $2 = why
+  python3 - "$1" "$2" <<'PYD'
+import sys, re
+iid, why = sys.argv[1], sys.argv[2]
+p='DECODE_LADDER.md'; s=open(p).read()
+pat = re.compile(r'^- \[ \] \*\*' + re.escape(iid) + r'\*\*', re.M)
+if pat.search(s):
+    s = pat.sub('- [!] **' + iid + '**', s, count=1)
+    s = s.replace('- [!] **' + iid + '**',
+                  '- [!] **' + iid + '**  _(DEFERRED by the loop: ' + why + '. Reopen by hand -- change `[!]` back to `[ ]`.)_\n     ', 1)
+    open(p,'w').write(s); print("deferred " + iid)
+else:
+    print("could not defer " + iid + " (line moved or already marked)")
+PYD
+}
 
 PROMPT_PREAMBLE=$(cat <<'P'
 You are continuing an autonomous decode-optimisation programme on a Jetson AGX Thor (sm_110a).
@@ -145,9 +191,27 @@ for iter in $(seq 1 "$MAX_ITERS"); do
   item=$(next_item)
   [ -n "$item" ] || { say "no unchecked ladder items left"; break; }
 
+  ITEM_ID="$(item_id "$item")"
   say "iteration $iter/$MAX_ITERS — next item: ${item:0:120}"
   if ! preflight; then say "preflight failed; waiting 120s"; sleep 120; continue; fi
-  if ! cpu_gates; then die "CPU gates are failing before the iteration even started"; fi
+  # A BROKEN TREE IS A JOB, NOT A WALL. Dying here wedges the programme permanently: the watchdog
+  # ALSO refuses to restart when the gates fail, so nothing ever runs again and nobody is told. But
+  # running the next optimisation on a broken tree is worse. So the gates failing redirects this
+  # iteration to fixing them, and only a repair that itself keeps failing is fatal.
+  REPAIR=""
+  if ! cpu_gates; then
+    nrep=$(( $(attempts_of "__repair__") ))
+    if [ "$nrep" -ge 3 ]; then die "CPU gates still failing after $nrep repair iterations"; fi
+    bump_attempt "__repair__" > /dev/null
+    say "CPU gates failing — spending iteration $iter on repair instead of the ladder (attempt $((nrep+1))/3)"
+    REPAIR="THE TREE IS BROKEN AND THAT IS THIS ITERATION'S ONLY JOB. One or more CPU gates fail:
+see $LOGDIR/gate_*.log for which. Do NOT start a ladder item. Find the cause, fix it, and prove
+every gate in scripts/build_gate.sh passes again. If the breakage is an uncommitted work-in-progress
+from a previous iteration that cannot be salvaged, say so plainly and revert those files -- a clean
+tree that builds beats a half-finished optimisation. Commit the repair."
+  else
+    printf '' ; { grep -v '^__repair__ ' "$ATTEMPTS" 2>/dev/null; } > "$ATTEMPTS.tmp" 2>/dev/null && mv "$ATTEMPTS.tmp" "$ATTEMPTS" 2>/dev/null || true
+  fi
 
   if [ "$DRY" = "1" ]; then say "DRY=1, not invoking claude"; break; fi
 
@@ -160,6 +224,8 @@ for iter in $(seq 1 "$MAX_ITERS"); do
   set -o pipefail
   timeout --signal=TERM --kill-after=60 "$ITER_TIMEOUT" \
     claude -p "$PROMPT_PREAMBLE
+
+$REPAIR
 
 This is iteration $iter. The topmost unchecked ladder item is:
 $item" \
@@ -186,10 +252,15 @@ $item" \
   #
   # What IS fatal: a failing gate, or a changed checkpoint. Those mean the tree is not what the next
   # iteration would build on.
-  post_ok=1
-  if ! cpu_gates; then say "POST: a CPU gate now fails"; post_ok=0; fi
+  post_ok=1; post_fatal=0
+  # A GATE THAT NOW FAILS IS REPAIRABLE; A CHECKPOINT THAT CHANGED IS NOT. Dying on the first is a
+  # permanent wedge, because the watchdog also refuses to restart onto a failing tree -- so the
+  # programme would stop with nobody told. The next iteration's preflight turns a failing gate into
+  # a repair job instead. A changed checkpoint invalidates every measurement ever taken against it,
+  # so that one really does stop the loop.
+  if ! cpu_gates; then say "POST: a CPU gate now fails — next iteration will be spent repairing it"; post_ok=0; fi
   fp_now=$(ckpt_fingerprint)
-  [ "$fp_now" = "$CKPT_FP0" ] || { say "POST: CHECKPOINT CHANGED ($CKPT_FP0 -> $fp_now)"; post_ok=0; }
+  [ "$fp_now" = "$CKPT_FP0" ] || { say "POST: CHECKPOINT CHANGED ($CKPT_FP0 -> $fp_now)"; post_ok=0; post_fatal=1; }
   # Residency: wait it out rather than dying. Background work the iteration started is legitimate.
   for _ in $(seq 1 240); do
     resident=$(ps -eo comm= | grep -cE '^(dsv4-server|decode|decode_probe|decode_prechange)$')
@@ -232,7 +303,7 @@ The iteration left no COMMIT_MSG_*.txt, so this message says only what the ladde
     git push -q 2>/dev/null && say "pushed $(git rev-parse --short HEAD)" || say "push failed (committed locally)"
   fi
 
-  [ "$post_ok" = "1" ] || die "post-checks failed after iteration $iter — stopping rather than compounding"
+  [ "$post_fatal" = "1" ] && die "the checkpoint changed under the loop — every measurement is now suspect"
   # A USAGE LIMIT IS NOT A FAILURE, IT IS A WAIT. Overnight the account hit its session limit and
   # every invocation returned rc=1 after one second having done nothing. The loop treated that as
   # fatal and stopped; the watchdog restarted it into the same wall every 15 minutes until it hit
@@ -246,7 +317,36 @@ The iteration left no COMMIT_MSG_*.txt, so this message says only what the ladde
     iter=$((iter-1))            # this attempt did no work; do not spend an iteration on it
     continue
   fi
-  [ "$rc" = "0" ] || { say "claude returned $rc; stopping"; break; }
+  # A FAILED ITERATION IS ONE ITERATION, NOT THE END OF THE PROGRAMME. `break` here meant a single
+  # timeout (rc=124) or one transient error ended a run that had a dozen ladder items left. The item
+  # keeps its attempt count, so an item that genuinely cannot be done is deferred after MAX_ATTEMPTS
+  # and the ladder still advances -- which is the difference between failing and blocking.
+  if [ "$rc" != "0" ]; then
+    say "claude returned $rc — counting it against this item and continuing to the next iteration"
+    sleep 30
+  fi
+
+  # ATTEMPT BOOKKEEPING. If the topmost unchecked item is STILL the one this iteration was given,
+  # it did not finish. After MAX_ATTEMPTS, defer it so the loop cannot spend the rest of the run on
+  # a single item it has already failed three times.
+  if [ -n "$ITEM_ID" ]; then
+    still=$(item_id "$(next_item)")
+    if [ "$still" = "$ITEM_ID" ]; then
+      n=$(bump_attempt "$ITEM_ID")
+      say "item $ITEM_ID still unchecked after this iteration (attempt $n/$MAX_ATTEMPTS)"
+      if [ "$n" -ge "$MAX_ATTEMPTS" ]; then
+        say "DEFERRING $ITEM_ID after $n attempts — the ladder must keep moving"
+        defer_item "$ITEM_ID" "not completed in $n iterations (last rc=$rc)"
+        git add DECODE_LADDER.md 2>/dev/null && git commit -q -m "loop: defer ladder item $ITEM_ID after $n attempts
+
+The loop takes the topmost unchecked item and the prompt tells it to leave an item it cannot finish
+unchecked. Together those re-select the same item forever. Deferring keeps it visible in the ladder
+and reopenable by hand while the remaining items still get run." 2>/dev/null || true
+      fi
+    else
+      { grep -v "^$ITEM_ID " "$ATTEMPTS" 2>/dev/null; } > "$ATTEMPTS.tmp" 2>/dev/null && mv "$ATTEMPTS.tmp" "$ATTEMPTS" 2>/dev/null || true
+    fi
+  fi
 done
 
 say "loop finished after ${iter:-0} iteration(s). Journal: $JOURNAL"

@@ -45,10 +45,21 @@ if ! flock -w 60 9; then
     exit 1
 fi
 
-AVAIL_GB=$(awk '/MemAvailable/ {printf "%d", $2/1048576}' /proc/meminfo)
+# RECLAIM BEFORE REFUSING. The threshold is 105 GiB and this box idles at ~104.6-110, so the check
+# was one page-cache read away from refusing every launch -- and a refusal here fails an autonomous
+# iteration for a condition that is not actually a shortage. Page cache IS reclaimable, so drop it
+# and re-read before giving up. Only a genuine shortage should stop a launch.
+avail_gb(){ awk '/MemAvailable/ {printf "%d", $2/1048576}' /proc/meminfo; }
+AVAIL_GB=$(avail_gb)
 if [ "$AVAIL_GB" -lt 105 ]; then
-    echo "REFUSED: only ${AVAIL_GB} GiB available; a full-model load needs ~105 GiB." >&2
-    echo "  Free memory first (the page cache is reclaimable: sync; echo 3 | sudo tee /proc/sys/vm/drop_caches)." >&2
+    echo "[run_model] ${AVAIL_GB} GiB available, below 105 — reclaiming page cache and re-checking"
+    sync; echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
+    sleep 2
+    AVAIL_GB=$(avail_gb)
+fi
+if [ "$AVAIL_GB" -lt 105 ]; then
+    echo "REFUSED: only ${AVAIL_GB} GiB available after reclaim; a full-model load needs ~105 GiB." >&2
+    echo "  running: $(ps -eo pid=,comm= | awk '$2=="dsv4-server"||$2=="decode"' || echo '(no model)')" >&2
     exit 1
 fi
 

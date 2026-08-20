@@ -1,0 +1,19 @@
+# Ladder execution order, most important first. Item ids as they appear in DECODE_LADDER.md.
+# Anything not listed here falls back to ladder text order. Edit freely; the loop re-reads this
+# file every iteration, so a change takes effect at the next iteration boundary.
+#
+# WHY THIS IS NOT LADDER ORDER. The ladder was written when the context term was 41 % of the
+# forward. After 1.0 and 1.2 it is 19.5 % (fit: fwd = 129.11 + 2.514 x ctx/1000). The two remaining
+# context items are worth +11.7 % at ctx 12.4k but only +1.7 % at ctx 1.7k, and each needs a new
+# kernel. 2.2 and 3.1 are already MEASURED, need no kernel, and apply at every context.
+
+1.5     # in flight; ~9 % of the context term, gates already built -- finish it
+2.2     # deploy s3: tau 3.5362 -> 3.8438, 22.66 -> 25.53 tok/s. +12.7 %, all contexts, no kernel.
+3.1     # jetson_clocks: GPU 1386->1575, EMC 2750->4266. +3.0-6.4 %, all contexts, no kernel.
+1.9     # why the engine stops reproducing itself mid-run -- correctness under every future A/B
+1.7     # cattn:sparse, 10 % of the context term
+1.8     # cattn:q_proj bimodality
+1b.2    # KV dims 0-447 as FP8 E4M3, 2048 B -> 711 B
+2.1     # re-tune block width now that 1.1/1.2 changed the shape
+2.3     # confidence head at verify time
+3.2     # final PERF.md re-run, both coefficients, then STOP
