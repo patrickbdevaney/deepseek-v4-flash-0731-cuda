@@ -26,6 +26,10 @@ set -u
 cd "$(dirname "$0")/.."
 
 MAX_ITERS="${MAX_ITERS:-40}"
+# PER-ITERATION TIMEOUT. Iteration 1 ran 30+ minutes on a context sweep with nothing bounding it;
+# at that rate the 48h budget buys ~90 iterations of an unknown mix. A stuck iteration is worse than
+# a failed one because it looks identical to a working one, so it gets a wall.
+ITER_TIMEOUT="${ITER_TIMEOUT:-5400}"
 MAX_HOURS="${MAX_HOURS:-48}"
 FLOOR_GB="${FLOOR_GB:-100}"          # refuse to start an iteration below this MemAvailable
 NOISE_PCT="${NOISE_PCT:-2.0}"        # below this, an iteration counts as no-improvement
@@ -131,16 +135,28 @@ for iter in $(seq 1 "$MAX_ITERS"); do
   if [ "$DRY" = "1" ]; then say "DRY=1, not invoking claude"; break; fi
 
   out="$LOGDIR/iter${iter}.log"
-  say "invoking headless claude -> $out"
-  claude -p "$PROMPT_PREAMBLE
+  say "invoking headless claude -> $out  (timeout ${ITER_TIMEOUT}s, live feed: $LOGDIR/live.log)"
+  # STREAM, DO NOT BUFFER. `--output-format text` emits nothing until the run ends, so iteration 1
+  # was opaque for half an hour -- and a loop you cannot watch is one you cannot stop early for the
+  # right reason. stream-json goes through tools/loop_stream.py, which keeps the raw JSONL intact in
+  # $out and prints one compact line per tool call to the live feed.
+  set -o pipefail
+  timeout --signal=TERM --kill-after=60 "$ITER_TIMEOUT" \
+    claude -p "$PROMPT_PREAMBLE
 
 This is iteration $iter. The topmost unchecked ladder item is:
 $item" \
-    --dangerously-skip-permissions \
-    --output-format text \
-    > "$out" 2>&1
-  rc=$?
-  say "claude exited rc=$rc ($(wc -l < "$out") lines)"
+      --dangerously-skip-permissions \
+      --output-format stream-json --verbose \
+      2>> "$LOGDIR/iter${iter}.stderr" \
+    | python3 tools/loop_stream.py --raw "$out" | tee -a "$LOGDIR/live.log"
+  rc=${PIPESTATUS[0]}
+  set +o pipefail
+  if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then
+    say "ITERATION TIMED OUT after ${ITER_TIMEOUT}s (rc=$rc) — leaving the ladder item unchecked"
+    # A timed-out iteration may have left a model resident; the post-check below will catch it.
+  fi
+  say "claude exited rc=$rc"
 
   # POST-CHECKS. The iteration is not trusted just because it exited zero.
   post_ok=1
@@ -161,3 +177,4 @@ PY
 done
 
 say "loop finished after ${iter:-0} iteration(s). Journal: $JOURNAL"
+say "live feed was: $LOGDIR/live.log"
