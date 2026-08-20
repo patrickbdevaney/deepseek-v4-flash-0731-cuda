@@ -13,6 +13,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
 | [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the two adoptions (1.0, 1.2) that took `b` down 65 %, and what is left |
 | [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
+| [`oom-and-memory-safety.md`](oom-and-memory-safety.md) | why the OOM killer never fires here (unified memory is invisible to the cgroup), and the two guards that replace it |
 
 ## The state in one table
 
