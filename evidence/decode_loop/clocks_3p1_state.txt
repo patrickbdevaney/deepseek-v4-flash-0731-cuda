@@ -1,0 +1,18 @@
+### clock state [baseline] 2026-08-20T10:59:57-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=315000000 MaxFreq=1386000000 CurrentFreq=315000000
+gpu-nvd-0 MinFreq=315000000 MaxFreq=1557000000 CurrentFreq=315000000
+EMC MinFreq=665600000 MaxFreq=4266000000 CurrentFreq=2750000000
+315 MHz, 41, 2.39 W
+### clock state [pinned 120W] 2026-08-20T11:03:21-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=1386000000 MaxFreq=1386000000 CurrentFreq=1386000000
+gpu-nvd-0 MinFreq=1557000000 MaxFreq=1557000000 CurrentFreq=1557000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1386 MHz, 46, 5.18 W
+### clock state [pinned MAXN] 2026-08-20T11:06:34-04:00
+NV Power Mode: MAXN 0 
+gpu-gpc-0 MinFreq=1575000000 MaxFreq=1575000000 CurrentFreq=1575000000
+gpu-nvd-0 MinFreq=1692000000 MaxFreq=1692000000 CurrentFreq=1692000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1575 MHz, 48, 4.78 W

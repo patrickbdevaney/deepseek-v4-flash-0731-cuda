@@ -1,0 +1,107 @@
+[3.1] 2026-08-20T10:59:57-04:00 checkpoint: /home/patrickd/models/ckpt-head-s3
+[3.1] 2026-08-20T10:59:57-04:00 suite sha256: 2b70769e5b034362  blksweep: 6:1:1.5:0,6:1:1.5:1,6:1:1.5:2,6:1:1.5:3,6:1:1.5:4,6:1:1.5:5,6:1:1.5:6,6:1:1.5:7,6:1:1.5:8
+[3.1] 2026-08-20T10:59:57-04:00 === PHASE 0: baseline machine state, stored so it can be put back ===
+[3.1] 2026-08-20T10:59:57-04:00 gpu-gpc-0 is governed (Min=315000000 Max=1386000000) — arm A is a real baseline
+rm: cannot remove '/tmp/clocks_3p1_before.conf': Operation not permitted
+[3.1] 2026-08-20T10:59:57-04:00 stored -> /tmp/clocks_3p1_before.conf  (62 entries)
+### clock state [baseline] 2026-08-20T10:59:57-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=315000000 MaxFreq=1386000000 CurrentFreq=315000000
+gpu-nvd-0 MinFreq=315000000 MaxFreq=1557000000 CurrentFreq=315000000
+EMC MinFreq=665600000 MaxFreq=4266000000 CurrentFreq=2750000000
+315 MHz, 41, 2.39 W
+[3.1] 2026-08-20T10:59:58-04:00 === ARM A (120W governed — the state every ladder measurement so far was taken in) ===
+### clock state [arm A before] 2026-08-20T10:59:58-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=315000000 MaxFreq=1386000000 CurrentFreq=315000000
+gpu-nvd-0 MinFreq=315000000 MaxFreq=1557000000 CurrentFreq=315000000
+EMC MinFreq=665600000 MaxFreq=4266000000 CurrentFreq=2750000000
+315 MHz, 41, 2.39 W
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/clocks_3p1_A.log
+[run_model] pid 484135   watch: tail -f evidence/decode_loop/clocks_3p1_A.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/clocks_3p1_A.memguard.log
+### clock state [arm A after] 2026-08-20T11:03:16-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=315000000 MaxFreq=1386000000 CurrentFreq=315000000
+gpu-nvd-0 MinFreq=315000000 MaxFreq=1557000000 CurrentFreq=315000000
+EMC MinFreq=665600000 MaxFreq=4266000000 CurrentFreq=2750000000
+315 MHz, 45, 2.39 W
+[3.1] 2026-08-20T11:03:16-04:00 arm A finished in 196s
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] WARM decode: 88.0 ms/tok = 11.36 tok/s  (M=1 steady state, 7-step avg)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 11.36 tok/s
+[3.1] 2026-08-20T11:03:16-04:00 arm A OK
+[3.1] arm A       gpc clock over  20 samples: min    315  median    315  max   1386 MHz
+[3.1] 2026-08-20T11:03:16-04:00 === pinning clocks: jetson_clocks at nvpmodel 1 ===
+Enabled Legacy persistence mode for GPU 00000000:01:00.0.
+All done.
+### clock state [pinned 120W] 2026-08-20T11:03:21-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=1386000000 MaxFreq=1386000000 CurrentFreq=1386000000
+gpu-nvd-0 MinFreq=1557000000 MaxFreq=1557000000 CurrentFreq=1557000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1386 MHz, 46, 5.18 W
+[3.1] 2026-08-20T11:03:21-04:00 === ARM B (120W pinned — jetson_clocks, gpc floor 1386, EMC 4266) ===
+### clock state [arm B before] 2026-08-20T11:03:21-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=1386000000 MaxFreq=1386000000 CurrentFreq=1386000000
+gpu-nvd-0 MinFreq=1557000000 MaxFreq=1557000000 CurrentFreq=1557000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1386 MHz, 46, 5.18 W
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/clocks_3p1_B.log
+[run_model] pid 490504   watch: tail -f evidence/decode_loop/clocks_3p1_B.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/clocks_3p1_B.memguard.log
+### clock state [arm B after] 2026-08-20T11:06:24-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=1386000000 MaxFreq=1386000000 CurrentFreq=1386000000
+gpu-nvd-0 MinFreq=1557000000 MaxFreq=1557000000 CurrentFreq=1557000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1386 MHz, 49, 4.78 W
+[3.1] 2026-08-20T11:06:24-04:00 arm B finished in 180s
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] WARM decode: 72.7 ms/tok = 13.75 tok/s  (M=1 steady state, 7-step avg)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.75 tok/s
+[3.1] 2026-08-20T11:06:24-04:00 arm B OK
+[3.1] arm B       gpc clock over  18 samples: min   1386  median   1386  max   1386 MHz
+[3.1] 2026-08-20T11:06:24-04:00 === switching to MAXN and re-pinning ===
+Persistence mode is already Enabled for GPU 00000000:01:00.0.
+All done.
+### clock state [pinned MAXN] 2026-08-20T11:06:34-04:00
+NV Power Mode: MAXN 0 
+gpu-gpc-0 MinFreq=1575000000 MaxFreq=1575000000 CurrentFreq=1575000000
+gpu-nvd-0 MinFreq=1692000000 MaxFreq=1692000000 CurrentFreq=1692000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1575 MHz, 48, 4.78 W
+[3.1] 2026-08-20T11:06:35-04:00 === ARM C (MAXN pinned — gpc ceiling 1575, EMC 4266) ===
+### clock state [arm C before] 2026-08-20T11:06:35-04:00
+NV Power Mode: MAXN 0 
+gpu-gpc-0 MinFreq=1575000000 MaxFreq=1575000000 CurrentFreq=1575000000
+gpu-nvd-0 MinFreq=1692000000 MaxFreq=1692000000 CurrentFreq=1692000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1575 MHz, 49, 4.78 W
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/clocks_3p1_C.log
+[run_model] pid 496883   watch: tail -f evidence/decode_loop/clocks_3p1_C.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/clocks_3p1_C.memguard.log
+### clock state [arm C after] 2026-08-20T11:09:37-04:00
+NV Power Mode: MAXN 0 
+gpu-gpc-0 MinFreq=1575000000 MaxFreq=1575000000 CurrentFreq=1575000000
+gpu-nvd-0 MinFreq=1692000000 MaxFreq=1692000000 CurrentFreq=1692000000
+EMC MinFreq=4266000000 MaxFreq=4266000000 CurrentFreq=4266000000
+1575 MHz, 51, 4.78 W
+[3.1] 2026-08-20T11:09:37-04:00 arm C finished in 180s
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] WARM decode: 71.2 ms/tok = 14.04 tok/s  (M=1 steady state, 7-step avg)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 14.04 tok/s
+[3.1] 2026-08-20T11:09:37-04:00 arm C OK
+[3.1] arm C       gpc clock over  18 samples: min   1575  median   1575  max   1575 MHz
+[3.1] 2026-08-20T11:09:37-04:00 === restoring 120W + governed clocks for the drift control ===
+[3.1] 2026-08-20T11:09:37-04:00 restoring machine state: nvpmodel 1 + stored governed clocks
+### clock state [restored] 2026-08-20T11:09:43-04:00
+NV Power Mode: 120W 1 
+gpu-gpc-0 MinFreq=315000000 MaxFreq=1386000000 CurrentFreq=315000000
+gpu-nvd-0 MinFreq=315000000 MaxFreq=1557000000 CurrentFreq=315000000
+EMC MinFreq=665600000 MaxFreq=4266000000 CurrentFreq=2750000000
+315 MHz, 50, 2.39 W
