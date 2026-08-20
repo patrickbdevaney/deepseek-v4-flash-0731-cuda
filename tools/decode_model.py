@@ -36,8 +36,26 @@ import argparse, glob, json, os, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'evidence', 'evals')
-WALL_MS = 46.70          # ms per target forward at 240 GB/s achievable -- see ROOFLINE.md
-BW = 240.0
+BW = 240.0               # GB/s achievable, measured by tools/bw_probe.cu
+B_TOK = 11202.36         # MB read by an M=1 AR step (MODEL_INVENTORY.md)
+B_ROUTED = 3449.29       # MB of that which is the top-6 routed experts
+B_DRAFT = 1892.0         # MB floor for the 3 MTP blocks + draft lm_head
+
+# THE WALL FOR A TARGET FORWARD IS NOT THE WALL FOR A TOKEN, AND CONFLATING THEM COST THIS PROJECT
+# A HEADLINE. B_tok is defined for ONE position. A speculative target forward verifies K positions
+# and reads the UNION of the experts they route to -- measured at 17.53 of a possible 30 at K=5
+# (LOOP_LOG, DSV4_MOEUNION; the instrument self-validates at K=1 -> exactly 6.00) -- plus the whole
+# draft side. Dividing B_tok by a per-forward wall time therefore understates efficiency by ~1.76x.
+# PERF.md says so in as many words ("a lower bound on efficiency, not an estimate of it"); the 34%
+# that fell out of it was then quoted as an estimate anyway, here and in the research prompt.
+UNION_K5 = 17.53         # measured expert union at K=5
+UNION_FIT = 22.0         # the same quantity implied by the K-sweep fit -- an honest upper end
+
+
+def forward_wall_ms(union):
+    """ms a target forward would take at BW, given an expert-union assumption."""
+    mb = (B_TOK - B_ROUTED) + union / 6.0 * B_ROUTED + B_DRAFT
+    return mb / (BW * 1000.0) * 1000.0, mb
 
 
 def collect(pattern, per_token):
@@ -119,14 +137,18 @@ def main():
         print(f'  {c:>8}{ms:>10.2f}{tps:>9.2f}{B*c/ms:>10.0%}')
 
     if not a.per_token:
-        # The whole point of the split: name the headroom in each term separately, because they
-        # are different engineering problems and the bigger one changes with context.
-        print(f'\n  constant term      {A:7.2f} ms   vs {WALL_MS:.2f} ms wall @ {BW:.0f} GB/s'
-              f'   -> {WALL_MS/A*100:.0f}% of achievable, headroom {A/WALL_MS:.2f}x')
-        for c in (c for c in (8000, 24000) if c <= ctx_max):
-            tot = A + B * c
-            print(f'  at ctx {c:>5}: fixing the constant alone -> {tot/(WALL_MS + B*c):.2f}x   '
-                  f'fixing the context term alone -> {tot/A:.2f}x   both -> {tot/WALL_MS:.2f}x')
+        # Report a BAND, not a point. The expert union is the uncertain input and it moves the
+        # answer by ~8 points, so quoting one number here is what created the problem above.
+        print()
+        for name, u in (('measured union 17.53', UNION_K5), ('fit-implied union 22.0', UNION_FIT)):
+            wall, mb = forward_wall_ms(u)
+            print(f'  {name:<24} wall {wall:6.2f} ms ({mb:6.0f} MB)   constant term is '
+                  f'{wall/A*100:4.1f}% of achievable, headroom {A/wall:.2f}x')
+        lo, _ = forward_wall_ms(UNION_K5)
+        hi, _ = forward_wall_ms(UNION_FIT)
+        print(f'\n  Term A headroom {A/hi:.2f}-{A/lo:.2f}x. Term B, at the deepest measured context,')
+        print(f'  is {B*ctx_max:.0f} ms against a byte floor of well under 1 ms -- two orders of')
+        print(f'  magnitude, and the only place a large factor is available.')
     return 0
 
 

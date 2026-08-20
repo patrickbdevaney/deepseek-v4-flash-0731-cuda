@@ -69,10 +69,21 @@ first time. Until then, treat every claim about 24k decode as a conjecture.
 
 **Two terms, both with headroom, and they are different engineering problems.**
 
-**Term A - the context-independent 136.44 ms/forward.** The wall is 46.70 ms, so this runs at
-**34% of achievable bandwidth**, headroom **2.92x**. This independently reproduces `PERF.md`'s
-81.7 GB/s / 34% figure from a completely different measurement, which is strong corroboration that
-both are measuring something real. This is the term the MoE/MLA GEMV work has been attacking.
+**Term A - the context-independent 136.44 ms/forward.** It runs at **60-68% of achievable**,
+headroom **1.47-1.66x**.
+
+This corrects a headline that was wrong here and in `PERF.md`. `B_tok` = 11,202 MB is defined for
+an **M=1 step**; a speculative target forward verifies K positions and reads the **union** of the
+experts they route to -- measured at **17.53 of a possible 30 at K=5** (`DSV4_MOEUNION`; the
+instrument self-validates at K=1 -> exactly 6.00) -- plus the entire draft side. Dividing M=1 bytes
+by a per-forward wall time understates efficiency by ~1.76x. `PERF.md:44` says so explicitly --
+*"a lower bound on efficiency, not an estimate of it"* -- and the 34% that fell out of it was then
+quoted as an estimate anyway, including by me, who then called reproducing the same construction
+"independent corroboration". It was the same error twice, not two measurements.
+
+LOOP_LOG **F137** had already retracted the premise from the other direction: scored in situ, the
+MoE region runs at **94% of roofline** and the whole step at 77%. `LEVERS.md` §8 and
+`wiki/moe-gemv-ceiling.md` still carry the superseded F67 figure and should be corrected.
 
 **Term B - 30.053 ms per 1000 tokens of context.** It is 47% of a forward by 4k and 59% by 6.6k,
 i.e. the majority of decode cost well inside the range we can actually see. Bytes that must move at

@@ -41,3 +41,8 @@ evidence/traces/MANIFEST.*.json
 .venv-bfcl/
 build/dsv4-server.staged
 build/dsv4-server.prev.*
+
+# Upstream SGLang clone, pulled 2026-08-19 as a kernel reference (DeepSeek-V4 top-k,
+# lightning indexer, mega_moe_pre_dispatch). 152 MB, Apache-2.0, NOT ours to vendor.
+# eval_land.sh runs a bare `git add -A`, so without this the next landing commit swallows it.
+sglangsrc/
