@@ -1,0 +1,24 @@
+VB-CONTROLLED.  g>=1 correlates with VB by construction (P(g>=1)=min(1,VB/4)), so the excess
+is re-read at FIXED VB=2 -- the ladder's own 'hold width fixed' rule (0.3/0.4).
+
+--- VB=2 ---
+    arm  g    n                 q:wq_a           cattn:q_proj         cattn:compress   q_proj+compress
+ serial  0   53       1.65 [1.63,1.70]      10.11 [9.92,10.32]       0.05 [0.04,0.06]             10.16
+ serial  1   45       1.66 [1.63,1.72]      10.12 [9.97,10.29]       8.34 [8.16,49.50]             18.46
+  split  0   53       1.66 [1.63,1.69]      10.12 [9.97,10.30]       0.04 [0.04,0.06]             10.16
+  split  1   45       5.54 [5.16,5.82]      14.68 [14.45,15.01]       2.50 [2.45,43.42]             17.18
+
+--- VB=3 ---
+    arm  g    n                 q:wq_a           cattn:q_proj         cattn:compress   q_proj+compress
+ serial  0    8       1.68 [1.65,1.71]      10.22 [10.16,10.29]       0.04 [0.04,0.06]             10.26
+ serial  1   38       1.67 [1.65,1.72]      10.18 [10.00,10.33]       8.40 [8.16,8.70]             18.59
+  split  0    8       1.66 [1.64,1.68]      10.21 [10.10,10.31]       0.05 [0.04,0.05]             10.26
+  split  1   38       5.60 [5.36,5.83]      14.75 [14.44,15.07]       2.45 [2.38,2.50]             17.20
+
+THE CONSERVATION NUMBER, at VB=2: excess of (cattn:q_proj + cattn:compress) over the same
+arm's own g=0 baseline.  Overlap can only reduce it; it cannot make the work disappear.
+  VB=2   serial 8.31 ms   split 7.02 ms   -> overlap hides 1.29 ms (16 % of the emit), the rest is real work that must happen
+  VB=3   serial 8.31 ms   split 6.92 ms   -> overlap hides 1.39 ms (17 % of the emit), the rest is real work that must happen
+
+ serial: 113/174 verify tables have g>=1  (64.9 %)
+  split: 113/174 verify tables have g>=1  (64.9 %)

@@ -50,19 +50,33 @@ gates PASS on both. **This row is a weights change, not a kernel one** — `s3` 
 hardcoded the base checkpoint. [`kernel-optimisations.md` §2.8](kernel-optimisations.md),
 [`draft-head-finetuning.md` §8](draft-head-finetuning.md).
 
-| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | after 1.7 | |
-|---|---|---|---|---|---|---|---|
-| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | 10.69 tok/s | *unchanged* | **+4.57 % paired** (10.46 → 10.93 in-session) | **+3.25 % paired** (11.71 → 12.09 in-session) | +24.4 %, +8.2 %, nothing, +4.6 %, **+3.3 %** |
-| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | not swept | +21.7 % then +6.7 % |
-| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | **+3.32 % paired** (11.74 → 12.13 in-session) | +15.8 %, +5.8 %, nothing, +2.2 %, **+3.3 %** |
-| spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | the pre-knee leg |
-| **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | 1.571× → **1.522×** its 82.18 ms floor |
-| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | **−74 % cumulative** |
+| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | after 1.7 | after 1.8 | |
+|---|---|---|---|---|---|---|---|---|
+| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | 10.69 tok/s | *unchanged* | **+4.57 % paired** (10.46 → 10.93 in-session) | **+3.25 % paired** (11.71 → 12.09 in-session) | *no kernel change* | +24.4 %, +8.2 %, nothing, +4.6 %, **+3.3 %**, nothing |
+| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | not swept | not swept | +21.7 % then +6.7 % |
+| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | **+3.32 % paired** (11.74 → 12.13 in-session) | *no kernel change* | +15.8 %, +5.8 %, nothing, +2.2 %, **+3.3 %**, nothing |
+| spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | not swept | the pre-knee leg |
+| **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | 1.571× → **1.522×** its 82.18 ms floor |
+| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | *untouched* (the swing is flat in context) | **−74 % cumulative** |
 
 **1.7 is the first item on this ladder to move Term A, and it is the term with the headroom.** `b ×
 6592` is now 12.44 ms against a stop condition of 5.0; `a` is 125.11 against a byte floor of 82.18
 and a stop condition of 1.25× = 102.7. Six items moved `b` by 74 %; one item has moved `a` by 3.1 %.
 [`kernel-optimisations.md` §2.9](kernel-optimisations.md).
+
+**1.8 moved neither term, deleted 4.4 ms of phantom headroom from Term A, and priced something
+nothing had ever timed.** The `cattn:q_proj` bimodality (1.71 ms on some steps, 5.47 on others at
+identical shape, width and context) is the compressor emits running on `g_side` while the mark is
+timed on the main stream. A schedule term computed from the dprof tag alone —
+`g = #{ j in [ctx,ctx+VB) : (j+1)%4 == 0 }` — separates the two populations **153/153 on the log
+0.4 had already written and 174/174 on a fresh arm, with no overlap**, and under `NO_ATTN_SPLIT=1`
+the swing collapses to **1.00–1.02×** while the identical time reappears in `cattn:compress`
+(2.50 → 8.34 ms at fixed VB=2). So `a` stays 125.11 ms. What the item bought: the compressed-KV
+emit costs **7.02 ms on the 64.9 % of forwards that carry one = 4.56 ms/forward amortised, 3.3 % of
+the forward, at 52 % of its 880 MB byte roofline**, and the ATTN_SPLIT overlap already in the engine
+is worth a paired **0.81 ms/forward, 2 SE band [0.72, 0.90], 9/9 legs faster and byte-identical**.
+[`measurement-and-traps.md` §29](measurement-and-traps.md),
+[`negative-results.md` §4h](negative-results.md).
 
 **Read 1.5's column as a paired percentage, not as a new absolute.** Its sweep spans ctx
 3,197–12,410 in one session per arm; the 10.93 and 12.15 are that session's after-arm and are not

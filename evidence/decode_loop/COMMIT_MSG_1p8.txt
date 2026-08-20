@@ -1,0 +1,66 @@
+1.8: the cattn:q_proj bimodality is the compressor emits on g_side, the "free 4.4 ms" does not exist, and the fork it exposed is worth a paired 0.81 ms/forward
+
+WHAT WAS ASKED. 0.4 left one open lead: at fixed verify width, fixed shape and fixed context,
+`q:wq_a` ran 1.71 ms on some verify steps and 5.47 on others -- a 3.2x swing in one fp8 GEMM, with
+`cattn:compress` splitting the same way. `cattn:q_proj` is 14.6 ms of every step, so 0.4 recorded
+that "if the cheap mode is reachable on demand that is ~4.4 ms/step of Term A for free".
+
+WHAT IT IS. `compressed_verify_step_indexer` records `g_side_fork` and then issues `build_qKV` on
+the MAIN stream, so the two `compressor_emit_group` calls run concurrently with the q chain
+(F55/F56). The emits fire only for groups completing inside the block -- `(j+1)%ratio==0` -- and the
+dprof marks are CUDA events on the main stream, so on an emit step they time a GEMM sharing the
+memory system with 21 layers x 2 compressor emits, and on a non-emit step they time it alone.
+
+MEASURED, IN THREE INDEPENDENT WAYS.
+
+1. THE SCHEDULE, AT ZERO GPU COST. `g = #{ j in [ctx,ctx+VB) : (j+1)%4 == 0 }` comes straight out of
+   the dprof tag. It classifies 0.4's OWN 153 per-verify tables 153/153, gap 2.80x, no overlap
+   between the populations -- on data collected before the hypothesis existed. The excess is LINEAR
+   in g: q_proj+compress is +6.97 ms at g=1 and +14.78 at g=2.
+
+2. THE CAUSE, TWO ARMS, ONE BINARY, SERIAL FIRST SO DRIFT PENALISES THE SHIPPED ARM. Four
+   predictions registered in scripts/qproj_ab_run.sh before it ran; all four held. At VB=2 held
+   fixed (g correlates with width by construction):
+
+     arm     g   q:wq_a   cattn:q_proj   cattn:compress   sum
+     serial  0     1.65        10.11            0.05     10.16
+     serial  1     1.66        10.12            8.34     18.46
+     split   0     1.66        10.12            0.04     10.16
+     split   1     5.54        14.68            2.50     17.18
+
+   The swing exists only when the fork does: 1.00-1.02x serial, 3.05x split (174/174 separated).
+   The g=0 baseline is 10.16 ms in BOTH arms across two separate checkpoint loads.
+
+3. THE TAIL, UNPLANNED. Every cattn:compress sample above 20 ms -- 8 of 8 across both arms, 43-50 ms
+   each, plus the lone outlier in 0.4's table -- is a block containing a RATIO-128 boundary, i.e.
+   the 20 strided layers, which use no side stream at all.
+
+THE RATCHET. Paired per leg, same corpus sha: 9 of 9 legs faster under the fork, mean -0.81
+ms/forward, sd 0.14, 2 SE band [-0.90, -0.72]; 9/9 byte-identical, tau and realised width equal to
+three decimals on every leg. The mark-level instrument predicts that band from the other side:
+1.29 ms hidden per emit step x 113/174 emit steps = 0.838 ms/forward, inside it.
+
+WHAT IT MEANS. There is no cheap mode; there is the absence of an emit. Overlap hides 16-17 % of the
+compressor and the other 84 % is work a correct engine must do, so `a` stays 125.11 ms and 4.4 ms of
+phantom headroom leaves this ladder before an iteration was spent chasing it. What the item bought
+instead is the first price on the compressed-KV emit: 7.02 ms on the 64.9 % of forwards that carry
+one = 4.56 ms/forward amortised, 3.3 % of the forward, at 52 % of its 880 MB byte roofline.
+
+BIT-EXACTNESS. Nothing numeric changed in either arm -- NO_ATTN_SPLIT only moves kernels between
+streams and the fork/join keeps the dependency order identical -- and 9/9 legs proved it.
+
+NEW ON THE LADDER, with pre-registered and honestly small ceilings: 1.11 defer the ATTN_SPLIT join
+past i:qidx/i:iw (1.99 ms of independent main-stream work is on the wrong side of it; ceiling
+1.29 ms/forward, and this item does NOT establish it is recoverable); 1.12 the ratio-128 emit
+re-reads its 33.55 MB of f32 weights ceil(256/8)=32 times (43-50 ms in a single step, ~0.53
+ms/forward amortised).
+
+RULE 5 IS ONE ITERATION FROM FIRING. 1.7 shipped a kernel, 1.8 did not. The next iteration takes a
+kernel item.
+
+WIKI, same commit: measurement-and-traps.md §29 (a mark that timed another stream's work),
+negative-results.md §4h (headroom that was never there), kernel-optimisations.md §2.4b (the
+compressor fork, re-measured with a band), README.md state table gains an "after 1.8" column.
+
+Instruments: tools/qproj_bimodal.py (schedule classifier, runs on any dprof server log);
+scripts/qproj_ab_run.sh (both arms, detached, added to detach_audit.sh PATTERNS in this commit).

@@ -1,0 +1,16 @@
+PAIRED PER LEG, ms per forward.  SERIAL arm ran first, so drift penalises SPLIT.
+               leg    ctx    serial     split    delta   tau s  tau sp
+   sweep-t12288-r0  12282    145.29    144.48    -0.81   1.620   1.620
+   sweep-t12288-r1  12282    142.56    141.75    -0.81   1.488   1.488
+   sweep-t12288-r2  12282    141.03    140.25    -0.78   1.707   1.707
+    sweep-t3072-r0   3069    136.56    135.79    -0.77   1.803   1.803
+    sweep-t3072-r1   3069    139.32    138.31    -1.01   1.707   1.707
+    sweep-t3072-r2   3069    138.58    137.58    -1.00   1.778   1.778
+    sweep-t6144-r0   6132    141.95    141.10    -0.85   1.707   1.707
+    sweep-t6144-r1   6132    136.90    136.34    -0.56   1.730   1.730
+    sweep-t6144-r2   6132    140.91    140.20    -0.71   1.662   1.662
+
+n=9  paired mean -0.81 ms/forward   sd 0.14   2 SE band [-0.90, -0.72]
+legs faster under SPLIT: 9/9   tau identical on 9/9
+
+mark-level prediction: 1.29 ms hidden per emit step x 113/174 = 0.838 ms/forward

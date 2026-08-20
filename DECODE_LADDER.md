@@ -40,6 +40,23 @@ has a named mechanism (the 20 ratio-128 layers, whose `topk` has no `index_topk`
 82.18 ms floor; stop wants <= 1.25) and **`b` 1.942 -> 1.887** (`b x 6592` 12.80 -> **12.44 ms**;
 stop wants <= 5.0). Cumulatively `b` is down **74 %**.
 
+**1.8 MOVED NEITHER TERM AND WAS NOT SUPPOSED TO — it DELETED headroom that was never there,
+2026-08-20.** The `cattn:q_proj` bimodality is the compressor emits running on `g_side` while the
+mark is timed on the main stream: `g = #{ j in [ctx,ctx+VB) : (j+1)%4==0 }` classifies it **153/153
+on 0.4's own log and 174/174 on a fresh split arm, with no overlap between the populations**, and
+under `NO_ATTN_SPLIT=1` the 3.2x swing **disappears entirely** (1.00-1.02x) while the identical time
+reappears in `cattn:compress` (2.50 -> 8.34 ms at fixed VB=2). So 0.4's "~4.4 ms/step of Term A for
+free" does not exist: `a` stays 125.11 ms and the distance to its floor stays 22.4 ms. What the item
+DID buy is a number for something nothing had priced — the compressed-KV emit is **7.02 ms on the
+64.9 % of forwards that carry one, 4.56 ms/forward amortised, 3.3 % of the forward, at 52 % of its
+880 MB byte roofline** — and a paired confirmation that the ATTN_SPLIT overlap is worth
+**0.81 ms/forward, 2 SE band [0.72, 0.90], 9 of 9 legs faster** (9/9 byte-identical, tau equal to
+three decimals on every leg) — a band the mark-level prediction of 0.838 falls inside.
+
+**Rule 5 is one iteration from firing.** 1.7 shipped a kernel, 1.8 did not. **The next iteration
+must take a kernel item.** 1.8's own follow-ups (1.11, 1.12) are honestly small — 1.29 and
+0.53 ms/forward ceilings — and are ranked accordingly; do not take one just because it is fresh.
+
 **Read the two terms against their stop conditions before picking the next item.** `b x 6592` needs
 to fall 2.5x more; `a` needs to fall to 102.7 ms, i.e. by another 22.4 ms. Six items have moved `b`
 by 74 %; one item has moved `a` by 3.1 %. `a` is 125.11 of a 142.24 ms forward at ctx 12,410 --
@@ -1195,12 +1212,111 @@ So, in order:
       > 6144 are **8.29 ms per 1000 across the first leg and 0.905 across the second**, joining
       > continuously onto 0.4's flat 19.22 / 19.90 / 21.17. One curve, two ranges.
 
-- [ ] **1.8** **Explain the `cattn:q_proj` bimodality 0.4 found.** At ctx 6144, at the SAME verify
-      width VB=2, 18 steps ran `q:wq_a` at 1.71 ms and 17 at 5.47 ms — a 3.2x swing in one fp8 GEMM
-      at fixed shape and fixed context, with `cattn:compress` splitting the same way (0.05 vs
-      2.50 ms). It is flat in context (R^2 0.005) so it does not touch 0.4's attribution, but
-      `cattn:q_proj` is 14.6 ms of every step and if the cheap mode is reachable on demand that is
-      ~4.4 ms/step of Term A for free. Correctness item first: find out which mode is right.
+- [x] **1.8** **EXPLAINED, 2026-08-20. Neither mode is wrong; the mark is. `cattn:q_proj` absorbs
+      the compressor emits running concurrently on `g_side`, and the "free 4.4 ms" does not exist.**
+      Full write-up: `wiki/measurement-and-traps.md` §28 and `wiki/negative-results.md` §21.
+
+      **The mechanism, and it is arithmetic rather than a fit.** `compressed_verify_step_indexer`
+      (`kernels/compressed_decode.cu:495`) records `g_side_fork` and then issues `build_qKV` on the
+      MAIN stream, so the two `compressor_emit_group` calls run CONCURRENTLY with the q chain
+      (Finding 55/56, ATTN_SPLIT). Those emits fire only for groups COMPLETING inside the verify
+      block — `for j in [pos,pos+K): if (j+1)%ratio==0` — and `cattn:q_proj`/`q:wq_a` are timed by
+      events on the main stream, so on an emit step they time a GEMM that is sharing the memory
+      system with 21 layers x 2 compressor emits, and on a non-emit step they time the GEMM alone.
+      Define, from the dprof tag alone,
+
+          g = #{ j in [ctx, ctx+VB) : (j+1) % 4 == 0 }        (ratio 4 = the 21 indexer layers)
+
+      **`g` classified 0.4's OWN 153 per-verify tables 153/153, with a 2.80x gap and no overlap
+      between the two populations** — on data collected before the hypothesis existed, at zero GPU
+      cost (`tools/qproj_bimodal.py`, `evidence/decode_loop/qproj_1p8_schedule.txt`). The excess is
+      LINEAR in `g`, not merely present: `cattn:q_proj + cattn:compress` is +6.97 ms at g=1 and
+      +14.78 at g=2. The blocks wide enough to straddle two group boundaries pay twice.
+
+      **Correlation is not cause, so it was tested with the switch the code already carries.**
+      Both "the GEMM is intrinsically slower on those steps" and "the mark absorbed another stream's
+      work" predict that classification. `NO_ATTN_SPLIT=1` restores the serial order.
+      `scripts/qproj_ab_run.sh` ran both arms, SERIAL first so drift penalises the shipped arm, one
+      binary, `DSV4_DPROF=1`, 174 verify tables each, and its four predictions were registered in
+      the script header before it started. At **VB=2 held fixed** (P(g>=1) = min(1, VB/4), so `g`
+      correlates with width by construction and the excess must be read at fixed width — rule 0.3):
+
+      | arm | g | n | `q:wq_a` | `cattn:q_proj` | `cattn:compress` | q_proj+compress |
+      |---|---|---|---|---|---|---|
+      | serial | 0 | 53 | 1.65 | 10.11 | 0.05 | 10.16 |
+      | serial | 1 | 45 | **1.66** | 10.12 | **8.34** | 18.46 |
+      | split  | 0 | 53 | 1.66 | 10.12 | 0.04 | 10.16 |
+      | split  | 1 | 45 | **5.54** | 14.68 | **2.50** | 17.18 |
+
+      * **P1 CONFIRMED.** Serial arm: `q:wq_a` is UNIMODAL — 1.66 at g=0 against 1.67 at g>=1, a
+        **1.00-1.02x** swing at every context, and the classifier that separated 153/153 separates
+        nothing. Split arm, same run: **174/174, a 3.05x gap, no overlap.** The 3.2x swing is
+        created by the fork and destroyed by removing it.
+      * **P2 CONFIRMED.** The identical time reappears in `cattn:compress`: 2.50 -> **8.34 ms**.
+      * **P3 CONFIRMED — the conservation check, which is the answer to "which mode is right".**
+        The g=0 baseline is **10.16 ms in BOTH arms** (10.26 at VB=3, both arms) — two separate
+        checkpoint loads agreeing to two decimals, which is also the control that says the arms are
+        comparable. The emit excess is **8.31 ms serial vs 7.02 ms split at VB=2** (8.31 vs 6.92 at
+        VB=3), so **overlap hides 16-17 % of the compressor and the other 84 % is real work that
+        must happen.** The cheap mode is not a mode; it is the absence of an emit.
+      * **P4 CONFIRMED, and it is the ratchet.** Paired per (target, rep), same corpus sha, SERIAL
+        arm first:
+
+        | ctx | serial ms/fwd | split | paired delta | speedup | tau s / tau sp | tok/s |
+        |---|---|---|---|---|---|---|
+        | 12,346 | 142.56 | 141.75 | -0.81 | 1.006x | 1.620 / 1.620 | 11.15 -> 11.21 |
+        | 6,196 | 140.91 | 140.20 | -0.71 | 1.005x | 1.707 / 1.707 | 12.02 -> 12.10 |
+        | 3,133 | 138.58 | 137.58 | -1.00 | 1.007x | 1.778 / 1.778 | 12.83 -> 12.92 |
+
+        **9/9 legs byte-identical**, `tau` and realised width equal to three decimals on every leg —
+        the required signature of a change that moves kernels between streams and alters no
+        arithmetic. Per leg rather than per point: **9 of 9 faster under SPLIT, paired mean
+        -0.81 ms/forward, sd 0.14, 2 SE band [-0.90, -0.72]** (`fit_1p8_band.txt`). The mark-level
+        number predicts that band from the other instrument: 1.29 ms hidden per emit step x
+        **64.9 %** of steps carrying an emit (113/174, identical in both arms) = **0.838**, which
+        falls inside it. Two instruments, one number.
+      * **A THIRD, UNPLANNED CONFIRMATION at a different ratio.** Every `cattn:compress` sample above
+        20 ms — **8 of 8 across both arms**, 43-50 ms each — is a step whose block contains a
+        **ratio-128** boundary, i.e. the 20 strided layers emitting through
+        `compressed_verify_step_strided`, which uses no side stream at all. Same mechanism, other
+        ratio, and it also explains the lone 43.90 ms outlier in 0.4's table.
+
+      **What this costs, now that it is named.** The emit is **7.02 ms on the 64.9 % of forwards
+      that carry one = 4.56 ms/forward amortised, ~3.3 % of a 140 ms forward**, all of it Term A. Its
+      byte floor is 21 layers x (2 x [1024,4096] + 2 x [256,4096]) f32 = **880 MB per group =
+      3.67 ms at 240 GB/s**, so the emit runs at **52 % of roofline overlapped, 44 % serial**.
+
+      **What this REFUTES.** 0.4's "if the cheap mode is reachable on demand that is ~4.4 ms/step of
+      Term A for free". There is no cheap mode to reach. Every one of those 4.4 ms is compressor
+      traffic that a correct engine must move, it is already overlapped, and the overlap is already
+      worth a measured 0.84 ms/forward. **A phantom 4.4 ms/step is removed from this ladder's
+      headroom.** Term A's remaining distance to its floor is unchanged at 22.4 ms and is elsewhere.
+
+      Instrument: `tools/qproj_bimodal.py` (schedule classifier, works on any dprof server log);
+      `scripts/qproj_ab_run.sh` (both arms, detached, named in `detach_audit.sh` in this commit).
+      Evidence: `evidence/decode_loop/{qproj_1p8_schedule,qproj_1p8_serial,qproj_1p8_split,
+      qproj_1p8_vbcontrol,fit_1p8_paired,dprof_ctx_1p8_serial,dprof_ctx_1p8_split}.txt`.
+      Bit-exactness: nothing numeric changed in either arm and 9/9 legs proved it.
+
+- [ ] **1.11** **Defer the ATTN_SPLIT join past `i:qidx` and `i:iw`.** 1.8 measured **2.50 ms of
+      side-stream work still un-hidden** in `cattn:compress` on every emit step. The join sits
+      immediately after `build_qKV` (`kernels/compressed_decode.cu:509`), but the first consumer of
+      `idx_ckv` is `index_score` and of `comp_kv` is the `kv_all` copy — and `i:qidx` (1.54 ms) and
+      `i:iw` (0.45 ms) read neither. **1.99 ms of independent main-stream work sits between the
+      current join and the true dependency.** Bit-exact by construction (kernels move between
+      streams, dependency order unchanged) and the arena is safe: `compressor_emit_group` ends in
+      `dsync`+`dfree`, both no-ops under the arena, and `arena_reset` is per layer.
+      **Pre-registered ceiling: 1.99 ms x 64.9 % of forwards = 1.29 ms/forward (0.9 %), and 1.8 does
+      NOT establish it will be recovered** — the deferred window's own traffic contends with the
+      same emits, which is exactly why the existing overlap only recovers 16 %. Measure paired; if
+      the paired band covers zero, mark it negative and write it into `negative-results.md`.
+- [ ] **1.12** **The ratio-128 emit re-reads its weights 32 times.** `gemm_fp32` chunks M in 8s
+      (`kernels/compressor.cu:76`) and the strided path calls it with `ntok = 2*ratio = 256`, so B —
+      33.55 MB of f32 `mc_wkv`/`mc_wgate` — is read `ceil(256/8) = 32` times per layer per group.
+      1.8 measured the result directly: **43-50 ms in a single step**, 8 of 8 outliers, once every
+      128 positions. Amortised that is only ~0.53 ms/forward, so this is ranked LOW on throughput —
+      but it is a 40 ms latency spike on one token in 75 and it is the largest single-kernel
+      inefficiency the profile has named. Tile over N with B staged, or raise MM.
 - [x] **1.6** **RESOLVED as pre-existing — proven by a control build, not by argument.**
       Built `build/decode_prechange` from `1a33cfe^` (the two kernel files and the header, before the
       warp top-k) and ran it: **`err711=42`, `err820=21` — the same fault.** The launch error has

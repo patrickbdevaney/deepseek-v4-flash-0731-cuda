@@ -104,6 +104,30 @@ the same prefill bug. **A parameter fitted on broken data is fitted to the break
 The kv chain forked off the q chain, serialising two independent computations. Splitting them onto
 separate streams recovered the overlap.
 
+**2.4b The compressor fork (F55/F56), re-measured with a band by ladder 1.8, 2026-08-20.** The two
+`compressor_emit_group` calls read `x_full` and nothing else, so they never depended on `build_qKV`
+— they were merely issued after it on the same stream. Forking them onto `g_side` is the same
+transformation as F57, one level up. F56 adopted it on a single-load pair (K=5 verify 155.22 →
+153.48 ms, spec 17.32 → 17.48 tok/s); 1.8 measured it **paired on the current engine, SERIAL arm
+first so drift penalises the fork**:
+
+| | value |
+|---|---|
+| paired saving | **0.81 ms/forward**, sd 0.14, **2 SE band [0.72, 0.90]** |
+| legs faster under the fork | **9 of 9** |
+| token identity | **9/9 byte-identical**, `tau` and realised width equal to 3 d.p. on every leg |
+| ctx range | 3,069 – 12,282, three points × three reps, one binary, `NO_ATTN_SPLIT=1` is the other arm |
+
+**And it says what the fork does NOT do.** The emit costs **8.31 ms** serially at fixed VB=2 and
+**7.02 ms** overlapped, so the fork hides **16–17 % of it**; the other 84 % is compressor traffic
+that must move. Amortised over the 64.9 % of forwards that carry an emit that is **4.56 ms/forward
+at 52 % of its 880 MB byte roofline**, which is the first price anything has put on the
+compressed-KV emit. Two consequences are on the ladder as 1.11 (defer the join past `i:qidx`/`i:iw`,
+1.99 ms of independent work currently sitting on the wrong side of it) and 1.12 (the ratio-128 emit
+re-reads its weights 32×). The trap this measurement walked into on the way —
+`cattn:q_proj` reporting a 3.2× swing that was the *other stream's* work — is
+[`measurement-and-traps.md` §29](measurement-and-traps.md).
+
 ### 2.5 Don't recompute a prefix that cannot have changed — cache the main-KV (ladder 1.0, 2026-08-20)
 
 **The first adopted win that is a function of context rather than of shape**, and the largest single

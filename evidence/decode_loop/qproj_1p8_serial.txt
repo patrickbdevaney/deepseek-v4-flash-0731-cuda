@@ -1,0 +1,103 @@
+174 per-verify dprof tables from 1 log(s)
+
+BY PREDICTED NUMBER OF COMPLETING GROUPS  g = #{ j in [ctx, ctx+VB) : (j+1) % 4 == 0 }
+ g    n                     q:wq_a             cattn:compress               cattn:q_proj                      TOTAL
+ 0   61          1.66 [1.63, 1.71]          0.05 [0.04, 0.06]        10.12 [9.92, 10.32]      99.32 [90.49, 117.66]
+ 1  111          1.67 [1.63, 1.75]         8.34 [7.94, 49.50]        10.18 [9.97, 11.01]     115.64 [98.53, 199.92]
+ 2    2          1.74 [1.73, 1.75]       15.32 [15.26, 15.39]       10.93 [10.93, 10.94]    171.08 [170.56, 171.60]
+
+q:wq_a  g=0: max 1.71 (n=61)   g>=1: min 1.63 (n=113)
+threshold 1.67 -> 99/174 classified correctly, 75 misclassified
+  MISS ctx=12281 VB=3 g=1 q:wq_a=1.67
+  MISS ctx=12299 VB=3 g=1 q:wq_a=1.67
+  MISS ctx=12312 VB=3 g=0 q:wq_a=1.68
+  MISS ctx=12318 VB=2 g=1 q:wq_a=1.63
+  MISS ctx=12331 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=12339 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=12350 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=12355 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=12360 VB=4 g=1 q:wq_a=1.66
+  MISS ctx=12382 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=12386 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=12392 VB=2 g=0 q:wq_a=1.68
+  MISS ctx=12331 VB=2 g=1 q:wq_a=1.64
+  MISS ctx=12337 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=12342 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=12388 VB=3 g=0 q:wq_a=1.68
+  MISS ctx=12402 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=12281 VB=3 g=1 q:wq_a=1.65
+  MISS ctx=12304 VB=3 g=0 q:wq_a=1.68
+  MISS ctx=12318 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=12323 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=12330 VB=3 g=1 q:wq_a=1.67
+  MISS ctx=12342 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=12383 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=12402 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=6131 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=6138 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=6147 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=6153 VB=4 g=1 q:wq_a=1.67
+  MISS ctx=6167 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=6173 VB=3 g=1 q:wq_a=1.65
+  MISS ctx=6178 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=6182 VB=2 g=1 q:wq_a=1.64
+  MISS ctx=6222 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=6230 VB=2 g=1 q:wq_a=1.64
+  MISS ctx=6247 VB=4 g=1 q:wq_a=1.67
+  MISS ctx=6255 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=6136 VB=3 g=0 q:wq_a=1.68
+  MISS ctx=6170 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=6190 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=6210 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=6227 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=6235 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=6255 VB=2 g=1 q:wq_a=1.64
+  MISS ctx=6131 VB=3 g=1 q:wq_a=1.67
+  MISS ctx=6150 VB=4 g=1 q:wq_a=1.67
+  MISS ctx=6155 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=6162 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=6167 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=6181 VB=2 g=0 q:wq_a=1.70
+  MISS ctx=6186 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=6194 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=6202 VB=2 g=1 q:wq_a=1.64
+  MISS ctx=6211 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=6231 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=6252 VB=3 g=0 q:wq_a=1.71
+  MISS ctx=6258 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=3074 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=3079 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=3086 VB=2 g=1 q:wq_a=1.65
+  MISS ctx=3091 VB=2 g=1 q:wq_a=1.63
+  MISS ctx=3099 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=3106 VB=3 g=1 q:wq_a=1.67
+  MISS ctx=3114 VB=4 g=1 q:wq_a=1.66
+  MISS ctx=3135 VB=2 g=1 q:wq_a=1.64
+  MISS ctx=3151 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=3167 VB=3 g=1 q:wq_a=1.67
+  MISS ctx=3075 VB=2 g=1 q:wq_a=1.66
+  MISS ctx=3074 VB=3 g=1 q:wq_a=1.67
+  MISS ctx=3090 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=3119 VB=3 g=1 q:wq_a=1.66
+  MISS ctx=3126 VB=2 g=1 q:wq_a=1.64
+  MISS ctx=3150 VB=2 g=1 q:wq_a=1.67
+  MISS ctx=3163 VB=3 g=1 q:wq_a=1.65
+  MISS ctx=3182 VB=2 g=1 q:wq_a=1.63
+
+EXCESS OVER THE g=0 MEDIAN, ms  (must be ~linear in g if the emits are the cause)
+ g           q:wq_a   cattn:compress     cattn:q_proj            TOTAL   q_proj+compress
+ 0             0.00             0.00             0.00             0.00              0.00
+ 1             0.01             8.29             0.06            16.32              8.35
+ 2             0.08            15.27             0.81            71.76             16.09
+
+RATIO-128 CHECK: 4 sample(s) with cattn:compress > 20 ms; 4/4 have a ratio-128 group boundary in the block -- ALL of them
+  ctx=6143 VB=2 compress=49.5 ms  ratio-128 boundaries in block: [6143]  q:wq_a=1.72
+  ctx=3068 VB=6 compress=48.5 ms  ratio-128 boundaries in block: [3071]  q:wq_a=1.74
+  ctx=3068 VB=6 compress=48.3 ms  ratio-128 boundaries in block: [3071]  q:wq_a=1.74
+  ctx=3068 VB=6 compress=48.5 ms  ratio-128 boundaries in block: [3071]  q:wq_a=1.74
+
+BY CONTEXT POINT (the swing must be present at every context if it is not a context effect)
+  ctx~    n         g=0 q:wq_a        g>=1 q:wq_a    swing
+  3000   55  1.65 [1.63, 1.67]  1.68 [1.63, 1.75]    1.02x
+  6000   58  1.67 [1.64, 1.71]  1.67 [1.64, 1.75]    1.00x
+ 12000   61  1.66 [1.63, 1.68]  1.67 [1.63, 1.72]    1.01x

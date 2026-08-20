@@ -19,7 +19,7 @@ cd "$(dirname "$0")/.."
 # 100.4 GiB process it launches, were not in this list -- so an audit taken while one was running
 # reported "all detached" having never looked at it. It printed one row (memguard) for a
 # three-process tree. A green audit that proves nothing is worse than a red one.
-PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh|topk_ab_run.sh|topk_early_ab_run.sh|ixgemm_ab_run.sh|sparse_ab_run.sh|clocks_ab_run.sh|clocks_emc_probe.sh|stephash_run.sh|run_model.sh|build/decode}"
+PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh|topk_ab_run.sh|topk_early_ab_run.sh|ixgemm_ab_run.sh|sparse_ab_run.sh|qproj_ab_run.sh|clocks_ab_run.sh|clocks_emc_probe.sh|stephash_run.sh|run_model.sh|build/decode}"
 
 # NEVER FLAG OUR OWN ANCESTRY. This script is itself run from a shell -- often a Claude Code Bash
 # invocation, which IS session-bound and correctly so. Its command line contains the patterns we

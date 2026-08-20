@@ -810,3 +810,69 @@ attribution rather than the story.
 shape — not because the gate was broken, but because the row it perturbed was outside *that*
 shape's gathered set. A perturbation that the kernel provably cannot see is not a control. Fixed by
 perturbing a sliding-window row, which every shape gathers by construction.
+
+## 29. A dprof mark that timed another stream's work, and reported it as a 3.2x swing in a GEMM (ladder 1.8, 2026-08-20)
+
+`cattn:q_proj` measured **1.71 ms on some verify steps and 5.47 ms on others, at the same verify
+width, the same context and the same GEMM shape**. 0.4 recorded it as an open lead worth its own
+item, on the reasoning that `cattn:q_proj` is 14.6 ms of every step and "if the cheap mode is
+reachable on demand that is ~4.4 ms/step of Term A for free".
+
+**There is no cheap mode. The mark is a stopwatch on a stream, not on a kernel.**
+`compressed_verify_step_indexer` records `g_side_fork` and *then* issues `build_qKV` on the main
+stream, so the two `compressor_emit_group` calls run concurrently with the q chain (Finding 55/56).
+`dprof_begin/end` record CUDA events on the **main** stream, so the interval they measure contains
+whatever the *other* stream was doing to the memory system at the time. The emits fire only for
+groups completing inside the block — `for j in [pos,pos+K): if (j+1)%ratio==0` — so the mark times
+a GEMM-plus-21-layers-of-compressor on some steps and a GEMM alone on others.
+
+**The tell was free and sitting on disk.** The schedule is arithmetic, so it is predictable from the
+dprof tag with no new run at all:
+
+    g = #{ j in [ctx, ctx+VB) : (j+1) % 4 == 0 }        # ratio 4 = the 21 indexer layers
+
+`g` classified 0.4's own **153 per-verify tables 153/153**, with a 2.80x gap and *no overlap between
+the two populations*, on data collected before the hypothesis existed. The excess is **linear in
+`g`**, not merely present: `cattn:q_proj + cattn:compress` is +6.97 ms at g=1 and +14.78 at g=2, so
+a block wide enough to straddle two group boundaries pays twice. `tools/qproj_bimodal.py` runs this
+on any dprof server log.
+
+**And the correlation was still not the proof.** "The GEMM is intrinsically slower on those steps"
+predicts the same classification. The separating experiment is the switch the code already carried,
+`NO_ATTN_SPLIT=1`, at fixed VB=2 (`g` correlates with width by construction — P(g>=1) = min(1, VB/4)
+— so §the width-control rule applies):
+
+| arm | g | `q:wq_a` | `cattn:compress` | q_proj+compress |
+|---|---|---|---|---|
+| serial | 0 | 1.65 | 0.05 | 10.16 |
+| serial | 1 | **1.66** | **8.34** | 18.46 |
+| split | 0 | 1.66 | 0.04 | 10.16 |
+| split | 1 | **5.54** | **2.50** | 17.18 |
+
+The 3.2x swing **exists only when the fork does** (1.00–1.02x serial, 3.05x split, 174/174
+separated), and the identical time reappears one mark over. The g=0 baseline is **10.16 ms in both
+arms across two separate checkpoint loads**, which is what says the arms are comparable at all.
+
+**Three lessons, in order of how much they cost.**
+
+1. **A mark bounded by events on one stream is not a measurement of the kernels issued on that
+   stream.** It is a measurement of an interval. Where the engine forks — `g_side` here, `g_side2`
+   for the C1 kv chain, `moe.cu` for the shared expert — every enclosing mark on the main stream
+   silently includes the side stream's pressure. This is not noise and it does not average out: it
+   is a deterministic function of a schedule, which is exactly why it looked like a clean bimodal
+   distribution rather than variance.
+2. **"Cheap mode / expensive mode" in a mark means look for a conserved quantity before looking for
+   a free lunch.** Summing the two marks that split *together* is the whole diagnosis: the sum is
+   flat at g=0 in both arms and differs by only the overlap gain at g>=1. Finding 56 had already
+   written down "cattn:compress 8.56 -> 0.51, cattn:q_proj 17.03 -> 23.85 (it absorbs the traffic)"
+   — the answer was in a comment above the fork, four months before the question was asked.
+3. **Outliers are schedule too.** Every `cattn:compress` sample above 20 ms — 8 of 8 across both
+   arms, 43–50 ms each, plus the lone 43.90 ms outlier in 0.4's table — is a step whose block
+   contains a **ratio-128** boundary, i.e. the 20 strided layers emitting through a path that uses
+   no side stream at all. Same mechanism, different ratio, arrived at by asking the same question of
+   the tail that had just been asked of the mode.
+
+**What it cost to check: zero GPU time for the classification, two checkpoint loads for the cause.**
+What it saved: a 4.4 ms/step phantom deleted from the ladder's headroom, and a first price on the
+compressed-KV emit — **7.02 ms on the 64.9 % of forwards that carry one, 4.56 ms/forward amortised,
+52 % of its 880 MB byte roofline** — which nothing had ever timed.

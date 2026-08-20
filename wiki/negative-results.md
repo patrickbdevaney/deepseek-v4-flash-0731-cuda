@@ -298,6 +298,35 @@ attribution was wrong and the parameter survived by accident.
 building on it.* One column in one table, 90 seconds, no checkpoint. The redundancy arithmetic was
 large enough (168 MB, 63/64ths) to read as a diagnosis; it was a description.
 
+## 4h. Headroom that was never there — the `cattn:q_proj` "free 4.4 ms" (ladder 1.8, 2026-08-20)
+
+**The claim, from 0.4:** `cattn:q_proj` runs 1.71 ms on some verify steps and 5.47 on others at the
+same width, shape and context; it is 14.6 ms of every step; *"if the cheap mode is reachable on
+demand that is ~4.4 ms/step of Term A for free"*.
+
+**Killed.** The two modes are the same GEMM with and without 21 layers of compressor emits running
+beside it on `g_side`. A schedule term computed from the dprof tag alone,
+`g = #{ j in [ctx,ctx+VB) : (j+1)%4 == 0 }`, separates them **153/153 on 0.4's own log and 174/174
+on a fresh arm, with no overlap between the populations**; under `NO_ATTN_SPLIT=1` the swing goes to
+**1.00–1.02x** and the identical time reappears in `cattn:compress` (2.50 -> 8.34 ms at fixed VB=2).
+Mechanism and evidence: `measurement-and-traps.md` §29.
+
+**Why it is worth a page rather than a line.** The refutation is *conservation*, and conservation is
+the check that most "one mode is cheaper" findings need. `cattn:q_proj + cattn:compress` is
+**10.16 ms at g=0 in both arms** — two separate checkpoint loads agreeing to two decimals — and at
+g>=1 it is 18.46 serial against 17.18 split. So the 4.4 ms is not a mode that could be selected; it
+is compressor traffic a correct engine must move, it is **already** overlapped, and the overlap is
+**already** worth a measured 0.81 ms/forward (2 SE band [0.72, 0.90], 9/9 legs faster and
+byte-identical, tau equal to three decimals). There was nothing left to take.
+
+**The value of a negative here is a smaller denominator.** Term A needs to fall 22.4 ms to reach its
+floor. Before 1.8, 4.4 of those ms had a named owner that would have absorbed an iteration and
+returned nothing — the 1.3 failure mode, one item earlier in the queue. After it, the same
+measurement prices what the emit actually costs (**4.56 ms/forward amortised at 52 % of its 880 MB
+byte roofline**) and leaves two honestly-small follow-ups on the ladder (1.11, 1.12) with
+pre-registered ceilings of 1.29 and 0.53 ms/forward. Deleting a phantom is not progress on the
+clock, but it is progress on the ladder, and it is cheaper to do before the kernel work than after.
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

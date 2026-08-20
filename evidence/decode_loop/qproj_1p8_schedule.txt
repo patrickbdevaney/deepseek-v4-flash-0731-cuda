@@ -1,0 +1,29 @@
+153 per-verify dprof tables from 1 log(s)
+
+BY PREDICTED NUMBER OF COMPLETING GROUPS  g = #{ j in [ctx, ctx+VB) : (j+1) % 4 == 0 }
+ g    n                     q:wq_a             cattn:compress               cattn:q_proj                      TOTAL
+ 0   54          1.71 [1.65, 1.76]          0.05 [0.04, 0.07]       10.32 [10.08, 10.63]     114.06 [90.92, 133.47]
+ 1   94          5.44 [4.93, 5.80]         2.54 [2.39, 43.90]       14.80 [14.23, 15.69]     132.76 [97.65, 207.08]
+ 2    5          5.87 [5.64, 6.02]          9.48 [9.44, 9.50]       15.67 [15.46, 15.82]    170.11 [161.82, 197.15]
+
+q:wq_a  g=0: max 1.76 (n=54)   g>=1: min 4.93 (n=99)
+threshold 3.34 -> 153/153 classified correctly, 0 misclassified -- SEPARATION IS PERFECT
+gap between the two populations: 3.17 ms (2.80x), no overlap at all
+
+EXCESS OVER THE g=0 MEDIAN, ms  (must be ~linear in g if the emits are the cause)
+ g           q:wq_a   cattn:compress     cattn:q_proj            TOTAL   q_proj+compress
+ 0             0.00             0.00             0.00             0.00              0.00
+ 1             3.73             2.49             4.48            18.70              6.97
+ 2             4.17             9.43             5.35            56.06             14.78
+
+RATIO-128 CHECK: 3 sample(s) with cattn:compress > 20 ms; 3/3 have a ratio-128 group boundary in the block -- ALL of them
+  ctx=12285 VB=4 compress=43.9 ms  ratio-128 boundaries in block: [12287]  q:wq_a=5.47
+  ctx=3068 VB=5 compress=43.7 ms  ratio-128 boundaries in block: [3071]  q:wq_a=5.46
+  ctx=3068 VB=5 compress=43.8 ms  ratio-128 boundaries in block: [3071]  q:wq_a=5.15
+
+BY CONTEXT POINT (the swing must be present at every context if it is not a context effect)
+  ctx~    n         g=0 q:wq_a        g>=1 q:wq_a    swing
+  1000   37  1.67 [1.65, 1.76]  5.26 [4.93, 6.02]    3.15x
+  3000   38  1.68 [1.66, 1.76]  5.47 [5.15, 5.87]    3.26x
+  6000   37  1.71 [1.67, 1.74]  5.45 [5.15, 5.88]    3.19x
+ 12000   41  1.72 [1.67, 1.74]  5.47 [5.05, 5.80]    3.18x
