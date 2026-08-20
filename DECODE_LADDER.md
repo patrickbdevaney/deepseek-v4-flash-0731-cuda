@@ -79,12 +79,30 @@ items on this ladder and the loop should hand back rather than thrash.
       (658 us -> 39 us at T=6000). **FP32/TF32 accumulation only** — an external ablation shows
       FP16 dropping perfect-recall rows from 99.99 % to 91.82 % on this exact operation.
 
-- [ ] **1.6** **OPEN DEFECT:** 63 `pending CUDA error: invalid argument` per run at
-      `mla_attn.cu:711`, 21 per decode step = exactly the ratio-4 layer count. Arrived with the
-      warp top-k (older DPROF runs are clean, and the reporting predates them). Output is correct
-      and both LOSSLESS gates pass, so it is latent, not wrong. Localisation in flight via
-      `DSV4_SYNCPROBE=1` against `build/decode_probe`, which probes every launch in
-      `compressed_decode_step_indexer_dp`. **Nothing else ships until this is understood.**
+- [ ] **1.6** **OPEN DEFECT — pre-existing, NOT caused by the top-k change.** `pending CUDA error:
+      invalid argument`, 42x at `mla_attn.cu:711` and 42x at `:820`, both of which are the `dsync`
+      on a return path of **`ogroup_gemm_fp8`** — a function this work never touched.
+
+      **The "it is new" conclusion was wrong and is retracted.** It rested on older DPROF runs
+      (`dbuf.log`, `kchunk.log`, 2026-08-08) being clean while the reporting was already live from
+      2026-08-07. But `mla_attn.cu` was modified on **2026-08-11** (NVFP4 dense overlay) and
+      **2026-08-12** (F128, ogroup M=K), i.e. *after* those logs, and no DPROF run has been taken
+      on this binary since. The clean logs simply predate the change that introduced it.
+
+      Confirmed by measurement, not argument: `DSV4_SYNCPROBE=1` against `build/decode_probe`,
+      with a probe after **every** launch in `compressed_decode_step_indexer_dp` including
+      `sparse_attn`, ran to completion with **no fault attributed**. The indexer decode path is
+      clean; the fault is downstream of it.
+
+      Ruled out so far, each by arithmetic rather than by guess: the bs==1 GEMV grid
+      (`G*R*32/256` = 1024 blocks, no overflow); the `__launch_bounds__(256, 4)` = 1024 threads/SM
+      against Thor's 1536 cap (satisfiable); and dynamic shared memory (the M=K launches pass 0).
+      A bisecting probe after the o-rope is in flight to separate `rope_interleaved_dp` from the
+      launches inside `ogroup_gemm_fp8` itself.
+
+      **Severity: latent.** Output is correct, both LOSSLESS gates pass on every run, and tau is
+      normal. It is a launch that fails and whose absence does not change the answer — which is
+      its own question worth asking, since a kernel nobody needs is a kernel to delete.
 
 ## Phase 1b — bit-exact packing (`KV_PRECISION_FINDINGS.md`)
 
