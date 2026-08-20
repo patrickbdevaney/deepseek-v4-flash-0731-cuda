@@ -538,10 +538,10 @@ void compressed_decode_step_strided_dp(float* out, const float* x, const float* 
     // window kv -> kvc[*d_pos]
     fp8_block_gemm(kvs,xq,xs,a.wkv,a.wkv_s,1,HEAD_DIM,DIM,stream); rmsnorm(kvs,kvs,a.kv_norm,1,HEAD_DIM,eps,true,stream);
     rope_interleaved_dp(kvs+NOPE_DIM,a.cosT,a.sinT,1,ROPE_DIM,false,HEAD_DIM,1,d_pos,stream); act_quant_fp8sim(kvs,1,NOPE_DIM,64,HEAD_DIM,stream);
-    k_append_at2<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvc,kvs,d_pos,HEAD_DIM);
+    k_append_at2<<<(HEAD_DIM+255)/256,256,0,stream>>>(kvc,kvs,d_pos,HEAD_DIM); dprobe(stream);
     // compressor emit (device-conditional) into the compressed region [winmax..]
     emit_group_dp(kvc+(size_t)winmax*HEAD_DIM, xin, d_pos, d_T, d_g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,false,0,eps,stream);
-    k_advance_T<<<1,1,0,stream>>>(d_T,d_pos,ratio);
+    k_advance_T<<<1,1,0,stream>>>(d_T,d_pos,ratio); dprobe(stream);
     // attention over combined cache
     k_comb_strided_dp<<<(wtop+Tmax+63)/64,64,0,stream>>>(comb,d_pos,d_T,winmax,wtop,Tmax);
     sparse_attn(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+Tmax,scale,stream);
@@ -592,12 +592,12 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     // indexer scoring for the single query -> select main-compressed rows
     fp8_block_gemm(qidx,qrq,qrs,w.idx_wq_b,w.idx_wq_b_s,1,QD,Q_LORA,stream);   // qrq/qrs == act_quant(qr): same call, unmodified qr
     rope_interleaved_dp(qidx+(ihd-rd),a.cosT,a.sinT,nH,rd,false,ihd,nH,d_pos,stream); hadamard(qtmp,qidx,nH,ihd,stream); act_quant_fp4sim(qtmp,nH,ihd,32,ihd,stream);
-    gemm_fp32(iw,x,w.idx_weights_proj,1,nH,DIM,stream); k_iw_scale<<<(nH+63)/64,64,0,stream>>>(iw,wscale,nH);
-    index_score(isc,qtmp,idx_kvc,iw,1,Tmax,nH,ihd,stream); k_mask_scores<<<(Tmax+63)/64,64,0,stream>>>(isc,d_T,Tmax);
-    k_topk_masked<<<1,32,topk_scan_smem(Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax);
-    k_comb_strided_dp<<<(wtop+63)/64,64,0,stream>>>(win,d_pos,d_T,winmax,wtop,0);   // window part only (Tmax=0)
-    k_comb_join<<<(wtop+topk_c+63)/64,64,0,stream>>>(comb,win,sel,wtop,topk_c);
-    sparse_attn(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+topk_c,scale,stream);
+    gemm_fp32(iw,x,w.idx_weights_proj,1,nH,DIM,stream); dprobe(stream); k_iw_scale<<<(nH+63)/64,64,0,stream>>>(iw,wscale,nH); dprobe(stream);
+    index_score(isc,qtmp,idx_kvc,iw,1,Tmax,nH,ihd,stream); dprobe(stream); k_mask_scores<<<(Tmax+63)/64,64,0,stream>>>(isc,d_T,Tmax); dprobe(stream);
+    k_topk_masked<<<1,32,topk_scan_smem(Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax); dprobe(stream);
+    k_comb_strided_dp<<<(wtop+63)/64,64,0,stream>>>(win,d_pos,d_T,winmax,wtop,0); dprobe(stream);   // window part only (Tmax=0)
+    k_comb_join<<<(wtop+topk_c+63)/64,64,0,stream>>>(comb,win,sel,wtop,topk_c); dprobe(stream);
+    sparse_attn(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+topk_c,scale,stream); dprobe(stream);
     rope_interleaved_dp(o+NOPE_DIM,a.cosT,a.sinT,N_HEADS,ROPE_DIM,true,HEAD_DIM,N_HEADS,d_pos,stream);
     if(a.wo_a_native) ogroup_gemm_fp8(og,o,a.wo_a_fp8,a.wo_a_sc,1,O_GROUPS,O_LORA,GKd,stream);
     else              ogroup_gemm    (og,o,a.wo_a,               1,O_GROUPS,O_LORA,GKd,stream);

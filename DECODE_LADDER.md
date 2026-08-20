@@ -43,17 +43,31 @@ items on this ladder and the loop should hand back rather than thrash.
 ## Phase 0 — instrument (must complete before anything is trusted)
 
 - [x] **0.1** `timings` on `/v1/completions` — staged in `server.cpp`, built 2026-08-19.
-- [ ] **0.2** `DSV4_DPROF` diff at two contexts (480 and 6000 prompt tokens). **IN FLIGHT.**
-      Splits Term B between `i:topk`, `i:score` and `cattn:sparse`. Predicted: `i:topk` and
-      `i:score` scale with context, `cattn:sparse` saturates at ctx 2048, everything else flat.
-      This decides the order of 1.2 vs 1.5.
+- [x] **0.2** `DSV4_DPROF` diff at two contexts. **DONE 2026-08-19 — the context term is GONE.**
+      Two single-prompt runs on the same binary, ctx 480 and ctx 3000:
+
+      | | base AR (M=1) | spec | i:topk (21 calls) | i:score | cattn:indexer |
+      |---|---|---|---|---|---|
+      | ctx 480 | 89.3 ms/tok | 65.9 ms/tok, 15.18 tok/s | 0.10 ms | 0.02 ms | 2.09 ms |
+      | ctx 3000 | 89.4 ms/tok | 65.2 ms/tok, 15.33 tok/s | 0.10 ms | 0.02 ms | 2.05 ms |
+
+      **Base AR moved 0.1 ms across a 6x context change.** The pre-fix fit predicted
+      150.9 -> 226.6 ms over the same span (`136.44 + 30.053*(ctx/1000)`). The slope went from
+      **30.05 ms per 1000 context to ~0.04**, and `i:topk` is flat at 0.10 ms across all 21 calls.
+      Both LOSSLESS gates passed.
+
+      **This retires 1.2 and 1.5 as decode levers.** A radix select replaces a kernel that now
+      costs 0.10 ms, and the `index_score` GEMM attacks `i:score` at 0.02 ms. Neither is worth a
+      bit-exactness risk. 1.3 and 1.4 remain as correctness items, not performance ones.
+      The remaining cost is **ATTENTION 44 % and MoE 38 %**, which is Term A — and Term A is the
+      term with ~1.5x of headroom, not 3x.
 - [ ] **0.3** Re-fit `tools/decode_model.py` on a post-fix run and record both coefficients.
 
 ## Phase 1 — the context term
 
 - [x] **1.1** Warp-parallel top-k (all four kernels). **14.2x at ctx 6592, 24.7x at 24k**,
       bit-identical on nine shapes and three distributions (`tests/gate_topk_warp.cu`).
-- [ ] **1.2** Single-CTA radix select to replace the warp scan. Reference: SGLang's
+- [~] **1.2** RETIRED as a perf lever (0.2: top-k is now 0.10 ms). Single-CTA radix select to replace the warp scan. Reference: SGLang's
       `deepseek_v4_topk.cu` (Apache-2.0) and TileLang `topk_selector.py`. **Restore descending
       order with a 512-element bitonic sort** — the reference emits in `atomicAdd` order, and
       `sparse_attn` sums selected rows in order, so without the sort this is not bit-exact.
@@ -61,9 +75,16 @@ items on this ladder and the loop should hand back rather than thrash.
       does the full scan to discover it.
 - [ ] **1.4** `cudaFuncSetAttribute` opt-in for dynamic shared memory, or drop the requirement
       entirely (1.2 does). Removes a silent garbage-return above ~49k context.
-- [ ] **1.5** `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
+- [~] **1.5** RETIRED as a perf lever (0.2: i:score is 0.02 ms). `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
       (658 us -> 39 us at T=6000). **FP32/TF32 accumulation only** — an external ablation shows
       FP16 dropping perfect-recall rows from 99.99 % to 91.82 % on this exact operation.
+
+- [ ] **1.6** **OPEN DEFECT:** 63 `pending CUDA error: invalid argument` per run at
+      `mla_attn.cu:711`, 21 per decode step = exactly the ratio-4 layer count. Arrived with the
+      warp top-k (older DPROF runs are clean, and the reporting predates them). Output is correct
+      and both LOSSLESS gates pass, so it is latent, not wrong. Localisation in flight via
+      `DSV4_SYNCPROBE=1` against `build/decode_probe`, which probes every launch in
+      `compressed_decode_step_indexer_dp`. **Nothing else ships until this is understood.**
 
 ## Phase 1b — bit-exact packing (`KV_PRECISION_FINDINGS.md`)
 
