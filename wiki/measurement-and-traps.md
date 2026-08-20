@@ -196,3 +196,40 @@ failed to collect timings* with *the thing being gated is broken*, and cost a fu
 > **Rule.** When a gate rides inside a harness, the gate's verdict must come from the gate's own
 > output, not from the harness's exit status. Check `nfail`/`npass` first and treat the carrier's
 > `rc` as a separate, differently-named condition — they answer different questions.
+
+## 14. A phase that ran nothing, and reported "finished"
+
+Ladder 1.2, 2026-08-20, and it is §13's rule failing in the opposite direction — the harness reported
+the *absence* of a check as a completed check.
+
+Phase 4 of `topk_ab_run.sh` runs `build/decode` for the standing GATE and the LOSSLESS gate. It is
+launched through `run_model.sh`, which correctly refuses to start a ~105 GiB load when less than
+that is available. It ran **0 seconds after** the previous phase's `server_down` returned:
+
+```
+[1.2] 05:25:22 === PHASE 4: standing GATE + LOSSLESS GATE (build/decode, radix ON) ===
+REFUSED: only 27 GiB available; a full-model load needs ~105 GiB.
+[1.2] 05:25:22 decode finished; gates:
+[1.2] 05:25:22 === PHASE 5: reports ===
+```
+
+`server_down` waits for the process to *exit*; the kernel reclaims its ~100 GiB of page cache
+lazily, and 70 seconds later 106 GiB was available. So the phase printed "decode finished; gates:"
+followed by nothing at all, and the script proceeded to the report phase and exited 0. **A missing
+gate looked exactly like a passing one**, which is the same class of defect as CLAUDE.md's
+`eval_bfcl_mt.py` "unconditional `return 0`" — a stage that completes against a dead engine.
+
+Two fixes, both needed:
+
+1. **Wait for the resource, do not assume it.** Poll `MemAvailable` up to 30 minutes before Phase 4.
+2. **Assert the gate produced output.** `[ ! -s "$DEC_LOG" ] && exit 1`, then
+   `grep -qE 'LOSSLESS GATE: .* -> PASS'`.
+
+The second fix immediately caught a third defect in itself: the first pattern written was
+`grep -q 'LOSSLESS GATE: PASS'`, and the actual line is
+`[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS`. A gate that had genuinely passed was
+reported FATAL.
+
+> **Rule.** An unattended phase must fail loudly when it did **not run**, and its success pattern
+> must be pasted from real output rather than remembered. "Finished" and "checked" are different
+> claims, and only the log can tell them apart.

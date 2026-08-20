@@ -1,0 +1,30 @@
+exactly-paired legs (identical tau AND identical mean verify width): 35/52
+  UNPAIRED control-t1536-r0: tau 1.6203 vs 2.2456  width None vs None
+  UNPAIRED control-t1536-r1: tau 1.8417 vs 1.8963  width None vs None
+  UNPAIRED control-t6144-r0: tau 1.6842 vs 1.6000  width None vs None
+  UNPAIRED control-t6144-r1: tau 1.6306 vs 1.6954  width None vs None
+  UNPAIRED sweep-t128-r0: tau 1.4382 vs 1.6410  width None vs None
+  UNPAIRED sweep-t128-r1: tau 1.4629 vs 1.4798  width None vs None
+  UNPAIRED sweep-t128-r2: tau 1.8028 vs 1.5059  width None vs None
+  UNPAIRED sweep-t128-r3: tau 1.6516 vs 1.7778  width None vs None
+  UNPAIRED sweep-t128-r4: tau 1.6516 vs 1.4463  width None vs None
+  UNPAIRED sweep-t128-r5: tau 1.6732 vs 1.4713  width None vs None
+  UNPAIRED sweep-t384-r0: tau 1.4713 vs 1.5515  width None vs None
+  UNPAIRED sweep-t384-r1: tau 1.5422 vs 1.3474  width None vs None
+  UNPAIRED sweep-t384-r2: tau 1.7415 vs 1.5610  width None vs None
+  UNPAIRED sweep-t384-r3: tau 1.5802 vs 1.4066  width None vs None
+  UNPAIRED sweep-t384-r4: tau 1.6410 vs 2.0157  width None vs None
+  UNPAIRED sweep-t384-r5: tau 1.5610 vs 1.5148  width None vs None
+  UNPAIRED sweep-t768-r5: tau 1.6000 vs 1.6203  width None vs None
+
+    ctx   n    before     after   paired d    min d    max d  speedup
+  12410   6    167.18    154.66     -12.55   -12.92   -12.33   1.081x
+   9341   6    166.77    156.54     -10.47   -10.66   -10.15   1.065x
+   6260   6    154.62    146.23      -8.58    -8.65    -8.30   1.057x
+   3197   6    147.85    141.23      -6.72    -7.01    -6.28   1.047x
+   1664   6    140.91    136.41      -4.53    -5.07    -4.40   1.033x
+    889   5    132.80    130.30      -2.34    -2.84    -2.18   1.019x
+
+paired saving (ms/forward) = 3.122 + 0.793 x (ctx/1000)     n=35  R^2 0.951  SE(b) 0.031
+  2 SE band on the slope: [0.730, 0.856]  ms per 1000 context
+  0.4 dprof attribution of i:topk (width held fixed): 0.872 +/- 0.021 ms per 1000

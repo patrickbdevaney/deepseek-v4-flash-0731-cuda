@@ -14,7 +14,7 @@
 #   bash scripts/detach_audit.sh        # exits non-zero if anything is session-bound
 set -u
 cd "$(dirname "$0")/.."
-PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh}"
+PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh|topk_ab_run.sh}"
 
 # NEVER FLAG OUR OWN ANCESTRY. This script is itself run from a shell -- often a Claude Code Bash
 # invocation, which IS session-bound and correctly so. Its command line contains the patterns we

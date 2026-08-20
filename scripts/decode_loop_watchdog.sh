@@ -34,7 +34,7 @@ ps -eo comm= | grep -qE '^(dsv4-server|decode|decode_probe|decode_prechange)$' &
 avail=$(awk '/MemAvailable/{printf "%d",$2/1048576}' /proc/meminfo)
 [ "$avail" -ge "$FLOOR_GB" ] || { say "only ${avail} GiB available; not restarting"; exit 0; }
 
-for g in gate_tokenizer gate_encoding gate_api gate_topk_warp gate_idx_pack; do
+for g in gate_tokenizer gate_encoding gate_api gate_topk_warp gate_topk_radix gate_idx_pack; do
   [ -x "build/$g" ] || continue
   ./build/"$g" > /dev/null 2>&1 || { say "GATE FAIL: $g — refusing to restart onto a broken tree"; exit 0; }
 done

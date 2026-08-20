@@ -1,5 +1,6 @@
 // indexer.cu — DSA Indexer primitives, correctness-first (Gate K: ref/gen_units gen_hadamard/gen_index_score).
 #include "indexer.h"
+#include "topk_radix.h"
 #include "dscratch.h"
 
 // Hadamard: y[r,j] = D^-0.5 * Σ_i x[r,i] * (-1)^popcount(i&j). One thread per (row, j).
@@ -138,6 +139,17 @@ __global__ void k_topk_offset(int* out, const float* score, int s, int T, int to
     }
 }
 
+// Radix-select twin (item 1.2). The asymmetry above is preserved: the SELECTION covers the full row
+// and out-of-range picks are rejected only at the OUTPUT, still consuming a slot.
+__global__ void k_topk_offset_rx(int* out, const float* score, int s, int T, int topk, int ratio, int offset){
+    int si=blockIdx.x; if(si>=s) return;
+    __shared__ TopkRadixSmem S;
+    int* o = out + (size_t)si*topk;
+    topk_radix_select<TOPK_RADIX_NT>(o, score+(size_t)si*T, T, topk, -1e30f, S);
+    const int thr=(si+1)/ratio;
+    for(int k=threadIdx.x;k<topk;k+=TOPK_RADIX_NT){ int b=o[k]; o[k] = (b<0 || b>=thr)? -1 : b+offset; }
+}
+
 void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, const float* qr,
                      const unsigned char* wq_b, const float* wq_b_s, const float* weights_proj,
                      const float* c_wkv, const float* c_wgate, const float* c_ape, const float* c_norm,
@@ -167,7 +179,9 @@ void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, con
     index_score(index_score_out, qtmp, ckv, weights, s, T, n_heads, idx_hd, stream); dprobe(stream);
     k_causal_mask<<<(s*T+255)/256,256,0,stream>>>(index_score_out, s, T, ratio); dprobe(stream);
     int topk = index_topk < T ? index_topk : T;
-    k_topk_offset<<<s, 32, topk_scan_smem(T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset); dprobe(stream);
+    if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_offset_rx<<<s, TOPK_RADIX_NT, 0, stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
+    else                                        k_topk_offset<<<s, 32, topk_scan_smem(T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
+    dprobe(stream);
     CUI(cudaStreamSynchronize(stream));
     cudaFree(qrq);cudaFree(qrs);cudaFree(q);cudaFree(qtmp);cudaFree(ckv);cudaFree(weights);
 }

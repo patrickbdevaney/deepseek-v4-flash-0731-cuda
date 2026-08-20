@@ -1,0 +1,13 @@
+[1.2] 2026-08-20T05:26:36-04:00 binaries: server 2026-08-20T04:15:20-04:00, decode 2026-08-20T04:19:52-04:00
+[1.2] 2026-08-20T05:26:36-04:00 === PHASE 4: standing GATE + LOSSLESS GATE (build/decode, radix ON) ===
+[run_model] 106 GiB available; launching detached -> evidence/decode_loop/decode_1p2_lossless.log
+[run_model] pid 102415   watch: tail -f evidence/decode_loop/decode_1p2_lossless.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/decode_1p2_lossless.memguard.log
+[1.2] 2026-08-20T05:28:06-04:00 decode finished; gates:
+[decode] PREFILL: 5 positions in 257.0 ms = 19.5 tok/s (51.393 ms/tok)
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] WARM decode: 86.9 ms/tok = 11.51 tok/s  (M=1 steady state, 7-step avg)
+[decode] PREFILL: 5 positions in 134.3 ms = 37.2 tok/s (26.862 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 47.8 ms/tok = 20.91 tok/s  (vs base M=1 86.9 ms/tok = 11.51 tok/s -> 1.82x)
+[1.2] 2026-08-20T05:28:06-04:00 FATAL: LOSSLESS gate did not pass

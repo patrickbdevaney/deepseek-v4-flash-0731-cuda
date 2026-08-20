@@ -1,0 +1,2 @@
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T04:32:20-04:00
+[memguard] victim gone, exiting. low-water was 5192 MB 2026-08-20T04:59:16-04:00

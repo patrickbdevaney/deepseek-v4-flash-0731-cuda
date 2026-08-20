@@ -2,6 +2,15 @@
 # Build the Gate-K unit test (host CUDA). Run: ./build/gate_units ref/goldens
 set -e
 cd "$(dirname "$0")/.."
+
+# Gate TOPK_RADIX — the single-CTA radix select (DECODE_LADDER 1.2) must be BIT-IDENTICAL to the warp
+# selection sort it replaces, not merely select the same set: sparse_attn sums the selected rows in
+# order, so fp32 association makes the ORDER load-bearing. Six distributions including exact ties,
+# signed zeros and floor-straddling rows, on all four kernel shapes. Two seconds, no checkpoint.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_topk_radix.cu -o build/gate_topk_radix
+echo "built build/gate_topk_radix"
+
 nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   tests/gate_units.cu kernels/fp8_block_gemm.cu kernels/hc_sinkhorn.cu kernels/mla_attn.cu kernels/moe.cu kernels/hc.cu kernels/compressor.cu kernels/indexer.cu kernels/tc_moe_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu \
   -o build/gate_units

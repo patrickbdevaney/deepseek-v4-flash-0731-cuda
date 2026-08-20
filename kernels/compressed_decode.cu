@@ -23,6 +23,7 @@ int g_kv_winmax = 0;
 #include "mla_attn.h"
 #include "compressor.h"
 #include "indexer.h"
+#include "topk_radix.h"
 #include "deepseek_v4.h"
 #include "dscratch.h"
 #include "dprof.h"
@@ -55,6 +56,15 @@ __global__ void k_topk_decode(int* out, const float* score, int T, int topk, int
         if(L==0){ if(bi<T) sh[bi]=-1e30f; out[k] = (bi>=T)? -1 : bi+offset; }
         __syncwarp(); }
 }
+// Radix-select twin (item 1.2). Same admission rule, same order, no dynamic shared memory.
+// `sel` is written in place: topk_radix_select leaves raw source indices (or -1) in `out`, then the
+// caller's own offset rule is applied to them -- which is exactly what the `if(L==0)` line did.
+__global__ void k_topk_decode_rx(int* out, const float* score, int T, int topk, int offset){
+    if(blockIdx.x) return;
+    __shared__ TopkRadixSmem S;
+    topk_radix_select<TOPK_RADIX_NT>(out, score, T, topk, -1e30f, S);
+    for(int k=threadIdx.x;k<topk;k+=TOPK_RADIX_NT){ int b=out[k]; out[k] = (b<0)? -1 : b+offset; }
+}
 __global__ void k_iw_scale(float* y, float sc, int n){ int i=blockIdx.x*blockDim.x+threadIdx.x; if(i<n) y[i]*=sc; }
 // device verify top-k (per query, global causal threshold) + combined-idx build -> removes the host D2H sync.
 __global__ void k_topk_verify(int* dtop, const float* score, int K, int Tf, int topkc, int pos, int ratio, int nwin){
@@ -68,10 +78,77 @@ __global__ void k_topk_verify(int* dtop, const float* score, int K, int Tf, int 
         warp_argmax(best,bi);
         if(L==0){ if(bi<Tf){ sh[bi]=-1e30f; dtop[(size_t)i*topkc+k]=nwin+bi; } else dtop[(size_t)i*topkc+k]=-1; }
         __syncwarp(); } }
+__global__ void k_topk_verify_rx(int* dtop, const float* score, int K, int Tf, int topkc, int pos, int ratio, int nwin){
+    int i=blockIdx.x; if(i>=K) return;
+    __shared__ TopkRadixSmem S;
+    const int thr=(pos+i+1)/ratio; const int lim = thr<Tf? thr : Tf;
+    int* out = dtop + (size_t)i*topkc;
+    topk_radix_select<TOPK_RADIX_NT>(out, score+(size_t)i*Tf, lim, topkc, -1e30f, S);
+    for(int k=threadIdx.x;k<topkc;k+=TOPK_RADIX_NT){ int b=out[k]; out[k] = (b<0)? -1 : nwin+b; }
+}
 __global__ void k_comb_verify(int* dcomb, const int* dtop, int K, int topk, int wmax, int topkc, int pos){
     int gid=blockIdx.x*blockDim.x+threadIdx.x; if(gid>=K*topk) return; int i=gid/topk, k=gid%topk;
     int ig=pos+i, base=ig-WINDOW+1; if(base<0)base=0; int wid=ig+1-base;
     if(k<wmax) dcomb[gid]=(k<wid)? base+k : -1; else dcomb[gid]=dtop[(size_t)i*topkc+(k-wmax)]; }
+
+
+// DSV4_TOPK_GATE=1 — the bit-exactness gate for item 1.2, run IN SITU on the shipped path at real
+// context. DECODE_LADDER hard invariant 1 was amended by 1.0: token ids are not a valid test at
+// context, because the engine stops reproducing itself part-way through a long run. The substitute
+// is a memcmp of the changed kernel's ENTIRE OUTPUT BUFFER against the untouched reference, on
+// every call, which is strictly stronger -- it proves the whole index array identical rather than
+// one downstream consumer's tokens.
+//
+// The reference is the shipped warp selection sort, launched with the identical arguments into a
+// private buffer. It aborts on the first differing slot rather than counting: a bit-exactness gate
+// that reports and continues is a gate that gets ignored.
+//
+// NOT armed on the `_dp` graph path (`k_topk_masked`), which is CUDA-graph captured and cannot
+// contain a host sync; that kernel is covered by tests/gate_topk_radix.cu only.
+static int topk_gate_on(){
+    static const int g = getenv("DSV4_TOPK_GATE") ? atoi(getenv("DSV4_TOPK_GATE")) : 0;
+    return g;
+}
+static long long g_topk_checks = 0, g_topk_slots = 0;
+static void topk_gate_report(const char* what, int n, int a0, int b0, int i, int ctx){
+    if(i >= 0){
+        fprintf(stderr, "[topk-gate] FAIL %s ctx=%d n=%d first diff at slot %d: radix %d vs warp %d\n",
+                what, ctx, n, i, a0, b0);
+        fflush(stderr); abort();
+    }
+    if(g_topk_checks <= 3 || g_topk_checks % 64 == 0){
+        fprintf(stderr, "[topk-gate] PASS %s ctx=%d n=%d (%lld checks, %lld slots)\n",
+                what, ctx, n, g_topk_checks, g_topk_slots); fflush(stderr);
+    }
+}
+static void topk_gate_verify(const int* got, const float* score, int K, int Tf, int topkc,
+                             int pos, int ratio, int nwin, cudaStream_t stream){
+    size_t n = (size_t)K*topkc;
+    int* ref = nullptr; CU(cudaMalloc(&ref, n*4));
+    k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(ref, score, K, Tf, topkc, pos, ratio, nwin);
+    CU(cudaStreamSynchronize(stream));
+    std::vector<int> a(n), b(n);
+    CU(cudaMemcpy(a.data(), got, n*4, cudaMemcpyDeviceToHost));
+    CU(cudaMemcpy(b.data(), ref, n*4, cudaMemcpyDeviceToHost));
+    cudaFree(ref);
+    ++g_topk_checks; g_topk_slots += (long long)n;
+    int bad = -1; for(size_t i=0;i<n;++i) if(a[i]!=b[i]){ bad=(int)i; break; }
+    topk_gate_report("verify", (int)n, bad<0?0:a[bad], bad<0?0:b[bad], bad, pos);
+}
+static void topk_gate_decode(const int* got, const float* score, int T, int topk, int offset,
+                             int pos, cudaStream_t stream){
+    size_t n = (size_t)topk;
+    int* ref = nullptr; CU(cudaMalloc(&ref, n*4));
+    k_topk_decode<<<1,32,topk_scan_smem(T),stream>>>(ref, score, T, topk, offset);
+    CU(cudaStreamSynchronize(stream));
+    std::vector<int> a(n), b(n);
+    CU(cudaMemcpy(a.data(), got, n*4, cudaMemcpyDeviceToHost));
+    CU(cudaMemcpy(b.data(), ref, n*4, cudaMemcpyDeviceToHost));
+    cudaFree(ref);
+    ++g_topk_checks; g_topk_slots += (long long)n;
+    int bad = -1; for(size_t i=0;i<n;++i) if(a[i]!=b[i]){ bad=(int)i; break; }
+    topk_gate_report("decode", (int)n, bad<0?0:a[bad], bad<0?0:b[bad], bad, pos);
+}
 
 // ---- prefill: fill window-KV + compressed-KV caches ----
 void compressed_attn_cache(float* win_kv, float* comp_kv, int* T, const float* x,
@@ -244,7 +321,9 @@ void compressed_decode_step_indexer(float* out, const float* x_cur, const float*
     int topk = w.index_topk < Tn ? w.index_topk : Tn;
     int* dtop; dtop=(decltype(dtop))dmalloc((size_t)topk*4);
     const int coff = g_kv_winmax ? g_kv_winmax : nwin;      // row where compressed rows begin
-    k_topk_decode<<<1,32,topk_scan_smem(Tn),stream>>>(dtop, iscore, Tn, topk, coff);
+    if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_decode_rx<<<1,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, Tn, topk, coff);
+    else                                       k_topk_decode<<<1,32,topk_scan_smem(Tn),stream>>>(dtop, iscore, Tn, topk, coff);
+    if(topk_gate_on() && topk_radix_on() && topk<=TOPK_RADIX_CAP) topk_gate_decode(dtop, iscore, Tn, topk, coff, pos, stream);
     // --- kv_all = [win_kv ; comp_kv] -- contiguous already when g_kv_winmax is set ---
     int ntot = coff + Tn;
     float* kv_all;
@@ -459,7 +538,9 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     int* dtop; dtop=(int*)dmalloc((size_t)K*topkc*4);
     dprof_begin(DP_I_TOPK,stream);
     const int coff = g_kv_winmax ? g_kv_winmax : nwin;
-    k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);   // device top-k (no D2H sync)
+    if(topk_radix_on() && topkc<=TOPK_RADIX_CAP) k_topk_verify_rx<<<K,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);
+    else                                         k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);   // device top-k (no D2H sync)
+    if(topk_gate_on() && topk_radix_on() && topkc<=TOPK_RADIX_CAP) topk_gate_verify(dtop, iscore, K, Tf, topkc, pos, ratio, coff, stream);
     dprof_end(DP_I_TOPK,stream);
     dprof_end(DP_C_INDEXER,stream);
     int ntot = coff + Tf;
@@ -564,6 +645,12 @@ __global__ void k_topk_masked(int* out, const float* score, int Tmax, int topk, 
         warp_argmax(best,bi);
         if(L==0){ if(bi<Tmax){ sh[bi]=-1e30f; out[k]=winmax+bi; } else out[k]=-1; }
         __syncwarp(); } }
+__global__ void k_topk_masked_rx(int* out, const float* score, int Tmax, int topk, int winmax){
+    if(blockIdx.x) return;
+    __shared__ TopkRadixSmem S;
+    topk_radix_select<TOPK_RADIX_NT>(out, score, Tmax, topk, -1e29f, S);   // NOTE the -1e29f floor, verbatim
+    for(int k=threadIdx.x;k<topk;k+=TOPK_RADIX_NT){ int b=out[k]; out[k] = (b<0)? -1 : winmax+b; }
+}
 __global__ void k_comb_join(int* comb, const int* win, const int* sel, int wtop, int topk_c){   // [window ⊕ selected]
     int k=blockIdx.x*blockDim.x+threadIdx.x; int tot=wtop+topk_c; if(k>=tot) return; comb[k]=(k<wtop)?win[k]:sel[k-wtop]; }
 
@@ -594,7 +681,9 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     rope_interleaved_dp(qidx+(ihd-rd),a.cosT,a.sinT,nH,rd,false,ihd,nH,d_pos,stream); hadamard(qtmp,qidx,nH,ihd,stream); act_quant_fp4sim(qtmp,nH,ihd,32,ihd,stream);
     gemm_fp32(iw,x,w.idx_weights_proj,1,nH,DIM,stream); dprobe(stream); k_iw_scale<<<(nH+63)/64,64,0,stream>>>(iw,wscale,nH); dprobe(stream);
     index_score(isc,qtmp,idx_kvc,iw,1,Tmax,nH,ihd,stream); dprobe(stream); k_mask_scores<<<(Tmax+63)/64,64,0,stream>>>(isc,d_T,Tmax); dprobe(stream);
-    k_topk_masked<<<1,32,topk_scan_smem(Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax); dprobe(stream);
+    if(topk_radix_on() && topk_c<=TOPK_RADIX_CAP) k_topk_masked_rx<<<1,TOPK_RADIX_NT,0,stream>>>(sel,isc,Tmax,topk_c,winmax);
+    else                                          k_topk_masked<<<1,32,topk_scan_smem(Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax);
+    dprobe(stream);
     k_comb_strided_dp<<<(wtop+63)/64,64,0,stream>>>(win,d_pos,d_T,winmax,wtop,0); dprobe(stream);   // window part only (Tmax=0)
     k_comb_join<<<(wtop+topk_c+63)/64,64,0,stream>>>(comb,win,sel,wtop,topk_c); dprobe(stream);
     sparse_attn(o,q,kvc,a.attn_sink,comb,1,1,N_HEADS,HEAD_DIM,winmax+Tmax,wtop+topk_c,scale,stream); dprobe(stream);

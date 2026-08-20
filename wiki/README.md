@@ -11,7 +11,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation |
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
-| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, and the rule it produces |
+| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, and the two adoptions (1.0, 1.2) that took `b` down 65 % |
 
 ## The state in one table
 
@@ -25,16 +25,23 @@ historical measurement; the second is where agentic work actually runs.
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
 
-| at real context | before 1.0 | after 1.0 | |
-|---|---|---|---|
-| spec decode @ ctx 12,282 | 7.67 tok/s | **9.54 tok/s** | **+24.4 %** |
-| spec decode @ ctx 9,213 | 9.69 tok/s | **11.79 tok/s** | +21.7 % |
-| spec decode @ ctx 6,132 | 9.59 tok/s | **11.10 tok/s** | +15.8 % |
-| context term | 7.220 ms/1000 | **4.006 ms/1000** | −44 %, and 2.2 ms/1000 of it is still identified work |
+| at real context | ladder open | after 1.0 | after 1.2 | |
+|---|---|---|---|---|
+| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | **10.69 tok/s** | +24.4 % then **+8.2 %** |
+| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | +21.7 % then +6.7 % |
+| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | **11.77 tok/s** | +15.8 % then +5.8 % |
+| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | **2.514 ms/1000** | **−65 % cumulative** |
 
-The context term is now the smaller half of the problem but not a solved one: `i:topk` (0.872
-ms/1000), `cattn:sparse` (0.709) and `i:score` (0.644) remain, and together they are worth about
-what 1.0 was worth — see [`context-scaling.md`](context-scaling.md).
+Each arrow is a separate paired A/B on its own before-arm; the columns are not one continuous
+sweep, and 1.2's before-arm measured `b = 3.488` where 1.0's after-arm reported 4.006 — one
+run-to-run spread on a fitted coefficient, which is why the *paired* saving and not the fit
+difference is the ratchet in both cases.
+
+**The context term is no longer where the money is.** Of the 6.97 ms/1000 that 0.4 attributed, the
+two large items — `draft:main_kv` (3.867) and `i:topk` (0.872) — are both spent. What is named and
+left is `cattn:sparse` (0.709) and `i:score` (0.644), **1.35 of a measured 2.514**, so about half
+the surviving slope is still unattributed. Term A is now 129.11 ms of a 154.66 ms forward at ctx
+12,410 — **83 %** — and it is 1.57× its byte floor. See [`context-scaling.md`](context-scaling.md).
 
 > ### ⚠️ RETRACTED 2026-08-20 — "the M=1 kernel path is finished"
 >
@@ -54,6 +61,13 @@ what 1.0 was worth — see [`context-scaling.md`](context-scaling.md).
 > established that **the engine does not reproduce itself run-to-run at context**, which makes the
 > ladder's "byte-identical token ids" invariant untestable as written at long context; see
 > [`measurement-and-traps.md` §12](measurement-and-traps.md).
+>
+> **Update 2026-08-20, same day:** the second of the two retired-on-a-135×-wrong-number levers is
+> also spent — the indexer's top-512 is a single-CTA radix select rather than 512 sequential argmax
+> rounds ([`kernel-optimisations.md` §2.6](kernel-optimisations.md)), **+8.2 % at ctx 12,410**,
+> gated by memcmp on the whole index array across 11,008 calls and 183 M slots. It also arrived
+> **3.12 ms/forward ahead of what the profile predicted**, in a kernel on the draft side that has
+> never had a dprof mark — so the profile is *still* incomplete, for the second time.
 
 ## If you read one thing
 

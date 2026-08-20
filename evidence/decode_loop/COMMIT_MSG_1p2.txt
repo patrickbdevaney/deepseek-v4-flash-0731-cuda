@@ -1,0 +1,73 @@
+1.2: single-CTA radix select for the indexer top-k — +8.2 % tok/s at ctx 12,410, bit-exact
+
+WHAT WAS MEASURED. Ladder item 1.2, one kernel change, paired A/B on one binary with the arm
+selected by DSV4_TOPK_RADIX, baseline arm first so drift penalises the radix arm. 35 of 52 legs
+paired exactly (identical tau AND identical mean verify width rep-for-rep); all six reps pair at
+every point at ctx >= 1,664.
+
+  ctx      before    after    paired d   band                speedup   tau b/a        tok/s
+  12,410   167.18    154.66   -12.55     [-12.92, -12.33]    1.081x    1.652/1.652    9.88 -> 10.69 (+8.2 %)
+   9,341   166.77    156.54   -10.47     [-10.66, -10.15]    1.065x    1.969/1.969   11.81 -> 12.60 (+6.7 %)
+   6,260   154.62    146.23    -8.58     [ -8.65,  -8.30]    1.057x    1.718/1.718   11.12 -> 11.77 (+5.8 %)
+   3,197   147.85    141.23    -6.72     [ -7.01,  -6.28]    1.047x    1.626/1.626   10.93 -> 11.46 (+4.8 %)
+   1,664   140.91    136.41    -4.53     [ -5.07,  -4.40]    1.033x    1.701/1.701   12.08 -> 12.48 (+3.3 %)
+     889   132.80    130.30    -2.34     [ -2.84,  -2.18]    1.019x    1.724/1.724   12.95 -> 13.19 (+1.9 %)
+
+  before   fwd = 130.60 + 3.488 x (ctx/1000)     after   fwd = 129.11 + 2.514 x (ctx/1000)
+  paired   saving = 3.122 + 0.793 +/- 0.031 x (ctx/1000)      R^2 0.951, n=35
+
+WHAT IT MEANS. The context term is down another 28 %, and 65 % cumulatively from the 7.220 the
+ladder opened on. 0.4's dprof attributed 0.872 +/- 0.021 ms/1000 to i:topk; the paired measurement
+recovered 0.793 +/- 0.031, whose 2 SE band [0.730, 0.856] does NOT cover the prediction. 9 % short,
+recorded rather than rounded away.
+
+The interesting number is the other one. The saving also has a 3.12 ms/forward CONTEXT-INDEPENDENT
+component, which no profile in this repo could have predicted: i:topk marks k_topk_verify and
+nothing else, and k_topk_decode -- the identical kernel on the draft side -- has never had a dprof
+mark at all. That is the same blind spot that hid draft:main_kv until 0.4 went looking. A win that
+lands in the intercept says the profile is still incomplete, for the second time.
+
+Term A is now much the larger problem: 129.11 ms of a 154.66 ms forward at ctx 12,410 (83 %), and
+1.57x its 82.18 ms byte floor. Neither stop condition is met; the loop continues.
+
+WHAT SHIPPED. include/topk_radix.h: MSB-first 8-bit radix select over a 64-bit composite key
+comp(v,t) = (ord(v) << 32) | ~t, one gather, one bitonic sort of the <= 512 winners. All four
+kernels take it (k_topk_verify, k_topk_decode, k_topk_masked, k_topk_offset). O(T) work in a
+constant number of passes instead of `topk` SEQUENTIAL argmax rounds -- 14-34x standalone, 18.0x at
+T=3072 (ctx 12,288). DSV4_TOPK_RADIX=0 restores the warp scan exactly.
+
+Because ~t makes every composite distinct there are no ties to break, so the select needs no
+equal-key special case. Two details are load-bearing and each has its own gate distribution:
+admission is the original's FLOAT compare v > floorv and never a key-space test (ord(NaN) beats
+every finite key, but NaN > best is false); and -0.0 is folded onto +0.0 before the key is formed
+(-0.0f == +0.0f is a tie for the original, but ord(-0.0) < ord(+0.0) as raw bits, and index_score
+can emit -0.0).
+
+BIT-EXACTNESS. Order is load-bearing, not just the set: sparse_attn sums the selected rows in order,
+so a reordering changes fp32 association.
+  tests/gate_topk_radix.cu   4 kernel shapes x 13 lengths x 6 distributions   PASS
+    (exact ties, signed zeros, floor-straddling rows, all-negative)
+  ^ under compute-sanitizer --tool memcheck                                   0 errors
+  dsv4-server in situ, DSV4_TOPK_GATE=1: 11,008 calls, ctx to 12,282,
+    183,179,703 index slots, prefill + extend + rewind                        0 FAIL
+  standing GATE + LOSSLESS gate (build/decode)                                PASS, tau 2.87
+The in-situ gate launches the UNTOUCHED warp kernel with identical arguments into a private buffer
+and memcmps the entire index array, aborting on the first differing slot -- the substitute hard
+invariant 1 names after 1.0's amendment, since token ids are not a valid test at context.
+
+BUILT AND KILLED IN THE SAME ITERATION (wiki/negative-results.md 4b): a __match_any_sync
+warp-aggregated histogram is SLOWER (43.0 vs 39.0 us at T=3072, 57.5 vs 49.3 at T=8192) even though
+the contention diagnosis behind it was right. Block size was worth sweeping: 128/256/512/1024 =
+53.3/38.9/32.0/31.6 us at T=3072; 512 shipped.
+
+A TRAP, RECORDED (wiki/measurement-and-traps.md 14): PHASE 4 first ran 0 seconds after the previous
+server exited, was refused by run_model.sh for lack of memory (page cache not yet reclaimed), and
+the script printed "decode finished; gates:" followed by nothing and exited 0. A missing gate looked
+exactly like a passing one. Now it waits for MemAvailable and asserts the log is non-empty and
+carries the PASS line.
+
+WIKI, in the same commit: kernel-optimisations.md 2.6 (adopted win), context-scaling.md (the term),
+negative-results.md 4b (the two dead levers), measurement-and-traps.md 14 (the trap), README.md
+state table.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

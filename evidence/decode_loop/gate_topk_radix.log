@@ -1,0 +1,47 @@
+== k_topk_masked: correctness on 6 distributions, then timing on mode 0 ==
+       T     topk   shipped us     radix us   speedup   all modes
+---------------------------------------------------------------------------
+       1        1          8.2         24.6      0.3x   identical
+       3        3         12.3         28.7      0.4x   identical
+      17       17         39.0         36.9      1.1x   identical
+      64       64        137.6         41.0      3.4x   identical
+     128      128         62.8         12.3      5.1x   identical
+     512      512        258.0         18.4     14.0x   identical
+    1024      512        323.9         28.7     11.3x   identical
+    1648      512        501.5         24.6     20.4x   identical
+    2048      512        458.5         24.5     18.7x   identical
+    3072      512        591.6         32.7     18.1x   identical
+    4096      512        725.6         36.9     19.7x   identical
+    6000      512       1076.1         35.4     30.4x   identical
+    8192      512       1259.1         36.9     34.1x   identical
+
+== k_topk_verify (K queries, per-query causal limit) ==
+  Tf=1648  mode=0 K=5 topkc=512 : identical
+  Tf=3072  mode=0 K=5 topkc=512 : identical
+  Tf=1648  mode=1 K=5 topkc=512 : identical
+  Tf=3072  mode=1 K=5 topkc=512 : identical
+  Tf=1648  mode=2 K=5 topkc=512 : identical
+  Tf=3072  mode=2 K=5 topkc=512 : identical
+  Tf=1648  mode=3 K=5 topkc=512 : identical
+  Tf=3072  mode=3 K=5 topkc=512 : identical
+  Tf=1648  mode=4 K=5 topkc=512 : identical
+  Tf=3072  mode=4 K=5 topkc=512 : identical
+  Tf=1648  mode=5 K=5 topkc=512 : identical
+  Tf=3072  mode=5 K=5 topkc=512 : identical
+  short causal limit (lim=200 < topkc=512)          : identical
+
+== k_topk_decode / k_topk_offset ==
+  k_topk_decode  T=1648 mode=0 : identical
+  k_topk_decode  T=1648 mode=1 : identical
+  k_topk_decode  T=1648 mode=2 : identical
+  k_topk_decode  T=1648 mode=3 : identical
+  k_topk_decode  T=1648 mode=4 : identical
+  k_topk_decode  T=1648 mode=5 : identical
+  k_topk_offset  s=64 T=400 mode=0 : identical
+  k_topk_offset  s=64 T=400 mode=1 : identical
+  k_topk_offset  s=64 T=400 mode=2 : identical
+  k_topk_offset  s=64 T=400 mode=3 : identical
+  k_topk_offset  s=64 T=400 mode=4 : identical
+  k_topk_offset  s=64 T=400 mode=5 : identical
+
+GATE: PASS — radix select is bit-identical to the shipped warp scan on every shape and distribution

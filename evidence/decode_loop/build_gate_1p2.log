@@ -1,0 +1,22 @@
+tests/gate_units.cu(421): warning #177-D: variable "half" was declared but never referenced
+      const auto& dm=S.get("dims"); int seqlen=i32(dm,0), dim=i32(dm,1); int half=dim/2;
+                                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/usr/bin/ld: /tmp/tmpxft_0000f197_00000000-58_fp8_block_gemm.o: in function `fp8_block_gemm(float*, unsigned char const*, float const*, unsigned char const*, float const*, int, int, int, CUstream_st*)':
+tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x12e0): undefined reference to `nvfp4_enabled()'
+/usr/bin/ld: tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x13a4): undefined reference to `nvfp4_enabled()'
+/usr/bin/ld: tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x13c0): undefined reference to `nvfp4_lookup(unsigned char const*)'
+/usr/bin/ld: tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x13f8): undefined reference to `nvfp4_gemv_mk(float*, unsigned char const*, float const*, NvFp4Weight const&, int, CUstream_st*)'
+/usr/bin/ld: tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x14b0): undefined reference to `nvfp4_lookup(unsigned char const*)'
+/usr/bin/ld: tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x14c4): undefined reference to `nvfp4_note_miss()'
+/usr/bin/ld: tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x1560): undefined reference to `nvfp4_gemv_m1(float*, unsigned char const*, float const*, NvFp4Weight const&, CUstream_st*)'
+/usr/bin/ld: tmpxft_0000f197_00000000-10_fp8_block_gemm.cudafe1.cpp:(.text+0x1594): undefined reference to `nvfp4_note_hit(long long)'
+/usr/bin/ld: /tmp/tmpxft_0000f197_00000000-64_mla_attn.o: in function `ogroup_gemm_fp8(float*, float const*, unsigned char const*, unsigned char const*, int, int, int, int, CUstream_st*)':
+tmpxft_0000f197_00000000-18_mla_attn.cudafe1.cpp:(.text+0x1a550): undefined reference to `nvfp4_enabled()'
+/usr/bin/ld: tmpxft_0000f197_00000000-18_mla_attn.cudafe1.cpp:(.text+0x1a588): undefined reference to `nvfp4_ogroup_mk(float*, float const*, unsigned char const*, int, int, int, int, CUstream_st*)'
+/usr/bin/ld: tmpxft_0000f197_00000000-18_mla_attn.cudafe1.cpp:(.text+0x1a6e0): undefined reference to `nvfp4_enabled()'
+/usr/bin/ld: tmpxft_0000f197_00000000-18_mla_attn.cudafe1.cpp:(.text+0x1a82c): undefined reference to `nvfp4_ogroup_gemv(float*, float const*, unsigned char const*, int, int, int, CUstream_st*)'
+collect2: error: ld returned 1 exit status
+gate rc=1

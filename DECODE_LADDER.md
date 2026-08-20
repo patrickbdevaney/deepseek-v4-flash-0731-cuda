@@ -13,12 +13,19 @@ Combined decode is `tok/s = tau * 1000 / ms_per_forward`, and `ms_per_forward = 
   side: **82.18 ms**. Term A was 136.44 ms at suspension = **60.2 % of achievable**.
 - **Term B floor** — 42.0 MB at ctx 6592 = 0.509 ms/forward at tau 2.91. Term B was **198.1 ms**.
 
-**Where the two terms stand now (1.0, 2026-08-20):** `a = 129.96 ms` = **1.58x** the 82.18 ms floor
-(stop wants <= 1.25x); `b x 6592 = 26.41 ms`, down from 47.60 (stop wants <= 5.0 ms). Neither is met,
-but **term B moved for the first time**: 1.0 took the context slope from `7.220 +/- 0.165` to
-`4.006 +/- 0.210` ms per 1000, a 44 % cut, measured as a paired saving of `3.604 +/- 0.076`. Term A
-is untouched and is now the larger distance from its floor. The fit reaches context 12,410, so the
-stop check does not extrapolate.
+**Where the two terms stand now (1.2, 2026-08-20):** `a = 129.11 ms` = **1.57x** the 82.18 ms floor
+(stop wants <= 1.25x); `b x 6592 = 16.57 ms`, down from 47.60 (stop wants <= 5.0 ms). Neither is met,
+but **term B has now moved twice**: 1.0 took the context slope from `7.220 +/- 0.165` to
+`4.006 +/- 0.210` ms per 1000 (paired saving `3.604 +/- 0.076`), and 1.2 took it from
+`3.488 +/- 0.179` to `2.514 +/- 0.151` (paired saving `0.793 +/- 0.031`). **Cumulatively `b` is
+down 65 % from the 7.220 the ladder opened on.** Term A is untouched and is now much the larger
+distance from its floor — it is 129.11 of a 154.66 ms forward at ctx 12,410, i.e. **83 %**. The fit
+reaches context 12,410, so the stop check does not extrapolate.
+
+*(The 1.2 before-arm slope, 3.488, is not the 4.006 that 1.0 reported after. Same protocol, same
+corpus sha, an independent server start eight hours later; the gap is one run-to-run spread on a
+fitted coefficient and both arms of 1.2's comparison are inside the same run, which is why the
+paired number and not the fit difference is the ratchet.)*
 
 **The loop STOPS when either:**
 1. `a <= 1.25 * a_floor` **and** `b*6592 <= 5.0 ms` — i.e. both terms are within a quarter of their
@@ -374,19 +381,105 @@ So, in order:
       `mainkv_verify_run.sh` (token ids + server determinism), `mainkv_decodegate_run.sh` (in-situ
       memcmp on `build/decode`), `mainkv_determinism_run.sh` (the same-arm control).
 
-- [ ] **1.2** **CONFIRMED BY 0.4, 2026-08-20 — this kernel is 12.5 % of the context term.**
-      Retired on 0.2's "top-k is 0.10 ms". 0.4 measured `i:topk` at **13.47 ms at ctx 12,288** and
-      a slope of **0.872 +/- 0.021 ms per 1000 context** (R^2 0.922, width held fixed). 0.2's
-      0.10 ms was real but was taken at **context 9** — both of its runs decoded from position 1,
-      see 0.4 — so it was 135x low. The retirement is void and the item is live. It ranks BELOW 1.0
-      (0.87 against 3.87 ms/1000) and above everything else in this phase. Single-CTA radix select to replace the warp scan. Reference: SGLang's
-      `deepseek_v4_topk.cu` (Apache-2.0) and TileLang `topk_selector.py`. **Restore descending
-      order with a 512-element bitonic sort** — the reference emits in `atomicAdd` order, and
-      `sparse_attn` sums selected rows in order, so without the sort this is not bit-exact.
+- [x] **1.2** **Single-CTA radix select instead of the warp selection sort.**
+      **DONE 2026-08-20 (iteration 2). +8.2 % tok/s at ctx 12,410, bit-exact, tau unchanged.**
+      Full write-up: `wiki/kernel-optimisations.md` §2.6 and `wiki/context-scaling.md`.
+
+      *Why it was live:* retired by 0.2 on "top-k is 0.10 ms", un-retired by 0.4, which measured
+      `i:topk` at **13.47 ms at ctx 12,288** and a slope of **0.872 +/- 0.021 ms per 1000 context**
+      (width held fixed). 0.2's 0.10 ms was real but taken at **context 9** — 135x low.
+
+      **What shipped.** `include/topk_radix.h`: an MSB-first 8-bit radix select over a 64-bit
+      composite key `comp(v,t) = (ord(v) << 32) | ~t`, then one gather, then a bitonic sort of the
+      <= 512 winners. All four kernels take it — `k_topk_verify` and `k_topk_decode`
+      (`compressed_decode.cu`, the spec-decode verify and draft paths), `k_topk_masked` (the
+      CUDA-graph base-AR path) and `k_topk_offset` (`indexer.cu`, prefill). O(T) work in a constant
+      number of passes instead of `topk` SEQUENTIAL argmax rounds. `DSV4_TOPK_RADIX=0` restores the
+      warp scan exactly and is the A/B arm.
+
+      **Because `~t` makes every composite distinct there are no ties to break**, so the select
+      needs no equal-key special case: exactly `k_eff` elements satisfy `comp >= threshold`. Two
+      details are load-bearing and both have their own gate distribution: admission is the
+      original's **float** compare `v > floorv` and never a key-space test (`ord(NaN)` beats every
+      finite key, but `NaN > best` is false, so a key-space test would select what the original
+      cannot); and **-0.0 is folded onto +0.0** before the key is formed, because `-0.0f == +0.0f`
+      makes them a tie for the original but `ord(-0.0) < ord(+0.0)` as raw bits, and `index_score`
+      can emit `-0.0` (relu gives exactly 0, times a negative head weight).
+
+      **Standalone, `tests/gate_topk_radix.cu`, warp scan -> radix, same block, same input:**
+
+      | T (= ctx/4) | 512 | 1,024 | 1,648 | 2,048 | **3,072 (ctx 12,288)** | 4,096 | 6,000 | 8,192 |
+      |---|---|---|---|---|---|---|---|---|
+      | shipped us | 258 | 324 | 502 | 459 | **592** | 725 | 1,076 | 1,259 |
+      | radix us | 18.4 | 28.8 | 24.6 | 24.5 | **32.8** | 37.3 | 35.6 | 37.0 |
+      | speedup | 14.1x | 11.2x | 20.4x | 18.7x | **18.0x** | 19.4x | 30.2x | **34.1x** |
+
+      **Measured in situ, PAIRED, same corpus, baseline arm first so drift penalises the radix arm.**
+      35 of 52 legs paired exactly (identical `tau` AND identical mean verify width rep-for-rep); all
+      six reps pair at every point at ctx >= 1,664. The unpaired legs are ctx 128/384 and the two
+      controls, which is item **1.9**'s known non-reproducibility, not this change.
+
+      | ctx | before ms/fwd | after | paired delta | band | speedup | tau b / tau a | tok/s |
+      |---|---|---|---|---|---|---|---|
+      | 12,410 | 167.18 | 154.66 | **-12.55** | [-12.92, -12.33] | **1.081x** | 1.652 / 1.652 | 9.88 -> 10.69 (**+8.2 %**) |
+      | 9,341 | 166.77 | 156.54 | -10.47 | [-10.66, -10.15] | 1.065x | 1.969 / 1.969 | 11.81 -> 12.60 (+6.7 %) |
+      | 6,260 | 154.62 | 146.23 | -8.58 | [-8.65, -8.30] | 1.057x | 1.718 / 1.718 | 11.12 -> 11.77 (+5.8 %) |
+      | 3,197 | 147.85 | 141.23 | -6.72 | [-7.01, -6.28] | 1.047x | 1.626 / 1.626 | 10.93 -> 11.46 (+4.8 %) |
+      | 1,664 | 140.91 | 136.41 | -4.53 | [-5.07, -4.40] | 1.033x | 1.701 / 1.701 | 12.08 -> 12.48 (+3.3 %) |
+      | 889 | 132.80 | 130.30 | -2.34 | [-2.84, -2.18] | 1.019x | 1.724 / 1.724 | 12.95 -> 13.19 (+1.9 %) |
+
+      Bands are **+/-2 % or tighter** against the 3.5 % run-to-run spread, because pairing removes
+      verify-width variance rather than averaging over it.
+
+      **The context term fell another 28 %, and it is the term 0.4 predicted would fall.**
+      `fwd = 130.60 + 3.488 x ctx/1000` (R^2 0.892) -> `129.11 + 2.514 x ctx/1000` (R^2 0.858);
+      width-controlled `3.128 +/- 0.142` -> `2.158 +/- 0.092`. Regressing the paired saving directly
+      on context over all 35 exactly-paired legs:
+      **`saving = 3.122 + 0.793 +/- 0.031 ms per 1000`, R^2 0.951**, against the
+      `0.872 +/- 0.021` that 0.4 attributed to `i:topk`. **91 % of it, and the 2 SE band
+      [0.730, 0.856] does NOT cover the prediction** — 0.079 ms/1000 is unaccounted for and is
+      recorded rather than rounded away. The **3.12 ms context-INDEPENDENT** saving is the part 0.4
+      could not have predicted: `i:topk` marks only `k_topk_verify`, and `k_topk_decode` on the
+      draft side has never had a dprof mark at all.
+
+      **BIT-EXACTNESS: gated by memcmp on the whole index array, 11,008 calls, 183 M slots, 0 FAIL.**
+
+      | gate | scope | result |
+      |---|---|---|
+      | `tests/gate_topk_radix.cu` | no checkpoint, 4 kernel shapes x 13 lengths x **6 distributions** (exact ties, signed zeros, floor-straddling, all-negative) | PASS |
+      | ^ under `compute-sanitizer --tool memcheck` | same | 0 errors |
+      | `build/dsv4-server` in situ, `DSV4_TOPK_GATE=1` | 11,008 calls, ctx to 12,282, **183,179,703 index slots**, prefill + extend + rewind | 0 FAIL |
+      | standing GATE (`build/decode`, first argmax = 11111) | every decode run | PASS |
+      | LOSSLESS gate (spec vs base AR) | every decode run | PASS, tau 2.87 tok/verify |
+
+      The in-situ gate runs the **untouched** `k_topk_verify` / `k_topk_decode` with the identical
+      arguments into a private buffer and memcmps the entire `[K, topkc]` index array, aborting on
+      the first differing slot. It is not armed on the `_dp` graph path (`k_topk_masked`), which is
+      CUDA-graph captured and cannot contain a host sync; that kernel is covered by the unit gate
+      and by the LOSSLESS gate, which exercises it on every `build/decode` run.
+
+      **A lever built and killed in the same iteration:** a `__match_any_sync` warp-aggregated
+      histogram, on the theory that the shared `atomicAdd` was contending on a handful of top-byte
+      bins. It is **slower** — 43.0 vs 39.0 us at T=3072, 57.5 vs 49.3 at T=8192 — so the naive
+      atomic stayed. Block size *was* worth sweeping: 128/256/512/1024 threads measure
+      53.3 / 38.9 / 32.0 / 31.6 us at T=3072, and 512 shipped. See `wiki/negative-results.md`.
+
+      Scripts, detached and named in `detach_audit.sh`: `topk_ab_run.sh`.
+      Evidence: `evidence/decode_loop/fit_1p2_paired.txt`, `fit_1p2_base.txt`, `fit_1p2_radix.txt`,
+      `fit_1p2_identity.txt`, `gate_topk_radix.log`, `server_1p2_gate.log`,
+      `decode_1p2_lossless.log`.
 - [ ] **1.3** `seq_len <= topk` early-out. Below ctx 2048 every row survives and the kernel still
       does the full scan to discover it.
 - [ ] **1.4** `cudaFuncSetAttribute` opt-in for dynamic shared memory, or drop the requirement
       entirely (1.2 does). Removes a silent garbage-return above ~49k context.
+      **NARROWED, NOT CLOSED, by 1.2 (2026-08-20).** The shipped path now requests **zero** dynamic
+      shared memory — the radix select uses ~7 KiB of *static* shared memory whatever T is — so the
+      ~49k ceiling cannot be hit by the kernel the engine runs. It is deliberately left unchecked
+      because that is a mechanical fact about the launch, **not a measurement**: nothing in this
+      repo has run the engine above 49k context, `seqmax` is 16,384, and the two paths that still
+      ask for `topk_scan_smem(T)` — the `DSV4_TOPK_RADIX=0` fallback arm and the `DSV4_TOPK_GATE=1`
+      reference — retain the defect. Close this item by either deleting those paths or opting them
+      in, and by running one leg above the ceiling.
 - [ ] **1.5** **CONFIRMED BY 0.4, 2026-08-20 — this kernel is 9 % of the context term.**
       `i:score` measured **6.58 ms at ctx 12,288**, slope **0.644 +/- 0.018 ms per 1000 context**
       (R^2 0.750, width held fixed), against the 0.02 ms at context 9 it was retired on — 330x low.

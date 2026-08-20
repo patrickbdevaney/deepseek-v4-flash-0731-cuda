@@ -85,6 +85,37 @@ whole family live again.
 
 ---
 
+## 4b. Killed inside the winning iteration — the radix top-k's two dead levers (ladder 1.2, 2026-08-20)
+
+Both were measured while building the change in [`kernel-optimisations.md` §2.6](kernel-optimisations.md),
+and both are here because "we tried the obvious optimisation and it lost" is the part that does not
+survive in a diff.
+
+**Warp-aggregated histogram: slower, and the theory behind it was right.** The radix select's cost
+at T=3072 was 20.7 µs of passes against a 2.1 µs empty-kernel floor — not bandwidth (24 loads per
+thread), so the shared `atomicAdd` contending on a handful of top-byte bins was the obvious suspect,
+and real score rows *are* exponentially distributed, so the contention is real. Replacing it with
+one `atomicAdd` per (warp, distinct digit) via `__match_any_sync`:
+
+| T | 768 | 1,536 | 3,072 | 4,096 | 8,192 |
+|---|---|---|---|---|---|
+| naive shared `atomicAdd` µs | 35.0 | **26.8** | **39.0** | **45.2** | **49.3** |
+| `__match_any_sync` aggregated µs | 35.2 | 28.7 | 43.0 | 49.3 | 57.5 |
+
+Worse at every T that matters and **16 % worse at 8,192**, because `__match_any_sync` plus `__ffs`
+plus `__popc` on *every* element costs more than the serialisation it removes on the minority that
+collide. Reverted. The diagnosis was correct and the fix still lost — this is F76's rule
+("instruction count is free in a latency-bound kernel") running the other way: instruction count is
+*not* free when the thing you spend it to avoid was cheap.
+
+**Block size was worth sweeping, and 256 was not the answer.** Same kernel, T=3072:
+**128 → 53.3 µs, 256 → 38.9, 512 → 32.0, 1024 → 31.6.** 512 shipped; 1024 buys 1 % for half the
+occupancy. Worth recording because the four kernels it replaced were all launched `<<<K,32>>>`, and
+that 32 was never a decision — it was the warp the original one-thread selection sort happened to
+sit in.
+
+---
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

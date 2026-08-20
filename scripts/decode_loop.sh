@@ -82,7 +82,7 @@ cpu_gates(){
     [ -x "build/$g" ] || continue
     if ! ./build/"$g" > "$LOGDIR/$g.log" 2>&1; then say "GATE FAIL: $g (see $LOGDIR/$g.log)"; ok=1; fi
   done
-  for g in gate_topk_warp gate_idx_pack; do
+  for g in gate_topk_warp gate_topk_radix gate_idx_pack; do
     [ -x "build/$g" ] || continue
     ./build/"$g" > "$LOGDIR/$g.log" 2>&1 || { say "GATE FAIL: $g"; ok=1; }
   done

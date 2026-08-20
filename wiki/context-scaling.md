@@ -114,15 +114,47 @@ User-visible: **7.67 → 9.54 tok/s at ctx 12,282 (+24.4 %)**, +21.7 % at 9,213,
 tapering to +4.5 % at 1,536 and nothing at context ~9 — which is precisely why nine findings' worth
 of profiling never saw it.
 
+## Status — 1.2 is done too, and it found a term the profile could not see
+
+**Adopted 2026-08-20.** The DSA indexer's top-512 selection is a single-CTA radix select instead of
+512 sequential argmax rounds; mechanism, gates and the full paired table are in
+[`kernel-optimisations.md` §2.6](kernel-optimisations.md). What belongs on *this* page is the second
+prediction-then-recovery, and the way it came up short in one direction and long in another:
+
+```
+before   fwd = 130.60 + 3.488 x (ctx/1000)      R^2 0.892   SE(b) 0.179
+after    fwd = 129.11 + 2.514 x (ctx/1000)      R^2 0.858   SE(b) 0.151
+paired   saving = 3.122 + 0.793 x (ctx/1000)    R^2 0.951   SE(b) 0.031   (35 exactly-paired legs)
+```
+
+**The context term is down another 28 %, and 65 % cumulatively from the 7.220 the ladder opened
+on.** The slope this page attributed to `i:topk` was `0.872 ± 0.021`; the paired measurement
+recovered `0.793 ± 0.031`, whose 2 SE band **[0.730, 0.856] does not cover it**. 9 % short, written
+down rather than rounded away — the same shape of small miss 1.0 had, in the same direction.
+
+**And it came in 3.12 ms/forward long in the intercept, which is the finding.** `i:topk` marks
+`k_topk_verify` and nothing else. `k_topk_decode`, the identical kernel on the *draft* side, has
+never had a dprof mark, so its cost has never appeared in any table on this page — exactly the blind
+spot that hid `draft:main_kv` until 0.4 went looking for it. **A win that lands in the intercept
+means the profile is still incomplete**, and this is the second time that has been true.
+
+User-visible: **9.88 → 10.69 tok/s at ctx 12,410 (+8.2 %)**, +6.7 % at 9,341, +5.8 % at 6,260,
+tapering to +1.9 % at 889.
+
 ## What is left of the term
 
 | mark | ms/1000 ctx | status |
 |---|---|---|
 | ~~`draft:main_kv`~~ | ~~3.867~~ → ~0 | **done, §2.5** |
-| `i:topk` | 0.872 ± 0.021 | ladder 1.2, now the largest remaining |
+| ~~`i:topk`~~ | ~~0.872 ± 0.021~~ → ~0.08 | **done, §2.6** |
 | `cattn:sparse` | 0.709 ± 0.050 | ladder 1.7 — the lever is its 11 ms *floor*, not its slope |
 | `i:score` | 0.644 ± 0.018 | ladder 1.5 |
 
-The four were 6.09 of the 6.97 ms/1000 step slope. Removing the largest leaves ~2.2 ms/1000 of
-identified work, so **the next three items together are worth about what 1.0 was worth** — and none
-of them is individually close. The easy half of this term is spent.
+The four were 6.09 of the 6.97 ms/1000 step slope that 0.4 attributed. Both large ones are now
+spent, and what remains is **1.35 ms/1000 of identified work inside a measured 2.514** — so about
+half of the surviving slope is *still* unattributed, and the two named items are each worth roughly
+a tenth of what 1.0 was worth. **The easy half of this term is gone; the honest next question is
+what the other 1.16 ms/1000 is**, and the intercept surprise above says at least some of it is on
+the draft side where no mark has ever been placed.
+
+Term A is now much the larger problem: at ctx 12,410 it is 129.11 ms of a 154.66 ms forward — 83 %.

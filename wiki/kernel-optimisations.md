@@ -203,6 +203,104 @@ clamps the high-water mark down; everything else may only grow it.
 
 ---
 
+### 2.6 A selection sort is not a top-k — single-CTA radix select (ladder 1.2, 2026-08-20)
+
+**+8.2 % tok/s at ctx 12,410**, bit-exact, `tau` unchanged, and the second consecutive adoption that
+is a function of context rather than of shape.
+
+**Mechanism.** Four kernels — `k_topk_verify` and `k_topk_decode` (spec-decode verify and draft),
+`k_topk_masked` (the CUDA-graph base-AR path) and `k_topk_offset` (prefill) — selected the DSA
+indexer's top 512 compressed rows by running 512 **sequential** argmax rounds over the score row,
+marking the winner `-1e30f` between rounds. §1.2's fix spread each *round* across the 32 lanes that
+were already launched (14–28×, F71); the rounds themselves stayed serial, so at `topk=512` and
+`T=3072` (ctx 12,288, ratio 4) the kernel was still 512 dependent rounds of 96 strided loads.
+0.4 measured the survivor at **13.47 ms at ctx 12,288 — 12.5 % of the whole context term.**
+
+The replacement (`include/topk_radix.h`) is O(T) work in a constant number of passes: an MSB-first
+8-bit radix select, one gather, one bitonic sort of the ≤512 winners. Standalone, same block, same
+input:
+
+| T (= ctx/4) | 512 | 1,648 | 2,048 | **3,072 (ctx 12,288)** | 4,096 | 6,000 | 8,192 |
+|---|---|---|---|---|---|---|---|
+| warp scan (§1.2) µs | 258 | 502 | 459 | **592** | 725 | 1,076 | 1,259 |
+| radix select µs | 18.4 | 24.6 | 24.5 | **32.8** | 37.3 | 35.6 | 37.0 |
+| speedup | 14.1× | 20.4× | 18.7× | **18.0×** | 19.4× | 30.2× | **34.1×** |
+
+**Bit-exactness is the design, not a property checked afterwards.** `sparse_attn` sums the selected
+rows *in order*, so fp32 association makes the ORDER load-bearing and not just the set. Four things
+carry it, and each has its own gate distribution:
+
+1. **The composite key** `comp(v,t) = (ord(v) << 32) | ~t`, `ord` the standard order-preserving
+   float→uint32 map. Sorting `comp` descending *is* (value descending, index ascending) — exactly
+   what a serial ascending scan with a strict `>` produces. And because `~t` makes every composite
+   distinct, **the select has no ties to break**: exactly `k_eff` elements satisfy
+   `comp >= threshold`, always, so there is no equal-key special case to get wrong.
+2. **Admission is the original's float compare** `v > floorv`, never a key-space test. `ord(NaN)`
+   is larger than every finite key, but `NaN > best` is false — a key-space test would select
+   something the original cannot.
+3. **Signed zero is canonicalised.** `-0.0f == +0.0f` for the original's `>`, so they tie and the
+   lower index wins; but `ord(-0.0) < ord(+0.0)` as raw bits. `index_score` can emit `-0.0` (relu
+   gives exactly 0, times a negative head weight).
+4. **The sentinel convention stays at the caller.** The selector returns raw source indices or −1;
+   each caller applies its own offset/threshold rule, including `k_topk_offset`'s deliberate
+   asymmetry (scan the full row, reject out-of-range picks only at the output, still consuming a
+   slot).
+
+**Measured in situ, paired A/B**, same corpus and binary, `DSV4_TOPK_RADIX=0` vs default, 6 reps per
+point, baseline arm first so thermal drift penalises the radix arm. 35 of 52 legs paired exactly
+(identical `tau` *and* identical mean verify width rep-for-rep); all six reps pair at every point at
+ctx ≥ 1,664, and the unpaired legs are ctx 128/384 and the two controls — the known
+non-reproducibility of [`measurement-and-traps.md` §12](measurement-and-traps.md), not this change.
+
+| ctx | before ms/fwd | after | paired Δ | Δ band | speedup | tok/s |
+|---|---|---|---|---|---|---|
+| 12,410 | 167.18 | 154.66 | **−12.55** | [−12.92, −12.33] | **1.081×** | 9.88 → 10.69 (**+8.2 %**) |
+| 9,341 | 166.77 | 156.54 | −10.47 | [−10.66, −10.15] | 1.065× | 11.81 → 12.60 (+6.7 %) |
+| 6,260 | 154.62 | 146.23 | −8.58 | [−8.65, −8.30] | 1.057× | 11.12 → 11.77 (+5.8 %) |
+| 3,197 | 147.85 | 141.23 | −6.72 | [−7.01, −6.28] | 1.047× | 10.93 → 11.46 (+4.8 %) |
+| 1,664 | 140.91 | 136.41 | −4.53 | [−5.07, −4.40] | 1.033× | 12.08 → 12.48 (+3.3 %) |
+| 889 | 132.80 | 130.30 | −2.34 | [−2.84, −2.18] | 1.019× | 12.95 → 13.19 (+1.9 %) |
+
+**It removes the term it was predicted to remove, 91 % of it, plus a term nobody could have
+predicted.** Regressing the paired saving on context over all 35 exactly-paired legs:
+
+```
+saving ms/forward = 3.122 + 0.793 x (ctx/1000)      R^2 0.951,  SE(b) 0.031
+dprof attribution of i:topk:                        0.872 +/- 0.021 ms per 1000
+```
+
+The 2 SE band **[0.730, 0.856] does not cover 0.872** — 0.079 ms/1000, 9 % of the term, is
+unaccounted for and is written down rather than rounded into agreement. The **3.12 ms
+context-independent** saving is the interesting half: `i:topk` marks only `k_topk_verify`, and
+`k_topk_decode` on the draft side **has never had a dprof mark at all** — the same blind spot that
+hid `draft:main_kv` until 0.4 went looking. A win that arrives in the intercept is a hint that the
+profile is still incomplete.
+
+**The gate.** Bit-exactness on the whole index array, not the same set:
+
+| gate | scope | result |
+|---|---|---|
+| `tests/gate_topk_radix.cu` | no checkpoint, 4 kernel shapes × 13 lengths × **6 distributions** — exact ties, signed zeros, floor-straddling rows, all-negative | PASS |
+| ^ under `compute-sanitizer --tool memcheck` | same | 0 errors |
+| `build/dsv4-server` in situ (`DSV4_TOPK_GATE=1`) | **11,008 calls, ctx to 12,282, 183,179,703 index slots**, prefill + extend + rewind | 0 FAIL |
+| standing GATE + LOSSLESS gate (`build/decode`) | every decode run | PASS, τ 2.87 tok/verify |
+
+The in-situ gate launches the **untouched** warp kernel with identical arguments into a private
+buffer and memcmps the entire `[K, topkc]` array, aborting on the first differing slot. It is not
+armed on the `_dp` graph path, which is CUDA-graph captured and cannot contain a host sync; that
+kernel is covered by the unit gate and by the LOSSLESS gate on every `build/decode` run.
+
+**Free side effect.** The originals asked for ~4T bytes of *dynamic* shared memory against a
+48 KiB default limit, and above ~49k context the launch silently failed and returned garbage
+(ladder 1.4). The radix select uses ~7 KiB of **static** shared memory whatever T is, so the
+shipped path cannot hit that ceiling. 1.4 stays open for the fallback arm, which still asks.
+
+**Two things measured and not shipped**, both in [`negative-results.md`](negative-results.md): a
+`__match_any_sync` warp-aggregated histogram (slower — 43.0 vs 39.0 µs at T=3072), and block sizes
+128/256/1024 (53.3 / 38.9 / 31.6 µs at T=3072 against 512's 32.0).
+
+---
+
 ## 3. Precision and layout
 
 | finding | change | result |

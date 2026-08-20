@@ -53,3 +53,11 @@
 [memguard] victim gone, exiting. low-water was 4574 MB 2026-08-20T03:16:10-04:00
 [memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T03:22:43-04:00
 [memguard] victim gone, exiting. low-water was 2389 MB 2026-08-20T03:51:46-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T04:23:39-04:00
+[memguard] victim gone, exiting. low-water was 5203 MB 2026-08-20T04:32:17-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T04:32:20-04:00
+[memguard] victim gone, exiting. low-water was 5192 MB 2026-08-20T04:59:16-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T04:59:18-04:00
+[memguard] victim gone, exiting. low-water was 5189 MB 2026-08-20T05:25:26-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T05:26:36-04:00
+[memguard] victim gone, exiting. low-water was 5438 MB 2026-08-20T05:27:59-04:00
