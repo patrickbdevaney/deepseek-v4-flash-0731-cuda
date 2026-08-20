@@ -232,6 +232,14 @@ def main():
     ap.add_argument('--outdir', default=os.path.join(ROOT, 'evidence', 'decode_loop', 'fit'))
     ap.add_argument('--ckpt', default=os.path.expanduser('~/models/DeepSeek-V4-Flash-0731-REAP'))
     ap.add_argument('--reps', type=int, default=REPS)
+    # --targets exists for ladder item 0.4, which needs the SAME driver (one document, descending
+    # token-prefixes, one full prefill) over a SHORTER point list, because it runs with DSV4_DPROF=1
+    # and each leg then emits a per-verify attribution table into the server log. The default list is
+    # unchanged, so `--report` still re-derives 0.3's fit from 0.3's records.
+    ap.add_argument('--targets', default='',
+                    help='comma-separated prompt-token targets, DESCENDING (default: the 0.3 sweep)')
+    ap.add_argument('--no-control', action='store_true',
+                    help='skip the fresh-build control legs (0.3 already proved the shortcut sound)')
     ap.add_argument('--max-tokens', type=int, default=MAX_TOKENS)
     ap.add_argument('--timeout', type=int, default=1800)
     ap.add_argument('--report', action='store_true',
@@ -253,7 +261,11 @@ def main():
 
     tok = load_tokenizer(a.ckpt)
     sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()[:16]
-    sweep = prefixes(tok, CORPUS, TARGETS)
+    targets = [int(x) for x in a.targets.split(',')] if a.targets else list(TARGETS)
+    if targets != sorted(targets, reverse=True):
+        sys.exit('[probe] --targets must be DESCENDING, or the prefix-cache shortcut is lost and '
+                 'every point pays a full prefill')
+    sweep = prefixes(tok, CORPUS, targets)
     ctrl = prefixes(tok, CONTROL_CORPUS, CONTROL_TARGETS)
     print(f'[probe] corpus {os.path.basename(CORPUS)} {sha(CORPUS)}   '
           f'control {os.path.basename(CONTROL_CORPUS)} {sha(CONTROL_CORPUS)}', flush=True)
@@ -261,7 +273,7 @@ def main():
     seen = existing(sweep_path) | existing(ctrl_path)
     n = 0
     with open(sweep_path, 'a') as fh:
-        for target in TARGETS:                       # descending: one full prefill for the whole run
+        for target in targets:                       # descending: one full prefill for the whole run
             for rep in range(a.reps):
                 if run_point(a.host, a, fh, seen, 'sweep', sweep[target], target, rep, sha(CORPUS)):
                     n += 1
@@ -270,7 +282,7 @@ def main():
     # with the sweep, so the first one takes `prefill_full`. If these disagree with the sweep at the
     # same depth, the prefix-cache shortcut is not equivalent and the sweep must be thrown away.
     with open(ctrl_path, 'a') as fh:
-        for target in CONTROL_TARGETS:
+        for target in ([] if a.no_control else CONTROL_TARGETS):
             for rep in range(2):
                 if run_point(a.host, a, fh, seen, 'control', ctrl[target], target, rep,
                              sha(CONTROL_CORPUS)):

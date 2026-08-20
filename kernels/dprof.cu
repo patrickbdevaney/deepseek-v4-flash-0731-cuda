@@ -24,6 +24,7 @@ const char* kName[DP_N] = {
     "    o:rope", "    o:wo_a", "    o:wo_b",
     "    i:qidx", "    i:iw", "    i:score", "    i:topk",
     "      mg:count", "      mg:prefix", "      mg:scatter", "      mg:tiles",
+    "draft:main_kv", "draft:block", "draft:head",
 };
 } // namespace
 

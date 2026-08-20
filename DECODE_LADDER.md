@@ -31,10 +31,13 @@ items on this ladder and the loop should hand back rather than thrash.
 ## THE POINT IS FASTER DECODE, NOT BETTER INSTRUMENTS
 
 Read this before picking an item. Measurement earns its place only when it changes what gets built
-next, and this ladder has now spent two of its first three items on instruments. That was defensible
--- 0.3 caught a wrong conclusion in 0.2 and the fit now reaches 12,410 context -- but **the engine
-has not gotten faster since the warp top-k landed**, and an instrument that does not lead to a
-shipped speedup inside the next iteration is overhead.
+next, and this ladder has now spent **four of its first five items on instruments** (0.1-0.4). Each
+was defensible in isolation and 0.4 in particular paid for the whole run -- it proved 0.2 had never
+varied context at all, un-retired 1.2 and 1.5, and found in `draft:main_kv` a larger item than
+either -- but **the engine has not gotten faster since the warp top-k landed**, that is now five
+iterations, and the whole context term is attributed with error bars. There is nothing left to
+measure before building. **The next four items are all kernel changes and 0.4 is the last
+instrument this phase gets.**
 
 So, in order:
 
@@ -152,24 +155,130 @@ So, in order:
       `tools/decode_model.py --dir` plus standard errors on both coefficients, because once `b` is
       small R^2 is the wrong statistic — a genuinely flat slope scores R^2 ~ 0 however precisely the
       zero is known, and the stop condition is a claim about an interval on `b`.
-- [ ] **0.4** `DSV4_DPROF` again at **ctx 12k**, and attribute the residual 7.36 ms/1000. 0.2
-      attributed the context term at ctx <= 3000 and found `i:topk` 0.10 ms and `i:score` 0.02 ms,
-      and **retired 1.2 and 1.5 on those numbers**. 0.3 then measured 91 ms of context term at
-      ctx 12,410 — 41 % of the forward — which those two marks cannot account for at any context
-      unless they grow. So either something else carries it (`cattn:indexer` was 2.09 ms and is the
-      obvious candidate, or the compressed-cache read itself), or the marks do grow past 3000 and
-      the retirements were taken on an unrepresentative measurement. Do not act on 1.2/1.5 either
-      way until this says which. One server load; the sweep harness already exists.
+- [x] **0.4** `DSV4_DPROF` at ctx 12k, and attribute the residual 7.36 ms/1000. **DONE
+      2026-08-20. The residual is fully attributed and 0.2 was wrong at the root: 0.2 never varied
+      context.**
+
+      **NO KERNEL CHANGED IN 0.3 OR 0.4** — two consecutive measurement iterations, which the
+      section above says must be declared. It is declared. The next item taken is **1.0**, a kernel
+      change, and 0.4 is what made it findable.
+
+      **0.2 DID NOT MEASURE TWO CONTEXTS. It measured the same context twice.** `src/decode.cu`
+      takes its prompt from **argv[2]**; `DSV4_PROMPTS_FILE` only appends prompts 1..N, and the
+      base-AR and K-sweep paths both run prompt 0. Both 0.2 runs passed a **2-id** argv[2], so both
+      printed `prefill 1 positions`, `step 0 pos 1`, and `[spec] ... prompt=0 s=2`, and both emitted
+      the identical 24 tokens `223 643 27 15 397 5029 515 260 ...`. The labels "ctx 480" and
+      "ctx 3000" were `seqmax`, which is sized from the longest prompt in the FILE
+      (`480+24+7+8=519`, `3000+24+7+8=3039`) — an allocation, not a context. Two runs of the same
+      computation at ctx 1..9, reported as a 6x context sweep. That is the whole of the evidence
+      that retired 1.2 and 1.5.
+
+      **THE ATTRIBUTION** (`evidence/decode_loop/dprof_ctx_0p4.txt`, one server load, seqmax 16384,
+      145 steady-state verify steps at four depths 772..12,406, `tools/dprof_ctx.py`). `b|VB` holds
+      the realised verify width fixed, because width sets bytes-per-forward and correlates with
+      context (0.3); it is the number to read.
+
+      | mark | ms/1000 ctx | `b\|VB` | ms at ctx 768 | ms at 12,288 | share of step slope |
+      |---|---|---|---|---|---|
+      | **STEP (verify+draft)** | 6.488 +/- 0.332 | **6.969 +/- 0.112** | 126.3 | 203.9 | 100 % |
+      | **`draft:main_kv`** | 3.867 +/- 0.001 | **3.867 +/- 0.001** | 3.30 | **47.87** | **55 %** |
+      | `ATTENTION` | 3.021 +/- 0.146 | 3.173 +/- 0.109 | 52.3 | 87.4 | 46 % |
+      | &nbsp;&nbsp;`cattn:indexer` | 1.472 +/- 0.040 | 1.515 +/- 0.029 | 5.80 | 22.20 | 22 % |
+      | &nbsp;&nbsp;&nbsp;&nbsp;**`i:topk`** | 0.871 +/- 0.021 | **0.872 +/- 0.021** | 2.58 | **13.47** | **12.5 %** |
+      | &nbsp;&nbsp;&nbsp;&nbsp;**`i:score`** | 0.609 +/- 0.029 | **0.644 +/- 0.018** | 0.92 | **6.58** | **9 %** |
+      | &nbsp;&nbsp;`cattn:sparse` | 0.695 +/- 0.050 | 0.709 +/- 0.050 | 11.00 | 21.17 | 10 % |
+      | `MoE` | -0.380 +/- 0.198 | **-0.079 +/- 0.029** | 35.8 (med) | 35.8 (med) | ~0 |
+      | every GEMM (`q:wq_a/b`, `o:wo_a/b`, `moe:w1w3/w2`, `cattn:ogroup`) | | within 1 SE of 0 | | | ~0 |
+
+      **The instrument reproduces the fit it was built to explain, which is the check that it is
+      measuring the right thing.** 0.3's wall-clock fit: `b = 7.362 +/- 0.370`, width-controlled
+      **7.029 +/- 0.28**. This run's dprof step total: `6.488 +/- 0.332`, width-controlled
+      **6.969 +/- 0.112** — a 0.9 % difference on the number that matters. The per-mark slopes sum
+      **exactly** to the step slope (the tool prints that identity rather than assuming it), so
+      nothing in the step is unaccounted for. The wall-clock legs also reproduce 0.3 point for
+      point (214.7/215.9 vs 215.33 at ctx 12.3k; 181.5/182.5 vs 179.2 at 6.1k; 160.8/162.6 vs
+      160.5 at 3.1k), so **`DSV4_DPROF` costs nothing measurable** and this is a profile of the
+      shipped cost, not of an instrumented one.
+
+      **1.2 AND 1.5 ARE UN-RETIRED, and the numbers they were retired on were off by 100x.**
+      0.2 reported `i:topk` 0.10 ms and `i:score` 0.02 ms. At ctx 12,288 they are **13.47 ms** and
+      **6.58 ms** — **135x** and **330x** — and together they carry **1.52 of the 6.97 ms/1000**.
+      They grow because they are O(context) by construction and 0.2 ran them at context 9.
+
+      **AND A LARGER ITEM THAN EITHER WAS FOUND, because the draft side had never been timed at
+      all.** Every dprof mark in this repo lived in the VERIFY stack, so `dprof_report`'s TOTAL has
+      only ever described part of a decode step. `src/engine.cu` calls `dspark_main_kv` **NSTAGE=3
+      times per step over the full `ctxlen`** — a from-scratch fp8 GEMM + rmsnorm + rope + quant
+      over EVERY position in the context, recomputed on every single token. It is **47.87 ms at
+      ctx 12,288, the largest single row in the step**, and **55 % of the entire context term** —
+      more than `i:topk`, `i:score` and `cattn:sparse` combined. Its R^2 against context is
+      **1.000**: it is not noisy, it is arithmetic. This is now item **1.0**.
+
+      **What is NOT the context term.** MoE is flat (`-0.079 +/- 0.029` per 1000 with width fixed);
+      its apparent -0.38 uncontrolled is a width artifact and disappears when width is held. Every
+      dense GEMM is flat. `cattn:ogroup`, 15.8 ms and the second-largest verify row, is flat. So
+      Term B is **not** a bytes problem — at ctx 6592 its byte floor is 0.509 ms/forward
+      (DECODE_ZENITH_FINDINGS 1.2) against ~43 ms measured, still ~85x off roofline. It is serial
+      and redundant work: one recompute (`draft:main_kv`) and one selection sort (`i:topk`).
+
+      Instruments, both justified before building and both of which paid: (1) `src/engine.cu` now
+      calls `dprof_report` once per verify, tagged with the context it was taken at — it had called
+      `dprof_init` since the marks were written and never reported, so **every mark the server ever
+      recorded was discarded**, which is why the only profiles that existed came from decode.cu's
+      argv[2]-length K-sweep. (2) Three new draft-side ids (`draft:main_kv/block/head`) placed after
+      `DP_ARGMAX` so historical tables stay comparable. (3) `tools/dprof_ctx.py` fits the ladder's
+      own linear model per mark with standard errors, because once a mark is flat R^2 is the wrong
+      statistic and the question is whether an interval covers zero. (4) `--targets/--no-control` on
+      `decode_fit_probe.py`; (5) `scripts/dprof_ctx_run.sh`, detached, health-gated, refuses to run
+      a binary older than the sources it must describe, and named in `detach_audit.sh`.
+
+      Bit-exactness: nothing numeric changed. Every added call is `dprof_begin/end`, which returns
+      on `!g_dprof_on`, and the reporting block is behind `DSV4_DPROF`. The four CPU gates pass in
+      preflight on every server start.
+
+      **One open lead, recorded and NOT chased here.** At the 6144 point `cattn:q_proj` is cleanly
+      bimodal — 18 steps at 10.3 ms and 17 at 14.7, with `q:wq_a` 1.71 vs 5.47 **at the same VB=2
+      and the same context**. A 3.2x swing in a GEMM at fixed shape is not explained by width or by
+      context, it is flat in context (R^2 0.005) so it does not touch this attribution, and it is
+      worth its own item.
+
 
 ## Phase 1 — the context term
 
 - [x] **1.1** Warp-parallel top-k (all four kernels). **14.2x at ctx 6592, 24.7x at 24k**,
       bit-identical on nine shapes and three distributions (`tests/gate_topk_warp.cu`).
-- [ ] **1.2** **REOPENED 2026-08-19.** Retired on 0.2's "top-k is 0.10 ms", but 0.3 superseded 0.2:
-      the context term is 4.1x smaller, **not gone**, and is still 41 % of a forward at ctx 12,410.
-      0.2 could not see it because both its runs were at ctx <= 3000 against a 3.5 % spread. The
-      retirement is therefore unsupported. Whether the residual is *this* kernel is 0.4's job --
-      do not assume it, which is the exact error that produced the retirement. Single-CTA radix select to replace the warp scan. Reference: SGLang's
+- [ ] **1.0** **Cache the DSpark main-KV prefix instead of recomputing it every token.**
+      **0.4 measured this as 55 % of the whole context term — larger than 1.2, 1.5 and
+      `cattn:sparse` combined — and nothing had ever timed it.**
+
+      `src/engine.cu`'s decode loop opens with
+      `for (st = 0..NSTAGE) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctxlen, EPS)`, and
+      `dspark_main_kv` (`kernels/dspark_attn.cu:14`) rebuilds the main-KV for **all `ctxlen`
+      positions from scratch**: `act_quant_fp8` over `[s, 7168]` fp32, `fp8_block_gemm` to
+      `[s, 576]`, `rmsnorm`, `rope_interleaved`, `act_quant_fp8sim`. Three stages, every token.
+      Measured **3.867 +/- 0.001 ms per 1000 context, R^2 1.000** — 3.30 ms at ctx 768 and
+      **47.87 ms at ctx 12,288**, the largest single row in the step.
+
+      **The recompute is provably redundant and the fix is bit-exact, not approximate.** `main_x`
+      rows are written once and never rewritten: `dspark_main_x(main_x + cpos*d, ..., acc + 1, ...)`
+      writes exactly the `acc+1` COMMITTED positions and `cpos` then advances past them, so
+      `main_x[0..cpos)` is immutable. Every stage of `dspark_main_kv` is row-independent — the GEMM
+      reduces over K with a fixed order regardless of M, rmsnorm and the two quantisers are
+      per-row-block within a row, rope is per-position — so recomputing only rows
+      `[cpos_prev, cpos)` and keeping the rest yields **byte-identical `mkv`**. Gate it that way:
+      run both, `memcmp` the full `[seqmax, 576]` buffer, then the standing LOSSLESS token gate.
+      Expected: ~47.6 ms off a 203.9 ms step at ctx 12,288 (**-23 %**) and ~24 ms at ctx 6.1k,
+      with tau unchanged because no numeric changes.
+
+      Second-order, free while in there: the per-step `dkmalloc`/`dkfree` of `s*DIM` + `s*(DIM/128)*4`
+      scratch (88 MB per stage at ctx 12k) goes away with the recompute.
+
+- [ ] **1.2** **CONFIRMED BY 0.4, 2026-08-20 — this kernel is 12.5 % of the context term.**
+      Retired on 0.2's "top-k is 0.10 ms". 0.4 measured `i:topk` at **13.47 ms at ctx 12,288** and
+      a slope of **0.872 +/- 0.021 ms per 1000 context** (R^2 0.922, width held fixed). 0.2's
+      0.10 ms was real but was taken at **context 9** — both of its runs decoded from position 1,
+      see 0.4 — so it was 135x low. The retirement is void and the item is live. It ranks BELOW 1.0
+      (0.87 against 3.87 ms/1000) and above everything else in this phase. Single-CTA radix select to replace the warp scan. Reference: SGLang's
       `deepseek_v4_topk.cu` (Apache-2.0) and TileLang `topk_selector.py`. **Restore descending
       order with a 512-element bitonic sort** — the reference emits in `atomicAdd` order, and
       `sparse_attn` sums selected rows in order, so without the sort this is not bit-exact.
@@ -177,12 +286,26 @@ So, in order:
       does the full scan to discover it.
 - [ ] **1.4** `cudaFuncSetAttribute` opt-in for dynamic shared memory, or drop the requirement
       entirely (1.2 does). Removes a silent garbage-return above ~49k context.
-- [ ] **1.5** **REOPENED 2026-08-19**, same reason as 1.2: the 0.2 measurement it was retired on
-      is superseded. `index_score` reads T x 128 per layer, which is genuinely O(context) and a
-      real candidate for the residual 7.36 ms/1000. Gate on 0.4. `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
+- [ ] **1.5** **CONFIRMED BY 0.4, 2026-08-20 — this kernel is 9 % of the context term.**
+      `i:score` measured **6.58 ms at ctx 12,288**, slope **0.644 +/- 0.018 ms per 1000 context**
+      (R^2 0.750, width held fixed), against the 0.02 ms at context 9 it was retired on — 330x low.
+      Ranks third, behind 1.0 and 1.2. `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
       (658 us -> 39 us at T=6000). **FP32/TF32 accumulation only** — an external ablation shows
       FP16 dropping perfect-recall rows from 99.99 % to 91.82 % on this exact operation.
 
+- [ ] **1.7** `cattn:sparse` — **0.709 +/- 0.050 ms per 1000 context (10 % of the term), measured
+      by 0.4**: 11.00 ms at ctx 768 rising to 21.17 ms at 12,288. Note the shape: it nearly
+      DOUBLES over the first 3k and then almost flattens (19.22 at 3072, 19.90 at 6144, 21.17 at
+      12,288), which is the signature of a top-`k` gather saturating once context exceeds `k`
+      rather than of a full scan. So the lever here is the 11 ms FLOOR, not the slope, and it
+      belongs to Term A as much as to Term B. Do not open this until 1.0/1.2/1.5 are done — it is
+      the smallest of the four and the only one whose mechanism is not yet understood.
+- [ ] **1.8** **Explain the `cattn:q_proj` bimodality 0.4 found.** At ctx 6144, at the SAME verify
+      width VB=2, 18 steps ran `q:wq_a` at 1.71 ms and 17 at 5.47 ms — a 3.2x swing in one fp8 GEMM
+      at fixed shape and fixed context, with `cattn:compress` splitting the same way (0.05 vs
+      2.50 ms). It is flat in context (R^2 0.005) so it does not touch 0.4's attribution, but
+      `cattn:q_proj` is 14.6 ms of every step and if the cheap mode is reachable on demand that is
+      ~4.4 ms/step of Term A for free. Correctness item first: find out which mode is right.
 - [x] **1.6** **RESOLVED as pre-existing — proven by a control build, not by argument.**
       Built `build/decode_prechange` from `1a33cfe^` (the two kernel files and the header, before the
       warp top-k) and ran it: **`err711=42`, `err820=21` — the same fault.** The launch error has

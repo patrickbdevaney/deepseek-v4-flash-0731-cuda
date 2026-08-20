@@ -1,0 +1,90 @@
+0.4 attributed the context term: 0.2 never varied context, and the biggest carrier is a recompute
+
+WHAT WAS MEASURED. One server load, seqmax 16384, DSV4_DPROF=1, 145 steady-state verify steps
+at four context depths from 772 to 12,406, every step tagged with the context it was taken at.
+Per-mark least squares against context, with standard errors, width held fixed:
+
+  mark                     ms/1000 ctx (b|VB)    ms @ ctx 768   @ 12,288   share
+  STEP (verify + draft)     6.969 +/- 0.112        126.3          203.9     100%
+    draft:main_kv           3.867 +/- 0.001          3.30          47.87     55%
+    ATTENTION               3.173 +/- 0.109         52.3           87.4      46%
+      cattn:indexer         1.515 +/- 0.029          5.80          22.20     22%
+        i:topk              0.872 +/- 0.021          2.58          13.47   12.5%
+        i:score             0.644 +/- 0.018          0.92           6.58      9%
+      cattn:sparse          0.709 +/- 0.050         11.00          21.17     10%
+    MoE                    -0.079 +/- 0.029          flat           flat      ~0
+    every dense GEMM        within 1 SE of zero
+
+The per-mark slopes sum exactly to the step slope, so nothing in the step is unattributed. The
+instrument reproduces the fit it exists to explain: 0.3's wall-clock b was 7.362 +/- 0.370, and
+7.029 +/- 0.28 width-controlled, against 6.969 +/- 0.112 here -- 0.9% apart. The wall-clock legs
+also reproduce 0.3 point for point (214.7/215.9 vs 215.33 ms/forward at ctx 12.3k; 181.5/182.5 vs
+179.2 at 6.1k; 160.8/162.6 vs 160.5 at 3.1k), so DSV4_DPROF costs nothing measurable and this
+profiles the shipped cost, not an instrumented one. tau 1.52-1.91 across the legs, in band with
+0.3's 1.63-1.97 on the same corpus.
+
+WHAT IT MEANS, FIRST: 0.2 DID NOT MEASURE TWO CONTEXTS. It measured the same context twice.
+src/decode.cu takes its prompt from argv[2]; DSV4_PROMPTS_FILE only appends prompts 1..N and the
+base-AR and K-sweep paths both run prompt 0. Both 0.2 runs passed a 2-id argv[2], so both logs say
+"prefill 1 positions", "step 0 pos 1", "prompt=0 s=2", and both emitted the identical 24 tokens
+223 643 27 15 397 5029 515 260 ... The labels "ctx 480" and "ctx 3000" were seqmax, which is sized
+from the longest prompt in the FILE (480+24+7+8=519, 3000+24+7+8=3039) -- an allocation, not a
+context. Two runs of the same computation at ctx 1..9, reported as a 6x context sweep. That is the
+entire evidence on which 1.2 and 1.5 were retired.
+
+SECOND: 1.2 AND 1.5 ARE UN-RETIRED AND THE NUMBERS WERE OFF BY TWO ORDERS OF MAGNITUDE. 0.2 gave
+i:topk 0.10 ms and i:score 0.02 ms. At ctx 12,288 they are 13.47 ms and 6.58 ms -- 135x and 330x --
+and together they carry 1.52 of the 6.97 ms/1000. They grow because they are O(context) by
+construction and 0.2 ran them at context 9.
+
+THIRD, AND LARGER THAN EITHER: THE DRAFT SIDE HAD NEVER BEEN TIMED AT ALL. Every dprof mark in this
+repo lived in the verify stack, so dprof_report's TOTAL has only ever described part of a decode
+step. src/engine.cu calls dspark_main_kv NSTAGE=3 times per step over the full ctxlen -- a
+from-scratch fp8 GEMM + rmsnorm + rope + quant over EVERY position in the context, redone on every
+token. 47.87 ms at ctx 12,288, the largest single row in the step, 55% of the whole context term,
+R^2 1.000 against context. It is not noisy, it is arithmetic. main_x rows are written once and
+never rewritten (dspark_main_x writes exactly the acc+1 committed positions and cpos advances past
+them), and every stage of dspark_main_kv is row-independent, so caching the prefix and recomputing
+only the committed tail is BIT-EXACT, not approximate. That is the new ladder item 1.0 and the next
+iteration takes it.
+
+FOURTH: TERM B IS NOT A BYTES PROBLEM. MoE is flat with width held (-0.079 +/- 0.029 per 1000);
+its apparent -0.38 uncontrolled is a width artifact. Every dense GEMM is flat, including
+cattn:ogroup at 15.8 ms. At ctx 6592 Term B's byte floor is 0.509 ms/forward against ~43 ms
+measured, still ~85x off roofline. What is left is serial and redundant work: one recompute and
+one selection sort.
+
+INSTRUMENTS, all named before they were built and all of which paid.
+  src/engine.cu now calls dprof_report once per verify, tagged with context. It had called
+    dprof_init since the marks were written and NEVER reported -- so every mark the server ever
+    recorded was discarded, which is why the only profiles that existed came from decode.cu's
+    argv[2]-length K-sweep. Nothing numeric changed: every added call is dprof_begin/end, which
+    returns on !g_dprof_on, and the report is behind DSV4_DPROF. Four CPU gates pass in preflight.
+  include/dprof.h + kernels/dprof.cu: three draft-side ids, placed after DP_ARGMAX so they print as
+    their own rows and do not enter TOTAL, which keeps every historical table comparable.
+  tools/dprof_ctx.py: fits the ladder's own linear model per mark with standard errors, because
+    once a mark is flat R^2 is the wrong statistic and the question is whether an interval covers
+    zero. Drops verify=0, which is not a steady-state step (always VB=7, follows a rewind_to,
+    median 219.5 ms against ~160) and was worth 0.9 ms/1000 of spurious negative MoE slope.
+  tools/decode_fit_probe.py: --targets/--no-control, so 0.3's default sweep and --report are
+    unchanged while 0.4 drives a shorter point list.
+  scripts/dprof_ctx_run.sh: detached, health-gated, arms a memguard run_server.sh does not, fails
+    loudly if the loader dies rather than sweeping a dead engine, and REFUSES to run a binary older
+    than the sources it must describe. Named in detach_audit.sh in this commit, per CLAUDE.md.
+
+NO KERNEL CHANGED IN 0.3 OR 0.4. Two consecutive measurement iterations; the ladder says to declare
+that and it is declared in the entry. Four of the first five items have now been instruments. The
+whole context term is attributed with error bars and there is nothing left to measure before
+building, so the ladder now reads: the next four items are all kernel changes and 0.4 is the last
+instrument this phase gets.
+
+ONE OPEN LEAD, RECORDED AND NOT CHASED. At ctx 6144, at the same verify width VB=2 and the same
+context, 18 steps ran q:wq_a at 1.71 ms and 17 at 5.47 ms, with cattn:compress splitting the same
+way (0.05 vs 2.50). A 3.2x swing in one fp8 GEMM at fixed shape is not explained by width or
+context and is flat in context, so it does not touch this attribution -- but cattn:q_proj is 14.6 ms
+of every step. Filed as 1.8, correctness first: find out which mode is right.
+
+Evidence: evidence/decode_loop/dprof_ctx_0p4.txt (the attribution), server_0p4.log (145 tables),
+dprof/postfix.sweep.jsonl (8 legs), dprof_ctx_run.log, build_server_0p4.log.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

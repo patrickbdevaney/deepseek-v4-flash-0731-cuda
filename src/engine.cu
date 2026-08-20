@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <random>
@@ -632,8 +633,25 @@ GenStats Engine::Impl::generate(const std::vector<int>& ids, const GenParams& gp
     std::vector<float> hmarg(BLK, 0.f), lg((size_t)(BLK + 1) * VOCAB);
 
     while (produced < gp.max_tokens && !stop && cpos + BLK + 1 < cfg.seqmax) {
+        // ---- DSV4_DPROF: attribute ONE WHOLE decode step -- draft and verify -- in the server
+        // path, at real context. dprof_init() has been called at load since the marks were written,
+        // but nothing in this file ever called dprof_report(), so every mark the kernels recorded
+        // here was dropped on the floor. The only profiles this repo had were from src/decode.cu's
+        // K-sweep, whose context is the length of argv[2] -- which is how 0.2 came to label two
+        // ctx-9 runs "ctx 480" and "ctx 3000" and retire two ladder items on the difference.
+        // Reporting here profiles the exact path, corpus and context tools/decode_fit_probe.py fits.
+        //
+        // Reset EVERY step, not just reported ones: the pool is fixed at 8192 marks and silently
+        // STOPS recording on overflow, so an unreset pool would report the first few steps and then
+        // quietly keep printing tables that were missing rows.
+        const bool dp_step = g_dprof_on;
+        if (dp_step) dprof_reset();
+
         const int anchor = cpos - 1, ctxlen = cpos;
+        // O(ctxlen), NSTAGE times per step, and never timed until now -- see include/dprof.h.
+        dprof_begin(DP_D_MAINKV, 0);
         for (int st = 0; st < NSTAGE; ++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctxlen, EPS);
+        dprof_end(DP_D_MAINKV, 0);
 
         // ---- DRAFT: block [cur, noise x (BLK-1)]
         for (int i = 0; i < BLK; ++i) bid[i] = DSPARK_NOISE_TID;
@@ -646,15 +664,19 @@ GenStats Engine::Impl::generate(const std::vector<int>& ids, const GenParams& gp
             k_hc_expand<<<((size_t)BLK * hc * d + 255) / 256, 256>>>(xa, xemb, BLK, hc, d);
             CU(cudaDeviceSynchronize());
             cb = xa; nb = xb;
+            dprof_begin(DP_D_BLOCK, 0);
             for (int st = 0; st < NSTAGE; ++st) {
                 dspark_block_forward(nb, cb, dbid, mkv[st], anchor, mb[st],
                                      blk_cos + (size_t)ctxlen * half, blk_sin + (size_t)ctxlen * half,
                                      BLK, WINDOW, HC_SINKHORN_ITERS, EPS);
                 std::swap(cb, nb);
             }
+            dprof_end(DP_D_BLOCK, 0);
             CU(cudaMemcpy(dfid, &cur, 4, cudaMemcpyHostToDevice));
+            dprof_begin(DP_D_HEAD, 0);
             dspark_forward_head(dout, cb, dfid, hh_fn, hh_sc, hh_ba, hnorm, head_bf, mw1, mw2,
                                 1, BLK, hc, d, VOCAB, DSPARK_MARKOV_RANK, EPS, dmarg);
+            dprof_end(DP_D_HEAD, 0);
             CU(cudaDeviceSynchronize());
             CU(cudaMemcpy(oo.data(), dout, (size_t)(BLK + 1) * 4, cudaMemcpyDeviceToHost));
             CU(cudaMemcpy(hmarg.data(), dmarg, (size_t)BLK * 4, cudaMemcpyDeviceToHost));
@@ -690,10 +712,26 @@ GenStats Engine::Impl::generate(const std::vector<int>& ids, const GenParams& gp
             else if (L == 41) dspark_tap_pool(mh_v, vin, VB, hc, d, 1, 3);
             else if (L == 42) dspark_tap_pool(mh_v, vin, VB, hc, d, 2, 3);
         }
+        // Same two marks src/decode.cu's K-sweep uses, so the row sets are directly comparable.
+        dprof_begin(DP_HEAD_HC, 0);
         hc_head(collK, vin, hc_fn, hc_sc, hc_bs, VB, hc, d, HC_EPS);
         rmsnorm(collK, collK, norm_w, VB, d, EPS, true, 0);
+        dprof_end(DP_HEAD_HC, 0);
+        dprof_begin(DP_LM_HEAD, 0);
         gemm_bf16w(logK, collK, head_bf, VB, VOCAB, d, 0);
+        dprof_end(DP_LM_HEAD, 0);
         CU(cudaDeviceSynchronize());
+        // The report syncs and prints; it lands AFTER the sync above, so it adds no stall inside the
+        // step it describes -- but it is inside the decode timing window, so a DPROF run's tok/s is
+        // an instrumented number and is not comparable to PERF.md. The per-mark ms are.
+        if (dp_step) {
+            static const int every = getenv("DSV4_DPROF_EVERY") ? atoi(getenv("DSV4_DPROF_EVERY")) : 1;
+            if (every > 0 && stats.verifies % every == 0) {
+                char tg[80];
+                snprintf(tg, sizeof tg, "ctx=%d VB=%d verify=%d", cpos, VB, stats.verifies);
+                dprof_report(tg);
+            }
+        }
         CU(cudaMemcpy(lg.data(), logK, (size_t)VB * VOCAB * 4, cudaMemcpyDeviceToHost));
         for (int i = 0; i < VB; ++i) tam[i] = sample_row(&lg[(size_t)i * VOCAB], VOCAB, gp, rng);
 

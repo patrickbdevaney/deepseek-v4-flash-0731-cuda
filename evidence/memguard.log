@@ -32,3 +32,5 @@
 [memguard] floor=1500 MB x3 poll=2s pat=decode_prechange started 2026-08-19T22:09:48-04:00
 [memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-19T22:30:19-04:00
 [memguard] victim gone, exiting. low-water was 5123 MB 2026-08-19T23:01:13-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T00:11:28-04:00
+[memguard] victim gone, exiting. low-water was 4855 MB 2026-08-20T00:22:54-04:00

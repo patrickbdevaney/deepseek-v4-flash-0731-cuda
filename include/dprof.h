@@ -43,6 +43,14 @@ enum DProfId {
     // six launches are <<<1,1>>> serial scans over nr=160 (k_moe_prefix, k_build_tiles). Finding 71
     // is the precedent for not guessing which: mark them.
     DP_MG_COUNT, DP_MG_PREFIX, DP_MG_SCATTER, DP_MG_TILES,
+    // THE DRAFT SIDE, which nothing has ever timed. Every mark above lives in the VERIFY stack, so
+    // a dprof TOTAL has only ever described part of a decode step -- and `dspark_main_kv` is called
+    // NSTAGE times per step over the FULL `ctxlen` (src/engine.cu), which makes it O(context) and a
+    // first-class suspect for ladder item 0.4's residual 7.36 ms/1000. Attributing a context slope
+    // with the one unmarked O(context) call left out is how 0.2 happened; mark it.
+    // These sit AFTER DP_ARGMAX so they print as their own rows and do not enter TOTAL, which keeps
+    // every historical table comparable.
+    DP_D_MAINKV, DP_D_BLOCK, DP_D_HEAD,
     DP_N
 };
 

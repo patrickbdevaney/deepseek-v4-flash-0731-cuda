@@ -1,1 +1,6 @@
 {"iter": 1, "rc": 0, "post_ok": true, "commit": "d2ef3e7", "dirty": true, "log": "evidence/decode_loop/iter1.log", "ts": "2026-08-19T23:04:50-0400"}
+{"iter": 1, "rc": 1, "post_ok": true, "commit": "0c55ecf", "dirty": true, "log": "evidence/decode_loop/iter1.log", "ts": "2026-08-19T23:09:46-0400"}
+{"iter": 1, "rc": 1, "post_ok": true, "commit": "0c55ecf", "dirty": true, "log": "evidence/decode_loop/iter1.log", "ts": "2026-08-19T23:25:43-0400"}
+{"iter": 1, "rc": 1, "post_ok": true, "commit": "0c55ecf", "dirty": true, "log": "evidence/decode_loop/iter1.log", "ts": "2026-08-19T23:41:42-0400"}
+{"iter": 1, "rc": 1, "post_ok": true, "commit": "0c55ecf", "dirty": true, "log": "evidence/decode_loop/iter1.log", "ts": "2026-08-19T23:57:42-0400"}
+{"iter": 1, "rc": 0, "post_ok": true, "commit": "c60f321", "dirty": true, "log": "evidence/decode_loop/iter1.log", "ts": "2026-08-20T00:25:09-0400"}
