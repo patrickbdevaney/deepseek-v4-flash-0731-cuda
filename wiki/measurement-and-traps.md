@@ -602,3 +602,87 @@ What it definitely does mean is that **every "N.NNx vs base AR" figure in this r
 two numbers only one of which is stable**, and the shipped head's own ratio inflated from 1.6464 to
 1.9406 across the ladder without the numerator moving. Quote the two throughputs, not the ratio.
 Worth its own ladder item; not worth folding into a deployment.
+
+## 23. A drift control that failed — and the agent that was contaminating its own arms (ladder 3.1, 2026-08-20)
+
+`clocks_ab_run.sh` was built with a kill switch it wrote down before it saw any data: four checkpoint
+loads, `A` governed / `B` pinned / `C` MAXN / **`A'` governed again, last**, and
+
+> "If A' comes back to A, the ordering did not manufacture the result; if it does not, the whole
+> comparison is void and says so."
+
+It did not come back. **A' was +8.19 % above A on the suite mean — larger than the +5.70 % pinning
+was supposed to be worth.** Both arms governed, both at the same nvpmodel, same binary, same
+checkpoint, same 9 prompts, 25 minutes apart. By its own pre-registered rule the run was void, and
+the +5.70 % it would otherwise have reported would have been session drift wearing a clock's
+clothes.
+
+**Two other things in the same run pointed the same way.**
+
+* Arm A' returned `tau = 3.80` on suite prompt 3 where A, B and C had all returned **2.49** — the
+  engine failing to reproduce itself (§12, ladder 1.9). That single leg is +42 % on one prompt of
+  eight and roughly 5 of the 8.19 percentage points on its own.
+* Arm C contains the only backwards leg in 36: prompt 4 at **22.97 -> 14.37 tok/s**, with the core
+  clock pinned at a verified 1575 MHz for every sample either side of it. The clock trace is flat
+  through it; what moves is **power, 34 W -> 19.5 W** — the GPU went idle mid-prompt.
+
+**The common cause is the agent that launched the arms.** The driving Claude Code iteration was
+still working during A, B and C — repo-wide `grep -rn`, file reads — and its ~GB node process
+**exited at 11:08:23**, inside the 10-second sample window containing arm C's stalled prompt. Arm A'
+ran after it was gone. The arms are ordered, monotonically, by how busy the box's *supervisor* was:
+A 24.83 -> B 26.26 -> C 26.61 -> A' 26.01 tok/s (prompts 0 and 3 excluded).
+
+**Re-run on a quiet box, everything tightens by an order of magnitude.** Same protocol, ABA bracket,
+nothing else running:
+
+| | first run (agent active) | re-run (quiet box) |
+|---|---|---|
+| governed-vs-governed drift control | **+8.19 %** | **+1.78 %** (paired +2.03 +/- 0.99 %) |
+| `tau` reproduced on every prompt | **no** — prompt 3 flipped 2.49 -> 3.80 | **yes**, all 9, both arms |
+| the effect being measured | +5.70 % (void) | +1.99 +/- 0.15 %, 8/8 legs |
+
+> **Rule.** A measurement arm is a single-tenant workload and **the agent supervising it is a
+> tenant.** Launch the arms detached, then do nothing until they finish — no repo-wide greps, no
+> builds, and in particular do not let a large process exit mid-arm. This is not the same rule as
+> "detach the workload" (CLAUDE.md); the arms here were correctly detached and still contaminated.
+> "One model at a time" understates it: it is one *workload* at a time.
+
+Note which control caught this and which did not. `tau`, the LOSSLESS gate and the first-token gate
+all passed in all four arms — they are exact-output checks and contamination is a timing effect. The
+only instrument that saw it was **the repeat of an arm already run**, which is the one thing an A/B
+is always tempted to skip because it buys no new comparison.
+
+## 24. The base-AR window times the governor, not the engine — and it is 21 % (ladder 3.1, 2026-08-20)
+
+`WARM decode` is a 7-step average taken immediately after the checkpoint loads. On this box that is
+**inside the DVFS ramp**: the GPU has been idle for the ~90 s of loading, both rails sit at their
+idle rates (gpc 315 MHz, EMC 2750 MHz), and they take ~2 s of GPU-busy time to reach 1386 and 4266.
+A 7-step average at ~88 ms/step is ~0.6 s long. It is measured almost entirely on the way up.
+
+Six loads on 2026-08-20, same binary, same gate prompt, same protocol, differing only in the rails:
+
+| machine state | base AR (`WARM decode`) |
+|---|---|
+| governed | **88.0 / 88.0 / 88.7 / 88.4 ms/tok** |
+| pinned | **72.7 / 72.9 ms/tok** |
+
+**+21.0 to +21.7 %, and it reproduces to a tenth of a millisecond in both states** — which is what
+makes it dangerous. This is not noise that averages out; it is a bimodal, perfectly repeatable
+number whose mode is set by a machine state nobody was recording. HARDWARE.md called this exact
+figure — **+20.7 %** — on 2026-08-07 and named the mechanism, and it still cost the ladder an item:
+**2.5 exists entirely because of it**, filed as "base AR fell 72.5 -> 87.7/88.2 and nothing explains
+it", with a note that if it were real it would be "larger than everything the ladder has won put
+together". It was a clock state.
+
+The tell was in the entry that raised it: speculative throughput on the same suite in the same runs
+was **flat**, and spec runs the same forward. A real forward regression cannot leave spec unchanged.
+The reason spec was flat is that the suite runs *after* the ramp — the artefact is confined to the
+one window measured before it.
+
+> **Rule.** A short average taken immediately after a cold start measures the machine warming up.
+> Either pin the clocks or state that you did not — and prefer pinning, which is why
+> `run_model.sh` and `run_server.sh` now call `scripts/pin_clocks.sh` and drop a `<log>.clocks`
+> sidecar next to every run. HARDWARE.md has required "every future measurement must state whether
+> clocks were pinned" since 2026-08-07; **nothing enforced it, so nothing did it**, and every A/B on
+> this ladder ran against a ramping governor without knowing. A rule that lives only in prose is
+> followed when someone remembers.

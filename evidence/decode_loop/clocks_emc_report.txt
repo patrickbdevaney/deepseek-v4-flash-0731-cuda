@@ -1,0 +1,107 @@
+###############  3.1 phase 6 — EMC under load + ABA bracket — 2026-08-20T11:27:04-04:00
+checkpoint: /home/patrickd/models/ckpt-head-s3
+
+=========== WHAT THE RAILS ACTUALLY DID WHILE TOKENS WERE BEING PRODUCED ===========
+arm A2  COMPUTE ( 43 samples): EMC mean   4231  min   2750  max   4266 MHz | gpc mean   1378 MHz
+arm A2  idle/load ( 53 samples): EMC mean   2750 MHz
+arm B2  COMPUTE ( 89 samples): EMC mean   4266  min   4266  max   4266 MHz | gpc mean   1386 MHz
+arm A2p COMPUTE ( 42 samples): EMC mean   4241  min   3200  max   4266 MHz | gpc mean   1380 MHz
+arm A2p idle/load ( 54 samples): EMC mean   2750 MHz
+
+=========== B2 vs A2 : pinned against the governed arm BEFORE it ===========
+ A2-governed: evidence/decode_loop/clocks_emc_A2.log
+              LOSSLESS PASS   first-token gate PASS   base AR 11.27 tok/s   clean=True
+B2-pinned120W: evidence/decode_loop/clocks_emc_B2.log
+              LOSSLESS PASS   first-token gate PASS   base AR 13.72 tok/s   clean=True
+
+base AR: A2-governed 11.27 tok/s   B2-pinned120W 13.72 tok/s   (+21.74 % -- head-independent, so this IS the between-load drift)
+
+| prompt | A2-governed tau | B2-pinned120W tau | d tau | A2-governed tok/s | B2-pinned120W tok/s | d tok/s | d % | A2-governed x base | B2-pinned120W x base | d x base |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0  *(control, excluded)* | 2.87 | 2.87 | +0.00 | 19.62 | 20.03 | +0.41 | +2.09 % | 1.741 | 1.460 | -0.281 |
+| 1 | 3.64 | 3.64 | +0.00 | 22.85 | 24.05 | +1.20 | +5.25 % | 2.028 | 1.753 | -0.275 |
+| 2 | 4.20 | 4.20 | +0.00 | 25.31 | 27.30 | +1.99 | +7.86 % | 2.246 | 1.990 | -0.256 |
+| 3 | 2.49 | 2.49 | +0.00 | 17.36 | 18.95 | +1.59 | +9.16 % | 1.540 | 1.381 | -0.159 |
+| 4 | 3.06 | 3.06 | +0.00 | 22.33 | 22.89 | +0.56 | +2.51 % | 1.981 | 1.668 | -0.313 |
+| 5 | 3.94 | 3.94 | +0.00 | 24.11 | 24.57 | +0.46 | +1.91 % | 2.139 | 1.791 | -0.348 |
+| 6 | 6.09 | 6.09 | +0.00 | 34.50 | 35.22 | +0.72 | +2.09 % | 3.061 | 2.567 | -0.494 |
+| 7 | 3.85 | 3.85 | +0.00 | 26.33 | 26.86 | +0.53 | +2.01 % | 2.336 | 1.958 | -0.379 |
+| 8 | 3.48 | 3.48 | +0.00 | 24.43 | 24.84 | +0.41 | +1.68 % | 2.168 | 1.810 | -0.357 |
+
+PAIRED over the 8 suite prompts (prompt 0 excluded, F96):
+  d tau        = +0.0000 +/- 0.0000   (0/8 legs positive)
+  d tok/s      = +0.9325 +/- 0.2098   (8/8 legs positive)
+  d %          = +4.058 +/- 1.058 %
+  d % x base   = -14.523 +/- 0.869 %   (0/8 legs positive)   <- drift-controlled
+
+SUITE MEANS (the registry number):
+  A2-governed: tau 3.8438  24.6525 tok/s   (n=8)
+  B2-pinned120W: tau 3.8438  25.585 tok/s   (n=8)
+  ratio 1.0378x  (+3.78 %)   run-to-run spread on this box is 3.5 %
+
+=========== B2 vs A2p : pinned against the governed arm AFTER it ===========
+A2p-governed: evidence/decode_loop/clocks_emc_A2p.log
+              LOSSLESS PASS   first-token gate PASS   base AR 11.31 tok/s   clean=True
+B2-pinned120W: evidence/decode_loop/clocks_emc_B2.log
+              LOSSLESS PASS   first-token gate PASS   base AR 13.72 tok/s   clean=True
+
+base AR: A2p-governed 11.31 tok/s   B2-pinned120W 13.72 tok/s   (+21.31 % -- head-independent, so this IS the between-load drift)
+
+| prompt | A2p-governed tau | B2-pinned120W tau | d tau | A2p-governed tok/s | B2-pinned120W tok/s | d tok/s | d % | A2p-governed x base | B2-pinned120W x base | d x base |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0  *(control, excluded)* | 2.87 | 2.87 | +0.00 | 19.69 | 20.03 | +0.34 | +1.73 % | 1.741 | 1.460 | -0.281 |
+| 1 | 3.64 | 3.64 | +0.00 | 23.35 | 24.05 | +0.70 | +3.00 % | 2.065 | 1.753 | -0.312 |
+| 2 | 4.20 | 4.20 | +0.00 | 26.78 | 27.30 | +0.52 | +1.94 % | 2.368 | 1.990 | -0.378 |
+| 3 | 2.49 | 2.49 | +0.00 | 18.57 | 18.95 | +0.38 | +2.05 % | 1.642 | 1.381 | -0.261 |
+| 4 | 3.06 | 3.06 | +0.00 | 22.46 | 22.89 | +0.43 | +1.91 % | 1.986 | 1.668 | -0.317 |
+| 5 | 3.94 | 3.94 | +0.00 | 24.18 | 24.57 | +0.39 | +1.61 % | 2.138 | 1.791 | -0.347 |
+| 6 | 6.09 | 6.09 | +0.00 | 34.62 | 35.22 | +0.60 | +1.73 % | 3.061 | 2.567 | -0.494 |
+| 7 | 3.85 | 3.85 | +0.00 | 26.38 | 26.86 | +0.48 | +1.82 % | 2.332 | 1.958 | -0.375 |
+| 8 | 3.48 | 3.48 | +0.00 | 24.39 | 24.84 | +0.45 | +1.85 % | 2.156 | 1.810 | -0.346 |
+
+PAIRED over the 8 suite prompts (prompt 0 excluded, F96):
+  d tau        = +0.0000 +/- 0.0000   (0/8 legs positive)
+  d tok/s      = +0.4937 +/- 0.0388   (8/8 legs positive)
+  d %          = +1.989 +/- 0.151 %
+  d % x base   = -15.926 +/- 0.125 %   (0/8 legs positive)   <- drift-controlled
+
+SUITE MEANS (the registry number):
+  A2p-governed: tau 3.8438  25.0912 tok/s   (n=8)
+  B2-pinned120W: tau 3.8438  25.585 tok/s   (n=8)
+  ratio 1.0197x  (+1.97 %)   run-to-run spread on this box is 3.5 %
+
+=========== A2p vs A2 : THE DRIFT CONTROL AGAIN, on a quiet box ===========
+ A2-governed: evidence/decode_loop/clocks_emc_A2.log
+              LOSSLESS PASS   first-token gate PASS   base AR 11.27 tok/s   clean=True
+A2p-governed: evidence/decode_loop/clocks_emc_A2p.log
+              LOSSLESS PASS   first-token gate PASS   base AR 11.31 tok/s   clean=True
+
+base AR: A2-governed 11.27 tok/s   A2p-governed 11.31 tok/s   (+0.35 % -- head-independent, so this IS the between-load drift)
+
+| prompt | A2-governed tau | A2p-governed tau | d tau | A2-governed tok/s | A2p-governed tok/s | d tok/s | d % | A2-governed x base | A2p-governed x base | d x base |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0  *(control, excluded)* | 2.87 | 2.87 | +0.00 | 19.62 | 19.69 | +0.07 | +0.36 % | 1.741 | 1.741 | +0.000 |
+| 1 | 3.64 | 3.64 | +0.00 | 22.85 | 23.35 | +0.50 | +2.19 % | 2.028 | 2.065 | +0.037 |
+| 2 | 4.20 | 4.20 | +0.00 | 25.31 | 26.78 | +1.47 | +5.81 % | 2.246 | 2.368 | +0.122 |
+| 3 | 2.49 | 2.49 | +0.00 | 17.36 | 18.57 | +1.21 | +6.97 % | 1.540 | 1.642 | +0.102 |
+| 4 | 3.06 | 3.06 | +0.00 | 22.33 | 22.46 | +0.13 | +0.58 % | 1.981 | 1.986 | +0.004 |
+| 5 | 3.94 | 3.94 | +0.00 | 24.11 | 24.18 | +0.07 | +0.29 % | 2.139 | 2.138 | -0.001 |
+| 6 | 6.09 | 6.09 | +0.00 | 34.50 | 34.62 | +0.12 | +0.35 % | 3.061 | 3.061 | -0.000 |
+| 7 | 3.85 | 3.85 | +0.00 | 26.33 | 26.38 | +0.05 | +0.19 % | 2.336 | 2.332 | -0.004 |
+| 8 | 3.48 | 3.48 | +0.00 | 24.43 | 24.39 | -0.04 | -0.16 % | 2.168 | 2.156 | -0.011 |
+
+PAIRED over the 8 suite prompts (prompt 0 excluded, F96):
+  d tau        = +0.0000 +/- 0.0000   (0/8 legs positive)
+  d tok/s      = +0.4388 +/- 0.2060   (7/8 legs positive)
+  d %          = +2.027 +/- 0.990 %
+  d % x base   = +1.666 +/- 0.986 %   (4/8 legs positive)   <- drift-controlled
+
+SUITE MEANS (the registry number):
+  A2-governed: tau 3.8438  24.6525 tok/s   (n=8)
+  A2p-governed: tau 3.8438  25.0912 tok/s   (n=8)
+  ratio 1.0178x  (+1.78 %)   run-to-run spread on this box is 3.5 %
+
+=========== base AR (the window that measures the governor ramp, not the engine) ===========
+A2   [decode] WARM decode: 88.7 ms/tok = 11.27 tok/s  (M=1 steady state, 7-step avg)
+B2   [decode] WARM decode: 72.9 ms/tok = 13.72 tok/s  (M=1 steady state, 7-step avg)
+A2p  [decode] WARM decode: 88.4 ms/tok = 11.31 tok/s  (M=1 steady state, 7-step avg)

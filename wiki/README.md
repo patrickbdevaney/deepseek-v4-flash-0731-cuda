@@ -13,6 +13,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
 | [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the two adoptions (1.0, 1.2) that took `b` down 65 %, and what is left |
 | [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
+| [`hardware-sm110a.md` §5](hardware-sm110a.md) | operating rules, **including what the clocks actually do under load (3.1) — the governed box already runs at the pinned frequencies 97.7 % of the time** |
 | [`oom-and-memory-safety.md`](oom-and-memory-safety.md) | why the OOM killer never fires here (unified memory is invisible to the cgroup), and the two guards that replace it |
 
 ## The state in one table
@@ -23,7 +24,7 @@ historical measurement; the second is where agentic work actually runs.
 | at context ~9 | measured | ceiling | |
 |---|---|---|---|
 | speculative decode | **22.15 tok/s** | 23.2–25.9 | 96 % |
-| base AR decode | **13.83 tok/s** | 14.33–15.98 | 97 % |
+| base AR decode | **13.83 tok/s** *(pinned; 11.3 governed — see below)* | 14.33–15.98 | 97 % |
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
 
@@ -33,6 +34,14 @@ historical measurement; the second is where agentic work actually runs.
 | suite mean tok/s | 22.1425 | **24.2512** | **+9.52 %** (drift-controlled +10.30 %) |
 | worst prompt `tau` | 1.75 | **2.49** | no suite prompt below 2 any more; spread −32.8 % |
 | base AR (drift control) | 11.41 tok/s | 11.33 tok/s | −0.70 % between the two loads |
+
+> **Those two base-AR rows differ by 21 % and neither is wrong — they were taken in different clock
+> states, and until 3.1 nothing recorded which.** `WARM decode` is a 7-step average taken
+> immediately after load, inside the ~2 s DVFS ramp, so it times the governor: **88.0 / 88.0 / 88.7 /
+> 88.4 ms/tok governed against 72.7 / 72.9 pinned**, six loads, reproducing to a tenth of a
+> millisecond in both states. That is the entirety of ladder item 2.5's "unexplained 17.4 % base-AR
+> fall" — there is no engine regression. Spec throughput never moved because the suite runs *after*
+> the ramp. [`measurement-and-traps.md` §24](measurement-and-traps.md).
 
 Both arms measured back to back on `93699e6`, same binary, same protocol, LOSSLESS and first-token
 gates PASS on both. **This row is a weights change, not a kernel one** — `s3` was promoted on
@@ -128,6 +137,24 @@ where a clean fit with a tight SE meant something other than it looked like.
 > gated by memcmp on the whole index array across 11,008 calls and 183 M slots. It also arrived
 > **3.12 ms/forward ahead of what the profile predicted**, in a kernel on the draft side that has
 > never had a dprof mark — so the profile is *still* incomplete, for the second time.
+
+> **Update 2026-08-20 — 3.1, and it is a null: the clock lever was already applied.** The last
+> throughput item before hand-back was `jetson_clocks`, carried from HARDWARE.md at "+3.0–6.4 %".
+> Sampling both rails every 2 s — which no run in this repo had ever done — shows a **governed** box
+> spends **97.7 % of its compute window at 1386 MHz and 4266 MHz**, the pinned frequencies; the
+> 315/2750 idle state is the ~90 s checkpoint load. Pinning buys the ramp, not the ceiling:
+> **+1.99 ± 0.15 % (8/8 legs, `tau` 3.8438 in all six arms)**, below the 3.5 % spread and **not
+> counted as a win**. MAXN's 1575 MHz is worth **+1.68 ± 5.83 %** — nothing, which is the right
+> answer for a bandwidth-bound engine asked about its core clock. Adopted anyway, in the launchers,
+> for what it does to the *measurement* (the 21 % base-AR artefact above).
+> [`negative-results.md` §4e](negative-results.md).
+>
+> **Its first attempt voided itself, and that is the more useful half.** The pre-registered drift
+> control — arm A repeated last — came back **+8.19 %**, larger than the effect. Cause: the agent
+> supervising the arms was still working during them, and a ~GB process of its own exited mid-arm.
+> Re-run on a quiet box the drift control falls to +1.78 % and the engine reproduces `tau` on all 9
+> prompts instead of 8. **A measurement arm is single-tenant, and the agent is a tenant.**
+> [`measurement-and-traps.md` §23](measurement-and-traps.md).
 
 > **Update 2026-08-20, third of the three:** the *last* of the linear items 0.4 named is spent too.
 > `index_score` is a register-tiled GEMM rather than a warp-per-(query,row) kernel

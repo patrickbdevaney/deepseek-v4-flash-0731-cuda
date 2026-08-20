@@ -128,7 +128,7 @@ run_arm(){       # $1 = tag, $2 = human label
   sync; echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true
   sleep 2
   : > "$log"
-  DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="$SW" \
+  DSV4_PIN_CLOCKS=0 DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="$SW" \
     bash scripts/run_model.sh "$log" ./build/decode "$CKPT" "$GATE_PROMPT" 8 "" "$NGEN0" \
     || { say "FATAL: run_model refused arm $tag"; return 1; }
   sampler_start "$tag"

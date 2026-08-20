@@ -113,3 +113,16 @@
 [memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T11:06:37-04:00
 [memguard] watching pid 496883 (decode)
 [memguard] victim gone, exiting. low-water 11777 MB, peak fall rate 7650 MB/s 2026-08-20T11:09:20-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T11:10:15-04:00
+[memguard] watching pid 504376 (decode)
+[memguard] victim gone, exiting. low-water 12169 MB, peak fall rate 10970 MB/s 2026-08-20T11:13:00-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T11:16:48-04:00
+[memguard] watching pid 516448 (decode)
+[memguard] victim gone, exiting. low-water 12061 MB, peak fall rate 11455 MB/s 2026-08-20T11:19:37-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T11:20:11-04:00
+[memguard] watching pid 523124 (decode)
+[memguard] victim gone, exiting. low-water 11496 MB, peak fall rate 8555 MB/s 2026-08-20T11:22:52-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T11:23:48-04:00
+[memguard] watching pid 530360 (decode)
+[memguard] victim gone, exiting. low-water 12073 MB, peak fall rate 10285 MB/s 2026-08-20T11:26:36-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=true started 2026-08-20T11:33:57-04:00

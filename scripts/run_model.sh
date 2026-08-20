@@ -63,6 +63,30 @@ if [ "$AVAIL_GB" -lt 105 ]; then
     exit 1
 fi
 
+# CLOCK STATE IS PART OF THE MEASUREMENT, AND NOTHING WAS RECORDING IT (ladder 3.1).
+# HARDWARE.md has demanded since 2026-08-07 that "every future measurement must state whether clocks
+# were pinned", and 3.1 found the box GOVERNED -- so every A/B this ladder has run stated nothing and
+# was taken against a ramping governor. A rule that lives only in prose is followed when someone
+# remembers. Pinning here makes it a property of the launch.
+#
+# WHAT THIS IS AND IS NOT WORTH. 3.1 measured the pin at +2.0 to +3.0 % on the suite, which is BELOW
+# the 3.5 % run-to-run spread and is not claimed as a win: the governor already holds both rails at
+# their ceiling for 97.7 % of the compute window, so the pin only buys the ~2 s ramp. What it does
+# buy is that `WARM decode` -- taken immediately after load, inside that ramp -- stops timing the
+# governor (88.0-88.7 ms/tok governed) and starts timing the engine (72.7-72.9 pinned). That 21 %
+# artefact reproduces to a tenth of a millisecond and reads exactly like a regression.
+#
+# DSV4_PIN_CLOCKS=0 OPTS OUT, and the clock A/B arms set it -- an arm that measures the governed
+# state cannot have its launcher pin the clocks out from under it.
+if [ "${DSV4_PIN_CLOCKS:-1}" = "1" ]; then
+    bash "$(dirname "$0")/pin_clocks.sh" pin 2>&1 | sed 's/^/[run_model] /'
+else
+    echo "[run_model] DSV4_PIN_CLOCKS=0 — leaving the rails as they are"
+fi
+# The log itself is truncated by the child's own redirect, so the state goes in a sidecar rather
+# than into a file the run is about to overwrite.
+bash "$(dirname "$0")/pin_clocks.sh" show > "${LOG%.log}.clocks" 2>&1 || true
+
 echo "[run_model] ${AVAIL_GB} GiB available; launching detached -> $LOG"
 # The lock is held by THIS shell (fd 9); the child inherits it and holds it for its lifetime.
 setsid nohup "$@" > "$LOG" 2>&1 < /dev/null &

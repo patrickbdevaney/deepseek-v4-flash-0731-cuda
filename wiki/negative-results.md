@@ -192,6 +192,53 @@ letting it bound the design.** The incumbent is not the reference; the reference
 
 ---
 
+## 4e. The lever that was already applied — `jetson_clocks` (ladder 3.1, 2026-08-20)
+
+The ladder carried this item from the beginning on a line in HARDWARE.md: pinning is worth
+"**+6.4 % / +3.5 % / +3.0 %**", GPU 1386 -> 1575, EMC 2750 -> 4266. It was the last throughput item
+before hand-back, and it looked like free money.
+
+**Nobody had ever sampled a rail while a decode was in flight.** One `cat` of
+`/sys/kernel/debug/bpmp/debug/clk/emc/rate` every two seconds, across three governed arms:
+
+| arm | machine state | compute-window samples | EMC at 4266 | gpc at 1386 |
+|---|---|---|---|---|
+| A2 | governed | 43 | **97.7 %** (mean 4231 MHz) | **97.7 %** (mean 1378 MHz) |
+| A2p | governed | 42 | **97.6 %** (mean 4241 MHz) | **97.6 %** (mean 1380 MHz) |
+| B2 | pinned 120W | 89 | 100 % | 100 % |
+
+**The governed box already runs at the pinned frequencies.** Both rails ramp to their ceiling within
+~2 s of the GPU going busy and stay there. The famous "315 MHz idle / 2750 MHz EMC" state is real,
+and it is the **~90 s checkpoint load** — when the GPU is idle and the CPU is reading 100 GiB off
+disk. Reading an idle clock and calling it the operating clock is how a 2.3 % lever got written down
+as a 6.4 % one.
+
+**So the ceiling is not the lever; the ramp is.** What pinning removes is the 2.3 % of the compute
+window spent climbing, and it measures as exactly that: **+1.99 +/- 0.15 % (8/8 legs positive)**
+against the closest-in-time governed arm, **+2.96 %** against a time-interpolated one, with the
+governed-vs-governed drift control at +2.03 +/- 0.99 %. Below the 3.5 % run-to-run spread. **Not
+counted as a ladder win.**
+
+**And the 1575 MHz half of the item is worth nothing at all**, which is the correct answer for a
+bandwidth-bound engine asked about its core clock. Reaching 1575 needs `nvpmodel -m 0` (MAXN) —
+`jetson_clocks` raises a rail to its *governor's* ceiling, and at nvpmodel 1 `/etc/nvpmodel.conf`
+caps GPU MAX_FREQ at 1386000000, so the item's own headline was unreachable by the tool the item
+named. Measured at a verified 1575 MHz for 18/18 samples: **+1.68 +/- 5.83 % paired** against
+pinned-120W. The deployment pins at the current power mode and does not touch `nvpmodel`.
+
+**It is adopted anyway, and not for the 2 %.** `scripts/pin_clocks.sh`, called by `run_model.sh` and
+`run_server.sh`. The reason is [`measurement-and-traps.md` §24](measurement-and-traps.md): the
+base-AR window is measured *inside* the ramp, so it reports 88 ms/tok governed and 72.8 pinned — a
+**21 % artefact that reproduces to a tenth of a millisecond** and reads exactly like a regression.
+It is the entirety of ladder item 2.5's unexplained "17.4 % base-AR fall". A free 2 % is the smaller
+half of this entry.
+
+**The generalisable part.** Three of this ladder's items — 1.3, and now both halves of 3.1 — were
+ranked on a number measured against the wrong operating point: the wrong context (1.3), and the idle
+clock (3.1). The check that would have caught 3.1 costs one sampler and no model load, and it is the
+same check §16 asks for: **before spending an iteration closing a gap, measure the gap under the
+conditions the workload actually runs in.**
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

@@ -176,13 +176,41 @@ The memory clock matters here because this engine is bandwidth-bound end to end.
 the three replicates of a 36-point sweep, and **+20.7 %** on the base-AR window (10.48 → 12.65 tok/s)
 because that window is measured immediately after load, before the governor has ramped.
 
+> **CORRECTED 2026-08-20 (DECODE_LADDER 3.1). The table above is the box's IDLE state, and it was
+> being read as its operating state.** Both rails ramp to their ceiling within ~2 s of the GPU going
+> busy, with no pin at all: sampled every 2 s across three governed arms, **97.7 % of
+> compute-window samples are at 1386 MHz and 4266 MHz**. The 315 MHz / 2750 MHz state is the ~90 s
+> checkpoint load, when the GPU is idle and the CPU is reading 100 GiB.
+>
+> So the steady-state throughput gain is **+2.0 to +3.0 %**, not +3.0-6.4 % — measured
+> **+1.99 ± 0.15 % (8/8 legs, `tau` identical)** against the closest-in-time governed arm, on a
+> quiet box with an ABA bracket, after the first attempt's own drift control voided it at +8.19 %.
+> Pinning buys the *ramp*, not the ceiling.
+>
+> **The +20.7 % on the base-AR window is real, reproduces to a tenth of a millisecond, and is an
+> artefact of the window** — exactly as the sentence above says. It is 88.0 / 88.0 / 88.7 / 88.4
+> ms/tok governed against 72.7 / 72.9 pinned, and it is the whole of ladder item 2.5's unexplained
+> "17.4 % base-AR regression". See [`wiki/measurement-and-traps.md` §24](wiki/measurement-and-traps.md).
+>
+> **`nvpmodel -m 0` (MAXN, GPU 1575 MHz) is worth +1.68 ± 5.83 % — nothing.** `jetson_clocks` cannot
+> reach 1575 on its own: it raises a rail to its *governor's* ceiling, and nvpmodel 1 caps GPU
+> MAX_FREQ at 1386000000.
+
 **This is invisible to a roofline probe.** `bw_probe` reads 235.6 GB/s pinned and ~240 ungoverned —
 a probe that streams for twenty passes ramps the governor by itself, so the clock state never showed
 up in any roofline number this project has taken. It shows up in short, cold, dependent work, which
 is exactly what decode is.
 
-    sudo jetson_clocks --store /tmp/clocks_before.conf   # then --restore /tmp/clocks_before.conf
-    sudo jetson_clocks
+    bash scripts/pin_clocks.sh pin        # store-once + jetson_clocks at the current power mode
+    bash scripts/pin_clocks.sh restore    # back to the stored governed state
+    bash scripts/pin_clocks.sh show
 
 **Every future measurement must state whether clocks were pinned.** Comparing a pinned run against an
 unpinned one is a 3-20 % error depending on where in the run the number was taken.
+
+**That sentence was written on 2026-08-07 and nothing acted on it until 2026-08-20**, by which point
+every A/B on the decode ladder had been taken against a ramping governor and one of them (2.5) had
+become a ladder item about a phantom regression. It is now mechanical rather than remembered:
+`run_model.sh` and `run_server.sh` call `scripts/pin_clocks.sh pin` unless `DSV4_PIN_CLOCKS=0`, and
+both write a `<log>.clocks` sidecar next to every run so the state is recorded whether or not anyone
+reads it.

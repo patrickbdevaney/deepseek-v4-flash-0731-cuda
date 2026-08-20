@@ -1,0 +1,44 @@
+3.1: the clock lever was already applied -- pinning buys the 2 s ramp, not the ceiling
+
+DECODE_LADDER 3.1 read "jetson_clocks -- GPU 1386 -> 1575 MHz, EMC 2750 -> 4266, measured
+in-repo at +3.0-6.4 %". Both halves are wrong about this workload, and one sampler settled it.
+
+WHAT THE RAILS ACTUALLY DO. No run in this repo had ever sampled a clock while a decode was in
+flight. Every 2 s, across three governed arms: 97.7 % of compute-window samples sit at 1386 MHz
+and 4266 MHz -- the pinned frequencies. The 315 MHz / 2750 MHz state everyone read as "the run"
+is the ~90 s checkpoint load, when the GPU is idle and the CPU is reading 100 GiB. Both rails
+ramp to their ceiling within ~2 s of the GPU going busy, with no pin at all.
+
+SO THE MEASURED GAIN IS THE RAMP: +1.99 +/- 0.15 % on the frozen suite (8/8 legs positive)
+against the closest-in-time governed arm, +2.96 % against a time-interpolated one, drift control
++2.03 +/- 0.99 %. Below the 3.5 % run-to-run spread. NOT counted as a ladder win. tau is 3.8438
+in all six arms of both runs, to four decimals -- the negative control this item needed, since
+clocks cannot change which token wins an argmax.
+
+MAXN's 1575 MHz is worth +1.68 +/- 5.83 % -- nothing, which is the right answer for a
+bandwidth-bound engine asked about its core clock. (jetson_clocks cannot reach 1575 anyway: it
+raises a rail to its governor's ceiling and nvpmodel 1 caps GPU MAX_FREQ at 1386000000.) The
+deployment pins at the current power mode and never touches nvpmodel.
+
+ADOPTED ANYWAY, FOR THE MEASUREMENT. base AR (`WARM decode`) is a 7-step average taken
+immediately after load -- inside the ramp -- so it times the governor: 88.0 / 88.0 / 88.7 / 88.4
+ms/tok governed against 72.7 / 72.9 pinned, six loads, reproducing to a tenth of a millisecond in
+both states. That 21 % artefact IS ladder item 2.5's unexplained "17.4 % base-AR regression", in
+full. There is no engine regression; spec throughput never moved because the suite runs after the
+ramp. HARDWARE.md predicted this at +20.7 % on 2026-08-07 and nobody connected it, because no run
+recorded its clock state. scripts/pin_clocks.sh now does, from run_model.sh and run_server.sh,
+with a <log>.clocks sidecar per run.
+
+THE FIRST ATTEMPT VOIDED ITSELF, AND THAT IS THE MORE USEFUL HALF. clocks_ab_run.sh pre-registered
+"if A' does not come back to A the whole comparison is void". A' came back +8.19 % -- larger than
+the +5.70 % pinning was supposed to be worth. Cause: the agent supervising the arms kept working
+during them, and a ~GB node process of its own exited inside arm C's one backwards leg (22.97 ->
+14.37 tok/s with the core clock flat at 1575 and power dropping 34 W -> 19.5 W). Re-run on a quiet
+box: drift control 8.19 % -> 1.78 %, and the engine reproduces tau on all 9 prompts instead of 8.
+A measurement arm is single-tenant and the agent is a tenant. Only the repeat of an already-run arm
+caught it -- tau, LOSSLESS and the first-token gate all passed in all four contaminated arms.
+
+Evidence: evidence/decode_loop/clocks_3p1_ab.txt (the void run, kept), clocks_emc_report.txt,
+clocks_emc_{A2,B2,A2p}.{log,samples}.
+Wiki: negative-results.md §4e, measurement-and-traps.md §23 + §24, hardware-sm110a.md §5,
+HARDWARE.md, README state table. New stage clocks_emc_probe.sh registered in detach_audit.sh.

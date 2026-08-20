@@ -1098,10 +1098,85 @@ So, in order:
       everything the ladder has won put together — which is the reason it gets its own item and not
       a footnote. [`measurement-and-traps.md` §22.2]
 
+      **ANSWERED 2026-08-20 by 3.1, and this entry's own reading was the right one: it is the
+      measurement.** `WARM decode` is a 7-step average taken immediately after load — i.e. inside the
+      ~2 s governor ramp — so it times the governor, not the engine. Six loads today, same binary,
+      same gate prompt, same protocol, differing only in whether the rails were pinned:
+
+      | machine state | base AR (`WARM decode`) |
+      |---|---|
+      | governed | **88.0 / 88.0 / 88.7 / 88.4 ms/tok** (11.36 / 11.36 / 11.27 / 11.31 tok/s) |
+      | pinned | **72.7 / 72.9 ms/tok** (13.75 / 13.72 tok/s) |
+
+      That is **+21.0 to +21.7 %**, it reproduces to a tenth of a millisecond in *both* states, and
+      it is the whole of the 72.5 -> 87.7/88.2 "fall". The earlier numbers were taken on a pinned
+      box and the later ones were not. HARDWARE.md predicted exactly this at **+20.7 %** on
+      2026-08-07 and named the mechanism — "that window is measured immediately after load, before
+      the governor has ramped" — and nobody connected the two because **no run recorded its clock
+      state**. There is no 17.4 % engine regression. This entry's own reason for doubting one holds
+      up perfectly: spec throughput was flat across the same runs because the suite runs *after* the
+      ramp, so it never saw it.
+
+      **Left unchecked deliberately.** 3.1 supplies the mechanism and the six-load table; what 2.5
+      still owns is the consequence it names — every "N.NNx vs base AR" ratio in this repo has a
+      denominator that depends on a clock state nobody recorded, and those need re-stating against
+      the pinned ~72.8 ms/tok now that `run_model.sh` pins by default. That is a sweep through the
+      archive, not a measurement, and it should be its own iteration.
+
 ## Phase 3 — clocks, then hand back
 
-- [ ] **3.1** `jetson_clocks` — GPU 1386 -> 1575 MHz, EMC 2750 -> 4266. Measured in-repo at
-      +3.0-6.4 %. Its own before/after; do not fold into another item.
+- [x] **3.1 DONE 2026-08-20 — the lever was already applied. The governor holds BOTH rails at
+      their ceiling for 97.7 % of the compute window, so `jetson_clocks` buys the ramp and not the
+      ceiling: +2.0 to +3.0 % on the suite, below the 3.5 % spread, NOT counted as a win.** Adopted
+      anyway, in the launchers, because of what it does to the *measurement*.
+
+      **Both halves of the item text were wrong about the workload, and one sampler settled it.**
+      The item read "GPU 1386 -> 1575 MHz, EMC 2750 -> 4266". Sampling both rails every 2 s across
+      three governed arms (`clocks_emc_*.samples`):
+
+      | arm | machine state | compute-window samples | EMC at 4266 | gpc at 1386 |
+      |---|---|---|---|---|
+      | A2 | governed | 43 | **97.7 %** (mean 4231 MHz) | **97.7 %** (mean 1378 MHz) |
+      | A2p | governed | 42 | **97.6 %** (mean 4241 MHz) | **97.6 %** (mean 1380 MHz) |
+      | B2 | pinned 120W | 89 | 100 % | 100 % |
+
+      The 315 MHz samples everyone took for "the run" are the ~90 s checkpoint load, when the GPU is
+      idle and the CPU is reading 100 GiB. EMC's 2750 is its *idle* rate; it ramps to 4266 within
+      ~2 s of the GPU going busy, **without any pin**. So the remaining 2.3 % is the ramp, and that
+      is the entire size of the lever.
+
+      **1575 MHz is worth nothing, which is what a bandwidth-bound engine should say about a core
+      clock.** Arm C ran at a verified 1575 MHz for 18/18 samples (`nvpmodel -m 0`, which is the only
+      way to reach it — at nvpmodel 1 `/etc/nvpmodel.conf` caps GPU MAX_FREQ at 1386, so
+      `jetson_clocks` alone provably cannot get there) and measured **+1.68 +/- 5.83 % paired**
+      against pinned-120W. The deployment therefore pins at the **current** power mode and does not
+      touch `nvpmodel`.
+
+      **The first run of this item was VOID and said so itself.** `clocks_ab_run.sh` pre-registered
+      "if A' does not come back to A the whole comparison is void", and A' came back **+8.19 %** on
+      the suite mean — larger than the +5.70 % pinning was supposed to be worth. Rerun on a quiet
+      box with an ABA bracket, the drift control passes (+1.78 %) and the answer shrinks to:
+
+      | comparison | suite mean tok/s | paired d % | `tau` |
+      |---|---|---|---|
+      | B2 vs A2p (closest in time, conservative) | 25.585 vs 25.0912 | **+1.99 +/- 0.15 %**, 8/8 legs | 3.8438 both |
+      | B2 vs a time-interpolated governed baseline | 25.585 vs 24.8484 | **+2.96 %** | 3.8438 both |
+      | A2p vs A2 (drift control) | 25.0912 vs 24.6525 | +2.03 +/- 0.99 % | 3.8438 both |
+
+      `tau` is **3.8438 in all six arms across both runs, to four decimal places** — the negative
+      control this item needed, since clocks cannot change which token wins an argmax.
+
+      **Adopted for the measurement, not the 2 %.** `scripts/pin_clocks.sh` (pin | restore | show |
+      pin-maxn), called by `run_model.sh` and `run_server.sh` unless `DSV4_PIN_CLOCKS=0`, which the
+      clock arms set so they can still measure a governed baseline. Both launchers now also write a
+      `<log>.clocks` sidecar — HARDWARE.md has demanded since 2026-08-07 that "every future
+      measurement must state whether clocks were pinned", and nothing was recording it, which is why
+      this ladder ran every one of its A/Bs against a ramping governor without knowing.
+
+      **It also resolves 2.5 outright — see the note there.** Evidence:
+      `evidence/decode_loop/clocks_3p1_ab.txt` (the void run, kept), `clocks_emc_report.txt`,
+      `clocks_emc_{A2,B2,A2p}.{log,samples}`. Wiki: [`negative-results.md` §4e],
+      [`measurement-and-traps.md` §23, §24], [`hardware-sm110a.md` §5], README state table.
 - [ ] **3.2** Final `PERF.md` re-run and both coefficients recorded. Then STOP and hand back.
 
 ## After the roofline — the long-horizon pivot

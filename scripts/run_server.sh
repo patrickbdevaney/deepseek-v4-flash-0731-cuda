@@ -31,6 +31,15 @@ if curl -s -m 10 -o /dev/null "http://localhost:8080/health" 2>/dev/null; then
   exit 1
 fi
 
+# PIN THE RAILS, LIKE run_model.sh (ladder 3.1). The server is the production decode path, so it
+# gets the same treatment as the benchmark: the pin is worth +2.0-3.0 % on the suite -- below the
+# 3.5 % spread and not claimed as a win -- and it removes the ramp that makes the first seconds after
+# load 21 % slower than the steady state. DSV4_PIN_CLOCKS=0 opts out.
+if [ "${DSV4_PIN_CLOCKS:-1}" = "1" ]; then
+    bash "$(dirname "$0")/pin_clocks.sh" pin 2>&1 | sed 's/^/[run_server] /'
+fi
+bash "$(dirname "$0")/pin_clocks.sh" show > "${LOG%.log}.clocks" 2>&1 || true
+
 echo "[run_server] starting detached, seqmax=$SEQMAX ext_chunk=$EXT_CHUNK, log -> $LOG"
 setsid nohup scripts/with_model_lock.sh \
     env SEQMAX="$SEQMAX" EXT_CHUNK="$EXT_CHUNK" bash scripts/serve.sh \

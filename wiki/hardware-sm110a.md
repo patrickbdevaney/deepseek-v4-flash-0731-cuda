@@ -112,8 +112,22 @@ apparent "5 % of the fp8 peak" is *not* a measured ceiling.
 
 ## 5. Operating rules
 
-- **Pin clocks before any measurement**: `sudo nvpmodel -m 1; sudo jetson_clocks`. A roofline probe
-  ramps the governor by itself, which is why no roofline number here ever saw an unpinned clock.
+- **Pin clocks before any measurement** — `bash scripts/pin_clocks.sh pin`, which `run_model.sh`
+  and `run_server.sh` now do for you (opt out with `DSV4_PIN_CLOCKS=0`) and which drops a
+  `<log>.clocks` sidecar so the run states its own clock state. A roofline probe ramps the governor
+  by itself, which is why no roofline number here ever saw an unpinned clock.
+  **Corrected 2026-08-20 (ladder 3.1): pinning is worth +2.0-3.0 % on decode, not the +3.0-6.4 %
+  this page and HARDWARE.md carried, and the reason is that a *decode* also ramps the governor by
+  itself.** Sampled every 2 s, a governed box spends **97.7 % of its compute window at 1386 MHz and
+  4266 MHz** — the pinned frequencies. The 315 MHz / 2750 MHz idle state is the ~90 s checkpoint
+  load, not the run. Pinning buys the ~2 s ramp, and pinning matters chiefly because the base-AR
+  window is measured *inside* that ramp ([`measurement-and-traps.md` §24](measurement-and-traps.md)
+  — 88 ms/tok governed vs 72.8 pinned, a 21 % artefact that reproduces exactly).
+- **`nvpmodel -m 0` (MAXN) is not worth taking.** It is the only way to reach the 1575 MHz core
+  ceiling — `jetson_clocks` only raises a rail to its governor's ceiling and nvpmodel 1 caps GPU
+  MAX_FREQ at 1386000000 — and at a verified 1575 MHz for 18/18 samples it measured
+  **+1.68 +/- 5.83 % paired** against pinned-120W. A core-clock raise is the wrong lever for a
+  bandwidth-bound engine. The sanctioned pin leaves the power mode alone.
 - **Drop caches before each model run**: `sync; echo 3 | sudo tee /proc/sys/vm/drop_caches`.
 - **Single tenant.** Two concurrent full-model processes exhaust the unified pool and thrash swap.
   `scripts/run_model.sh` enforces this with `flock` — on 2026-08-06 a failed-*looking* launch had in
