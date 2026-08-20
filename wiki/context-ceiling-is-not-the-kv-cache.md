@@ -123,11 +123,47 @@ Two things about it are worth carrying:
 * **The fix is an opt-in, and it is 4.7×, not infinite.** `topk_scan_smem_optin` in
   `include/indexer.h` raises those arms to 232,436 tokens of context and *aborts* above it.
   Bit-exactness against the radix select is gated at T = 12,286 / 16,381 / 24,570 / 58,045 on six
-  distributions, under CUDA-graph capture as well as direct launch.
+  distributions, under CUDA-graph capture as well as direct launch — and, since 2026-08-20, through
+  the engine's own `compressed_decode_step_indexer` at contexts 49,207 and 200,003
+  (`scripts/gate_topk_smem_ctx.sh`).
+* **There was a third one, on a path nothing links.** `sdpa` (`kernels/attention.cu`) sizes its
+  dynamic request `(head_dim + seq) * 4`, so it had the same defect at seq 12,224 — lower than any
+  of the seqmax figures this page argues for. It is not linked into `build/decode` or
+  `build/dsv4-server`; only `tests/test_attention.cu` calls it, and that test's golden dirs are not
+  in this tree. Enumerating every `<<<g, b, smem, s>>>` in `kernels/` and `src/` is what found it:
+  thirteen launches request dynamic shared memory, seven of them scale with a runtime quantity, and
+  the other six are bounded by model or block constants at ≤ 4 KiB. **Grep for the launch
+  configuration, not for the buffer.**
 
 The transferable form: **a context ceiling need not be a memory ceiling.** Before raising `seqmax`,
 grep for launch configurations computed from a runtime quantity — dynamic shared memory, grid size,
 block size — because those fail at a fixed number that no allocation table will tell you about.
+
+## Where the memory ceiling actually is now, and why the 49,140 leg had to be run outside the engine
+
+**Measured from the allocation code, 2026-08-20, and this supersedes the table at the top of the
+page for the current engine.** Both offenders that table names have since been fixed: the arena is
+sized by `MAXB`, not `seqmax` (`src/engine.cu:469`, `(512 + MAXB*2) MiB` = 640 MiB flat), and `xin`
+is a `2*ratio`-row ring (`xin_ring_alloc_rows`). What still scales with `seqmax` in `src/engine.cu`
+is:
+
+| buffer | B/token |
+|---|---:|
+| `win_kv` — 43 layers × `HEAD_DIM` fp32 | 88,064 |
+| `comp_kv` — 41 layers × `HEAD_DIM` fp32 / ratio 4 | 20,992 |
+| `main_x` — `DIM` fp32 | 16,384 |
+| `mkv[3]` — DSpark stage KV | 6,144 |
+| `idx_ckv` — 21 layers × `INDEX_HEAD_DIM` fp32 / ratio 4 | 2,688 |
+| `d_ids` | 4 |
+| **total** | **134,276** = 131 KiB/token |
+
+That is **2.05 GiB at the seqmax 16,384 the engine runs today and 6.15 GiB at seqmax 49,152** — 4.10
+GiB more, against the 3.7 GiB free that `[engine] ready. mem 119.1/122.8 GiB` reports at seqmax
+16,384. **So the engine cannot be run past the 49,140 shared-memory ceiling on this box, and the
+blocker is the 100.4 GiB of weights, not the KV.** 131 KiB/token is 3017 KiB/token's successor and
+it is 23× better; the remaining 96.7 %-is-scratch claim in the table above no longer holds, but
+`win_kv` at full `seqmax` (66 % of what is left, against a `WINDOW` of 128) is the same
+over-allocation the caveat at the end of that section already flags, and it is still unverified.
 
 ## Why this matters beyond memory
 

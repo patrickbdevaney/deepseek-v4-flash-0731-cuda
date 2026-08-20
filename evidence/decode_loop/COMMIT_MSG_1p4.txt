@@ -1,0 +1,63 @@
+1.4: the ~49k dynamic-shared-memory ceiling is closed, gated through the engine's own decode
+step, and it is a measured NULL on throughput -- proven by a same-arm control, not by argument
+
+WHAT WAS BROKEN. Six top-k launches and `sdpa` sized their dynamic shared memory from a runtime
+quantity (~4T bytes; (head_dim+seq)*4). Past this device's 49,152 B per-block default the LAUNCH
+fails, the following `cudaDeviceSynchronize` returns SUCCESS, and the consumer proceeds on a buffer
+nothing wrote. Iteration 5 landed the opt-in for the four scan kernels but its server build was
+killed mid-nvcc, so it was never compiled into the engine and the item was never closed.
+
+WHAT WAS MEASURED THIS ITERATION.
+
+1. The full enumeration. Every `<<<g,b,smem,s>>>` in kernels/ and src/: 13 request dynamic shared
+   memory, 7 scale with a runtime quantity (6 top-k + `sdpa`), 6 are bounded by model or block
+   constants at <= 4 KiB. `sdpa` is the one iteration 5 missed -- and it is on the one path nothing
+   links, which is why it would have sat there. Fixed and gated (tests/gate_sdpa_smem.cu).
+
+2. The leg above the ceiling, through the ENGINE, which is what the ladder entry asked for.
+   tests/gate_topk_smem_ctx.cu drives `compressed_decode_step_indexer` -- the function the server
+   calls once per decode step -- at contexts 8,191 / 49,207 / 200,003 / 240,003. Radix, fallback
+   scan and in-situ reference arms all agree bit-exactly above the ceiling; past the opt-in maximum
+   it aborts with the numbers. It could NOT be run in build/dsv4-server: seqmax 49,152 needs
+   6.15 GiB of seqmax-scaling allocations against 2.05 GiB at today's 16,384 and 3.7 GiB free.
+
+3. The defect reproduced in the SAME binary. New DSV4_TOPK_SMEM_OPTIN=0 restores pre-1.4 behaviour:
+   launch fails `invalid argument`, sync says success, exit code 0, output 4096/4096 nonzero with
+   0 NaN -- and the wrong hash. This CORRECTS iteration 5's own write-up twice: it is not zeros
+   (`dtop` is unzeroed `dmalloc`, so it is a plausible wrong answer), and the in-situ reference does
+   not "agree with anything" -- it reports a FALSE FAIL against the correct shipped path.
+
+4. A hardware fact and a margin that failed a passing gate. `MaxSharedMemoryPerBlockOptin` is not a
+   kernel's settable maximum; subtract the kernel's own STATIC shared, and do NOT subtract
+   `ReservedSharedMemoryPerBlock`. Bisected: static 0 -> 232,448 settable; static 1,024 -> 231,424.
+   Subtracting `reserved` "to be safe" aborted gate_topk_radix's T=58,045 leg minutes after it
+   passed.
+
+5. THE RATCHET, and the control is the finding. First 1.4 leg: 19.62 tok/s against 1.3's recorded
+   20.89 -- -6.1 %, outside the quoted 3.5 % spread -- with tau and token ids identical, on a change
+   whose three touched TUs compile to BYTE-IDENTICAL SASS. So the pre-1.4 binary was rebuilt from
+   e4d7c6d and run now:
+
+     tau           2.87 recorded | 2.87/2.87/2.87 pre-1.4 today | 2.87/2.87/2.87 with 1.4
+     spec tok/s   20.89 recorded | 19.65-19.72   pre-1.4 today | 19.65-19.76   with 1.4
+     base AR      11.43 recorded | 11.28         pre-1.4 today | 11.37         with 1.4
+     token ids -- byte-identical across all three (md5 25c90e85...)
+
+   The old binary does not reproduce its own number. Three replicates inside ONE checkpoint load
+   spread 0.6 %; the same measurement across loads three hours apart differs by 5.7 %. The dominant
+   variance on this box is BETWEEN loads. Corollary, now a rule: a number from a previous iteration
+   is not a valid before-arm.
+
+WHAT IT MEANS. 1.4 moves no throughput number and could not have. What it buys is that the two arms
+which certify every future top-k change -- DSV4_TOPK_RADIX=0 and DSV4_TOPK_GATE=1 -- now work above
+the context they were only ever run below, instead of condemning the code they audit. Next item is
+1.5 (`i:score`), and it is a kernel change: this is the second consecutive iteration without one.
+
+Also closed in passing, because CLAUDE.md requires it: detach_audit.sh knew neither `run_model.sh`
+nor `build/decode`, so an audit taken while this iteration's own benchmark was running printed one
+row for a three-process tree and said "all detached".
+
+Wiki: kernel-optimisations.md (1.4 closed), measurement-and-traps.md (SS17 rewritten from the
+engine-path measurement, SS18 the opt-in maximum, SS19 between-load variance),
+context-ceiling-is-not-the-kv-cache.md (the third launch; the current 134,276 B/token footprint),
+README.md state table.

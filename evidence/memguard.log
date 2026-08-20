@@ -73,3 +73,10 @@
 [memguard] victim gone, exiting. low-water was 5307 MB 2026-08-20T06:42:38-04:00
 [memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T06:42:49-04:00
 [memguard] victim gone, exiting. low-water was 5275 MB 2026-08-20T06:44:16-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T07:47:20-04:00
+[memguard] victim gone, exiting. low-water was 5338 MB 2026-08-20T07:48:56-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T07:49:47-04:00
+[memguard] victim gone, exiting. low-water was 5398 MB 2026-08-20T07:51:19-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T07:51:31-04:00
+[memguard] victim gone, exiting. low-water was 5028 MB 2026-08-20T07:53:08-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode_pre1p4_ref started 2026-08-20T07:57:04-04:00

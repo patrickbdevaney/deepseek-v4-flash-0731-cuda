@@ -1,0 +1,18 @@
+== item 1.4, iteration 6: SASS of the three changed TUs, HEAD vs working tree ==
+kernels/indexer.cu               pre   5847 lines   post   5847 lines   IDENTICAL
+kernels/compressed_decode.cu     pre  12612 lines   post  12612 lines   IDENTICAL
+kernels/attention.cu             pre   1993 lines   post   1993 lines   IDENTICAL
+859eec1af58b8ae3acf94ea6213833db80b62f492027269cfea86a5095887fb7  /tmp/sass16/attention.post.sass
+859eec1af58b8ae3acf94ea6213833db80b62f492027269cfea86a5095887fb7  /tmp/sass16/attention.pre.sass
+699ad9785f9027615ddc7013f62fe6ba1f8178c00531b1df2389ed9f4caa8961  /tmp/sass16/compressed_decode.post.sass
+699ad9785f9027615ddc7013f62fe6ba1f8178c00531b1df2389ed9f4caa8961  /tmp/sass16/compressed_decode.pre.sass
+f700b59785e239fe15b695144e099d5b0e79ec85f7d19cbc1047a9d2574574e9  /tmp/sass16/indexer.post.sass
+f700b59785e239fe15b695144e099d5b0e79ec85f7d19cbc1047a9d2574574e9  /tmp/sass16/indexer.pre.sass
+
+CONCLUSION: iteration 6's changes to item 1.4 -- the DSV4_TOPK_SMEM_OPTIN kill-switch, the
+per-kernel ceiling from cudaFuncGetAttributes, and the sdpa opt-in -- changed no device code. All
+three touched translation units compile to byte-identical SASS against HEAD. The only difference is
+host-side launch CONFIGURATION on paths the shipped radix branch does not evaluate.
+Method: git archive HEAD -> /tmp/pre16 (pre-change headers included); working tree = post;
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -cubin; cuobjdump -sass; addresses and
+instruction offsets stripped before comparison.

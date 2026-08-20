@@ -1,0 +1,57 @@
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=45
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 119.6/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 281.3 ms = 17.8 tok/s (56.267 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (87.7 ms warmup)
+  step 1 pos 6 -> token 16  (87.9 ms)
+  step 2 pos 7 -> token 455  (96.5 ms)
+  step 3 pos 8 -> token 6102  (88.2 ms)
+  step 4 pos 9 -> token 294  (87.9 ms)
+  step 5 pos 10 -> token 16603  (88.2 ms)
+  step 6 pos 11 -> token 344  (95.6 ms)
+  step 7 pos 12 -> token 29168  (73.4 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 88.3 ms/tok = 11.33 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 128.0 ms (= 25.6 ms/tok if all accepted vs 88.3 M=1 -> 3.45x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 6
+[spec] head built. mem 119.7/122.8 GiB
+[decode] PREFILL: 5 positions in 149.5 ms = 33.4 tok/s (29.897 ms/tok)
+[spec] decoding 24 tokens (block=6, draft passes=1, adaptK=1.50, prompt=0 s=6)...
+[arena] first draft: draft footprint 214.32 MB, global hwm 214.32 MB / cap 512.00 MB (41.9%), draft path = ARENA
+  [margins] 3.74 0.25 0.84 1.00 0.17 5.66  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (111.8 ms)  cpos=7
+  [margins] 1.05 0.20 2.96 0.88 0.28 0.65  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (118.3 ms)  cpos=9
+  [margins] 5.70 4.24 6.70 0.77 3.17 2.22  K=4
+  verify 3: accepted 1/3 (K=4) + correction -> +2 tokens (143.2 ms)  cpos=11
+  [margins] 7.69 2.39 3.60 3.04 3.60 0.95  K=6
+  verify 4: accepted 1/5 (K=6) + correction -> +2 tokens (184.6 ms)  cpos=13
+  [margins] 2.65 3.67 5.26 0.24 1.66 4.33  K=4
+  verify 5: accepted 3/3 (K=4) + correction -> +4 tokens (143.7 ms)  cpos=17
+  [margins] 0.20 4.39 0.20 3.09 3.99 5.63  K=3
+  verify 6: accepted 2/2 (K=3) + correction -> +3 tokens (129.5 ms)  cpos=20
+  [margins] 2.24 3.68 4.74 1.28 0.31 3.22  K=4
+  verify 7: accepted 3/3 (K=4) + correction -> +4 tokens (144.1 ms)  cpos=24
+  [margins] 0.32 6.82 0.04 4.17 4.63 6.04  K=3
+  verify 8: accepted 0/2 (K=3) + correction -> +1 tokens (122.8 ms)  cpos=25
+  [margins] 9.30 2.42 3.03 4.30 6.69 2.91  K=7
+  verify 9: accepted 1/6 (K=7) + correction -> +2 tokens (198.1 ms)  cpos=27
+  [margins] 2.93 4.26 7.04 1.83 1.39 5.00  K=5
+  verify 10: accepted 4/4 (K=5) + correction -> +5 tokens (165.9 ms)  cpos=32
+
+[spec] generated 27 tokens over 10 verifies: mean tokens/verify = 2.70 (block=6, max 7)
+[spec] tokens: 11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 344 16235 16 455 6102 294 29585 344 76405 16 455 6102 294 25062
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 54.0 ms/tok = 18.52 tok/s  (vs base M=1 88.3 ms/tok = 11.33 tok/s -> 1.63x)
+[decode] mem 119.7/122.8 GiB

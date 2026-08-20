@@ -1,0 +1,50 @@
+== 1. below the ceiling: all three arms must agree ==
+    [smem-ctx below-radix] context=8191 pos=8190 T=2047  scan smem would be 8208 B (device default 49152 B, opt-in 232448 B) -> below the default ceiling
+    [smem-ctx below-radix] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=4329fccc7a286b1b
+    [smem-ctx below-scan] context=8191 pos=8190 T=2047  scan smem would be 8208 B (device default 49152 B, opt-in 232448 B) -> below the default ceiling
+    [smem-ctx below-scan] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=4329fccc7a286b1b
+    [smem-ctx below-gate] context=8191 pos=8190 T=2047  scan smem would be 8208 B (device default 49152 B, opt-in 232448 B) -> below the default ceiling
+    [topk-gate] PASS decode ctx=8190 n=512 (1 checks, 512 slots)
+    [smem-ctx below-gate] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=4329fccc7a286b1b
+  OK  all three arms hash=4329fccc7a286b1b
+
+== 2. ABOVE the ceiling, opt-in ON (the shipped state): the arms must still agree ==
+    [smem-ctx above-radix] context=49207 pos=49206 T=12301  scan smem would be 49216 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [smem-ctx above-radix] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=2b36c09ec550fc1a
+    [smem-ctx above-scan] context=49207 pos=49206 T=12301  scan smem would be 49216 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [topk-smem] k_topk_decode opted in to 232448 B dynamic shared memory (needed 49216 B at T=12301; default limit is 49152 B)
+    [smem-ctx above-scan] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=2b36c09ec550fc1a
+    [smem-ctx above-gate] context=49207 pos=49206 T=12301  scan smem would be 49216 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [topk-smem] k_topk_decode opted in to 232448 B dynamic shared memory (needed 49216 B at T=12301; default limit is 49152 B)
+    [topk-gate] PASS decode ctx=49206 n=512 (1 checks, 512 slots)
+    [smem-ctx above-gate] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=2b36c09ec550fc1a
+  OK  all three arms hash=2b36c09ec550fc1a
+
+== 3. ABOVE the ceiling, opt-in OFF (pre-1.4 restored): the defect must REPRODUCE ==
+    [smem-ctx pre1p4-scan] context=49207 pos=49206 T=12301  scan smem would be 49216 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [topk-smem] DSV4_TOPK_SMEM_OPTIN=0: handing k_topk_decode the pre-1.4 49216 B request at T=12301 against a 49152 B default limit. This launch WILL fail and the following synchronize WILL report success. Deliberate; A/B before-arm only.
+    [topk-smem] DSV4_TOPK_SMEM_OPTIN=0: launch of k_topk_decode (T=12301, 49216 B dynamic shared) failed with invalid argument and the check is disabled, so this process now continues on an UNWRITTEN output buffer. This is what pre-1.4 did on every call.
+    [smem-ctx pre1p4-scan] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=8f24ad5745233320
+  OK  pre-1.4 returns hash=8f24ad5745233320 where the correct answer is hash=2b36c09ec550fc1a -- wrong, and it exited 0
+  (the in-situ reference under the same switch, which must report a FALSE FAIL:)
+    [smem-ctx pre1p4-gate] context=49207 pos=49206 T=12301  scan smem would be 49216 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [topk-smem] DSV4_TOPK_SMEM_OPTIN=0: handing k_topk_decode the pre-1.4 49216 B request at T=12301 against a 49152 B default limit. This launch WILL fail and the following synchronize WILL report success. Deliberate; A/B before-arm only.
+    [topk-smem] DSV4_TOPK_SMEM_OPTIN=0: launch of k_topk_decode (T=12301, 49216 B dynamic shared) failed with invalid argument and the check is disabled, so this process now continues on an UNWRITTEN output buffer. This is what pre-1.4 did on every call.
+    [topk-gate] FAIL decode ctx=49206 n=512 first diff at slot 0: radix 55526 vs warp 0
+
+== 4. deep inside the opt-in range: T=50,000 ==
+    [smem-ctx deep-radix] context=200003 pos=200002 T=50000  scan smem would be 200016 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [smem-ctx deep-radix] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=2dcfaeaf2947c336
+    [smem-ctx deep-scan] context=200003 pos=200002 T=50000  scan smem would be 200016 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [topk-smem] k_topk_decode opted in to 232448 B dynamic shared memory (needed 200016 B at T=50000; default limit is 49152 B)
+    [smem-ctx deep-scan] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=2dcfaeaf2947c336
+  OK  both arms hash=2dcfaeaf2947c336
+
+== 5. above the opt-in maximum: must ABORT, not return ==
+scripts/gate_topk_smem_ctx.sh: line 75: 179848 Aborted                 (core dumped) env DSV4_TOPK_RADIX=0 "$BIN" "$OVER" over-optin > /tmp/smem_over.log 2>&1
+    [smem-ctx over-optin] context=240003 pos=240002 T=60000  scan smem would be 240016 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+    [topk-smem] FATAL k_topk_decode wants 240016 B of dynamic shared memory for T=60000, but the most this kernel can be granted on this device is 232448 B (T <= 58109, context <= 232436 at ratio 4). Refusing to issue a launch that would fail and leave the output buffer untouched. Use the radix select (DSV4_TOPK_RADIX=1, the default), which needs none.
+  OK  SIGABRT (rc 134)
+
+GATE: PASS — the engine's decode step is correct above context 49,140, and the defect it
+        replaces is reproducible in the same binary with DSV4_TOPK_SMEM_OPTIN=0.

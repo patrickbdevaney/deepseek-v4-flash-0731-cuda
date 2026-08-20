@@ -62,10 +62,15 @@ static inline size_t topk_scan_smem(int n){
 // Read the middle column. The LAUNCH fails, the following synchronize returns **success**, and the
 // output buffer is left exactly as it was -- so the engine's own defences do not see it. `dprobe()`
 // is compiled in but inert unless `DSV4_SYNCPROBE` is set; `dsync()` does check the error slot but
-// only *warns* unless `DSV4_STRICT_LAUNCH` is set, and the arena path skips its sync entirely. The
-// consumer therefore reads a zeroed (`zalloc`) index array and sparse_attn attends to row 0 of the
-// KV for every head, forever, with no diagnostic anywhere. That is the "silent garbage-return above
-// ~49k context" of item 1.4.
+// only *warns* unless `DSV4_STRICT_LAUNCH` is set, and the arena path skips its sync entirely.
+//
+// WHAT THE CONSUMER THEN READS WAS MEASURED, not assumed, by driving the engine's own decode entry
+// point at context 49,207 with the fix switched off (tests/gate_topk_smem_ctx.cu, ladder 1.4's
+// engine-path leg). `dtop` in `compressed_decode_step_indexer` comes from `dmalloc`, which is a bump
+// allocator and does NOT zero -- so this is not "attends to row 0 forever", it is worse: the step
+// completes, `cudaDeviceSynchronize` returns success, the process exits 0, and `out` is 4096/4096
+// nonzero with no NaN and a different hash from the correct answer. A wrong answer wearing the
+// costume of a right one.
 //
 // THE FIX IS THE OPT-IN, AND WHERE THE OPT-IN RUNS OUT IT IS AN ABORT. `cudaFuncSetAttribute` with
 // `cudaFuncAttributeMaxDynamicSharedMemorySize` raises the ceiling to
@@ -77,9 +82,10 @@ static inline size_t topk_scan_smem(int n){
 // COST IS ZERO IN THE REGIME THE ENGINE ACTUALLY RUNS IN. The request is compared against the
 // default limit first and returns immediately when it fits, so at `seqmax` 16,384 (T = 4,096,
 // 16 KiB) not one CUDA call is added. Above the default it is one `cudaFuncSetAttribute` per
-// kernel for the lifetime of the process -- the attribute is a MAXIMUM, so it is set once to the
-// device limit and never touched again. That matters because these kernels ARE the `DSV4_TOPK_RADIX=0`
-// A/B arm: adding a per-launch host call to them would inflate every future re-measurement of 1.2.
+// kernel for the lifetime of the process -- the attribute is a MAXIMUM, so it is set once to this
+// kernel's ceiling and never touched again. That matters because these kernels ARE the
+// `DSV4_TOPK_RADIX=0` A/B arm: adding a per-launch host call to them would inflate every future
+// re-measurement of 1.2.
 //
 // WHY OPT IN RATHER THAN DELETE. The shipped path (item 1.2's radix select) requests zero dynamic
 // shared memory and cannot hit this at any T, so deleting these four kernels would also close the
@@ -87,6 +93,19 @@ static inline size_t topk_scan_smem(int n){
 // in-situ bit-exactness reference -- the only thing in this repo that can prove a future top-k
 // change still matches the original selection sort. The reference is worth more than the twelve
 // lines it costs to keep it correct.
+//
+// THE KILL-SWITCH IS WHAT MAKES THIS ITEM MEASURABLE, and it is the reason it is here at all.
+// `DSV4_TOPK_SMEM_OPTIN=0` restores the EXACT pre-1.4 behaviour in the same binary: no
+// `cudaFuncSetAttribute`, no post-launch error check, the size handed back regardless. Without it,
+// "the fix works" is a claim about a binary that no longer exists, and the before-arm would have to
+// be a git checkout, a rebuild, and a different set of everything-else. With it, before and after
+// are two runs of one executable over one input, which is the only form of before/after this ladder
+// accepts. It is deliberately loud: restoring a silent-garbage path prints that it did so, every
+// time, so a switch left set in a script cannot masquerade as a passing run. Default is ON.
+static inline int topk_smem_optin_on(){
+    static const int v = getenv("DSV4_TOPK_SMEM_OPTIN") ? atoi(getenv("DSV4_TOPK_SMEM_OPTIN")) : 1;
+    return v;
+}
 static inline size_t topk_scan_smem_optin(const void* fn, int n, const char* what){
     const size_t need = topk_scan_smem(n);
     // Drain the error slot BEFORE the launch so `topk_smem_launch_check` below can attribute what
@@ -97,6 +116,21 @@ static inline size_t topk_scan_smem_optin(const void* fn, int n, const char* wha
     { cudaError_t pre = cudaGetLastError();
       if(pre != cudaSuccess) fprintf(stderr, "[topk-smem] pre-existing CUDA error before %s: %s\n",
                                      what, cudaGetErrorString(pre)); }
+    // `lim_optin` is a DEVICE attribute and is NOT what a given kernel can be granted. MEASURED on
+    // this box by bisecting `cudaFuncSetAttribute` over two kernels that differ only in their static
+    // shared memory (/tmp/probe_smem2.cu, reproduced in the ladder entry):
+    //
+    //     optin = 232,448   reserved = 1,024
+    //     static 0 B     -> max settable 232,448, and a launch at exactly that size succeeds
+    //     static 1,024 B -> max settable 231,424, and a launch at exactly that size succeeds
+    //
+    // So the rule is `optin - the kernel's own STATIC shared`, and `ReservedSharedMemoryPerBlock` is
+    // NOT a second deduction -- it is already accounted for in the opt-in figure. Subtracting it as
+    // well looks conservative and is not free: it lowered the ceiling by 1,024 B, which is 256 rows
+    // of context, and immediately aborted tests/gate_topk_radix.cu's T = 58,045 leg -- a leg that
+    // had passed. A guessed safety margin that fails a passing gate is a bug with good manners.
+    // These four scan kernels declare no static shared at all, so for them `lim_fn == lim_optin`;
+    // the query is here so the helper stays correct for a kernel that has not been written yet.
     static int lim_default = 0, lim_optin = 0;
     if(!lim_default){
         int dev = 0; cudaGetDevice(&dev);
@@ -105,26 +139,38 @@ static inline size_t topk_scan_smem_optin(const void* fn, int n, const char* wha
         if(!lim_default) lim_default = 48*1024;                       // query failed; assume the floor
         if(lim_optin < lim_default) lim_optin = lim_default;
     }
+    int lim_fn = lim_optin;
+    { cudaFuncAttributes fa{};
+      if(cudaFuncGetAttributes(&fa, fn) == cudaSuccess) lim_fn = lim_optin - (int)fa.sharedSizeBytes;
+      if(lim_fn < lim_default) lim_fn = lim_default; }
     if(need <= (size_t)lim_default) return need;                      // the whole reachable regime
-    if(need > (size_t)lim_optin){
-        fprintf(stderr, "[topk-smem] FATAL %s wants %zu B of dynamic shared memory for T=%d, but this "
-                "device's opt-in maximum is %d B (T <= %d, context <= %d at ratio 4). Refusing to "
-                "issue a launch that would fail and leave the output buffer untouched. Use the radix "
-                "select (DSV4_TOPK_RADIX=1, the default), which needs none.\n",
-                what, need, n, lim_optin, (int)(lim_optin/4) - 3, ((int)(lim_optin/4) - 3) * 4);
+    if(!topk_smem_optin_on()){
+        fprintf(stderr, "[topk-smem] DSV4_TOPK_SMEM_OPTIN=0: handing %s the pre-1.4 %zu B request at "
+                "T=%d against a %d B default limit. This launch WILL fail and the following "
+                "synchronize WILL report success. Deliberate; A/B before-arm only.\n",
+                what, need, n, lim_default);
+        fflush(stderr); return need;
+    }
+    if(need > (size_t)lim_fn){
+        fprintf(stderr, "[topk-smem] FATAL %s wants %zu B of dynamic shared memory for T=%d, but the "
+                "most this kernel can be granted on this device is %d B (T <= %d, context <= %d at "
+                "ratio 4). Refusing to issue a launch that would fail and leave the output buffer "
+                "untouched. Use the radix select (DSV4_TOPK_RADIX=1, the default), which needs "
+                "none.\n",
+                what, need, n, lim_fn, (int)(lim_fn/4) - 3, ((int)(lim_fn/4) - 3) * 4);
         fflush(stderr); abort();
     }
     static const void* done[8]; static int ndone = 0;                 // one opt-in per kernel, ever
     for(int i = 0; i < ndone; ++i) if(done[i] == fn) return need;
-    cudaError_t e = cudaFuncSetAttribute(fn, cudaFuncAttributeMaxDynamicSharedMemorySize, lim_optin);
+    cudaError_t e = cudaFuncSetAttribute(fn, cudaFuncAttributeMaxDynamicSharedMemorySize, lim_fn);
     if(e != cudaSuccess){
         fprintf(stderr, "[topk-smem] FATAL cudaFuncSetAttribute(%s, MaxDynamicSharedMemorySize, %d) "
-                "failed: %s\n", what, lim_optin, cudaGetErrorString(e));
+                "failed: %s\n", what, lim_fn, cudaGetErrorString(e));
         fflush(stderr); abort();
     }
     if(ndone < 8) done[ndone++] = fn;
     fprintf(stderr, "[topk-smem] %s opted in to %d B dynamic shared memory (needed %zu B at T=%d; "
-            "default limit is %d B)\n", what, lim_optin, need, n, lim_default);
+            "default limit is %d B)\n", what, lim_fn, need, n, lim_default);
     fflush(stderr);
     return need;
 }
@@ -138,6 +184,13 @@ static inline size_t topk_scan_smem_optin(const void* fn, int n, const char* wha
 static inline void topk_smem_launch_check(const char* what, int n, size_t bytes){
     cudaError_t e = cudaGetLastError();
     if(e == cudaSuccess) return;
+    if(!topk_smem_optin_on()){
+        fprintf(stderr, "[topk-smem] DSV4_TOPK_SMEM_OPTIN=0: launch of %s (T=%d, %zu B dynamic "
+                "shared) failed with %s and the check is disabled, so this process now continues on "
+                "an UNWRITTEN output buffer. This is what pre-1.4 did on every call.\n",
+                what, n, bytes, cudaGetErrorString(e));
+        fflush(stderr); return;
+    }
     fprintf(stderr, "[topk-smem] FATAL launch of %s (T=%d, %zu B dynamic shared) failed: %s. The "
             "output buffer was NOT written.\n", what, n, bytes, cudaGetErrorString(e));
     fflush(stderr); abort();

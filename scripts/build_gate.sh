@@ -11,6 +11,27 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   tests/gate_topk_radix.cu -o build/gate_topk_radix
 echo "built build/gate_topk_radix"
 
+# Gate TOPK_SMEM_CTX (DECODE_LADDER 1.4) -- the ENGINE'S decode step above the dynamic-shared-memory
+# ceiling. gate_topk_radix launches the scan kernels directly; this drives
+# `compressed_decode_step_indexer` itself at context 49,207 and 200,003, over pre-filled caches and
+# no checkpoint, and reproduces the pre-fix defect in the same binary via DSV4_TOPK_SMEM_OPTIN=0.
+# Driver: scripts/gate_topk_smem_ctx.sh. A gate that lives only in a comment rots; this is why it is
+# in the build script.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_topk_smem_ctx.cu kernels/compressed_decode.cu kernels/compressed_attn.cu \
+  kernels/compressor.cu kernels/indexer.cu kernels/mla_attn.cu kernels/fp8_block_gemm.cu \
+  kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu kernels/nvfp4_dense.cu \
+  -o build/gate_topk_smem_ctx
+echo "built build/gate_topk_smem_ctx"
+
+# Gate SDPA_SMEM (DECODE_LADDER 1.4) -- the third context-sized dynamic-shared launch, on the one
+# path in kernels/ that nothing links (tests/test_attention.cu is its only caller and its golden
+# dirs are absent). Fixing an unexercised path and calling it fixed is how a wiki page becomes
+# confidently wrong, so the fix gets a leg: below the ceiling and above it, same finite output.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_sdpa_smem.cu kernels/attention.cu -o build/gate_sdpa_smem
+echo "built build/gate_sdpa_smem"
+
 nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   tests/gate_units.cu kernels/fp8_block_gemm.cu kernels/hc_sinkhorn.cu kernels/mla_attn.cu kernels/moe.cu kernels/hc.cu kernels/compressor.cu kernels/indexer.cu kernels/tc_moe_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu \
   -o build/gate_units

@@ -592,16 +592,156 @@ So, in order:
       `fit_1p3_itopk.txt`, `gate_topk_radix_1p3.log`, `server_1p3_gate.log`,
       `dprof_ctx_1p3_on.txt`, `dprof_ctx_1p3_off.txt`, `decode_1p3_lossless.log`,
       `topk_early_ab.log`.
-- [ ] **1.4** `cudaFuncSetAttribute` opt-in for dynamic shared memory, or drop the requirement
+- [x] **1.4** `cudaFuncSetAttribute` opt-in for dynamic shared memory, or drop the requirement
       entirely (1.2 does). Removes a silent garbage-return above ~49k context.
-      **NARROWED, NOT CLOSED, by 1.2 (2026-08-20).** The shipped path now requests **zero** dynamic
-      shared memory — the radix select uses ~7 KiB of *static* shared memory whatever T is — so the
-      ~49k ceiling cannot be hit by the kernel the engine runs. It is deliberately left unchecked
-      because that is a mechanical fact about the launch, **not a measurement**: nothing in this
-      repo has run the engine above 49k context, `seqmax` is 16,384, and the two paths that still
-      ask for `topk_scan_smem(T)` — the `DSV4_TOPK_RADIX=0` fallback arm and the `DSV4_TOPK_GATE=1`
-      reference — retain the defect. Close this item by either deleting those paths or opting them
-      in, and by running one leg above the ceiling.
+      **DONE 2026-08-20 (iterations 5 and 6). It is a CORRECTNESS item and it moved no throughput
+      number, which is the outcome it was ranked on — the shipped path does not evaluate any of the
+      changed code, and `kernels/indexer.cu`, `kernels/compressed_decode.cu` and
+      `kernels/attention.cu` compile to BYTE-IDENTICAL SASS before and after, so that is a property
+      of the compiled artefact rather than an argument.**
+
+      **RULE 5 DECLARATION: this is the second consecutive iteration to ship no kernel change**
+      (1.3 changed a kernel and was worth nothing; 1.4 changes no device code at all). The next item
+      taken must be the highest-expected-value *kernel* item, which is **1.5** — `i:score`, still
+      `0.629 +/- 0.018 ms per 1000 context` on 1.3's re-attribution, genuinely linear, and untouched
+      by anything that has landed since it was measured.
+
+      **WHY IT TOOK TWO ITERATIONS, stated because the ladder is a record of process too.** Iteration
+      5 landed the fix, the four-kernel gate legs and the wiki pages and then stopped — its server
+      build was killed mid-`nvcc` (`build_1p4.log` ends `nvcc: Terminated`), so `build/dsv4-server`
+      was never rebuilt, the item was never marked, and no `COMMIT_MSG` was left. Iteration 6 found
+      a complete-looking change that had never been compiled into the engine. **A change that is not
+      in a built binary is not landed**, and the tell was one line at the bottom of a build log.
+
+      **1. THE ENUMERATION, which is what turns "we fixed the four we knew about" into a closed
+      item.** Every `<<<grid, block, smem, stream>>>` in `kernels/` and `src/` was extracted and its
+      third argument classified. **Thirteen launches request non-zero dynamic shared memory. Three
+      families:**
+
+      | family | sites | request | ceiling | disposition |
+      |---|---|---|---|---|
+      | top-k scans (`k_topk_offset/decode/verify/masked`) | 6 | `~4T`, **context-scaled** | ctx 49,140 | opted in (iter 5) |
+      | `sdpa` (`kernels/attention.cu:97`) | 1 | `(head_dim + seq) * 4`, **context-scaled** | seq 12,224 | **opted in (iter 6)** |
+      | model/block constants | 6 | `2*n_routed*4`=1,280 B; `nr*4`=640 B; `threads*4` <= 4,096 B; `3*HD*4`=1,536 B | none reachable | no change needed |
+
+      `sdpa` is the one iteration 5 missed, and the reason it was easy to miss is the reason it was
+      worth fixing: **it is not linked into `build/decode` or `build/dsv4-server`** — its only caller
+      is `tests/test_attention.cu`, whose golden case dirs are not in this tree, so it had no
+      runnable gate either. An unreachable path is not a fixed one, it is an unexercised one. It now
+      has both a fix and a gate (`tests/gate_sdpa_smem.cu`, PASS at seq 4,096 and 16,384).
+
+      **2. THE LEG ABOVE THE CEILING, run through the ENGINE'S OWN DECODE STEP, which is what the
+      previous entry asked for.** `tests/gate_topk_smem_ctx.cu` +
+      `scripts/gate_topk_smem_ctx.sh` drive `compressed_decode_step_indexer` — the function the
+      server calls once per decode step, with its arena, its unzeroed `dmalloc`'d index buffer and
+      its `sparse_attn` consumer — over pre-filled caches, no checkpoint, ~140 MB. Both arms see
+      byte-identical inputs, so the FNV hash of the 4096-wide output is an exact comparison:
+
+      | leg | context | T | scan smem | result |
+      |---|---:|---:|---:|---|
+      | control, below the ceiling | 8,191 | 2,047 | 8,208 B | radix = scan = gate, `4329fccc7a286b1b` |
+      | **just above** | **49,207** | **12,301** | **49,216 B** | radix = scan = gate, `2b36c09ec550fc1a` |
+      | deep | 200,003 | 50,000 | 200,016 B | radix = scan, `2dcfaeaf2947c336` |
+      | past the opt-in max | 240,003 | 60,000 | 240,016 B | **SIGABRT** with the numbers, as designed |
+
+      **3. THE DEFECT REPRODUCED IN THE SAME BINARY.** `DSV4_TOPK_SMEM_OPTIN=0` (new, and loud —
+      it prints that it is restoring a silent-garbage path) turns the opt-in and the post-launch
+      check off, which is the only honest form of a before-arm: one executable, one input, two runs.
+      At context 49,207:
+
+      | | opt-in ON | opt-in OFF (pre-1.4) |
+      |---|---|---|
+      | launch | success | **`invalid argument`** |
+      | `cudaDeviceSynchronize` | success | **success** |
+      | exit code | 0 | **0** |
+      | `out` | 4096/4096 nonzero, 0 NaN | **4096/4096 nonzero, 0 NaN** |
+      | hash | `2b36c09ec550fc1a` | **`8f24ad5745233320`** |
+
+      **This corrects iteration 5's own write-up on both counts, and the correction is the more
+      useful finding.** It is *not* "reads a zeroed array and attends to KV row 0": `dtop` comes from
+      `dmalloc`, a bump allocator that does not clear, so the step returns a full, finite,
+      entirely-plausible wrong answer with every error channel reporting success. And the in-situ
+      reference does *not* "agree with anything" — under the same switch it prints
+      `[topk-gate] FAIL decode ctx=49206 first diff at slot 0: radix 55526 vs warp 0`, i.e. above the
+      ceiling the gate **condemns the correct shipped path**, because the reference is the arm that
+      failed to launch. A false alarm from your own instrument is how a good change gets reverted.
+      See `wiki/measurement-and-traps.md` §17 (rewritten).
+
+      **4. A NEW HARDWARE FACT, and the safety margin that failed a passing gate.**
+      `cudaFuncSetAttribute(..., MaxDynamicSharedMemorySize, cudaDevAttrMaxSharedMemoryPerBlockOptin)`
+      succeeds on the four scan kernels and returns `invalid argument` on `sdpa_kernel`. Bisected on
+      a pair of kernels differing only in static shared memory, then launched at the value found:
+      static 0 B -> **232,448 B** settable; static 1,024 B -> **231,424 B**. So
+      `settable = optin - the kernel's own static shared`, and
+      `cudaDevAttrReservedSharedMemoryPerBlock` (1,024 B) is **not** a second deduction. The first
+      version of the fix subtracted it anyway "to be safe", lowered the ceiling by 256 rows of
+      context, and immediately aborted `gate_topk_radix`'s T = 58,045 leg — a leg that had passed
+      minutes earlier. Both helpers now read `cudaFuncGetAttributes(...).sharedSizeBytes`.
+      `wiki/measurement-and-traps.md` §18.
+
+      **5. WHAT WAS NOT DONE, AND THE ARITHMETIC THAT SAYS WHY.** The leg above the ceiling was NOT
+      run in `build/dsv4-server`, and it cannot be on this box. Reaching context 49,140 needs
+      `--seqmax 49152`, and the engine's seqmax-scaling allocations are **134,276 B/token**
+      (`win_kv` 88,064 + `comp_kv` 20,992 + `main_x` 16,384 + `mkv[3]` 6,144 + `idx_ckv` 2,688 +
+      `d_ids` 4; `src/engine.cu:332-433` against `include/deepseek_v4.h`) — **6.15 GiB at seqmax
+      49,152 against 2.05 GiB at the 16,384 the engine runs today, i.e. 4.10 GiB more**, and the
+      engine reports `mem 119.1/122.8 GiB` at seqmax 16,384, i.e. **3.7 GiB free**. It does not fit,
+      and this box does not OOM gracefully. `build/decode` is worse still (it allocates `xin` at
+      `seqmax*DIM*4` across 41 layers). The engine-path gate above is the strongest leg that is
+      actually available, and it exercises the same function at the same T.
+
+      **6. THE RATCHET, and it is a null by construction.** Standing gate, `build/decode` rebuilt
+      with every 1.4 change in, same prompt and same parameters as 1.3's leg (s=6, NDEC=8, NGEN=64):
+
+      | | 1.3, as recorded | **pre-1.4 binary, re-measured now** | 1.4 binary, now |
+      |---|---|---|---|
+      | generated token ids | — | **identical** | **identical** (md5 `25c90e85…` all three) |
+      | LOSSLESS gate | PASS | PASS x3 | PASS x3 |
+      | tau (tokens/verify) | 2.87 | **2.87 / 2.87 / 2.87** | **2.87 / 2.87 / 2.87** |
+      | spec decode | 20.89 tok/s | **19.65 – 19.72** | **19.65 – 19.76** |
+      | base AR M=1 | 11.43 tok/s | 11.28 tok/s | 11.37 tok/s |
+
+      **THE CONTROL IS THE POINT, AND IT NEARLY WAS NOT RUN.** The first 1.4 leg came back at
+      19.62 tok/s against 1.3's recorded 20.89 — **−6.1 %, well outside the 3.5 % spread this ladder
+      quotes** — with `tau` and the token ids identical. On a byte-identical-SASS change that the
+      shipped path does not even evaluate, that number is impossible, so the temptation is to write
+      "within noise" and move on. Instead the pre-1.4 binary was rebuilt from `e4d7c6d` and run
+      **now, on this machine, in this state**: it returns **19.65–19.72**. It does not reproduce
+      20.89 either. The gap is between-session drift, and both arms are inside 0.6 % of each other.
+
+      **Three replicates inside one checkpoint load spread 0.6 %; the same measurement across loads
+      three hours apart differs by 5.7 %.** The dominant variance on this box is *between* loads, not
+      within them, and the ladder's "3.5 % run-to-run spread" understates it — see
+      `wiki/measurement-and-traps.md` §19. **Corollary for every future item: a single point from a
+      previous iteration is not a valid before-arm.** Both arms must be measured in the same session,
+      which is what `DSV4_BLKSWEEP` is for.
+
+      Bit-exactness: SASS byte-identical on all three touched TUs (`sass_1p4_identical.txt`,
+      `sass_1p6_identical.txt`); `gate_topk_radix` PASS (four kernel shapes x 13 lengths x 6
+      distributions, early-out both ways, plus the four above-ceiling legs and the graph-capture
+      leg); `gate_sdpa_smem` PASS; `gate_topk_smem_ctx.sh` PASS.
+
+      **7. A DETACHMENT GAP CLOSED IN PASSING, because CLAUDE.md requires it.** `detach_audit.sh`'s
+      `PATTERNS` list contained neither `run_model.sh` — the sanctioned launcher for every
+      full-model benchmark in this repo — nor `build/decode`, the 100.4 GiB process it launches. An
+      audit taken *while this iteration's benchmark was running* printed one row (`memguard.sh`) for
+      a three-process tree and concluded "all detached", which is precisely the green-audit-that-
+      proves-nothing CLAUDE.md warns about. Both added. A second fix went with it: the Claude Code
+      Bash wrapper shell retains its last command line forever, so a shell that had once typed
+      `build/decode` reported as a SESSION-BOUND stage; wrapper shells are now excluded by their
+      `shell-snapshots` signature, because a red audit that is wrong teaches people to ignore red.
+
+      Evidence: `evidence/decode_loop/gate_topk_smem_ctx_1p4.log`, `gate_topk_radix_1p4.log`,
+      `gate_sdpa_smem_1p4.log`, `sass_1p6_identical.txt`, `decode_1p4_lossless.log` (single leg),
+      `decode_1p4_band.log` (3 replicates, one load), `decode_pre1p4_control.log` (**the control**:
+      `e4d7c6d` rebuilt and re-measured today), `build_1p4_final.log`.
+      `decode_1p4_lossless_ngen24.log` is kept as the discarded first attempt — it ran NGEN=24
+      against 1.3's NGEN=64 (seqmax 45 vs 85, 10 verifies vs 23) and was thrown away rather than
+      reported, because a `tau` averaged over 10 verifies is not the same instrument as one averaged
+      over 23. **Check the header line of the log you are comparing against before you compare.**
+      Code: `include/indexer.h`, `kernels/attention.cu`, `tests/gate_topk_smem_ctx.cu`,
+      `tests/gate_sdpa_smem.cu`, `scripts/gate_topk_smem_ctx.sh`, `scripts/build_gate.sh`,
+      `scripts/detach_audit.sh`.
 - [ ] **1.5** **CONFIRMED BY 0.4, 2026-08-20 — this kernel is 9 % of the context term.**
       `i:score` measured **6.58 ms at ctx 12,288**, slope **0.644 +/- 0.018 ms per 1000 context**
       (R^2 0.750, width held fixed), against the 0.02 ms at context 9 it was retired on — 330x low.

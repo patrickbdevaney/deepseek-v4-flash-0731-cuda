@@ -14,7 +14,12 @@
 #   bash scripts/detach_audit.sh        # exits non-zero if anything is session-bound
 set -u
 cd "$(dirname "$0")/.."
-PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh|topk_ab_run.sh|topk_early_ab_run.sh}"
+# `run_model.sh` and `build/decode` ADDED 2026-08-20 by ladder item 1.4, and the omission is the
+# exact failure CLAUDE.md names: the sanctioned launcher for every full-model benchmark, and the
+# 100.4 GiB process it launches, were not in this list -- so an audit taken while one was running
+# reported "all detached" having never looked at it. It printed one row (memguard) for a
+# three-process tree. A green audit that proves nothing is worse than a red one.
+PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh|topk_ab_run.sh|topk_early_ab_run.sh|run_model.sh|build/decode}"
 
 # NEVER FLAG OUR OWN ANCESTRY. This script is itself run from a shell -- often a Claude Code Bash
 # invocation, which IS session-bound and correctly so. Its command line contains the patterns we
@@ -36,7 +41,13 @@ while read -r pid; do
   [ -n "$ppid" ] || continue
   tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
   cmd=$(ps -o args= -p "$pid" 2>/dev/null | cut -c1-58)
-  case "$cmd" in *detach_audit*|*ps\ -o*) continue;; esac
+  # The Claude Code Bash tool keeps a long-lived wrapper shell per session, and its command line
+  # retains whatever it was last asked to run -- so a shell that once typed `build/decode` matches
+  # this grep forever and reports as a SESSION-BOUND stage. It is not a stage; it is the session
+  # doing the auditing, which is session-bound by definition. The SELF walk above only excludes
+  # our own ancestors, not a sibling shell of the same session, so exclude the wrapper by its
+  # unmistakable signature. A red audit that is wrong teaches people to ignore a red audit.
+  case "$cmd" in *detach_audit*|*ps\ -o*|*shell-snapshots*) continue;; esac
   pcmd=$(ps -o comm= -p "$ppid" 2>/dev/null | tr -d ' ')
   n=$((n+1))
 

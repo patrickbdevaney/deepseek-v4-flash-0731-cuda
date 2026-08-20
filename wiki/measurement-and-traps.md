@@ -354,5 +354,116 @@ decoration: it is exercised by a forked child in `tests/gate_topk_radix.cu`, whi
 radix select uses ~7 KiB of *static* shared memory whatever `T` is, so the engine's default path
 cannot reach this at any context. What retained the defect was the `DSV4_TOPK_RADIX=0` A/B arm and
 the `DSV4_TOPK_GATE=1` in-situ reference — the two instruments that exist to prove a *future* top-k
-change still matches the original selection sort. An instrument that silently produces zeros above a
-context nobody has tried yet is worse than no instrument, because it will agree with anything.
+change still matches the original selection sort.
+
+**CORRECTED 2026-08-20 WHEN THE DEFECT WAS FINALLY RUN THROUGH THE ENGINE, and the correction is the
+interesting half.** This section used to end "an instrument that silently produces zeros above a
+context nobody has tried yet is worse than no instrument, because it will agree with anything."
+Both halves of that were wrong, and only running it found out. `scripts/gate_topk_smem_ctx.sh`
+drives `compressed_decode_step_indexer` — the function the server calls once per decode step — at
+context 49,207 with `DSV4_TOPK_SMEM_OPTIN=0`, which restores the pre-1.4 behaviour in the same
+binary:
+
+| | correct (opt-in on) | pre-1.4 (opt-in off) |
+|---|---|---|
+| launch | success | **`invalid argument`** |
+| `cudaDeviceSynchronize` | success | **success** |
+| process exit code | 0 | **0** |
+| `out` | 4096/4096 nonzero, 0 NaN | **4096/4096 nonzero, 0 NaN** |
+| hash of `out` | `2b36c09ec550fc1a` | **`8f24ad5745233320`** |
+
+1. **It does not produce zeros.** `dtop` comes from `dmalloc`, a bump allocator that does not clear,
+   so the consumer reads whatever the arena last held. The output is not obviously broken: a full
+   4096-wide vector, every element nonzero, no NaN, no diagnostic, exit 0 — and simply the wrong
+   answer. A wrong answer wearing the costume of a right one is a harder failure than zeros,
+   because zeros at least look like a bug.
+2. **The instrument does not "agree with anything" — it disagrees with everything.** Under the same
+   switch the in-situ reference gate prints
+   `[topk-gate] FAIL decode ctx=49206 first diff at slot 0: radix 55526 vs warp 0`. The *reference*
+   is the arm that failed to launch, so above the ceiling the gate would have condemned the correct
+   shipped path. An instrument that fails safe-looking is bad; one that raises a false alarm against
+   the code it audits is how a good change gets reverted.
+
+The general form is a rule about gates, not about shared memory: **a gate is evidence only inside
+the range it has been run over, and a failure it reports outside that range may be its own.**
+
+
+---
+
+## 18. The device opt-in maximum is not the kernel's maximum, and the safety margin that failed a passing gate
+
+DECODE_LADDER item 1.4, 2026-08-20, found while extending §17's fix to the third dynamic-shared
+launch (`sdpa`, `kernels/attention.cu`). `cudaFuncSetAttribute(fn,
+cudaFuncAttributeMaxDynamicSharedMemorySize, cudaDevAttrMaxSharedMemoryPerBlockOptin)` works on the
+four top-k scan kernels and returns **`invalid argument`** on `sdpa_kernel`. The difference is not
+the block size, the register count or the arch: `sdpa_kernel` also declares 1,040 B of **static**
+shared memory (`red[ATT_THREADS]`, `m_sh`, `l_sh`), and the four scan kernels declare none.
+
+Bisecting `cudaFuncSetAttribute` over a pair of kernels differing only in their static shared
+memory, then launching at exactly the value found:
+
+| kernel | static shared | max settable dynamic | launch at that size |
+|---|---:|---:|---|
+| no static shared | 0 B | **232,448 B** — the full opt-in attribute | success |
+| `__shared__ float r[256]; float a, b;` | 1,024 B | **231,424 B** — opt-in − static | success |
+
+So the rule on sm_110a is `settable = MaxSharedMemoryPerBlockOptin − the kernel's own static
+shared`, and **`cudaDevAttrReservedSharedMemoryPerBlock` (1,024 B here) is NOT a second deduction** —
+it is already inside the opt-in figure.
+
+**The part worth carrying is what the wrong version cost.** The first fix subtracted `reserved` as
+well, on the reasoning that a conservative bound cannot hurt. It lowered the ceiling by 1,024 B —
+256 rows of context — and `tests/gate_topk_radix.cu` immediately aborted on its T = 58,045 leg,
+which requests 232,192 B and *had passed minutes earlier*. The margin was not free, it was not
+conservative, and it turned a correct launch into `FATAL ... Refusing to issue a launch`.
+
+> **Rule.** A safety margin added by reasoning rather than by measurement is a behaviour change and
+> needs the same gate as any other. Prefer `cudaFuncGetAttributes(&fa, fn).sharedSizeBytes`, which
+> reports the kernel's actual static usage, over a constant you talked yourself into. If a defensive
+> bound makes a passing gate fail, the bound is the bug.
+
+
+---
+
+## 19. The variance is BETWEEN checkpoint loads, not within them — 0.6 % vs 5.7 %
+
+DECODE_LADDER item 1.4, 2026-08-20, and it was found by a control that nearly was not run.
+
+1.4 changes no device code: `kernels/indexer.cu`, `kernels/compressed_decode.cu` and
+`kernels/attention.cu` compile to byte-identical SASS, and the shipped radix path does not evaluate
+any of the changed macros. Its standing `build/decode` leg nevertheless came back at **19.62 tok/s
+against the 20.89 recorded for 1.3 three hours earlier — −6.1 %**, with `tau` at 2.87 in both and
+the 66 generated token ids byte-identical. An impossible regression, on the same prompt, the same
+parameters and the same box.
+
+The control: rebuild the **pre-1.4** binary from `e4d7c6d` and run the identical leg *now*.
+
+| | 1.3, as recorded (~04:00) | pre-1.4 binary, re-measured (~08:20) | 1.4 binary (~08:00) |
+|---|---|---|---|
+| tau | 2.87 | 2.87 / 2.87 / 2.87 | 2.87 / 2.87 / 2.87 |
+| spec tok/s | **20.89** | **19.69 / 19.65 / 19.72** | **19.65 / 19.73 / 19.76** |
+| base AR M=1 | 11.43 | 11.28 | 11.37 |
+
+**The old binary does not reproduce its own number either.** Both arms sit inside 0.6 % of each
+other and 5.7 % below a figure that this repo had already written down as a baseline.
+
+Read the two spreads against each other, because that is the finding:
+
+* **Three replicates inside ONE checkpoint load (`DSV4_BLKSWEEP="6:1:1.50,6:1:1.50,6:1:1.50"`,
+  each point re-prefilling): 19.65 → 19.76, a 0.6 % spread.**
+* **The same measurement across loads three hours apart: 5.7 %.**
+
+So the dominant term is not per-run noise, it is whatever differs between one 100.4 GiB load and the
+next — page placement of managed weights, thermal and DVFS history, what else has touched the unified
+pool. The ladder's stated "3.5 % run-to-run spread" is roughly right *within* a session and
+substantially understates the *between*-session term.
+
+> **Rule.** A number from a previous iteration is not a valid before-arm. Both arms of an A/B must be
+> measured in the same session, ideally in the same checkpoint load — that is what `DSV4_BLKSWEEP`
+> and the paired-fit protocol exist for. When a comparison against a recorded baseline shows a gap
+> you cannot explain mechanically, **re-measure the baseline before you believe the gap.** Rebuilding
+> the old binary costs one build and one load; attributing a 6 % phantom to a change costs the
+> ladder its ratchet.
+
+This is the throughput-side twin of §12: there, token ids diverged run-to-run and the fix was to run
+the same-arm control first. Here, throughput drifts load-to-load and the fix is the same shape.

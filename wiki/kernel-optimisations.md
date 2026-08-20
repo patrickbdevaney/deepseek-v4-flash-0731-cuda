@@ -293,7 +293,15 @@ kernel is covered by the unit gate and by the LOSSLESS gate on every `build/deco
 **Free side effect.** The originals asked for ~4T bytes of *dynamic* shared memory against a
 48 KiB default limit, and above ~49k context the launch silently failed and returned garbage
 (ladder 1.4). The radix select uses ~7 KiB of **static** shared memory whatever T is, so the
-shipped path cannot hit that ceiling. 1.4 stays open for the fallback arm, which still asks.
+shipped path cannot hit that ceiling. **1.4 CLOSED 2026-08-20** for the fallback arm and the in-situ
+reference, which still ask: they now opt in via `cudaFuncSetAttribute` and abort rather than issue a
+launch that would fail silently. The item moved no throughput number and could not have — all three
+touched translation units compile to byte-identical SASS, so the change is host-side launch
+configuration only. What it bought is that the two arms which certify every *future* top-k change
+now work above the context they were previously only ever run below: the engine's own
+`compressed_decode_step_indexer` is gated at contexts 49,207 and 200,003
+(`scripts/gate_topk_smem_ctx.sh`), and the defect is reproducible in the same binary under
+`DSV4_TOPK_SMEM_OPTIN=0`. See [`measurement-and-traps.md` §17–18](measurement-and-traps.md).
 
 **Two things measured and not shipped**, both in [`negative-results.md`](negative-results.md): a
 `__match_any_sync` warp-aggregated histogram (slower — 43.0 vs 39.0 µs at T=3072), and block sizes

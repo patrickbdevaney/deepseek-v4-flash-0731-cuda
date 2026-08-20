@@ -1,0 +1,14 @@
+src/decode.cu(118): warning #550-D: variable "n" was set but never used
+          char* line=nullptr; size_t cap=0; ssize_t n; int nl=0;
+                                                    ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+built build/decode
+built build/gate_tokenizer
+built build/gate_stream
+built build/gate_encoding
+built build/gate_api
+built build/dsv4-chat
+built build/dsv4-server
+built build/gate_engine

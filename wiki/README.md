@@ -38,11 +38,24 @@ not a throughput one: it removes a silent garbage-return above context 49,140 fr
 *instruments* (the `DSV4_TOPK_RADIX=0` A/B arm and the `DSV4_TOPK_GATE=1` in-situ reference), which
 requested `~4T` bytes of dynamic shared memory against a 49,152 B default. The shipped path has
 requested **zero** dynamic shared memory since 1.2, so no measured number in this table moves and
-none was claimed. What the item is worth is that the arms which certify every *future* top-k change
-now work above the context they were only ever run below. See
+none was claimed — and that claim is not an inference: `kernels/indexer.cu`,
+`kernels/compressed_decode.cu` and `kernels/attention.cu` compile to **byte-identical SASS** before
+and after, so the change is host-side launch configuration and nothing else. What the item is worth
+is that the arms which certify every *future* top-k change now work above the context they were only
+ever run below. Closed 2026-08-20 with the engine's own decode step driven at contexts 49,207 and
+200,003 (`scripts/gate_topk_smem_ctx.sh`), and with the defect reproduced in the same binary under
+`DSV4_TOPK_SMEM_OPTIN=0`: it exits 0, `cudaDeviceSynchronize` says success, and the output is
+4096/4096 nonzero with no NaN and the wrong hash. See
 [`measurement-and-traps.md` §17](measurement-and-traps.md) — a failed launch that
-`cudaStreamSynchronize` reports as success — and
+`cudaStreamSynchronize` reports as success, §18 — the device opt-in maximum that is not the
+kernel's maximum — §19 — **the variance is between checkpoint loads, not within them: 0.6 % against
+5.7 %, so a number from a previous iteration is not a valid before-arm** — and
 [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md).
+
+**The ratchet for 1.4 is a null with a same-arm control.** `tau` 2.87 and the 66 generated token ids
+are byte-identical across 1.3's recorded leg, a freshly rebuilt **pre-1.4** binary and the 1.4
+binary; spec throughput is 19.65–19.76 tok/s for 1.4 and 19.65–19.72 for the pre-1.4 control, both
+measured today, against the 20.89 recorded three hours earlier that **neither** binary reproduces.
 
 **1.3 is in that table as a blank on purpose.** It shipped, it is bit-exact across 66.9 M gated
 index slots, and it is worth 0.07 % of a forward — a correct optimisation of a term 1.2 had already
