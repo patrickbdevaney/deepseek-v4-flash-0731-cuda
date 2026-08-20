@@ -1,0 +1,86 @@
+1.0: cache the DSpark main-KV prefix — +24.4 % tok/s at ctx 12,282, bit-exact
+
+The decode loop rebuilt the DSpark main-KV for EVERY position in the context, three
+stages, on every token: act_quant_fp8 + fp8 block GEMM + rmsnorm + rope + quant over
+all ctxlen rows. 0.4 measured that at 3.867 +/- 0.001 ms per 1000 context, R^2 1.000 —
+47.87 ms at ctx 12,288, the largest single row in the step and 55 % of the whole
+context term, and it had never been timed before 0.4. main_x is write-once below the
+committed position, so all but the last acc+1 rows of that work recomputed bytes that
+were already in the buffer.
+
+dspark_main_kv_upto computes only rows [valid, s). Per-step cost goes from O(context)
+to O(tokens committed); over a generation, O(n^2) -> O(n). The three paths that can
+invalidate a prefix — prefill_full, extend, rewind_to — clamp the high-water mark down.
+DSV4_MAINKV_CACHE=0 restores the old path exactly and is the A/B arm.
+
+MEASURED (paired A/B, same corpus, 6 reps/point, baseline arm first so drift penalises
+the cached arm). At ctx >= 1536 both arms produced bit-identical tau AND mean verify
+width rep-for-rep, 6/6 legs, so each rep pairs with its twin and the delta is the
+kernel alone:
+
+  ctx     before    after   paired d      band        speedup   tau b/a        tok/s
+  12,282  215.65   170.25    -45.40   [-45.9,-38.5]   1.267x   1.652/1.652  7.67->9.54  (+24.4 %)
+   9,213  203.51   167.27    -36.24   [-36.9,-34.3]   1.217x   1.969/1.969  9.69->11.79 (+21.7 %)
+   6,132  178.89   154.71    -24.18   [-24.7,-23.4]   1.156x   1.718/1.718  9.59->11.10 (+15.8 %)
+   3,069  160.46   148.19    -12.27   [-12.7,-12.0]   1.083x   1.626/1.626 10.07->10.91 (+8.3 %)
+   1,536  147.67   141.15     -6.52   [ -6.9, -6.2]   1.046x   1.701/1.701 11.54->12.07 (+4.5 %)
+
+Bands are +/-1 % against the 3.5 % run-to-run spread, because pairing removes verify-
+width variance instead of averaging over it. tau is unchanged to three decimals on every
+reproducible leg — the required signature of a change that alters no arithmetic. The one
+disturbed leg (sweep-t12288-r3, 204.87 against a same-arm cohort of 165.7-176.5 at
+identical tau and width) is reported, not dropped; it is the whole of that point's 22.7 %
+spread and the median paired delta is robust to it.
+
+The context term fell 44 %: fwd = 132.24 + 7.220 x ctx/1000 -> 129.96 + 4.006 x ctx/1000.
+Regressed directly as a paired saving over the 30 exactly-paired legs it is
+3.604 +/- 0.076 ms per 1000, R^2 0.988, against the 3.867 +/- 0.001 that 0.4's dprof
+attributed to draft:main_kv. That is 93 % of the predicted term and the 2 SE band
+[3.45, 3.76] does NOT cover the prediction; the missing 0.26 ms/1000 is recorded rather
+than rounded into agreement. Predicting a slope from a profiler and then recovering it
+from wall clock is the strongest form 0.4's attribution could take, and it nearly held
+exactly.
+
+BIT-EXACT, gated by memcmp on the whole [s, HEAD_DIM] buffer against the untouched
+dspark_main_kv, aborting on the first differing float — 704 calls across two binaries,
+contexts to 12,281, 2.59 M retained rows, 0 FAIL. The unit gate agrees across 22 split
+points on both GEMM paths, and BOTH its negative controls were run rather than asserted:
+dropping the rope offset fails it on 130,624 floats, and dropping the GEMM pin fails it
+at g_tc_fp8=1 only, on 377 of 1,048,576 floats AT THE LAST ULP — which is exactly what a
+tolerance-based check would have waved through, on the only path decode actually uses.
+
+WHAT THIS ITERATION ALSO FOUND, AND IT IS NOT SMALL: the engine does not reproduce
+itself. The A/B's 21 differing completion hashes were not the cache. A full second
+baseline sweep from an independent server start differs from the first on 21 of 52 legs
+— THE SAME 21, same set, both symmetric differences empty — with the cached code path
+never executing on either side. build/decode does the same with DSV4_MAINKV_CACHE=0 on
+both sides, diverging from itself at ctx 1,024 at the identical id index 1067. In both
+binaries the divergence is a clean suffix in run order: generation is autoregressive, so
+one flipped token de-synchronises everything after it. So there is a rare per-step event
+whose rate rises with context, and DECODE_LADDER.md's "byte-identical generated token
+ids" invariant is untestable as written past that point. Hard invariant 1 is amended
+accordingly: run the same-arm control FIRST, and where it fails, gate on the changed
+kernel's entire output buffer — which is strictly stronger anyway. New item 1.9 chases
+the cause, deliberately ranked below the two remaining kernel changes because the
+buffer-memcmp gate is a working substitute.
+
+That same control validates the timing half too: with no change at all the harness reads
+0.998x-1.000x where the real A/B read 1.267x-1.046x. A null A/B that reads null is the
+cheapest evidence a speedup is not an artifact.
+
+Also fixed: a gate that PASSED (384 checks, 2,023,320 rows, 0 FAIL) was reported FATAL
+because decode_fit_probe.py, which it rode inside, correctly refused to bank records for
+32-token completions and exited 1. A gate's verdict must come from the gate, not from its
+carrier's exit status. And the comment added to decode_fit_probe.py claiming its seeded
+hashes prove bit-exactness is corrected in place — it is the claim this iteration
+disproved.
+
+Wiki, same commit: kernel-optimisations.md 2.5 (mechanism, paired table, gates, negative
+controls), context-scaling.md (the term is down 44 % and what is left of it),
+measurement-and-traps.md 12 and 13 (the nondeterminism, the gate-vs-carrier trap),
+README.md state table now carries a context with every row.
+
+Evidence: fit_1p0_paired.txt, fit_1p0_base.txt, fit_1p0_cache.txt, fit_1p0_determinism.txt,
+genout_1p0_identity.txt, genout_1p0_determinism.txt, server_1p0_gate.log,
+decode_1p0_gate.log, mainkv_ab.log, mainkv_verify.log, mainkv_determinism.log.
+Scripts all detached and all named in detach_audit.sh.

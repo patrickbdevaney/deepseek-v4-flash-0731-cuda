@@ -13,10 +13,12 @@ Combined decode is `tok/s = tau * 1000 / ms_per_forward`, and `ms_per_forward = 
   side: **82.18 ms**. Term A was 136.44 ms at suspension = **60.2 % of achievable**.
 - **Term B floor** — 42.0 MB at ctx 6592 = 0.509 ms/forward at tau 2.91. Term B was **198.1 ms**.
 
-**Where the two terms stand now (0.3, 2026-08-19):** `a = 130.98 +/- 2.25 ms` = **1.59x** the
-82.18 ms floor (stop wants <= 1.25x); `b x 6592 = 48.53 +/- 2.44 ms` (stop wants <= 5.0 ms).
-Neither is met. The fit now reaches context 12,410, so the ladder's stop check no longer has to
-extrapolate.
+**Where the two terms stand now (1.0, 2026-08-20):** `a = 129.96 ms` = **1.58x** the 82.18 ms floor
+(stop wants <= 1.25x); `b x 6592 = 26.41 ms`, down from 47.60 (stop wants <= 5.0 ms). Neither is met,
+but **term B moved for the first time**: 1.0 took the context slope from `7.220 +/- 0.165` to
+`4.006 +/- 0.210` ms per 1000, a 44 % cut, measured as a paired saving of `3.604 +/- 0.076`. Term A
+is untouched and is now the larger distance from its floor. The fit reaches context 12,410, so the
+stop check does not extrapolate.
 
 **The loop STOPS when either:**
 1. `a <= 1.25 * a_floor` **and** `b*6592 <= 5.0 ms` — i.e. both terms are within a quarter of their
@@ -34,10 +36,15 @@ Read this before picking an item. Measurement earns its place only when it chang
 next, and this ladder has now spent **four of its first five items on instruments** (0.1-0.4). Each
 was defensible in isolation and 0.4 in particular paid for the whole run -- it proved 0.2 had never
 varied context at all, un-retired 1.2 and 1.5, and found in `draft:main_kv` a larger item than
-either -- but **the engine has not gotten faster since the warp top-k landed**, that is now five
-iterations, and the whole context term is attributed with error bars. There is nothing left to
-measure before building. **The next four items are all kernel changes and 0.4 is the last
-instrument this phase gets.**
+either -- but the engine had not gotten faster since the warp top-k landed, that was five
+iterations, and the whole context term was attributed with error bars.
+
+**BROKEN 2026-08-20 by 1.0: +24.4 % tok/s at ctx 12,282, and the rule is what produced it.** 0.4
+bought exactly one thing -- it named the largest term and predicted its size -- and the very next
+iteration spent that prediction on a kernel and got 93 % of it back. That is the whole case for the
+rule, and also its limit: **the remaining items are smaller and none of them needs a new
+instrument.** `i:topk`, `i:score` and `cattn:sparse` are already attributed with error bars. Build
+them. The one open instrument-shaped item, 1.9, is deliberately ranked below both kernel changes.
 
 So, in order:
 
@@ -65,6 +72,17 @@ So, in order:
 1. **Bit-exactness or an explicit gate.** Any kernel change either produces byte-identical generated
    token ids, or ships behind the LOSSLESS gate with the deviation measured and recorded. A change
    that silently alters output is reverted, not debugged.
+
+   **AMENDED 2026-08-20 by 1.0 — token ids are not a valid test at context, and this invariant was
+   nearly used to revert a correct change.** The engine stops reproducing itself part-way through a
+   long run: `build/decode` with `DSV4_MAINKV_CACHE=0` on **both** sides of the comparison, argmax,
+   no seed, no HTTP, still diverged from itself at the identical id index 1067. The cached path
+   never ran on either side, so the divergence cannot be the cache. **A token-id comparison is only
+   evidence if the same-arm control was run and passed — run the control FIRST.** Where it fails,
+   the invariant is satisfied instead by memcmp of the changed kernel's **entire output buffer**
+   against the untouched reference, in situ, on every call; that is strictly stronger, because it
+   proves the whole intermediate identical rather than one downstream consumer's output. See
+   `wiki/measurement-and-traps.md` §12 and item 1.9.
 2. **tau is reported in every A/B.** A byte-identical token sequence can still collapse acceptance
    3.12 -> 1.00 (`LOOP_LOG`), because acceptance is an exact draft/target comparison. Throughput
    without tau is not a measurement.
@@ -255,31 +273,106 @@ So, in order:
 
 - [x] **1.1** Warp-parallel top-k (all four kernels). **14.2x at ctx 6592, 24.7x at 24k**,
       bit-identical on nine shapes and three distributions (`tests/gate_topk_warp.cu`).
-- [ ] **1.0** **Cache the DSpark main-KV prefix instead of recomputing it every token.**
-      **0.4 measured this as 55 % of the whole context term — larger than 1.2, 1.5 and
-      `cattn:sparse` combined — and nothing had ever timed it.**
+- [x] **1.0** **Cache the DSpark main-KV prefix instead of recomputing it every token.**
+      **DONE 2026-08-20 (iteration 1). +24.4 % tok/s at ctx 12,282, bit-exact, tau unchanged.**
+      Full write-up: `wiki/kernel-optimisations.md` §2.5 and `wiki/context-scaling.md`.
 
-      `src/engine.cu`'s decode loop opens with
-      `for (st = 0..NSTAGE) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctxlen, EPS)`, and
-      `dspark_main_kv` (`kernels/dspark_attn.cu:14`) rebuilds the main-KV for **all `ctxlen`
-      positions from scratch**: `act_quant_fp8` over `[s, 7168]` fp32, `fp8_block_gemm` to
-      `[s, 576]`, `rmsnorm`, `rope_interleaved`, `act_quant_fp8sim`. Three stages, every token.
-      Measured **3.867 +/- 0.001 ms per 1000 context, R^2 1.000** — 3.30 ms at ctx 768 and
-      **47.87 ms at ctx 12,288**, the largest single row in the step.
+      **What shipped.** `dspark_main_kv_upto` (`kernels/dspark_attn.cu`) computes only rows
+      `[valid, s)` and advances a high-water mark; `src/engine.cu` and `src/decode.cu` call it
+      instead of rebuilding all `ctxlen` rows NSTAGE=3 times per token. The three paths that can
+      invalidate a prefix — `prefill_full`, `extend`, `rewind_to` — clamp the mark down; everything
+      else may only grow it. Per-step cost is O(tokens committed) instead of O(context); over a
+      generation, O(n) instead of O(n^2). `DSV4_MAINKV_CACHE=0` restores the old path exactly and is
+      the A/B arm.
 
-      **The recompute is provably redundant and the fix is bit-exact, not approximate.** `main_x`
-      rows are written once and never rewritten: `dspark_main_x(main_x + cpos*d, ..., acc + 1, ...)`
-      writes exactly the `acc+1` COMMITTED positions and `cpos` then advances past them, so
-      `main_x[0..cpos)` is immutable. Every stage of `dspark_main_kv` is row-independent — the GEMM
-      reduces over K with a fixed order regardless of M, rmsnorm and the two quantisers are
-      per-row-block within a row, rope is per-position — so recomputing only rows
-      `[cpos_prev, cpos)` and keeping the rest yields **byte-identical `mkv`**. Gate it that way:
-      run both, `memcmp` the full `[seqmax, 576]` buffer, then the standing LOSSLESS token gate.
-      Expected: ~47.6 ms off a 203.9 ms step at ctx 12,288 (**-23 %**) and ~24 ms at ctx 6.1k,
-      with tau unchanged because no numeric changes.
+      **Measured, PAIRED, same corpus, baseline arm first so drift penalises the cached arm.** On
+      every point at ctx >= 1536 both arms produced **bit-identical tau and mean verify width
+      rep-for-rep** (6/6 legs), so each rep pairs with its twin and the delta is the kernel alone:
 
-      Second-order, free while in there: the per-step `dkmalloc`/`dkfree` of `s*DIM` + `s*(DIM/128)*4`
-      scratch (88 MB per stage at ctx 12k) goes away with the recompute.
+      | ctx | before ms/fwd | after | paired delta | band | speedup | tau b / tau a | tok/s |
+      |---|---|---|---|---|---|---|---|
+      | 12,282 | 215.65 | 170.25 | **-45.40** | [-45.9, -38.5] | **1.267x** | 1.652 / 1.652 | 7.67 -> 9.54 (**+24.4 %**) |
+      | 9,213 | 203.51 | 167.27 | -36.24 | [-36.9, -34.3] | 1.217x | 1.969 / 1.969 | 9.69 -> 11.79 (+21.7 %) |
+      | 6,132 | 178.89 | 154.71 | -24.18 | [-24.7, -23.4] | 1.156x | 1.718 / 1.718 | 9.59 -> 11.10 (+15.8 %) |
+      | 3,069 | 160.46 | 148.19 | -12.27 | [-12.7, -12.0] | 1.083x | 1.626 / 1.626 | 10.07 -> 10.91 (+8.3 %) |
+      | 1,536 | 147.67 | 141.15 | -6.52 | [-6.9, -6.2] | 1.046x | 1.701 / 1.701 | 11.54 -> 12.07 (+4.5 %) |
+      | 249 | 128.25 | 125.28 | -2.97 | [-7.7, +1.0] | 1.024x | 1.646 / 1.636 | 13.05 -> 12.92 |
+
+      Bands are **+/-1 %** against the 3.5 % run-to-run spread, because pairing removes verify-width
+      variance rather than averaging over it. `tau` is unchanged to three decimals wherever the leg
+      is reproducible — the required signature of a change that alters no arithmetic.
+
+      **The one disturbed leg, stated exactly:** `sweep-t12288-r3` came in at 204.87 against a
+      same-arm cohort of 165.7-176.5 at identical tau and width, and its *before* twin (216.55) is
+      unremarkable — so it is the after leg that was disturbed, and it is the whole of that point's
+      22.7 % spread. It is **kept** in the medians above, which are robust to it, and **excluded**
+      from the regression below, which is not. Both are reported: with it the slope is
+      `3.190 +/- 0.278`, without it `3.604 +/- 0.076`. The conclusion is the same either way and the
+      exclusion is not doing the work.
+      Evidence: `evidence/decode_loop/fit_1p0_paired.txt`, `fit_1p0_base.txt`, `fit_1p0_cache.txt`.
+
+      **The context term fell 44 %, and it is the term 0.4 predicted would fall.**
+      `fwd = 132.24 + 7.220 x ctx/1000` (R^2 0.976) -> `129.96 + 4.006 x ctx/1000` (R^2 0.888).
+      Regressing the paired saving directly on context over 30 of the 31 exactly-paired legs:
+      **`3.604 +/- 0.076 ms per 1000`, R^2 0.988**, against the `3.867 +/- 0.001` that 0.4's dprof
+      attributed to `draft:main_kv`. **93 % of it, and the 2 SE band [3.45, 3.76] does NOT cover the
+      prediction** — 0.26 ms/1000 is unaccounted for and is recorded rather than rounded away. The
+      residual per-step main-KV work (`acc+1` rows x 3 stages, 15 launches, 3 dkmalloc/sync/free
+      triples) is context-*independent* and belongs in the intercept, which is where the -1.42 ms
+      also went, so it does not explain a slope.
+
+      **BIT-EXACTNESS: gated by memcmp on the whole buffer, 704 calls, 2.59 M retained rows, 0 FAIL.**
+
+      | gate | scope | result |
+      |---|---|---|
+      | `tests/gate_mainkv_incr.cu` | no checkpoint, 2048 x 512 floats, 22 split points, both GEMM paths | PASS |
+      | ^ negative control: rope offset dropped | same | **FAIL**, 130,624/1,048,576 floats |
+      | ^ negative control: GEMM pin dropped | same | **FAIL at g_tc_fp8=1 only, 377 floats, last ulp** |
+      | `build/dsv4-server` in situ, `DSV4_MAINKV_GATE=1` | 384 calls, ctx to 12,281, 2,023,320 rows kept, all 3 invalidation paths | 0 FAIL |
+      | `build/decode` in situ | 320 calls, ctx to 3,130, 568,509 rows kept | 0 FAIL |
+      | LOSSLESS gate (spec vs base AR) | every decode run | PASS |
+
+      Each recomputes all `s` rows with the **untouched** `dspark_main_kv` into a private buffer and
+      memcmps the full `[s, HEAD_DIM]` range, aborting on the first differing float. The load-bearing
+      detail is the **GEMM pin**: `fp8_block_gemm` dispatches on M (M=1 GEMV, M in [2,8] NVFP4
+      overlay, larger -> `tc_fp8_gemm`), and the incremental delta is 1-6 rows where the from-scratch
+      call was thousands, so the naive version would compare a GEMV against a tensor-core tile and
+      lose bit-exactness for a reason unrelated to caching. The incremental path pins to
+      `tc_fp8_gemm`, whose dispatch depends only on N and K. Second trap, also covered: `cosT/sinT`
+      must be offset by `r0` or a sub-range rotates every row by the wrong angle.
+
+      **The token-id half of the invariant could NOT be tested, and that is a finding, not a gap.**
+      The server A/B reported 21/52 completion hashes differing; on `build/decode` (argmax, no seed)
+      2 of 3 points diverged. **Two same-arm controls settled it, and they agree.**
+
+      *Control 1, `build/decode`:* `DSV4_MAINKV_CACHE=0` on BOTH sides still diverged from itself, at
+      ctx 1,024 at the identical id index 1067 with the identical token pair (223 vs 5115) — the
+      cached path never executed in either arm. Baseline-run-2 and the cache-on run agree with each
+      other; the first baseline was the outlier.
+
+      *Control 2, `build/dsv4-server`, a full second baseline sweep from an independent server start:*
+
+      > **base-vs-base2 differs on 21 of 52 legs — the SAME 21 legs as base-vs-cache.** Not merely
+      > the same count: the same set, both symmetric differences empty. The cache code path never ran
+      > on either side of that comparison.
+
+      Control 2 also validates the A/B **timing** measurement, which is the part that actually
+      ratchets: with no change at all it reports **0.998x-1.000x** at ctx 12,410 / 9,341 / 6,260 /
+      3,197 / 1,536, where the real A/B reported 1.267x / 1.217x / 1.156x / 1.083x / 1.046x. The
+      harness reads "no speedup" when there is no speedup.
+
+      So the engine is not run-to-run reproducible once a run is long enough, and token ids cannot
+      test anything past that point. See the amendment to hard invariant 1, item **1.9**, and
+      `wiki/measurement-and-traps.md` §12. Evidence: `genout_1p0_identity.txt`,
+      `genout_1p0_determinism.txt`, `fit_1p0_determinism.txt`, `mainkv_determinism.log`.
+
+      **Second-order, as predicted and free:** the per-step scratch `dkmalloc`/`dkfree` of
+      `s*DIM + s*(DIM/128)*4` — 51.8 MB per stage, 155 MB per step at ctx 12,288 — is now sized by
+      the delta, ~12 KB.
+
+      Scripts, all detached and all named in `detach_audit.sh`: `mainkv_ab_run.sh` (the A/B),
+      `mainkv_verify_run.sh` (token ids + server determinism), `mainkv_decodegate_run.sh` (in-situ
+      memcmp on `build/decode`), `mainkv_determinism_run.sh` (the same-arm control).
 
 - [ ] **1.2** **CONFIRMED BY 0.4, 2026-08-20 — this kernel is 12.5 % of the context term.**
       Retired on 0.2's "top-k is 0.10 ms". 0.4 measured `i:topk` at **13.47 ms at ctx 12,288** and
@@ -300,6 +393,45 @@ So, in order:
       Ranks third, behind 1.0 and 1.2. `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
       (658 us -> 39 us at T=6000). **FP32/TF32 accumulation only** — an external ablation shows
       FP16 dropping perfect-recall rows from 99.99 % to 91.82 % on this exact operation.
+
+- [ ] **1.9** **Find out why the engine stops reproducing itself part-way through a long run.**
+      **Opened by 1.0, 2026-08-20, and it is a correctness item before it is a performance one.**
+      **RANKED HERE, BELOW 1.2 AND 1.5, DELIBERATELY.** It is the most interesting thing on this
+      page and it is still not the next thing to build: the ladder has spent four of its first six
+      iterations on instruments, and 1.0 showed the buffer-memcmp gate is a *stronger* correctness
+      instrument than the token ids it replaces — so the invariant has a working substitute and
+      this is not blocking. Promote it above 1.2 the moment a kernel change cannot be gated by
+      buffer memcmp, or if `tau` itself starts moving between identical runs.
+      `build/decode` is argmax, unseeded, single-stream, no HTTP, and its width controller reads the
+      draft's own margins (`while (VK < VKCAP && hmarg[VK-1] >= adaptK) ++VK`) rather than the clock
+      — so "the faster arm picked a different width" does **not** explain it. Yet two runs of the
+      identical binary with the identical env diverge.
+
+      **State the shape precisely, because it is the diagnostic.** In BOTH binaries the divergence
+      is a **clean suffix in run order**, not a property of a context:
+
+      * `build/decode`: point 0 (ctx 6, 260 ids) identical in **three** separate runs; points 1
+        (ctx 3,072) and 2 (ctx 1,024) differ in every pairing, first at generated token 20 and 43.
+      * `build/dsv4-server`: legs 1-31 of 52 identical (including every leg at ctx 12,410, 9,341,
+        6,260, 3,197 and 1,536, with `tau` matching to three decimals across three independent
+        server starts), then leg 32 onward all differ.
+
+      Generation is autoregressive, so **one** flipped token permanently de-synchronises everything
+      after it. The observation is therefore not "context X is nondeterministic" but "there is a
+      rare per-step event whose rate rises with context": zero occurrences in 3 x 260 steps at ctx 6,
+      but within 20-43 steps at ctx 1,024-3,072. A context-linear reduction with a
+      **non-deterministic accumulation order** fits exactly — more terms, more chances that a
+      near-tie in an argmax flips. `atomicAdd`-ordered sums or split-K reductions in `i:topk`,
+      `i:score` or `cattn:sparse` are the obvious family; note that 1.2's own reference "emits in
+      `atomicAdd` order".
+
+      Cheap first probe, in ONE process so there is no load-to-load variation to argue about: run the
+      same prompt twice back to back and hash the logits every step, then bisect to the first step
+      whose logits differ and dump the per-mark intermediates there. Second probe: re-run with each
+      candidate kernel forced to a deterministic order and see which one makes the repeat stable.
+      **Why it matters beyond tidiness:** it disables the ladder's primary correctness invariant for
+      every remaining item, forcing each onto buffer-memcmp gates; and if a reduction really is
+      order-nondeterministic, `tau` is being measured against a moving target.
 
 - [ ] **1.7** `cattn:sparse` — **0.709 +/- 0.050 ms per 1000 context (10 % of the term), measured
       by 0.4**: 11.00 ms at ctx 768 rising to 21.17 ms at 12,288. Note the shape: it nearly

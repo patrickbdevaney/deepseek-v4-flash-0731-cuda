@@ -1,0 +1,100 @@
+[1.0v] 2026-08-20T03:22:39-04:00 binaries: server 2026-08-20T00:56:11-04:00, decode 2026-08-20T01:00:08-04:00
+[1.0v]   [parse] 3 prompt(s), SMAX=3072, BLKMAX=6, VBMAX=7, seqmax=3343
+[1.0v]   [parse] point 0: BLK=6 passes=1 adaptK=1.50 prompt=0
+[1.0v]   [parse] point 1: BLK=6 passes=1 adaptK=1.50 prompt=1
+[1.0v]   [parse] point 2: BLK=6 passes=1 adaptK=1.50 prompt=2
+[1.0v] 2026-08-20T03:22:39-04:00 decode seqmax=3343 (cap 3600, ~109 GiB resident incl. weights)
+[1.0v] 2026-08-20T03:22:39-04:00 === PHASE 4: BASELINE sweep, second independent server start (determinism control) ===
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p0_base2.log
+[run_server] pid=27418 ppid=27415 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p0_base2.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.0v] 2026-08-20T03:22:43-04:00 memguard armed -> evidence/decode_loop/server_1p0_base2.memguard.log
+[1.0v] 2026-08-20T03:23:58-04:00 healthy [base2]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=267389ms decode=30826ms tau=1.829 -> 220.19 ms/forward  (298s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=36973ms tau=1.463 -> 211.28 ms/forward  (37s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=34304ms tau=1.620 -> 217.12 ms/forward  (34s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=34405ms tau=1.610 -> 216.39 ms/forward  (34s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=256 prefill=0ms decode=32797ms tau=1.684 -> 215.77 ms/forward  (33s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=256 prefill=0ms decode=31627ms tau=1.741 -> 215.15 ms/forward  (32s)
+[probe] sweep-t9216-r0: pt=9213 cached=None ct=256 prefill=0ms decode=27008ms tau=1.869 -> 197.14 ms/forward  (27s)
+[probe] sweep-t9216-r1: pt=9213 cached=None ct=256 prefill=0ms decode=25141ms tau=2.133 -> 209.50 ms/forward  (25s)
+[probe] sweep-t9216-r2: pt=9213 cached=None ct=256 prefill=0ms decode=26363ms tau=1.969 -> 202.80 ms/forward  (26s)
+[probe] sweep-t9216-r3: pt=9213 cached=None ct=256 prefill=0ms decode=23420ms tau=2.286 -> 209.11 ms/forward  (23s)
+[probe] sweep-t9216-r4: pt=9213 cached=None ct=256 prefill=0ms decode=27648ms tau=1.882 -> 203.30 ms/forward  (28s)
+[probe] sweep-t9216-r5: pt=9213 cached=None ct=256 prefill=0ms decode=26495ms tau=1.969 -> 203.81 ms/forward  (27s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=24098ms tau=1.939 -> 182.56 ms/forward  (24s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=26736ms tau=1.718 -> 179.44 ms/forward  (27s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=26149ms tau=1.753 -> 179.10 ms/forward  (26s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=26536ms tau=1.718 -> 178.10 ms/forward  (27s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=28252ms tau=1.620 -> 178.81 ms/forward  (28s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=28764ms tau=1.590 -> 178.66 ms/forward  (29s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=26668ms tau=1.506 -> 156.87 ms/forward  (27s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=25965ms tau=1.580 -> 160.28 ms/forward  (26s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=22338ms tau=1.829 -> 159.56 ms/forward  (22s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=25907ms tau=1.600 -> 161.92 ms/forward  (26s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=256 prefill=0ms decode=23459ms tau=1.753 -> 160.68 ms/forward  (23s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=256 prefill=0ms decode=24956ms tau=1.652 -> 161.00 ms/forward  (25s)
+[probe] sweep-t1536-r0: pt=1536 cached=None ct=256 prefill=0ms decode=22205ms tau=1.707 -> 148.03 ms/forward  (22s)
+[probe] sweep-t1536-r1: pt=1536 cached=None ct=256 prefill=0ms decode=22189ms tau=1.718 -> 148.92 ms/forward  (22s)
+[probe] sweep-t1536-r2: pt=1536 cached=None ct=256 prefill=0ms decode=22364ms tau=1.662 -> 145.22 ms/forward  (22s)
+[probe] sweep-t1536-r3: pt=1536 cached=None ct=256 prefill=0ms decode=21397ms tau=1.778 -> 148.59 ms/forward  (21s)
+[probe] sweep-t1536-r4: pt=1536 cached=None ct=256 prefill=0ms decode=22194ms tau=1.695 -> 146.98 ms/forward  (22s)
+[probe] sweep-t1536-r5: pt=1536 cached=None ct=256 prefill=0ms decode=22492ms tau=1.673 -> 147.01 ms/forward  (22s)
+[probe] sweep-t768-r0: pt=761 cached=None ct=256 prefill=0ms decode=19326ms tau=1.803 -> 136.10 ms/forward  (19s)
+[probe] sweep-t768-r1: pt=761 cached=None ct=256 prefill=0ms decode=20439ms tau=1.718 -> 137.18 ms/forward  (20s)
+[probe] sweep-t768-r2: pt=761 cached=None ct=256 prefill=0ms decode=20305ms tau=1.730 -> 137.20 ms/forward  (20s)
+[probe] sweep-t768-r3: pt=761 cached=None ct=256 prefill=0ms decode=19603ms tau=1.816 -> 139.03 ms/forward  (20s)
+[probe] sweep-t768-r4: pt=761 cached=None ct=256 prefill=0ms decode=21257ms tau=1.620 -> 134.54 ms/forward  (21s)
+[probe] sweep-t768-r5: pt=761 cached=None ct=256 prefill=0ms decode=21829ms tau=1.620 -> 138.16 ms/forward  (22s)
+[probe] sweep-t384-r0: pt=364 cached=None ct=256 prefill=0ms decode=21431ms tau=1.552 -> 129.89 ms/forward  (21s)
+[probe] sweep-t384-r1: pt=364 cached=None ct=256 prefill=0ms decode=24865ms tau=1.347 -> 130.87 ms/forward  (25s)
+[probe] sweep-t384-r2: pt=364 cached=None ct=256 prefill=0ms decode=21175ms tau=1.561 -> 129.11 ms/forward  (21s)
+[probe] sweep-t384-r3: pt=364 cached=None ct=256 prefill=0ms decode=23281ms tau=1.407 -> 127.92 ms/forward  (23s)
+[probe] sweep-t384-r4: pt=364 cached=None ct=256 prefill=0ms decode=16798ms tau=2.133 -> 139.99 ms/forward  (17s)
+[probe] sweep-t384-r5: pt=364 cached=None ct=256 prefill=0ms decode=21909ms tau=1.524 -> 130.41 ms/forward  (22s)
+[probe] sweep-t128-r0: pt=121 cached=None ct=256 prefill=0ms decode=22838ms tau=1.422 -> 126.88 ms/forward  (23s)
+[probe] sweep-t128-r1: pt=121 cached=None ct=256 prefill=0ms decode=18806ms tau=1.707 -> 125.38 ms/forward  (19s)
+[probe] sweep-t128-r2: pt=121 cached=None ct=256 prefill=0ms decode=20113ms tau=1.600 -> 125.71 ms/forward  (20s)
+[probe] sweep-t128-r3: pt=121 cached=None ct=256 prefill=0ms decode=18856ms tau=1.707 -> 125.71 ms/forward  (19s)
+[probe] sweep-t128-r4: pt=121 cached=None ct=256 prefill=0ms decode=18803ms tau=1.707 -> 125.35 ms/forward  (19s)
+[probe] sweep-t128-r5: pt=121 cached=None ct=256 prefill=0ms decode=17464ms tau=1.925 -> 131.31 ms/forward  (17s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=124604ms decode=29133ms tau=1.600 -> 182.08 ms/forward  (154s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=27649ms tau=1.662 -> 179.54 ms/forward  (28s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=20217ms tau=1.925 -> 152.01 ms/forward  (20s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=20768ms tau=1.882 -> 152.70 ms/forward  (21s)
+[probe] wrote 52 usable records -> evidence/decode_loop/fit_1p0_base2/postfix.sweep.jsonl and evidence/decode_loop/fit_1p0_base2/control.fresh.jsonl
+[1.0v] 2026-08-20T03:51:38-04:00 base2 probe rc=0
+[1.0v] 2026-08-20T03:51:38-04:00 server down
+[1.0v] 2026-08-20T03:51:38-04:00 === PHASE 5: baseline vs baseline (same arm, two server starts) ===
+corpus sha256: before ['79ac6563f97e53e5', 'ac10134c87e3d0fe']  after ['79ac6563f97e53e5', 'ac10134c87e3d0fe']
+
+token identity: 31/52 legs proven byte-identical, 21 differ, 0 unproven (no hash on record)
+  DIFFER control-t1536-r0: 0a93f7ba42d56935 vs dab65f702cb72dfb  (len 583 vs 696)
+  DIFFER control-t1536-r1: 396f9df9c21699ec vs 7325a011c2e6325e  (len 710 vs 645)
+  DIFFER control-t6144-r0: 6b476bd0e969bc29 vs 46aacf032f3f99fa  (len 992 vs 913)
+  DIFFER control-t6144-r1: 316c6d502d388886 vs 31f080885c7211e6  (len 981 vs 889)
+  DIFFER sweep-t128-r0: 7ab6f5708dd556a1 vs c17866da6552bfc3  (len 782 vs 839)
+  DIFFER sweep-t128-r1: 772a4ce6d6ed02e1 vs 77f6d51ff16ca42c  (len 648 vs 781)
+  DIFFER sweep-t128-r2: 538f3f4eb38411cc vs 3241285bdb38936e  (len 863 vs 797)
+  DIFFER sweep-t128-r3: de7950fb5e1c2845 vs 0e8327646504b066  (len 608 vs 810)
+  DIFFER sweep-t128-r4: c67315c7316b13a0 vs 1d67e2f93d240fe0  (len 668 vs 761)
+  DIFFER sweep-t128-r5: f67521fc0c1392fa vs 10ad9edf7b65dfd4  (len 750 vs 696)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+control     6144  2   6248    182.55    180.81    -1.74   1.010x   1.612   1.631   2.69   2.71     8.83     9.02
+control     1536  2   1656    156.23    152.36    -3.88   1.025x   2.133   1.904   3.04   2.96    13.62    12.49
+sweep      12288  6  12410    215.65    216.08    +0.43   0.998x   1.652   1.652   2.65   2.65     7.67     7.63
+sweep       9216  6   9341    203.51    203.55    +0.05   1.000x   1.969   1.969   2.92   2.92     9.69     9.69
+sweep       6144  6   6260    178.89    178.96    +0.07   1.000x   1.718   1.718   2.66   2.66     9.59     9.61
+sweep       3072  6   3197    160.46    160.48    +0.02   1.000x   1.626   1.626   2.69   2.69    10.07    10.07
+sweep       1536  6   1664    147.67    147.52    -0.15   1.001x   1.701   1.701   2.68   2.68    11.54    11.53
+sweep        768  6    889    137.50    137.19    -0.31   1.002x   1.730   1.724   2.70   2.64    12.49    12.57
+sweep        384  6    492    132.09    130.15    -1.94   1.015x   1.631   1.538   2.63   2.53    12.48    11.81
+sweep        128  6    249    128.25    125.71    -2.55   1.020x   1.646   1.707   2.68   2.50    13.05    13.59
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.
+[1.0v] 2026-08-20T03:51:38-04:00 determinism comparison rc=1
+[1.0v] 2026-08-20T03:51:38-04:00 done.

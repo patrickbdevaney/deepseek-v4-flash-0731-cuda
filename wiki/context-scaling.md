@@ -90,10 +90,39 @@ And its corollary, which is why this went nine findings deep:
 > **Check that the instrument is switched on.** `dprof_init` without `dprof_report` looks identical
 > to a profile with nothing in it.
 
-## Status
+## Status — 1.0 is done, and the term it removed came off the measured slope
 
-`draft:main_kv` caching is item 1.0 on `DECODE_LADDER.md`. Correctness is already established —
-`tests/gate_mainkv_incr.cu` shows incremental and from-scratch main-KV byte-identical across 22
-split points, with two negative controls that fail it, and the in-situ gate has 384+ checks and
-~2.02 M retained rows byte-identical across all three invalidation paths. The throughput A/B is what
-remains.
+**Adopted 2026-08-20.** `draft:main_kv` is no longer recomputed; only the rows committed since the
+last step are built. Mechanism, gates and the full paired table are in
+[`kernel-optimisations.md` §2.5](kernel-optimisations.md). The part that belongs on *this* page is
+that the cost model above predicted the win and then survived it:
+
+```
+before   fwd = 132.24 + 7.220 x (ctx/1000)      R^2 0.976   SE(b) 0.165
+after    fwd = 129.96 + 4.006 x (ctx/1000)      R^2 0.888   SE(b) 0.210
+```
+
+**The context term is down 44 %.** Measured directly as a paired saving across 30 exactly-paired
+legs — legs whose two arms produced bit-identical `tau` and verify width, so the difference is the
+kernel and nothing else — it is `3.604 ± 0.076 ms per 1000 context`, R² 0.988, against the
+`3.867 ± 0.001` this page attributed to `draft:main_kv`. **93 % of the predicted term, and the 2 SE
+band does not cover the prediction**; the missing 0.26 ms/1000 is written down in §2.5 rather than
+rounded into agreement. Predicting a slope from a profiler and then recovering it from wall clock
+is the strongest form the attribution above could take, and it very nearly held exactly.
+
+User-visible: **7.67 → 9.54 tok/s at ctx 12,282 (+24.4 %)**, +21.7 % at 9,213, +15.8 % at 6,132,
+tapering to +4.5 % at 1,536 and nothing at context ~9 — which is precisely why nine findings' worth
+of profiling never saw it.
+
+## What is left of the term
+
+| mark | ms/1000 ctx | status |
+|---|---|---|
+| ~~`draft:main_kv`~~ | ~~3.867~~ → ~0 | **done, §2.5** |
+| `i:topk` | 0.872 ± 0.021 | ladder 1.2, now the largest remaining |
+| `cattn:sparse` | 0.709 ± 0.050 | ladder 1.7 — the lever is its 11 ms *floor*, not its slope |
+| `i:score` | 0.644 ± 0.018 | ladder 1.5 |
+
+The four were 6.09 of the 6.97 ms/1000 step slope. Removing the largest leaves ~2.2 ms/1000 of
+identified work, so **the next three items together are worth about what 1.0 was worth** — and none
+of them is individually close. The easy half of this term is spent.

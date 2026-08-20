@@ -1,0 +1,40 @@
+PAIRED A/B — ladder 1.0, incremental main-KV. Each rep compared to the SAME rep of the
+other arm. Legs are paired by construction: tau and mean_width match rep-for-rep on every
+sweep point, so the pairing removes verify-width variance instead of averaging over it.
+
+point             n    ctx   before    after    d med   d min   d max  speedup  tau ok
+sweep-t12288      6  12282   215.65   170.25   -45.40  -45.93  -11.68   1.267x 6/6
+sweep-t9216       6   9213   203.51   167.27   -36.24  -36.90  -34.26   1.217x 6/6
+sweep-t6144       6   6132   178.89   154.71   -24.18  -24.70  -23.43   1.156x 6/6
+sweep-t3072       6   3069   160.46   148.19   -12.27  -12.72  -11.98   1.083x 6/6
+sweep-t1536       6   1536   147.67   141.15    -6.52   -6.85   -6.24   1.046x 6/6
+sweep-t768        6    761   137.50   133.37    -4.12   -6.37   -3.14   1.031x 1/6
+sweep-t384        6    364   132.09   128.14    -3.95  -10.42    1.70   1.031x 0/6
+sweep-t128        6    121   128.25   125.28    -2.97   -7.71    1.02   1.024x 0/6
+control-t6144     2   6120   182.55   157.82   -24.73  -25.07  -24.40   1.157x 0/2
+control-t1536     2   1528   156.23   143.82   -12.41  -15.42   -9.40   1.086x 0/2
+
+'tau ok' = reps where tau AND mean_width are bit-identical across the two arms. Where that
+is n/n the two arms drafted and verified the SAME way on every rep, so the delta is the
+kernel and nothing else. d med is the median PAIRED delta, robust to a single disturbed leg.
+
+PAIRED SAVING vs CONTEXT  (n=30 exactly-paired legs, ctx 1536..12282;
+                           sweep-t12288-r3 excluded as a disturbed leg, see below)
+  saving ms/forward = -1.420 + (-3.604 +/- 0.076) x (ctx/1000)     R^2 0.9878
+  => the change removes 3.604 +/- 0.076 ms per 1000 context
+  dprof attributed draft:main_kv at    3.867 +/- 0.001 ms per 1000 context
+  band [3.452, 3.755] at 2 SE DOES NOT COVER the predicted 3.867
+
+  the excluded leg: sweep-t12288-r3 204.87 vs a cohort of 165.69-176.54 ms/fwd in the same
+  arm at the same tau and width. Its BEFORE leg (216.55) is unremarkable, so it is the after
+  leg that was disturbed. Included, the slope is:
+    3.190 +/- 0.278 ms per 1000 (n=31) -- same conclusion, wider band.
+
+USER-VISIBLE tok/s, paired legs only (tau and width bit-identical across arms)
+   ctx  n  before   after     gain
+ 12282  6    7.67    9.54   +24.4%
+  9213  6    9.69   11.79   +21.7%
+  6132  6    9.59   11.10   +15.8%
+  3069  6   10.07   10.91    +8.3%
+  1536  6   11.54   12.07    +4.5%
+   761  1   13.25   13.57    +2.4%

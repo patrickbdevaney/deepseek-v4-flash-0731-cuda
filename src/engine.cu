@@ -137,6 +137,12 @@ struct Engine::Impl {
     // resident context
     std::vector<int> ctx;          // committed token ids, ctx.size() == cpos
     int cpos = 0;
+    // LADDER 1.0. Rows [0, mkv_valid) of every mkv[st] are already built from the CURRENT main_x.
+    // `main_x` is write-once below the committed position, so those rows never go stale on their
+    // own -- only a path that rewrites or discards main_x rows can invalidate them, and there are
+    // exactly three: prefill_full (memsets), extend (writes [from,n)), rewind_to (drops to n).
+    // Each clamps this down. Everything else may only grow it.
+    int mkv_valid = 0;
 
     ~Impl() {
         for (void* p : keep) cudaFree(p);
@@ -486,6 +492,7 @@ void Engine::Impl::load() {
 void Engine::Impl::prefill_full(const std::vector<int>& ids) {
     for (int L = 0; L < N_LAYERS; ++L) KV[L].T = 0;
     CU(cudaMemset(main_x, 0, (size_t)cfg.seqmax * d * 4));
+    mkv_valid = 0;                             // main_x is gone; every cached main-KV row with it
     extend(ids, 0);
 }
 
@@ -494,6 +501,7 @@ void Engine::Impl::prefill_full(const std::vector<int>& ids) {
 // prefix-cached turn and a fresh one go through the identical arithmetic, only starting later.
 void Engine::Impl::extend(const std::vector<int>& ids, int from) {
     const int n = (int)ids.size();
+    if (mkv_valid > from) mkv_valid = from;    // rows [from,n) of main_x are about to be rewritten
     for (int base = from; base < n; base += EXT_CHUNK) {
         const int m = (n - base) < EXT_CHUNK ? (n - base) : EXT_CHUNK;
         int* dvt = d_ids + base;
@@ -534,6 +542,7 @@ void Engine::Impl::rewind_to(int n) {
     }
     cpos = n;
     ctx.resize(n);
+    if (mkv_valid > n) mkv_valid = n;          // positions above n are no longer committed
 }
 
 // Resolve the prompt's prefix the way generate() does, then read the target's logits for the next
@@ -648,9 +657,27 @@ GenStats Engine::Impl::generate(const std::vector<int>& ids, const GenParams& gp
         if (dp_step) dprof_reset();
 
         const int anchor = cpos - 1, ctxlen = cpos;
-        // O(ctxlen), NSTAGE times per step, and never timed until now -- see include/dprof.h.
+        // LADDER 1.0. This used to be an O(ctxlen) from-scratch rebuild, NSTAGE times per token --
+        // 3.867 +/- 0.001 ms per 1000 context, 47.87 ms at ctx 12,288, the largest single row in the
+        // step and 55 % of the whole context term (0.4). It is now incremental: only the rows
+        // committed since the last step are computed, which is `acc+1` of them, so the per-step cost
+        // is O(tokens committed) instead of O(context) and the total over a generation is O(n)
+        // instead of O(n^2). Byte-identical, not approximate -- see kernels/dspark_attn.cu, the
+        // in-situ DSV4_MAINKV_GATE=1 memcmp, and tests/gate_mainkv_incr.cu.
+        // DSV4_MAINKV_CACHE=0 restores the from-scratch path EXACTLY, which is the A/B arm.
+        static const bool mainkv_cache = !(getenv("DSV4_MAINKV_CACHE") && atoi(getenv("DSV4_MAINKV_CACHE")) == 0);
         dprof_begin(DP_D_MAINKV, 0);
-        for (int st = 0; st < NSTAGE; ++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctxlen, EPS);
+        if (mainkv_cache) {
+            // One `valid` per stage because each call advances its own copy; the stages are always
+            // in lockstep, so the shared high-water mark is written back once.
+            for (int st = 0; st < NSTAGE; ++st) {
+                int v = mkv_valid;
+                dspark_main_kv_upto(mkv[st], main_x, mb[st].attn, ctxlen, &v, EPS);
+            }
+            mkv_valid = ctxlen;
+        } else {
+            for (int st = 0; st < NSTAGE; ++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctxlen, EPS);
+        }
         dprof_end(DP_D_MAINKV, 0);
 
         // ---- DRAFT: block [cur, noise x (BLK-1)]

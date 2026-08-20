@@ -15,12 +15,26 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 
 ## The state in one table
 
-| | measured | ceiling | |
+**Every row needs a context.** The first block is context ~9, where this project did all of its
+historical measurement; the second is where agentic work actually runs.
+
+| at context ~9 | measured | ceiling | |
 |---|---|---|---|
 | speculative decode | **22.15 tok/s** | 23.2–25.9 | 96 % |
 | base AR decode | **13.83 tok/s** | 14.33–15.98 | 97 % |
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
+
+| at real context | before 1.0 | after 1.0 | |
+|---|---|---|---|
+| spec decode @ ctx 12,282 | 7.67 tok/s | **9.54 tok/s** | **+24.4 %** |
+| spec decode @ ctx 9,213 | 9.69 tok/s | **11.79 tok/s** | +21.7 % |
+| spec decode @ ctx 6,132 | 9.59 tok/s | **11.10 tok/s** | +15.8 % |
+| context term | 7.220 ms/1000 | **4.006 ms/1000** | −44 %, and 2.2 ms/1000 of it is still identified work |
+
+The context term is now the smaller half of the problem but not a solved one: `i:topk` (0.872
+ms/1000), `cattn:sparse` (0.709) and `i:score` (0.644) remain, and together they are worth about
+what 1.0 was worth — see [`context-scaling.md`](context-scaling.md).
 
 > ### ⚠️ RETRACTED 2026-08-20 — "the M=1 kernel path is finished"
 >
@@ -33,6 +47,13 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 >
 > See **[`context-scaling.md`](context-scaling.md)**. The acceptance argument still stands on its
 > own terms; it is no longer the *only* thing left.
+>
+> **Update 2026-08-20:** that recompute is now cached
+> ([`kernel-optimisations.md` §2.5](kernel-optimisations.md)) — **+24.4 % at ctx 12,282**, gated by
+> memcmp on the whole main-KV buffer across 704 calls and 2.59 M retained rows. Proving it also
+> established that **the engine does not reproduce itself run-to-run at context**, which makes the
+> ladder's "byte-identical token ids" invariant untestable as written at long context; see
+> [`measurement-and-traps.md` §12](measurement-and-traps.md).
 
 ## If you read one thing
 

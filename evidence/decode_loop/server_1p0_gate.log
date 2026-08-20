@@ -1,0 +1,26 @@
+[model-lock] acquired (287725) — 107 GiB available
+  preflight gate_tokenizer ok
+  preflight gate_encoding ok
+  preflight gate_api ok
+  preflight gate_stream ok
+[server] tokenizer /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP/tokenizer.json
+[server] tokenizer ok (vocab 128000, 1283 added)
+[engine] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP (seqmax=16384, blk=6, adaptK=1.50)...
+[engine] loaded 100.40 GiB, 45821 tensors (MANAGED device-preferred)
+[engine] building 43 layer structs (persistent)...
+[engine] DSpark head: NSTAGE=3 experts=160
+[engine] ready. mem 119.4/122.8 GiB  (seqmax 16384, batch 64, arena 640 MiB)
+
+[server] listening on http://0.0.0.0:8080   (web UI at /)
+[server] model deepseek-v4-flash-0731-reap, context 16384, block 6, adaptK 1.50
+[engine] prefill 12281 tok, arena high-water 103 MiB of 640 MiB
+[mainkv-gate] PASS s=12281 kept=0 recomputed=12281 (1 checks, 0 rows kept)
+[mainkv-gate] PASS s=12281 kept=0 recomputed=12281 (2 checks, 0 rows kept)
+[mainkv-gate] PASS s=12281 kept=0 recomputed=12281 (3 checks, 0 rows kept)
+[mainkv-gate] PASS s=6133 kept=6131 recomputed=2 (64 checks, 725399 rows kept)
+[mainkv-gate] PASS s=6161 kept=6159 recomputed=2 (128 checks, 1118640 rows kept)
+[mainkv-gate] PASS s=1565 kept=1560 recomputed=5 (192 checks, 1236087 rows kept)
+[engine] prefill 6119 tok, arena high-water 243 MiB of 640 MiB
+[mainkv-gate] PASS s=6119 kept=6119 recomputed=0 (256 checks, 1596596 rows kept)
+[mainkv-gate] PASS s=1536 kept=1535 recomputed=1 (320 checks, 1924711 rows kept)
+[mainkv-gate] PASS s=1541 kept=1538 recomputed=3 (384 checks, 2023320 rows kept)

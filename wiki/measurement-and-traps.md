@@ -121,3 +121,78 @@ survived every gate in the project.
 
 `gate_prefill_len` now varies length deliberately. **A masked read is not a safe read**: F62's row
 masks made the reads legal and hid a missing loop.
+
+## 12. The engine stops reproducing itself part-way through a long run, so "bit-identical token ids" is not a test there
+
+**Found proving ladder 1.0, 2026-08-20.** `DECODE_LADDER.md`'s standing invariant is that a kernel
+change "either produces byte-identical generated token ids, or ships behind the LOSSLESS gate".
+That invariant assumes the engine is a function of its input. **At context it is not.**
+
+The A/B for 1.0 reported 21 of 52 completion hashes differing between arms. The obvious reading —
+the cached prefix is wrong — was wrong, and it took three runs to establish that:
+
+| run | arms compared | result |
+|---|---|---|
+| server A/B, temperature 1.0 | cache off vs cache on | 21/52 legs differ |
+| `build/decode`, **argmax, no seed, no HTTP** | cache off vs cache on | point 0 identical (266 ids); ctx 3,072 and 1,024 diverge at generated token 20 and 43 |
+| `build/decode`, **`DSV4_MAINKV_CACHE=0` on BOTH sides** | cache off vs cache off | **same divergence** |
+| server, full second baseline sweep, independent start | cache off vs cache off | **the SAME 21 of 52 legs differ** — same set, both symmetric differences empty |
+
+The last two runs are the whole finding. The cached code path never executed on either side, and the
+binary **still disagreed with itself** — at ctx 1,024, at the *identical* id index 1067 with the
+identical token pair (223 vs 5115). The first baseline run was the odd one out: baseline-run-2 and
+the cache-on run agree with each other. A comparison whose control fails cannot convict anything.
+
+**Describe the shape correctly or you will chase the wrong bug.** It is tempting to write this up
+as "context ≥ 1024 is nondeterministic". It isn't. In both binaries the divergence is a **clean
+suffix in run order** — `build/decode` point 0 identical in three runs then points 1 and 2 differ;
+the server's legs 1–31 of 52 identical (with `tau` matching to three decimals at ctx 12,410 across
+three independent server starts) then leg 32 onward all differ. Generation is autoregressive, so
+**one** flipped token permanently de-synchronises everything after it. What is actually observed is
+a **rare per-step event whose rate rises with context**: zero in 3 × 260 steps at ctx 6, but inside
+20–43 steps at ctx 1,024–3,072.
+
+That shape points somewhere specific — a context-linear reduction with a **non-deterministic
+accumulation order**, where more terms mean more chances a near-tie in an argmax flips. It is also
+**not timing-dependent in the obvious way**: `decode.cu`'s width controller reads the draft's own
+margins (`while (VK < VKCAP && hmarg[VK-1] >= adaptK) ++VK`), not the clock, so "the faster arm
+picked a different width" does not explain it. Cause unknown; it is now ladder item 1.9.
+
+> **The rule.** A token-id comparison is only evidence if the *same-arm* control was run and passed.
+> Run it first, not after the result surprises you. Where the control fails, fall back to comparing
+> the **intermediate buffer** rather than the output.
+
+**The same control earns its cost twice, because it also calibrates the timing half of the A/B.**
+Running the baseline arm against itself end-to-end reported **0.998×–1.000×** at ctx 12,410 through
+1,536 — where the real comparison reported 1.267×–1.046×. A null A/B that reads null is the cheapest
+available evidence that a measured speedup is not an artifact of the harness, the corpus, or the
+order the arms ran in, and it costs one extra arm.
+
+**And the fallback is the stronger instrument anyway.** 1.0 was ultimately proved by memcmp'ing the
+whole `[s, HEAD_DIM]` main-KV buffer against the untouched from-scratch function on every call —
+704 calls across two binaries, contexts to 12,281, 2.59 M retained rows, zero mismatches, aborting
+on the first differing float. That proves the changed function's *entire output* is identical, which
+is strictly stronger than proving that one downstream consumer happened to emit the same tokens. A
+buffer comparison is also immune to the nondeterminism above, because both sides are computed
+inside the same process on the same step from the same `main_x`.
+
+## 13. A gate that passed, reported as a failure, because the probe it rode on kept no records
+
+Same item. Phase 1 of the A/B ran the in-situ bit-exactness gate and the harness printed:
+
+```
+[1.0] gate probe rc=1
+[1.0] gate: 9 PASS lines, 0 FAIL lines
+[1.0] FATAL: bit-exactness gate did not pass cleanly. STOPPING before spending three more loads.
+```
+
+The gate had passed — 384 checks, 2,023,320 retained rows, zero failures. What returned 1 was
+`decode_fit_probe.py`, which **refuses to bank a record below 64 completion tokens** (correctly —
+CLAUDE.md forbids writing records for items that generated nothing usable). The phase had asked it
+for `--max-tokens 64`, the model emitted 32, so it wrote **0 usable records and exited 1** with the
+gate underneath it perfectly healthy. The stop condition `[ "$rc" != "0" ]` conflated *the vehicle
+failed to collect timings* with *the thing being gated is broken*, and cost a full run.
+
+> **Rule.** When a gate rides inside a harness, the gate's verdict must come from the gate's own
+> output, not from the harness's exit status. Check `nfail`/`npass` first and treat the carrier's
+> `rc` as a separate, differently-named condition — they answer different questions.

@@ -1,3 +1,6 @@
 [watchdog 2026-08-19T23:25:23-04:00] loop is gone and everything checks out — restart 1/4
 [watchdog 2026-08-19T23:41:23-04:00] loop is gone and everything checks out — restart 2/4
 [watchdog 2026-08-19T23:57:23-04:00] loop is gone and everything checks out — restart 3/4
+[watchdog 2026-08-20T02:03:14-04:00] a model is resident; not restarting
+[watchdog 2026-08-20T02:19:24-04:00] loop is gone and everything checks out — restart 1/4
+[watchdog 2026-08-20T02:47:57-04:00] loop is gone and everything checks out — restart 2/4

@@ -1,0 +1,27 @@
+corpus sha256: before ['79ac6563f97e53e5', 'ac10134c87e3d0fe']  after ['79ac6563f97e53e5', 'ac10134c87e3d0fe']
+
+token identity: 31/52 legs proven byte-identical, 21 differ, 0 unproven (no hash on record)
+  DIFFER control-t1536-r0: 0a93f7ba42d56935 vs 0e63b50c9c731b94  (len 583 vs 600)
+  DIFFER control-t1536-r1: 396f9df9c21699ec vs 0c648036041eb6f5  (len 710 vs 597)
+  DIFFER control-t6144-r0: 6b476bd0e969bc29 vs bc59e0d553388423  (len 992 vs 902)
+  DIFFER control-t6144-r1: 316c6d502d388886 vs c51bdee57863a948  (len 981 vs 894)
+  DIFFER sweep-t128-r0: 7ab6f5708dd556a1 vs 4fff0c5515fe1bf2  (len 782 vs 754)
+  DIFFER sweep-t128-r1: 772a4ce6d6ed02e1 vs b13e02a1a4b9a596  (len 648 vs 685)
+  DIFFER sweep-t128-r2: 538f3f4eb38411cc vs 24692d631d9aece7  (len 863 vs 710)
+  DIFFER sweep-t128-r3: de7950fb5e1c2845 vs f73c5f481d1f98a7  (len 608 vs 880)
+  DIFFER sweep-t128-r4: c67315c7316b13a0 vs 908c00c1a78abb72  (len 668 vs 933)
+  DIFFER sweep-t128-r5: f67521fc0c1392fa vs bbc053c881f9c948  (len 750 vs 875)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+control     6144  2   6248    182.55    157.82   -24.73   1.157x   1.612   1.798   2.69   2.77     8.83    11.39
+control     1536  2   1656    156.23    143.82   -12.41   1.086x   2.133   1.890   3.04   2.84    13.62    13.14
+sweep      12288  6  12410    215.65    172.78   -42.87   1.248x   1.652   1.652   2.65   2.65     7.67     9.54
+sweep       9216  6   9341    203.51    167.36   -36.14   1.216x   1.969   1.969   2.92   2.92     9.69    11.79
+sweep       6144  6   6260    178.89    155.18   -23.71   1.153x   1.718   1.718   2.66   2.66     9.59    11.10
+sweep       3072  6   3197    160.46    148.31   -12.14   1.082x   1.626   1.626   2.69   2.69    10.07    10.91
+sweep       1536  6   1664    147.67    141.07    -6.60   1.047x   1.701   1.701   2.68   2.68    11.54    12.07
+sweep        768  6    889    137.50    133.27    -4.23   1.032x   1.730   1.724   2.70   2.64    12.49    12.94
+sweep        384  6    492    132.09    127.46    -4.64   1.036x   1.631   1.533   2.63   2.49    12.48    12.05
+sweep        128  6    249    128.25    126.65    -1.60   1.013x   1.646   1.636   2.68   2.62    13.05    12.92
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.

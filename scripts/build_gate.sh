@@ -97,6 +97,27 @@ bg gate_compressor_emit kernels/compressor.cu kernels/mla_attn.cu kernels/indexe
 # line lists only tc_moe_gemm.cu and has not linked since the oracle moved.
 bg gate_grouped_moe kernels/tc_moe_gemm.cu kernels/moe.cu kernels/mla_attn.cu kernels/fp8_block_gemm.cu \
   kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/dprof.cu
+# Gate MAINKV_INCR (ladder 1.0) — the incremental main-KV must be BIT-IDENTICAL to the from-scratch
+# one at every split point. Same reasoning as gate_tc_fp8_kc and gate_og_ws1: the claim is value
+# equality, so the instrument is memcmp. Seconds here instead of a 10-minute checkpoint load.
+#
+# BOTH NEGATIVE CONTROLS WERE RUN, 2026-08-20, not just asserted (an earlier version of this comment
+# claimed them without having done it). Each was a one-line edit to a scratch copy of
+# kernels/dspark_attn.cu, rebuilt and run:
+#   A. rope offset dropped (cosT/sinT not advanced by r0):  FAIL on BOTH GEMM settings,
+#      130,624 of 1,048,576 floats differ, first at row 7 col 448.
+#   B. GEMM pin dropped (delta goes back through fp8_block_gemm's M-dependent dispatch):
+#      PASS at g_tc_fp8=0 -- the oracle really is M-independent -- and **FAIL at g_tc_fp8=1 with
+#      377 of 1,048,576 floats differing at the last ulp** (0.209164858 vs 0.209164843).
+# B is the one that justifies the gate's two design choices. 0.036 % of floats at the last ulp is
+# exactly what a tolerance-based check calls "close enough", and it appears ONLY on the tensor-core
+# path -- which is the path decode uses and the one a gate running only the default would skip.
+#
+# Both controls put the first differing float at col 448 = NOPE_DIM, and that is mechanism, not
+# coincidence: act_quant_fp8sim re-quantises columns [0, NOPE_DIM) and absorbs sub-ulp differences,
+# while the ROPE half above it stays fp32 and preserves them. The NOPE half hides small errors.
+bg gate_mainkv_incr kernels/dspark_attn.cu kernels/dspark.cu kernels/block.cu \
+  kernels/compressed_block.cu kernels/block_decode.cu kernels/nvfp4_dense.cu $FULL
 # -lcublasLt: fp4_gemm.cu carries a cublasLt reference path next to the hand-written kernel.
 bg gate_fp4_gemv kernels/fp4_gemm.cu kernels/moe.cu kernels/tc_moe_gemm.cu \
   kernels/dscratch.cu kernels/dprof.cu kernels/mla_attn.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu \

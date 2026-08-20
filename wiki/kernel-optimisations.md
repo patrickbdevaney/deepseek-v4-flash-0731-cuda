@@ -4,7 +4,10 @@ Every optimisation below was **adopted**: built, gated, measured end-to-end on t
 kept. Findings that were built and *rejected* are in [`negative-results.md`](negative-results.md),
 which is the longer and more useful list.
 
-Session arc: **base AR 10.30 → 13.83 tok/s (+34.3 %)**, **speculative 16.86 → 22.15 tok/s (+31.4 %)**.
+Session arc: **base AR 10.30 → 13.83 tok/s (+34.3 %)**, **speculative 16.86 → 22.15 tok/s (+31.4 %)**
+— both at context ~9. At the contexts agentic work runs at, the arc that matters is §2.5:
+**+24.4 % at ctx 12,282**, the first win here that is a function of context rather than of shape.
+See [`context-scaling.md`](context-scaling.md) for why every number above has a context attached now.
 
 ---
 
@@ -100,6 +103,103 @@ the same prefill bug. **A parameter fitted on broken data is fitted to the break
 
 The kv chain forked off the q chain, serialising two independent computations. Splitting them onto
 separate streams recovered the overlap.
+
+### 2.5 Don't recompute a prefix that cannot have changed — cache the main-KV (ladder 1.0, 2026-08-20)
+
+**The first adopted win that is a function of context rather than of shape**, and the largest single
+adoption of the programme at the lengths agentic work runs at: **+24.4 % tok/s at ctx 12,282**.
+
+**Mechanism.** The decode loop opened with
+
+```c
+for (int st = 0; st < NSTAGE; ++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctxlen, EPS);
+```
+
+— an `act_quant_fp8` + fp8 block GEMM + `rmsnorm` + `rope` + `act_quant_fp8sim` over **every
+position in the context**, three stages, **on every token**. `main_x` is written exactly once per
+position (prefill writes `[0,n)`; the accept path writes the `acc+1` committed rows and `cpos`
+advances past them — rejected drafts never reach it), so every row below the committed position is
+frozen and all but the last `acc+1` rows of that work reproduce bytes already in the buffer.
+`dspark_main_kv_upto` computes only rows `[valid, s)` and advances the high-water mark. Per-step
+cost goes from **O(context) to O(tokens committed)**; over a generation, from O(n²) to O(n).
+
+**Measured, paired A/B** — same corpus, same binary, `DSV4_MAINKV_CACHE=0` vs default, 6 reps per
+point, baseline arm run first so thermal drift penalises the cached arm. On every point at
+ctx ≥ 1536 the two arms produced **bit-identical `tau` and mean verify width rep-for-rep**, so each
+rep pairs exactly with its twin and the comparison is of the kernel and nothing else:
+
+| ctx | before ms/fwd | after | paired Δ (median) | Δ band | speedup | tok/s |
+|---|---|---|---|---|---|---|
+| 12,282 | 215.65 | 170.25 | **−45.40** | [−45.9, −38.5] | **1.267×** | 7.67 → 9.54 (**+24.4 %**) |
+| 9,213 | 203.51 | 167.27 | −36.24 | [−36.9, −34.3] | 1.217× | 9.69 → 11.79 (+21.7 %) |
+| 6,132 | 178.89 | 154.71 | −24.18 | [−24.7, −23.4] | 1.156× | 9.59 → 11.10 (+15.8 %) |
+| 3,069 | 160.46 | 148.19 | −12.27 | [−12.7, −12.0] | 1.083× | 10.07 → 10.91 (+8.3 %) |
+| 1,536 | 147.67 | 141.15 | −6.52 | [−6.9, −6.2] | 1.046× | 11.54 → 12.07 (+4.5 %) |
+
+The bands are **±1 %** against a 3.5 % run-to-run spread, because pairing removes verify-width
+variance instead of averaging over it — see §4.3, this is that rule applied at context.
+
+**It removes the term it was predicted to remove, and 93 % of it.** Regressing the paired saving on
+context over 30 of the 31 exactly-paired legs (`sweep-t12288-r3` excluded as a disturbed leg — it is
+kept in the medians above, which are robust to it; including it gives `3.190 ± 0.278`, the same
+conclusion with a wider band):
+
+```
+saving ms/forward = -1.420 + 3.604 x (ctx/1000)      R^2 0.988,  SE(b) 0.076
+dprof attribution of draft:main_kv:  3.867 +/- 0.001 ms per 1000
+```
+
+**The 2 SE band [3.45, 3.76] does not quite cover the predicted 3.867** — 0.26 ms/1000, 6.8 % of the
+term, is unaccounted for and is written down here rather than rounded away. The remaining per-step
+main-KV work (`acc+1` rows × 3 stages, plus 15 kernel launches and 3 `dkmalloc`/`dksync`/`dkfree`
+triples) is context-*independent* and should land in the intercept, which is where the −1.42 ms
+also is. Whatever the residual slope is, it is not that.
+
+**Second-order and free:** the per-step scratch `dkmalloc` of `s*DIM + s*(DIM/128)*4` — **51.8 MB
+per stage, 155 MB per step at ctx 12,288**, bumped off a 640 MB arena before the step's first
+`arena_reset()` — is now sized by the delta instead, about 12 KB.
+
+**The gate.** Bit-exactness, not approximate equality. Three independent gates, each memcmp'ing the
+**whole** `[s, HEAD_DIM]` buffer against the untouched `dspark_main_kv` and aborting on the first
+differing float:
+
+| gate | scope | result |
+|---|---|---|
+| `tests/gate_mainkv_incr.cu` | no checkpoint, 2048 × 512 floats, **22 split points**, both GEMM paths | PASS, byte-identical |
+| `build/dsv4-server`, in situ (`DSV4_MAINKV_GATE=1`) | 384 calls, ctx to 12,281, **2,023,320 retained rows**, all three invalidation paths | 0 FAIL |
+| `build/decode`, in situ | 320 calls, **568,509 retained rows** | 0 FAIL |
+
+**The gate was proved to have teeth.** Asserting that a gate would catch the bug is not the same as
+watching it do so, so both failure modes were reintroduced on a scratch copy and rebuilt:
+
+| negative control | `g_tc_fp8=0` | `g_tc_fp8=1` | floats differing |
+|---|---|---|---|
+| rope offset not advanced by `r0` | **FAIL** | **FAIL** | 130,624 / 1,048,576 |
+| GEMM pin removed | PASS | **FAIL** | **377 / 1,048,576, at the last ulp** |
+
+The second row is the whole argument for two of this gate's design choices. **0.036 % of floats
+differing in the last ulp** (0.209164858 vs 0.209164843) is precisely what a tolerance-based check
+waves through — memcmp is not pedantry here, it is the only instrument that sees it. And it appears
+**only on the tensor-core path**, which is the one decode actually uses; a gate that ran only the
+default `g_tc_fp8=0` would have reported a clean pass on a broken kernel. Note also that both
+controls put the first differing float at column 448 = `NOPE_DIM`, which is mechanism rather than
+coincidence: `act_quant_fp8sim` re-quantises columns `[0, NOPE_DIM)` and absorbs sub-ulp
+differences, while the rope half above it stays fp32 and preserves them. **The NOPE half hides small
+errors; look in the rope half first.**
+
+**The load-bearing detail is the GEMM pin.** `fp8_block_gemm`'s dispatch is **M-dependent**: M=1
+takes a GEMV, M∈[2,8] can take an NVFP4 overlay, larger M reaches `tc_fp8_gemm`. The incremental
+delta is 1–6 rows where the from-scratch call was thousands, so going through that dispatch would
+compare a GEMV against a tensor-core tile and lose bit-exactness *for a reason that has nothing to
+do with caching*. The incremental path pins to `tc_fp8_gemm`, whose own dispatch depends only on N
+and K — M only sets `grid.y`, and each output element accumulates over K in the same order
+regardless of which 16-row tile it lands in — which makes the result independent of the split
+point. The other trap is the rope offset: `cosT/sinT` must be advanced by `r0`, or a sub-range
+rotates every row by the wrong angle. Both are covered by the 22 split points.
+
+**Invalidation is the caller's job, and there are exactly three callers that need it**:
+`prefill_full` (memsets `main_x`), `extend` (rewrites `[from,n)`), `rewind_to` (drops to `n`). Each
+clamps the high-water mark down; everything else may only grow it.
 
 ---
 

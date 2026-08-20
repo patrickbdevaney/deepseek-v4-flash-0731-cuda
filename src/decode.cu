@@ -998,6 +998,11 @@ int main(int argc, char** argv){
                    path, PSp, ntap, d, bytes/1048576.0, bytes/1024.0/PSp); fflush(stdout);
         }
         dspark_main_x(main_x, mh_pre, main_proj, main_proj_s, main_norm, PSp, d, EPS); CU(cudaDeviceSynchronize());
+        // LADDER 1.0. Rows [0, mkv_valid) of mkv[st] are built from the CURRENT main_x. main_x was
+        // just rewritten wholesale for this sweep point, so nothing carries over from the last one.
+        // Below the committed position main_x is write-once (the accept path at the bottom of the
+        // spec loop only ever appends acc+1 rows), so the cache only ever grows from here.
+        int mkv_valid = 0;
         // ---------------- S5 DRAFT PROBE (DSV4_CAPTURE) ----------------
         // THE EQUIVALENCE ORACLE. F101: the PyTorch port agreed with the engine on 1.5% of draft
         // positions where the engine itself gets ~30%, so training on it would have aligned the
@@ -1136,8 +1141,18 @@ int main(int argc, char** argv){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]
             if(specprof){ cudaEventRecord(p0); raw0=g_raw_ms; rsy0=g_rawsync_ms; rawn0=g_raw_n; rsyn0=g_rawsync_n; }
-            // rebuild head main-KV over the context
-            for(int st=0;st<NSTAGE;++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctx, EPS);
+            // LADDER 1.0. Was a full O(ctx) rebuild of the head main-KV, three stages, every token
+            // -- 55 % of the whole context term (0.4). Now only the rows committed since the last
+            // step. Byte-identical; DSV4_MAINKV_CACHE=0 restores the from-scratch path for the A/B,
+            // and this binary is the one that carries the LOSSLESS gate, so the two arms of that
+            // env var are what proves the emitted sequence is unchanged.
+            static const bool mainkv_cache = !(getenv("DSV4_MAINKV_CACHE") && atoi(getenv("DSV4_MAINKV_CACHE"))==0);
+            if(mainkv_cache){
+                for(int st=0;st<NSTAGE;++st){ int v=mkv_valid; dspark_main_kv_upto(mkv[st], main_x, mb[st].attn, ctx, &v, EPS); }
+                mkv_valid = ctx;
+            } else {
+                for(int st=0;st<NSTAGE;++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctx, EPS);
+            }
             if(specprof) cudaEventRecord(p1);
             // DRAFT: block [cur, noise x (BLK-1)].
             //

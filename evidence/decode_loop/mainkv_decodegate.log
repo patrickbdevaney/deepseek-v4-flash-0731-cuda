@@ -1,0 +1,16 @@
+[1.0g] 2026-08-20T03:01:59-04:00 binary: decode 2026-08-20T01:00:08-04:00
+[run_model] 105 GiB available; launching detached -> evidence/decode_loop/decode_1p0_gate.log
+[run_model] pid 15731   watch: tail -f evidence/decode_loop/decode_1p0_gate.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/decode_1p0_gate.memguard.log
+[1.0g] 2026-08-20T03:05:10-04:00 gate: 8 PASS lines, 0 FAIL lines
+[mainkv-gate] PASS s=5 kept=0 recomputed=5 (1 checks, 0 rows kept)
+[mainkv-gate] PASS s=5 kept=0 recomputed=5 (2 checks, 0 rows kept)
+[mainkv-gate] PASS s=5 kept=0 recomputed=5 (3 checks, 0 rows kept)
+[mainkv-gate] PASS s=63 kept=58 recomputed=5 (64 checks, 1843 rows kept)
+[mainkv-gate] PASS s=3091 kept=3089 recomputed=2 (128 checks, 111643 rows kept)
+[mainkv-gate] PASS s=3130 kept=3127 recomputed=3 (192 checks, 310659 rows kept)
+[mainkv-gate] PASS s=1026 kept=1023 recomputed=3 (256 checks, 500559 rows kept)
+[mainkv-gate] PASS s=1110 kept=1104 recomputed=6 (320 checks, 568509 rows kept)
+[1.0g] 2026-08-20T03:05:10-04:00 VERDICT: the cached mkv buffer is byte-identical to from-scratch on every call in this
+[1.0g] 2026-08-20T03:05:10-04:00 binary too. The token divergence is therefore NOT the cached prefix; it is downstream.
+[1.0g] 2026-08-20T03:05:10-04:00 done.

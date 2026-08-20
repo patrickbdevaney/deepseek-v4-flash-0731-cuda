@@ -124,8 +124,27 @@ def run_point(host, args, fh, seen, tag, prompt, target, rep, corpus_sha):
         # DO NOT BANK A RECORD FOR AN ITEM THAT GENERATED NOTHING USABLE.
         print(f'[probe] {rid}: unusable (ct={ct} timings={tm}); not recorded', flush=True)
         return None
+    # The completion's hash, recorded because it costs one sha256 of ~1 KB per leg.
+    #
+    # READ THIS BEFORE USING IT AS A BIT-EXACTNESS CHECK. An earlier version of this comment claimed
+    # that sampling here is seeded (`seed=1000+rep`), that the engine reseeds per request, and that
+    # therefore two arms producing the same hashes have proven byte-identical token sequences.
+    # **The first two are true and the conclusion is false, and it was measured false on 2026-08-20.**
+    # A full baseline sweep run twice from two independent server starts -- same binary, same env,
+    # same seeds, no kernel change whatsoever -- differed on **21 of its 52 legs**, and they were the
+    # same 21 legs on which a real kernel A/B differed (evidence/decode_loop/fit_1p0_determinism.txt).
+    #
+    # So a hash MISMATCH here means nothing on its own: it is the engine failing to reproduce itself
+    # at least as often as it is the kernel under test. A hash MATCH is still informative, and the
+    # matching legs are worth a lot -- on ladder 1.0 the legs at ctx >= 1536 matched across three
+    # independent runs and carried identical `tau`, which is what made the paired timing comparison
+    # possible. Use it that way: as a filter that identifies which legs are comparable, NOT as a
+    # verdict on the kernel. The verdict comes from memcmp of the kernel's own output buffer.
+    # See wiki/measurement-and-traps.md 12 and DECODE_LADDER.md hard invariant 1.
+    txt = ((r.get('choices') or [{}])[0] or {}).get('text') or ''
     rec = dict(id=rid, kind=tag, target_tokens=target, rep=rep, corpus_sha256=corpus_sha,
                usage=u, timings=tm, spec_profile=r.get('spec_profile'),
+               text_sha256=hashlib.sha256(txt.encode('utf-8')).hexdigest(), text_len=len(txt),
                wall_s=round(time.time() - t0, 2))
     fh.write(json.dumps(rec) + '\n')
     fh.flush()

@@ -34,3 +34,22 @@
 [memguard] victim gone, exiting. low-water was 5123 MB 2026-08-19T23:01:13-04:00
 [memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T00:11:28-04:00
 [memguard] victim gone, exiting. low-water was 4855 MB 2026-08-20T00:22:54-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T01:02:20-04:00
+[memguard] victim gone, exiting. low-water was 5803 MB 2026-08-20T01:10:52-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T01:18:56-04:00
+[memguard] victim gone, exiting. low-water was 5782 MB 2026-08-20T01:48:13-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T01:48:16-04:00
+[memguard] victim gone, exiting. low-water was 5832 MB 2026-08-20T02:15:25-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T02:27:10-04:00
+[memguard] !!! MemAvailable 219 MB < floor 1500 MB x3 — KILLING pid 377354 2026-08-20T02:28:55-04:00
+[memguard] killed. MemAvailable now 204 MB
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T02:52:30-04:00
+[memguard] victim gone, exiting. low-water was 4559 MB 2026-08-20T02:56:10-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T02:56:15-04:00
+[memguard] victim gone, exiting. low-water was 4631 MB 2026-08-20T02:59:54-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T03:01:59-04:00
+[memguard] victim gone, exiting. low-water was 4558 MB 2026-08-20T03:05:09-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T03:12:31-04:00
+[memguard] victim gone, exiting. low-water was 4574 MB 2026-08-20T03:16:10-04:00
+[memguard] floor=1500 MB x3 poll=2s pat=dsv4-server started 2026-08-20T03:22:43-04:00
+[memguard] victim gone, exiting. low-water was 2389 MB 2026-08-20T03:51:46-04:00
