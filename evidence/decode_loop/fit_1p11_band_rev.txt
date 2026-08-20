@@ -1,0 +1,41 @@
+token identity: 22/22 legs byte-identical, 0 differ, 0 unproven
+
+--- SWEEP legs (the band) ---
+                 leg     ctx    joined  deferred    delta   tau b   tau a
+     sweep-t12288-r0   12410    147.05    145.45    -1.60   1.766   1.766
+     sweep-t12288-r1   12410    144.43    143.23    -1.20   1.707   1.707
+     sweep-t12288-r2   12410    144.29    143.06    -1.23   1.842   1.842
+     sweep-t12288-r3   12410    140.24    139.31    -0.93   1.506   1.506
+     sweep-t12288-r4   12410    142.39    141.13    -1.26   1.790   1.790
+     sweep-t12288-r5   12410    140.42    138.89    -1.53   1.580   1.580
+      sweep-t3072-r0    3197    130.27    130.09    -0.18   1.620   1.620
+      sweep-t3072-r1    3197    133.13    132.22    -0.91   1.542   1.542
+      sweep-t3072-r2    3197    130.85    130.55    -0.30   1.533   1.533
+      sweep-t3072-r3    3197    130.98    130.05    -0.93   1.430   1.430
+      sweep-t3072-r4    3197    133.91    132.44    -1.47   1.620   1.620
+      sweep-t3072-r5    3197    137.80    137.01    -0.79   1.610   1.610
+      sweep-t6144-r0    6260    137.61    136.50    -1.11   1.896   1.896
+      sweep-t6144-r1    6260    139.56    137.84    -1.72   1.753   1.753
+      sweep-t6144-r2    6260    133.95    134.15    +0.19   1.542   1.542
+      sweep-t6144-r3    6260    135.06    135.58    +0.52   1.610   1.610
+      sweep-t6144-r4    6260    134.18    134.57    +0.39   1.580   1.580
+      sweep-t6144-r5    6260    136.67    137.04    +0.38   1.673   1.673
+
+n=18  paired mean -0.760 ms/forward   sd 0.740   2 SE band [-1.109, -0.411]
+legs faster after: 14/18   tau equal to 3 d.p.: 18/18
+VERDICT: the band EXCLUDES zero — a real paired saving.
+split:   flat -0.222 +/- 0.710 ms/forward   context -0.0739 +/- 0.0863 ms per 1000 ctx   R^2 0.155
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)
+
+--- CONTROL legs (reported separately, never pooled) ---
+                 leg     ctx    joined  deferred    delta   tau b   tau a
+    control-t1536-r0    1656    130.73    129.58    -1.15   1.673   1.673
+    control-t1536-r1    1656    134.55    133.38    -1.18   2.048   2.048
+    control-t6144-r0    6248    140.02    139.59    -0.43   1.925   1.925
+    control-t6144-r1    6248    135.48    134.56    -0.92   1.641   1.641
+
+n=4  paired mean -0.920 ms/forward   sd 0.347   2 SE band [-1.266, -0.573]
+legs faster after: 4/4   tau equal to 3 d.p.: 4/4
+VERDICT: the band EXCLUDES zero — a real paired saving.
+split:   flat -1.341 +/- 0.490 ms/forward   context +0.1066 +/- 0.1071 ms per 1000 ctx   R^2 0.665
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)

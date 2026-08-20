@@ -1,0 +1,2 @@
+[smem-ctx arm] context=49207 pos=49206 T=12301  scan smem would be 49216 B (device default 49152 B, opt-in 232448 B) -> ABOVE the default ceiling
+[smem-ctx arm] sync=no error  out: 4096/4096 nonzero, 0 NaN, hash=2b36c09ec550fc1a

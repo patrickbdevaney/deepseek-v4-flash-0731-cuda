@@ -512,6 +512,53 @@ hypothesis, [`context-scaling.md`](context-scaling.md) for the 6 % of this that 
 
 ---
 
+### 2.10 Join a side stream where the data is needed, not where it was forked (ladder 1.11, 2026-08-20)
+
+**Mechanism.** `compressed_verify_step_indexer` forks the two `compressor_emit_group` calls onto
+`g_side` (§2.4's pattern, Finding 55/56) and then joined them straight back, immediately after
+`build_qKV`. The join position was inherited, not chosen. **The first consumer of `idx_ckv` is
+`index_score` and of `comp_kv` is the `kv_all` copy**, and the two marks in between — `i:qidx`
+(a GEMM on `iqrq/iqrs`) and `i:iw` (a GEMM on `x_cur`) — read neither. 1.8 measured that window at
+1.94 + 0.64 = **2.58 ms of independent main-stream work sitting behind a barrier that had no reason
+to be in front of it**.
+
+The fix keeps the `cudaEventRecord` where the emits end and moves only the `cudaStreamWaitEvent`:
+
+    if(asplit) cudaEventRecord(g_side_join,cs);                 // "the emits are done"
+    if(asplit && !jdefer) cudaStreamWaitEvent(stream,g_side_join,0);
+    ...  i:qidx, i:iw ...
+    if(jdefer) cudaStreamWaitEvent(stream,g_side_join,0);       // at index_score, the true dependency
+
+**Measured gain.** Drift-free paired over **18 legs and four checkpoint loads**:
+**−0.542 ± 0.310 ms/forward**, and **−1.092 ± 0.146 at ctx 12,410**, where it is 6/6 in each arm
+order independently (+0.77 % tok/s there). The mark-level instrument agrees on the mechanism at
+K=5: `cattn:compress` 2.34 → **0.07** ms as the barrier leaves it, `i:qidx` 1.94 → **2.81** as it
+absorbs the emit traffic, verify TOTAL 127.33 → **125.89**; −1.44 ms on a step carrying one emit ×
+1.8's 64.9 % emit rate predicts −0.93 ms/forward.
+
+**The gate that proved it.** `tests/gate_join_defer.cu` — and it had to be written, because **every
+existing gate that links these kernels does so without calling `arena_init()`, so `g_side` is null,
+`asplit` is false, and the fork/join has never been under test at all.** It calls `arena_init()`
+first and refuses to PASS if `g_side` comes back null. Both join positions in one process on
+identical weights, four cases (1 emit, 2 emits, 0 emits, second shape): **0 of 143,360 floats
+differ**, same under `--swap`, `--negctl` fires on every case. Engine: identical generated ids,
+LOSSLESS PASS in both arms, **44 of 44 sweep legs byte-identical with `tau` equal to three
+decimals**.
+
+**What generalises.** §2.4 established *that* independent chains belong on two streams. 1.11 is the
+second-order version: **the join is a free parameter and the default is the wrong one.** A fork
+written as `fork; workA; join; workB; consume` costs nothing to rewrite as `fork; workA; workB;
+join; consume` when `workB` does not read the fork's output, and the compiler will never do it for
+you because the dependency lives in your head, not in the types. Every fork site in this repo —
+`g_side` here, `g_side2` in `build_qKV`, `moe.cu`'s shared expert — is worth re-reading with the
+question "what is the *first* thing that actually reads this?".
+
+**And read the marks with care after doing it.** Deferring a join MOVES time between marks rather
+than removing it: `cattn:compress` fell 97 % and that is not the win, it is the barrier leaving.
+Only the conserved sum, and then the paired ms/forward, decides. See
+[`measurement-and-traps.md` §29](measurement-and-traps.md) for the same effect misread as a 3.2×
+swing in a GEMM, and **§33 for why one arm order could not resolve this item at all**.
+
 ## 3. Precision and layout
 
 | finding | change | result |

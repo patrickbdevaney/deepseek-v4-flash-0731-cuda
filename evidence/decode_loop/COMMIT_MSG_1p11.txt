@@ -1,0 +1,63 @@
+1.11: deferring the ATTN_SPLIT join past i:qidx and i:iw is worth -0.542 +/- 0.310 ms/forward drift-free and -1.092 +/- 0.146 at ctx 12,410 -- and ONE arm order called it a null
+
+WHAT CHANGED. kernels/compressed_decode.cu. compressed_verify_step_indexer forks the two
+compressor_emit_group calls onto g_side and joined them straight back, immediately after build_qKV.
+Nothing between there and index_score reads what the emits write: the first consumer of idx_ckv is
+index_score and of comp_kv is the kv_all copy, while i:qidx (a GEMM on iqrq/iqrs) and i:iw (a GEMM
+on x_cur) read neither. The cudaEventRecord stays where the emits end; only the cudaStreamWaitEvent
+moves, down to index_score. NO_JOIN_DEFER=1 restores the 1.8 position on the same binary, which is
+what let both arms be one build. ADOPTED, DEFAULT ON.
+
+WHAT WAS MEASURED. Drift-free paired over 18 legs and FOUR checkpoint loads:
+-0.542 +/- 0.310 ms/forward, and -1.092 +/- 0.146 at ctx 12,410 where it is 6/6 in each arm order
+independently (+0.77 % tok/s). The marks show the mechanism at K=5: cattn:compress 2.34 -> 0.07 ms
+as the barrier leaves it, i:qidx 1.94 -> 2.81 as it ABSORBS the emit traffic -- the same signature
+Finding 56 recorded -- verify TOTAL 127.33 -> 125.89. -1.44 ms on an emit step x 1.8's 64.9 % emit
+rate predicts -0.93 ms/forward.
+
+WHAT IT MEANS, AND IT IS NOT THE 0.54. Run the standard way -- control arm first, so drift penalises
+the change -- this measured -0.324, 2 SE [-0.670, +0.022]: a band covering zero, which under the
+item's own pre-registration is a NEGATIVE RESULT and would have been written up as one. It is not
+one. Pairing removes between-LEG variance and does nothing to a constant offset between two
+checkpoint loads, and traps SS19 had already measured that offset at 0.6 % = ~0.8 ms/forward -- the
+size of the entire effect. Running the identical pair with the ARM ORDER REVERSED gives
+-0.760 [-1.109, -0.411]; averaging the per-leg deltas cancels the drift and half their difference
+measures it: THE SECOND CHECKPOINT LOAD OF A SESSION COSTS +0.218 +/- 0.157 ms/forward, 40 % of what
+this item was chasing. Term A needs another 22.4 ms and there is no single 22 ms item left, so it
+will be paid down in pieces this size. Below ~1 ms/forward, a null from one arm order is not a
+result, and reporting one retires a real win. tools/paired_band.py --reversed does the pooling.
+
+a AND b ARE UNCHANGED AT 125.11 AND 1.887, ON PURPOSE. The item pre-registered a FLAT saving --
+every byte in the deferred window is context-independent, and the mark-level confirmation was taken
+at context FIVE. The engine did not deliver a flat one: -1.092 +/- 0.146 at ctx 12,410 (sd 0.179)
+against bands covering zero at 3,197 and 6,260 (sd 0.585, 0.741). A three-point fit through groups
+with 3-4x different scatter is not an attribution, so the ratchet is stated where it resolves --
+a + b*ctx at ctx 12,410 goes 142.24 -> 141.15 ms -- and the term is new item 1.13. The item says its
+own prediction failed rather than rounding it into the nearest term.
+
+BIT-EXACT, AND THE GATE FOR IT DID NOT EXIST. tests/gate_join_defer.cu is the FIRST gate in this
+repo that calls arena_init() before driving these kernels. Every other one links them without an
+arena, so g_side is null, asplit is false, and the fork 1.8 priced at 0.81 ms/forward had never been
+under test at all. It refuses to PASS if g_side comes back null. Four cases (1 emit, 2 emits, 0
+emits, a second shape), both join positions in one process on identical weights: 0 of 143,360 floats
+differ, same under --swap, and --negctl fires on every case so the memcmp is live. Engine: identical
+generated ids in both arms, LOSSLESS PASS in both, 44 of 44 sweep legs byte-identical with tau equal
+to three decimals across four loads.
+
+THE GATE'S FIRST RUN SAID FAIL, AND THE NULL CONTROL IS WHY THAT IS NOT A DEFECT IN THIS COMMIT.
+One row differed -- row 0, an M=1 decode step, which 1.11 does not touch. Pinning BOTH arms to the
+SAME join position still differed, including with the pre-1.11 code in both; duplicating a case
+showed instance 1 differing and instance 2 of byte-identical data clean. It is being FIRST: the
+arena slab is cudaMalloc'd and never zeroed, so scratch in the M=1 step is read before it is written
+and sees driver garbage on pass 1 and the previous pass's bytes forever after. Pre-existing,
+unrelated, burned off with a discarded warm arm, and filed as new ladder item 1.14 -- it has been
+silently corrupting the first run of every bit-exactness gate here.
+
+WIKI, in the same commit: kernel-optimisations.md SS2.10 (the adopted win; the general form is that
+a join position is a free parameter and the default is the wrong one),
+measurement-and-traps.md SS32 (the cold-arena first pass) and SS33 (pairing does not remove a
+between-load offset), context-scaling.md (the flat/context attribution left open and why), and
+README.md's state table.
+
+Detached: scripts/joindefer_ab_run.sh, 8 phases, both arm orders, named in detach_audit.sh's
+PATTERNS in this commit.

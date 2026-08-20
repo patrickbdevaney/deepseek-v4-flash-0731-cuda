@@ -1,0 +1,187 @@
+[1.11] 2026-08-20T18:50:11-04:00 binaries: server 2026-08-20T18:11:33-04:00, decode 2026-08-20T18:11:33-04:00
+[1.11] 2026-08-20T18:50:11-04:00 === PHASE 6: REVERSED replicate, DEFERRED arm FIRST ===
+[1.11] 2026-08-20T18:50:11-04:00 starting server [on2] seqmax=16384 NO_JOIN_DEFER=unset -> evidence/decode_loop/server_1p11_on2.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p11_on2.log
+[run_server] pid=1388738 ppid=1388124 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p11_on2.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.11] 2026-08-20T18:51:25-04:00 healthy [on2]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=225810ms decode=21090ms tau=1.766 -> 145.45 ms/forward  (247s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21484ms tau=1.707 -> 143.23 ms/forward  (21s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=19886ms tau=1.842 -> 143.06 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=23683ms tau=1.506 -> 139.31 ms/forward  (24s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=256 prefill=0ms decode=20182ms tau=1.790 -> 141.13 ms/forward  (20s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=256 prefill=0ms decode=22500ms tau=1.580 -> 138.89 ms/forward  (23s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=18428ms tau=1.896 -> 136.50 ms/forward  (18s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=20124ms tau=1.753 -> 137.84 ms/forward  (20s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=22268ms tau=1.542 -> 134.15 ms/forward  (22s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=21557ms tau=1.610 -> 135.58 ms/forward  (22s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=21801ms tau=1.580 -> 134.57 ms/forward  (22s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=20967ms tau=1.673 -> 137.04 ms/forward  (21s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=20554ms tau=1.620 -> 130.09 ms/forward  (21s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=21948ms tau=1.542 -> 132.22 ms/forward  (22s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=21802ms tau=1.533 -> 130.55 ms/forward  (22s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=23278ms tau=1.430 -> 130.05 ms/forward  (23s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=256 prefill=0ms decode=20925ms tau=1.620 -> 132.44 ms/forward  (21s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=256 prefill=0ms decode=21785ms tau=1.610 -> 137.01 ms/forward  (22s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=111733ms decode=18565ms tau=1.925 -> 139.59 ms/forward  (130s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=20992ms tau=1.641 -> 134.56 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=19826ms tau=1.673 -> 129.58 ms/forward  (20s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=16672ms tau=2.048 -> 133.38 ms/forward  (17s)
+[probe] wrote 22 usable records -> evidence/decode_loop/fit_1p11_on2/postfix.sweep.jsonl and evidence/decode_loop/fit_1p11_on2/control.fresh.jsonl
+[1.11] 2026-08-20T19:04:44-04:00 reversed deferred probe rc=0
+[1.11] 2026-08-20T19:04:44-04:00 server down
+[1.11] 2026-08-20T19:04:49-04:00 === PHASE 7: REVERSED replicate, CONTROL arm SECOND ===
+[1.11] 2026-08-20T19:04:50-04:00 starting server [off2] seqmax=16384 NO_JOIN_DEFER=1 -> evidence/decode_loop/server_1p11_off2.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p11_off2.log
+[run_server] pid=1415385 ppid=1414766 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p11_off2.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.11] 2026-08-20T19:06:03-04:00 healthy [off2]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=230892ms decode=21322ms tau=1.766 -> 147.05 ms/forward  (252s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21664ms tau=1.707 -> 144.43 ms/forward  (22s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=20056ms tau=1.842 -> 144.29 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=23841ms tau=1.506 -> 140.24 ms/forward  (24s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=256 prefill=0ms decode=20362ms tau=1.790 -> 142.39 ms/forward  (20s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=256 prefill=0ms decode=22748ms tau=1.580 -> 140.42 ms/forward  (23s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=18578ms tau=1.896 -> 137.61 ms/forward  (19s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=20376ms tau=1.753 -> 139.56 ms/forward  (20s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=22236ms tau=1.542 -> 133.95 ms/forward  (22s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=21474ms tau=1.610 -> 135.06 ms/forward  (21s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=21738ms tau=1.580 -> 134.18 ms/forward  (22s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=20910ms tau=1.673 -> 136.67 ms/forward  (21s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=20583ms tau=1.620 -> 130.27 ms/forward  (21s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=22099ms tau=1.542 -> 133.13 ms/forward  (22s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=21851ms tau=1.533 -> 130.85 ms/forward  (22s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=23445ms tau=1.430 -> 130.98 ms/forward  (23s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=256 prefill=0ms decode=21158ms tau=1.620 -> 133.91 ms/forward  (21s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=256 prefill=0ms decode=21911ms tau=1.610 -> 137.80 ms/forward  (22s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=112630ms decode=18622ms tau=1.925 -> 140.02 ms/forward  (131s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=21135ms tau=1.641 -> 135.48 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=20002ms tau=1.673 -> 130.73 ms/forward  (20s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=16819ms tau=2.048 -> 134.55 ms/forward  (17s)
+[probe] wrote 22 usable records -> evidence/decode_loop/fit_1p11_off2/postfix.sweep.jsonl and evidence/decode_loop/fit_1p11_off2/control.fresh.jsonl
+[1.11] 2026-08-20T19:19:30-04:00 reversed control probe rc=0
+[1.11] 2026-08-20T19:19:30-04:00 server down
+[1.11] 2026-08-20T19:19:35-04:00 === PHASE 8: the drift-free estimate ===
+[1.11] 2026-08-20T19:19:35-04:00 --- run 1: control arm first (drift penalises 1.11) ---
+token identity: 22/22 legs byte-identical, 0 differ, 0 unproven
+
+--- SWEEP legs (the band) ---
+                 leg     ctx    joined  deferred    delta   tau b   tau a
+     sweep-t12288-r0   12410    144.78    143.67    -1.11   1.766   1.766
+     sweep-t12288-r1   12410    142.25    141.25    -1.00   1.707   1.707
+     sweep-t12288-r2   12410    142.03    141.05    -0.98   1.842   1.842
+     sweep-t12288-r3   12410    137.99    137.34    -0.65   1.506   1.506
+     sweep-t12288-r4   12410    140.02    139.07    -0.95   1.790   1.790
+     sweep-t12288-r5   12410    137.81    137.14    -0.67   1.580   1.580
+      sweep-t3072-r0    3197    127.68    128.90    +1.22   1.620   1.620
+      sweep-t3072-r1    3197    130.20    131.24    +1.04   1.542   1.542
+      sweep-t3072-r2    3197    128.71    129.03    +0.32   1.533   1.533
+      sweep-t3072-r3    3197    127.65    127.55    -0.10   1.430   1.430
+      sweep-t3072-r4    3197    130.14    129.46    -0.68   1.620   1.620
+      sweep-t3072-r5    3197    135.33    134.73    -0.60   1.610   1.610
+      sweep-t6144-r0    6260    135.47    134.52    -0.95   1.896   1.896
+      sweep-t6144-r1    6260    137.31    136.48    -0.83   1.753   1.753
+      sweep-t6144-r2    6260    131.71    131.19    -0.51   1.542   1.542
+      sweep-t6144-r3    6260    132.66    132.26    -0.41   1.610   1.610
+      sweep-t6144-r4    6260    131.44    131.93    +0.49   1.580   1.580
+      sweep-t6144-r5    6260    134.38    134.93    +0.55   1.673   1.673
+
+n=18  paired mean -0.324 ms/forward   sd 0.734   2 SE band [-0.670, +0.022]
+legs faster after: 13/18   tau equal to 3 d.p.: 18/18
+VERDICT: the band COVERS ZERO — this is a NULL, not a win.
+split:   flat +0.521 +/- 0.599 ms/forward   context -0.1159 +/- 0.0728 ms per 1000 ctx   R^2 0.388
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)
+
+--- CONTROL legs (reported separately, never pooled) ---
+                 leg     ctx    joined  deferred    delta   tau b   tau a
+    control-t1536-r0    1656    128.60    129.24    +0.64   1.673   1.673
+    control-t1536-r1    1656    132.19    132.83    +0.64   2.048   2.048
+    control-t6144-r0    6248    137.72    138.33    +0.62   1.925   1.925
+    control-t6144-r1    6248    133.38    134.20    +0.82   1.641   1.641
+
+n=4  paired mean +0.677 ms/forward   sd 0.093   2 SE band [+0.584, +0.770]
+legs faster after: 0/4   tau equal to 3 d.p.: 4/4
+VERDICT: the band EXCLUDES zero — a real paired COST.
+split:   flat +0.608 +/- 0.196 ms/forward   context +0.0175 +/- 0.0430 ms per 1000 ctx   R^2 0.248
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)
+[1.11] 2026-08-20T19:19:35-04:00 --- run 2: deferred arm first (drift penalises the control) ---
+token identity: 22/22 legs byte-identical, 0 differ, 0 unproven
+
+--- SWEEP legs (the band) ---
+                 leg     ctx    joined  deferred    delta   tau b   tau a
+     sweep-t12288-r0   12410    147.05    145.45    -1.60   1.766   1.766
+     sweep-t12288-r1   12410    144.43    143.23    -1.20   1.707   1.707
+     sweep-t12288-r2   12410    144.29    143.06    -1.23   1.842   1.842
+     sweep-t12288-r3   12410    140.24    139.31    -0.93   1.506   1.506
+     sweep-t12288-r4   12410    142.39    141.13    -1.26   1.790   1.790
+     sweep-t12288-r5   12410    140.42    138.89    -1.53   1.580   1.580
+      sweep-t3072-r0    3197    130.27    130.09    -0.18   1.620   1.620
+      sweep-t3072-r1    3197    133.13    132.22    -0.91   1.542   1.542
+      sweep-t3072-r2    3197    130.85    130.55    -0.30   1.533   1.533
+      sweep-t3072-r3    3197    130.98    130.05    -0.93   1.430   1.430
+      sweep-t3072-r4    3197    133.91    132.44    -1.47   1.620   1.620
+      sweep-t3072-r5    3197    137.80    137.01    -0.79   1.610   1.610
+      sweep-t6144-r0    6260    137.61    136.50    -1.11   1.896   1.896
+      sweep-t6144-r1    6260    139.56    137.84    -1.72   1.753   1.753
+      sweep-t6144-r2    6260    133.95    134.15    +0.19   1.542   1.542
+      sweep-t6144-r3    6260    135.06    135.58    +0.52   1.610   1.610
+      sweep-t6144-r4    6260    134.18    134.57    +0.39   1.580   1.580
+      sweep-t6144-r5    6260    136.67    137.04    +0.38   1.673   1.673
+
+n=18  paired mean -0.760 ms/forward   sd 0.740   2 SE band [-1.109, -0.411]
+legs faster after: 14/18   tau equal to 3 d.p.: 18/18
+VERDICT: the band EXCLUDES zero — a real paired saving.
+split:   flat -0.222 +/- 0.710 ms/forward   context -0.0739 +/- 0.0863 ms per 1000 ctx   R^2 0.155
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)
+
+--- CONTROL legs (reported separately, never pooled) ---
+                 leg     ctx    joined  deferred    delta   tau b   tau a
+    control-t1536-r0    1656    130.73    129.58    -1.15   1.673   1.673
+    control-t1536-r1    1656    134.55    133.38    -1.18   2.048   2.048
+    control-t6144-r0    6248    140.02    139.59    -0.43   1.925   1.925
+    control-t6144-r1    6248    135.48    134.56    -0.92   1.641   1.641
+
+n=4  paired mean -0.920 ms/forward   sd 0.347   2 SE band [-1.266, -0.573]
+legs faster after: 4/4   tau equal to 3 d.p.: 4/4
+VERDICT: the band EXCLUDES zero — a real paired saving.
+split:   flat -1.341 +/- 0.490 ms/forward   context +0.1066 +/- 0.1071 ms per 1000 ctx   R^2 0.665
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)
+[1.11] 2026-08-20T19:19:36-04:00 --- pooled, drift-free ---
+POOLED OVER TWO ARM ORDERS — the drift-free estimate.
+run 1: control arm first (drift penalises the change).
+run 2: change arm first (drift penalises the control).
+
+                 leg     ctx    effect     drift
+     sweep-t12288-r0   12410     -1.35     +0.25
+     sweep-t12288-r1   12410     -1.10     +0.10
+     sweep-t12288-r2   12410     -1.10     +0.12
+     sweep-t12288-r3   12410     -0.79     +0.14
+     sweep-t12288-r4   12410     -1.10     +0.16
+     sweep-t12288-r5   12410     -1.10     +0.43
+      sweep-t3072-r0    3197     +0.52     +0.70
+      sweep-t3072-r1    3197     +0.07     +0.98
+      sweep-t3072-r2    3197     +0.01     +0.31
+      sweep-t3072-r3    3197     -0.52     +0.42
+      sweep-t3072-r4    3197     -1.08     +0.39
+      sweep-t3072-r5    3197     -0.69     +0.09
+      sweep-t6144-r0    6260     -1.03     +0.08
+      sweep-t6144-r1    6260     -1.28     +0.45
+      sweep-t6144-r2    6260     -0.16     -0.35
+      sweep-t6144-r3    6260     +0.06     -0.46
+      sweep-t6144-r4    6260     +0.44     +0.05
+      sweep-t6144-r5    6260     +0.46     +0.09
+
+n=18  DRIFT-FREE paired mean -0.542 ms/forward   sd 0.657   2 SE band [-0.852, -0.232]
+legs faster after: 12/18
+drift term (half the difference between the two orders): +0.218 ms/forward   sd 0.333   2 SE [+0.061, +0.375]
+VERDICT: the drift-free band EXCLUDES zero — a real paired saving.
+split:   flat +0.150 +/- 0.564 ms/forward   context -0.0949 +/- 0.0685 ms per 1000 ctx   R^2 0.324
+[1.11] 2026-08-20T19:19:36-04:00 done.

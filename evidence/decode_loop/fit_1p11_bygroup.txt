@@ -1,0 +1,9 @@
+1.11 DRIFT-FREE effect, BY CONTEXT GROUP (n=6 paired legs each, 4 checkpoint loads)
+     ctx   n     mean     sd           2 SE band    neg   run1 6/6?  run2 6/6?
+    3197   6   -0.282  0.585   [ -0.759, +0.195]    3/6      3/6       6/6
+    6260   6   -0.252  0.741   [ -0.858, +0.353]    3/6      4/6       2/6
+   12410   6   -1.092  0.179   [ -1.238, -0.946]    6/6      6/6       6/6
+
+fresh-build CONTROL legs, same pooling: n=4 mean -0.121 sd 0.175 2 SE [-0.297,+0.054]  neg 3/4
+  (these run the SAME kernels -- they are the prefix-cache control, not a null leg --
+   so agreeing with the sweep is the expected result, and they do.)

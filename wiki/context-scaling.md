@@ -335,3 +335,41 @@ named, linear, kernel-shaped context item waiting, and that is a change in the s
 gap in the notes.
 
 Term A is now much the larger problem: at ctx 12,410 it is 129.11 ms of a 154.66 ms forward — 83 %.
+
+## 1.11 — a Term-A change that showed up only at long context, and why that is left open (2026-08-20)
+
+Ladder 1.11 defers the ATTN_SPLIT join past `i:qidx` and `i:iw`
+([`kernel-optimisations.md` §2.10](kernel-optimisations.md)). It pre-registered a **flat** saving,
+and the argument for that is not hand-waving: every byte the deferred window moves is
+context-independent. The two `compressor_emit_group` calls read one group of `ratio` tokens whatever
+the context is; `i:qidx` is `K × QD` out of `Q_LORA` and `i:iw` is `K × nH` out of `DIM`. Nothing in
+the window is sized by the cache. The mark-level confirmation was taken **at context 5**, where
+there is no context term to hide in, and it is −1.44 ms on a step carrying one emit.
+
+**The engine disagreed.** Drift-free over 18 paired legs and four checkpoint loads:
+
+| ctx | n | mean ms/forward | 2 SE band | legs faster | sd |
+|---|---|---|---|---|---|
+| 3,197 | 6 | −0.282 | [−0.759, +0.195] | 3/6 | 0.585 |
+| 6,260 | 6 | −0.252 | [−0.858, +0.353] | 3/6 | 0.741 |
+| **12,410** | 6 | **−1.092** | **[−1.238, −0.946]** | **6/6** | **0.179** |
+
+Fitted on the same per-leg deltas: flat **+0.150 ± 0.564**, context **−0.0949 ± 0.0685 per 1000**,
+R² 0.324.
+
+**Two readings, and neither is established.**
+
+1. *The saving really is in `b`.* Then there is a mechanism nobody has named. The two obvious
+   candidates both fail on arithmetic: the emits are context-independent by construction, and the
+   emit *rate* moves only ~7 % across these three points (realised verify width 2.56 → 2.74, and
+   P(a block of width `w` straddles a ratio-4 boundary) ≈ `w/4`).
+2. *The saving is flat and the two short groups are noise.* Their sd is 0.585 and 0.741 against
+   **0.179** at 12,410 — a 3–4× difference in scatter between groups, which is enough on its own to
+   tilt a three-point least-squares line. This is the exact configuration
+   [`measurement-and-traps.md` §16](measurement-and-traps.md) warns about: a slope fitted through
+   groups with unequal scatter is not a cost per 1000 context.
+
+**So `b` was NOT moved on this page and `a` was not moved either.** The ratchet is stated where it
+resolves — `a + b×ctx` at ctx 12,410 falls 142.24 → 141.15 ms — and the attribution is ladder item
+1.13, which needs ≥ 6 context points in **both** arm orders. Writing 1.11's saving into either term
+on three points would be inventing a number, and this page exists because somebody did that once.

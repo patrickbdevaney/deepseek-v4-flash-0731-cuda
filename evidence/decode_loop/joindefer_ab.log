@@ -1,0 +1,396 @@
+[1.11] 2026-08-20T18:11:33-04:00 binaries: server 2026-08-20T18:11:33-04:00, decode 2026-08-20T18:11:33-04:00
+[1.11] 2026-08-20T18:11:33-04:00 === PHASE 0: in-situ gates, BOTH arms (no checkpoint) ===
+[joindefer] arena on, g_side=0xaaaacbf871f0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER: PASS  (arm mismatches 0)
+[joindefer] arena on, g_side=0xaaaacdf2cf70, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER: PASS  (arm mismatches 0)  [--swap arm order]
+[joindefer] arena on, g_side=0xaaab16165da0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER NULLCTL: CLEAN  (arm mismatches 0)  [NULL CONTROL: both arms joined -- any
+    difference here is the HARNESS, not 1.11]
+[joindefer] arena on, g_side=0xaaaaeb5b51f0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER NULLCTL: CLEAN  (arm mismatches 0)  [NULL CONTROL: both arms deferred -- any
+    difference here is the HARNESS, not 1.11]
+[joindefer] arena on, g_side=0xaaaaddc371f0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  20471 / 32768 floats differ   <<<< NOT BIT-EXACT
+   first at 12288 (row 3 col 0): deferred -0.569001436  joined -0.569068909
+s0=480 decode=6 verify_K=6 emits_in_block=2  45055 / 49152 floats differ   <<<< NOT BIT-EXACT
+   first at 4096 (row 1 col 0): deferred 2.42540479  joined 2.49499416
+s0=480 decode=6 verify_K=1 emits_in_block=0  24575 / 28672 floats differ   <<<< NOT BIT-EXACT
+   first at 4096 (row 1 col 0): deferred 2.26584768  joined 2.24696088
+s0=184 decode=3 verify_K=5 emits_in_block=2  20480 / 32768 floats differ   <<<< NOT BIT-EXACT
+   first at 12288 (row 3 col 0): deferred 0.414937019  joined 0.391071081
+GATE JOIN_DEFER NEGCTL: PASS  [--negctl: every arm pair MUST differ]
+[1.11] 2026-08-20T18:13:08-04:00 arm=defer gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1.11] 2026-08-20T18:13:12-04:00 arm=defer gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.11] 2026-08-20T18:13:17-04:00 arm=defer gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.11] 2026-08-20T18:13:21-04:00 arm=defer gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.11] 2026-08-20T18:13:25-04:00 arm=defer gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.11] 2026-08-20T18:13:26-04:00 arm=defer gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1.11] 2026-08-20T18:13:26-04:00 arm=defer gate_forkjoin_graph rc=0
+[forkjoin] eager=86.0 graph=86.0 expected=86.0 -> PASS
+Gate FORKJOIN_GRAPH: PASS
+[1.11] 2026-08-20T18:13:32-04:00 arm=defer gate_index_score rc=0
+[gate_index_score] 1130 shapes, 21773760 floats compared, 0 differing, 0 bad shapes -> PASS
+[1.11] 2026-08-20T18:13:44-04:00 arm=defer gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1.11] 2026-08-20T18:13:44-04:00 arm=defer gate_topk_smem_ctx rc=0
+[1.11] 2026-08-20T18:13:45-04:00 arm=nodefer gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1.11] 2026-08-20T18:13:49-04:00 arm=nodefer gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.11] 2026-08-20T18:13:54-04:00 arm=nodefer gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.11] 2026-08-20T18:13:58-04:00 arm=nodefer gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.11] 2026-08-20T18:14:02-04:00 arm=nodefer gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.11] 2026-08-20T18:14:03-04:00 arm=nodefer gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1.11] 2026-08-20T18:14:03-04:00 arm=nodefer gate_forkjoin_graph rc=0
+[forkjoin] eager=86.0 graph=86.0 expected=86.0 -> PASS
+Gate FORKJOIN_GRAPH: PASS
+[1.11] 2026-08-20T18:14:09-04:00 arm=nodefer gate_index_score rc=0
+[gate_index_score] 1130 shapes, 21773760 floats compared, 0 differing, 0 bad shapes -> PASS
+[1.11] 2026-08-20T18:14:21-04:00 arm=nodefer gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1.11] 2026-08-20T18:14:21-04:00 arm=nodefer gate_topk_smem_ctx rc=0
+[1.11] 2026-08-20T18:14:21-04:00 === PHASE 1: build/decode, CONTROL (1.8 join, NO_JOIN_DEFER=1) ===
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 110 GiB available; launching detached -> evidence/decode_loop/decode_1p11_off.log
+[run_model] pid 1321953   watch: tail -f evidence/decode_loop/decode_1p11_off.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/decode_1p11_off.memguard.log
+[decode] structs built. mem 114.6/122.8 GiB
+[decode] PREFILL: 5 positions in 195.8 ms = 25.5 tok/s (39.150 ms/tok)
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 74.0 ms/tok = 13.52 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 114.7/122.8 GiB
+[decode] PREFILL: 5 positions in 142.1 ms = 35.2 tok/s (28.420 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.8 ms/tok = 20.10 tok/s  (vs base M=1 74.0 ms/tok = 13.52 tok/s -> 1.49x)
+[decode] mem 114.6/122.8 GiB
+[1.11] 2026-08-20T18:15:52-04:00 === PHASE 2: build/decode, DEFERRED (1.11) ===
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 110 GiB available; launching detached -> evidence/decode_loop/decode_1p11_on.log
+[run_model] pid 1325360   watch: tail -f evidence/decode_loop/decode_1p11_on.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/decode_1p11_on.memguard.log
+[decode] structs built. mem 114.9/122.8 GiB
+[decode] PREFILL: 5 positions in 194.8 ms = 25.7 tok/s (38.951 ms/tok)
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 73.2 ms/tok = 13.66 tok/s  (M=1 steady state, 7-step avg)
+[spec] head built. mem 115.0/122.8 GiB
+[decode] PREFILL: 5 positions in 141.9 ms = 35.2 tok/s (28.371 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.3 ms/tok = 20.28 tok/s  (vs base M=1 73.2 ms/tok = 13.66 tok/s -> 1.48x)
+[decode] mem 114.9/122.8 GiB
+[1.11] 2026-08-20T18:17:23-04:00 --- generated ids, both arms (must be IDENTICAL: 1.11 is bit-exact by construction) ---
+off: [decode] generated: 11111 16 455 6102 294 16603 344 29168
+ on: [decode] generated: 11111 16 455 6102 294 16603 344 29168
+[1.11] 2026-08-20T18:17:23-04:00 TOKEN-ID GATE: PASS (identical)
+[1.11] 2026-08-20T18:17:23-04:00 === PHASE 3: tok/s sweep, CONTROL (1.8 join) ===
+[1.11] 2026-08-20T18:17:23-04:00 starting server [off] seqmax=16384 NO_JOIN_DEFER=1 -> evidence/decode_loop/server_1p11_off.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p11_off.log
+[run_server] pid=1328834 ppid=1328217 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p11_off.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.11] 2026-08-20T18:18:41-04:00 healthy [off]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=227569ms decode=20993ms tau=1.766 -> 144.78 ms/forward  (249s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21338ms tau=1.707 -> 142.25 ms/forward  (21s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=19742ms tau=1.842 -> 142.03 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=23459ms tau=1.506 -> 137.99 ms/forward  (23s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=256 prefill=0ms decode=20023ms tau=1.790 -> 140.02 ms/forward  (20s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=256 prefill=0ms decode=22325ms tau=1.580 -> 137.81 ms/forward  (22s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=18289ms tau=1.896 -> 135.47 ms/forward  (18s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=20047ms tau=1.753 -> 137.31 ms/forward  (20s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=21864ms tau=1.542 -> 131.71 ms/forward  (22s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=21094ms tau=1.610 -> 132.66 ms/forward  (21s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=21294ms tau=1.580 -> 131.44 ms/forward  (21s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=20560ms tau=1.673 -> 134.38 ms/forward  (21s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=20174ms tau=1.620 -> 127.68 ms/forward  (20s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=21613ms tau=1.542 -> 130.20 ms/forward  (22s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=21494ms tau=1.533 -> 128.71 ms/forward  (21s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=22849ms tau=1.430 -> 127.65 ms/forward  (23s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=256 prefill=0ms decode=20562ms tau=1.620 -> 130.14 ms/forward  (21s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=256 prefill=0ms decode=21517ms tau=1.610 -> 135.33 ms/forward  (22s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=110658ms decode=18316ms tau=1.925 -> 137.72 ms/forward  (129s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=20808ms tau=1.641 -> 133.38 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=19677ms tau=1.673 -> 128.60 ms/forward  (20s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=16524ms tau=2.048 -> 132.19 ms/forward  (17s)
+[probe] wrote 22 usable records -> evidence/decode_loop/fit_1p11_off/postfix.sweep.jsonl and evidence/decode_loop/fit_1p11_off/control.fresh.jsonl
+[1.11] 2026-08-20T18:31:55-04:00 control probe rc=0
+[1.11] 2026-08-20T18:31:55-04:00 server down
+[1.11] 2026-08-20T18:32:00-04:00 === PHASE 4: tok/s sweep, DEFERRED (1.11) ===
+[1.11] 2026-08-20T18:32:01-04:00 starting server [on] seqmax=16384 NO_JOIN_DEFER=unset -> evidence/decode_loop/server_1p11_on.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p11_on.log
+[run_server] pid=1355748 ppid=1355129 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p11_on.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.11] 2026-08-20T18:33:14-04:00 healthy [on]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=227006ms decode=20832ms tau=1.766 -> 143.67 ms/forward  (248s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21188ms tau=1.707 -> 141.25 ms/forward  (21s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=19606ms tau=1.842 -> 141.05 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=23348ms tau=1.506 -> 137.34 ms/forward  (23s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=256 prefill=0ms decode=19887ms tau=1.790 -> 139.07 ms/forward  (20s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=256 prefill=0ms decode=22216ms tau=1.580 -> 137.14 ms/forward  (22s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=18160ms tau=1.896 -> 134.52 ms/forward  (18s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=19926ms tau=1.753 -> 136.48 ms/forward  (20s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=21778ms tau=1.542 -> 131.19 ms/forward  (22s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=21029ms tau=1.610 -> 132.26 ms/forward  (21s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=21373ms tau=1.580 -> 131.93 ms/forward  (21s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=20644ms tau=1.673 -> 134.93 ms/forward  (21s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=20366ms tau=1.620 -> 128.90 ms/forward  (20s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=21786ms tau=1.542 -> 131.24 ms/forward  (22s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=21548ms tau=1.533 -> 129.03 ms/forward  (22s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=22831ms tau=1.430 -> 127.55 ms/forward  (23s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=256 prefill=0ms decode=20454ms tau=1.620 -> 129.46 ms/forward  (20s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=256 prefill=0ms decode=21422ms tau=1.610 -> 134.73 ms/forward  (21s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=110323ms decode=18399ms tau=1.925 -> 138.33 ms/forward  (129s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=20935ms tau=1.641 -> 134.20 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=19774ms tau=1.673 -> 129.24 ms/forward  (20s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=16603ms tau=2.048 -> 132.83 ms/forward  (17s)
+[probe] wrote 22 usable records -> evidence/decode_loop/fit_1p11_on/postfix.sweep.jsonl and evidence/decode_loop/fit_1p11_on/control.fresh.jsonl
+[1.11] 2026-08-20T18:46:26-04:00 deferred probe rc=0
+[1.11] 2026-08-20T18:46:26-04:00 server down
+[1.11] 2026-08-20T18:46:31-04:00 === PHASE 5: reports ===
+[1.11] 2026-08-20T18:46:31-04:00 --- BEFORE (1.8 join) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+control    6248  2      135.55    3.2%   1.783   2.729   13.14
+control    1656  2      130.40    2.7%   1.861   2.849   14.25
+sweep     12410  6      141.02    4.9%   1.736   2.736   12.10
+sweep      6260  6      133.52    4.4%   1.642   2.642   12.29
+sweep      3197  6      129.42    5.9%   1.576   2.556   11.90
+
+  context only   fwd = 126.32 + 1.173 x (ctx/1000)                    R^2 0.776  SE(b) 0.157
+  + verify width fwd = 79.26 + 0.916 x (ctx/1000) + 18.46 x width   R^2 0.994  SE(b) 0.028  SE(c) 0.76
+
+  corr(mean_width, ctx) = +0.382   corr(tau, ctx) = +0.425
+[1.11] 2026-08-20T18:46:31-04:00 --- AFTER (1.11 deferred join) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+control    6248  2      136.27    3.0%   1.783   2.729   13.07
+control    1656  2      131.03    2.7%   1.861   2.849   14.18
+sweep     12410  6      140.06    4.7%   1.736   2.736   12.19
+sweep      6260  6      133.39    4.0%   1.642   2.642   12.29
+sweep      3197  6      129.24    5.6%   1.576   2.556   11.92
+
+  context only   fwd = 126.84 + 1.057 x (ctx/1000)                    R^2 0.775  SE(b) 0.142
+  + verify width fwd = 85.20 + 0.830 x (ctx/1000) + 16.33 x width   R^2 0.985  SE(b) 0.041  SE(c) 1.13
+
+  corr(mean_width, ctx) = +0.382   corr(tau, ctx) = +0.425
+[1.11] 2026-08-20T18:46:31-04:00 --- paired, per (target, rep), tau and completion hash reported per leg ---
+corpus sha256: before ['79ac6563f97e53e5', 'ac10134c87e3d0fe']  after ['79ac6563f97e53e5', 'ac10134c87e3d0fe']
+
+token identity: 22/22 legs proven byte-identical, 0 differ, 0 unproven (no hash on record)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+control     6144  2   6248    135.55    136.27    +0.72   0.995x   1.783   1.783   2.73   2.73    13.14    13.07
+control     1536  2   1656    130.40    131.03    +0.64   0.995x   1.861   1.861   2.85   2.85    14.25    14.18
+sweep      12288  6  12410    141.02    140.06    -0.96   1.007x   1.736   1.736   2.74   2.74    12.10    12.19
+sweep       6144  6   6260    133.52    133.39    -0.14   1.001x   1.642   1.642   2.64   2.64    12.29    12.29
+sweep       3072  6   3197    129.42    129.24    -0.18   1.001x   1.576   1.576   2.56   2.56    11.90    11.92
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.
+[1.11] 2026-08-20T18:46:31-04:00 --- dprof mark tables, both build/decode arms: WHERE the time moved, not whether it shrank ---
+### evidence/decode_loop/decode_1p11_off.log
+[dprof]       mg:tiles         0.23     0.2%         43
+[dprof] TOTAL                113.78
+[dprof] K=5 — verify step by sub-op, summed over all layers (1506 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.63     2.1%         43
+[dprof] rmsnorm (attn)         0.76     0.6%         43
+[dprof] ATTENTION             46.10    36.2%         43
+[dprof] hc_post (attn)         0.44     0.3%         43
+[dprof] hc_pre  (ffn)          3.28     2.6%         43
+[dprof] rmsnorm (ffn)          0.74     0.6%         43
+[dprof] MoE                   65.86    51.7%         43
+[dprof] hc_post (ffn)          0.43     0.3%         43
+[dprof] kv xin copy            0.24     0.2%         41
+[dprof] hc_head+norm           0.04     0.0%          1
+[dprof] lm_head                6.81     5.3%          1
+[dprof]   attn:q_proj          0.49     0.4%          2
+[dprof]   attn:kv_write        0.08     0.1%          2
+[dprof]   attn:sparse          0.04     0.0%          2
+[dprof]   attn:ogroup          1.00     0.8%          2
+[dprof]   cattn:q_proj        15.95    12.5%         41
+[dprof]   cattn:compress       2.34     1.8%         41
+[dprof]   cattn:indexer        3.52     2.8%         21
+[dprof]   cattn:sparse         0.75     0.6%         41
+[dprof]   cattn:ogroup        21.16    16.6%         41
+[dprof]   moe:router           1.85     1.5%         43
+[dprof]   moe:group            2.06     1.6%         43
+[dprof]   moe:w1w3            39.56    31.1%         43
+[dprof]   moe:act              1.84     1.4%         43
+[dprof]   moe:w2              18.96    14.9%         43
+[dprof]   moe:combine          0.55     0.4%         43
+[dprof]   moe:shared           0.26     0.2%         43
+[dprof]     q:aq(x)            0.42     0.3%         41
+[dprof]     q:wq_a             5.74     4.5%         41
+[dprof]     q:rms+aq           0.74     0.6%         41
+[dprof]     q:wq_b             7.70     6.0%         41
+[dprof]     q:tail             0.68     0.5%         41
+[dprof]     q:kv_join          0.07     0.1%         41
+[dprof]     o:rope             0.24     0.2%         41
+[dprof]     o:wo_a            11.96     9.4%         41
+[dprof]     o:wo_b             8.72     6.8%         41
+[dprof]     i:qidx             1.94     1.5%         21
+[dprof]     i:iw               0.64     0.5%         21
+[dprof]     i:score            0.64     0.5%         21
+[dprof]     i:topk             0.16     0.1%         21
+[dprof]       mg:count         0.20     0.2%         43
+[dprof]       mg:prefix        0.22     0.2%         43
+[dprof]       mg:scatter       0.22     0.2%         43
+[dprof]       mg:tiles         0.24     0.2%         43
+[dprof] TOTAL                127.33
+[dprof] PREFILL PS=5 — verify step by sub-op, summed over all layers (1106 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.73     2.1%         43
+[dprof] rmsnorm (attn)         0.76     0.6%         43
+[dprof] ATTENTION             50.30    37.9%         43
+[dprof] hc_post (attn)         0.53     0.4%         43
+[dprof] hc_pre  (ffn)          3.31     2.5%         43
+[dprof] rmsnorm (ffn)          0.75     0.6%         43
+[dprof] MoE                   73.79    55.6%         43
+[dprof] hc_post (ffn)          0.41     0.3%         43
+[dprof] kv xin copy            0.20     0.2%         41
+[dprof]   attn:kv_write        1.80     1.4%         43
+[dprof]   cattn:q_proj        10.83     8.2%         41
+[dprof]   cattn:compress       8.57     6.5%         41
+[dprof]   cattn:indexer       10.86     8.2%         41
+[dprof]   cattn:sparse         0.96     0.7%         41
+[dprof]   cattn:ogroup        20.32    15.3%         41
+[dprof]   moe:router           1.87     1.4%         43
+[dprof]   moe:group            2.10     1.6%         43
+[dprof]   moe:w1w3            45.54    34.3%         43
+[dprof]   moe:act              1.59     1.2%         43
+[dprof]   moe:w2              21.09    15.9%         43
+[dprof]   moe:combine          0.57     0.4%         43
+[dprof]   moe:shared           0.29     0.2%         43
+[dprof]       mg:count         0.22     0.2%         43
+[dprof]       mg:prefix        0.22     0.2%         43
+[dprof]       mg:scatter       0.23     0.2%         43
+[dprof]       mg:tiles         0.26     0.2%         43
+[dprof] TOTAL                132.78
+[dprof] *** INVALID: attn children 53.34 ms > ATTENTION 50.30 ms — marks recorded outside the reported window
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+### evidence/decode_loop/decode_1p11_on.log
+[dprof]       mg:tiles         0.23     0.2%         43
+[dprof] TOTAL                112.77
+[dprof] K=5 — verify step by sub-op, summed over all layers (1506 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.69     2.1%         43
+[dprof] rmsnorm (attn)         0.78     0.6%         43
+[dprof] ATTENTION             44.82    35.6%         43
+[dprof] hc_post (attn)         0.42     0.3%         43
+[dprof] hc_pre  (ffn)          3.29     2.6%         43
+[dprof] rmsnorm (ffn)          0.75     0.6%         43
+[dprof] MoE                   65.78    52.3%         43
+[dprof] hc_post (ffn)          0.43     0.3%         43
+[dprof] kv xin copy            0.24     0.2%         41
+[dprof] hc_head+norm           0.04     0.0%          1
+[dprof] lm_head                6.64     5.3%          1
+[dprof]   attn:q_proj          0.57     0.5%          2
+[dprof]   attn:kv_write        0.08     0.1%          2
+[dprof]   attn:sparse          0.04     0.0%          2
+[dprof]   attn:ogroup          0.99     0.8%          2
+[dprof]   cattn:q_proj        16.19    12.9%         41
+[dprof]   cattn:compress       0.07     0.1%         41
+[dprof]   cattn:indexer        4.39     3.5%         21
+[dprof]   cattn:sparse         0.73     0.6%         41
+[dprof]   cattn:ogroup        21.02    16.7%         41
+[dprof]   moe:router           1.85     1.5%         43
+[dprof]   moe:group            2.08     1.7%         43
+[dprof]   moe:w1w3            39.64    31.5%         43
+[dprof]   moe:act              1.61     1.3%         43
+[dprof]   moe:w2              19.05    15.1%         43
+[dprof]   moe:combine          0.54     0.4%         43
+[dprof]   moe:shared           0.25     0.2%         43
+[dprof]     q:aq(x)            0.40     0.3%         41
+[dprof]     q:wq_a             5.84     4.6%         41
+[dprof]     q:rms+aq           0.71     0.6%         41
+[dprof]     q:wq_b             7.87     6.3%         41
+[dprof]     q:tail             0.64     0.5%         41
+[dprof]     q:kv_join          0.08     0.1%         41
+[dprof]     o:rope             0.26     0.2%         41
+[dprof]     o:wo_a            11.79     9.4%         41
+[dprof]     o:wo_b             8.77     7.0%         41
+[dprof]     i:qidx             2.81     2.2%         21
+[dprof]     i:iw               0.62     0.5%         21
+[dprof]     i:score            0.65     0.5%         21
+[dprof]     i:topk             0.17     0.1%         21
+[dprof]       mg:count         0.19     0.1%         43
+[dprof]       mg:prefix        0.23     0.2%         43
+[dprof]       mg:scatter       0.22     0.2%         43
+[dprof]       mg:tiles         0.23     0.2%         43
+[dprof] TOTAL                125.89
+[dprof] PREFILL PS=5 — verify step by sub-op, summed over all layers (1106 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)         2.78     2.1%         43
+[dprof] rmsnorm (attn)         0.77     0.6%         43
+[dprof] ATTENTION             49.24    37.2%         43
+[dprof] hc_post (attn)         0.51     0.4%         43
+[dprof] hc_pre  (ffn)          3.34     2.5%         43
+[dprof] rmsnorm (ffn)          0.76     0.6%         43
+[dprof] MoE                   74.46    56.2%         43
+[dprof] hc_post (ffn)          0.44     0.3%         43
+[dprof] kv xin copy            0.20     0.2%         41
+[dprof]   attn:kv_write        1.78     1.3%         43
+[dprof]   cattn:q_proj        10.45     7.9%         41
+[dprof]   cattn:compress       8.58     6.5%         41
+[dprof]   cattn:indexer       10.63     8.0%         41
+[dprof]   cattn:sparse         0.95     0.7%         41
+[dprof]   cattn:ogroup        20.09    15.2%         41
+[dprof]   moe:router           1.88     1.4%         43
+[dprof]   moe:group            2.04     1.5%         43
+[dprof]   moe:w1w3            45.90    34.6%         43
+[dprof]   moe:act              1.49     1.1%         43
+[dprof]   moe:w2              21.56    16.3%         43
+[dprof]   moe:combine          0.56     0.4%         43
+[dprof]   moe:shared           0.28     0.2%         43
+[dprof]       mg:count         0.21     0.2%         43
+[dprof]       mg:prefix        0.23     0.2%         43
+[dprof]       mg:scatter       0.22     0.2%         43
+[dprof]       mg:tiles         0.23     0.2%         43
+[dprof] TOTAL                132.51
+[dprof] *** INVALID: attn children 52.48 ms > ATTENTION 49.24 ms — marks recorded outside the reported window
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[1.11] 2026-08-20T18:46:31-04:00 done.

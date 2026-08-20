@@ -66,9 +66,40 @@ tracked `a`/`b` above are therefore UNCHANGED -- the numbers in this paragraph a
 issue-bound, and the saving showed up entirely in the context term. See item 1b.2 and
 `wiki/negative-results.md` §4i.
 
-**Rule 5 was one iteration from firing when 1b.2 was taken.** 1.7 shipped a kernel, 1.8 did not.
-**The next iteration must take a kernel item.** 1.8's own follow-ups (1.11, 1.12) are honestly small — 1.29 and
-0.53 ms/forward ceilings — and are ranked accordingly; do not take one just because it is fresh.
+**1.11 SHIPPED A KERNEL AND IS ADOPTED DEFAULT ON, 2026-08-20 — and the headline is not its size,
+it is that ONE arm order called it a null.** Deferring the ATTN_SPLIT join past `i:qidx` and `i:iw`
+is **-0.542 +/- 0.310 ms/forward drift-free** over 18 paired legs and FOUR checkpoint loads, and
+**-1.092 +/- 0.146 at ctx 12,410**, where it is 6/6 in each arm order independently (+0.77 % tok/s).
+Bit-exact: 44 of 44 sweep legs byte-identical, `tau` equal to three decimals on every one,
+`gate_join_defer` 0 of 143,360 floats differing, LOSSLESS PASS in both arms.
+
+Run the standard way -- control arm first, so drift penalises the change -- it measured
+**-0.324, 2 SE [-0.670, +0.022]**, a band covering zero, which under the item's own pre-registration
+is a negative result and would have been written up as one. **Pairing removes between-LEG variance
+and does nothing to a between-LOAD offset**, and traps §19 already measured that offset at 0.6 % =
+~0.8 ms/forward, the size of the whole effect. Running the identical pair with the ARM ORDER REVERSED
+and averaging the per-leg deltas cancels it and measures it: **the second checkpoint load of a
+session costs +0.218 +/- 0.157 ms/forward**. `a` needs another 22.4 ms and there is no single 22 ms
+item left, so it will be taken in pieces this size -- **below ~1 ms/forward, a null from one arm
+order is not a result, and reporting one retires a real win.** `tools/paired_band.py --reversed`.
+
+**`a` and `b` are UNCHANGED at 125.11 and 1.887, on purpose.** 1.11 pre-registered a FLAT saving and
+the engine did not deliver one: it resolves at ctx 12,410 (6/6, sd 0.179) and covers zero at 3,197
+and 6,260 (sd 0.585, 0.741), and a three-point fit through groups with 3-4x different scatter is not
+an attribution. The ratchet is stated where it resolves -- `a + b*ctx` at ctx 12,410 goes
+**142.24 -> 141.15 ms** -- and the term is item 1.13.
+
+**1.11 also wrote the first gate here that can reach the side-stream fork.** Every gate that links
+these kernels does so WITHOUT `arena_init()`, so `g_side` is null, `asplit` is false, and the fork
+1.8 priced at 0.81 ms/forward had never been under test. `tests/gate_join_defer.cu` refuses to PASS
+if `g_side` comes back null -- and its NULL control immediately found a pre-existing uninitialised
+arena read in the M=1 step (item **1.14**), which had been silently corrupting the first run of every
+bit-exactness gate in this repo.
+
+**Rule 5 is clear: 1b.2 and 1.11 both shipped kernels.** 1.8's remaining follow-up (1.12) is
+honestly small — a 0.53 ms/forward ceiling — and is ranked accordingly; do not take it just because
+it is fresh. 1.11 is the evidence for the ranking cutting the other way too: its ceiling was 1.29
+ms/forward and it delivered 0.54, which is what a 22.4 ms gap now gets paid down in.
 
 **Read the two terms against their stop conditions before picking the next item.** `b x 6592` needs
 to fall 2.5x more; `a` needs to fall to 102.7 ms, i.e. by another 22.4 ms. Six items have moved `b`
@@ -1311,18 +1342,125 @@ So, in order:
       qproj_1p8_vbcontrol,fit_1p8_paired,dprof_ctx_1p8_serial,dprof_ctx_1p8_split}.txt`.
       Bit-exactness: nothing numeric changed in either arm and 9/9 legs proved it.
 
-- [ ] **1.11** **Defer the ATTN_SPLIT join past `i:qidx` and `i:iw`.** 1.8 measured **2.50 ms of
-      side-stream work still un-hidden** in `cattn:compress` on every emit step. The join sits
-      immediately after `build_qKV` (`kernels/compressed_decode.cu:509`), but the first consumer of
-      `idx_ckv` is `index_score` and of `comp_kv` is the `kv_all` copy — and `i:qidx` (1.54 ms) and
-      `i:iw` (0.45 ms) read neither. **1.99 ms of independent main-stream work sits between the
-      current join and the true dependency.** Bit-exact by construction (kernels move between
-      streams, dependency order unchanged) and the arena is safe: `compressor_emit_group` ends in
-      `dsync`+`dfree`, both no-ops under the arena, and `arena_reset` is per layer.
-      **Pre-registered ceiling: 1.99 ms x 64.9 % of forwards = 1.29 ms/forward (0.9 %), and 1.8 does
-      NOT establish it will be recovered** — the deferred window's own traffic contends with the
-      same emits, which is exactly why the existing overlap only recovers 16 %. Measure paired; if
-      the paired band covers zero, mark it negative and write it into `negative-results.md`.
+- [x] **1.11 DONE 2026-08-20 — ADOPTED, DEFAULT ON, BIT-EXACT. Deferring the ATTN_SPLIT join past
+      `i:qidx` and `i:iw` is worth a DRIFT-FREE paired `-0.542 +/- 0.310 ms/forward` over 18 paired
+      legs and FOUR checkpoint loads, and `-1.092 +/- 0.146` at ctx 12,410, where it is 6/6 in each
+      arm order independently.** 44 of 44 sweep legs byte-identical, `tau` equal to three decimals on
+      every one, `gate_join_defer` 0 of 143,360 floats differing.
+
+      **What shipped.** `kernels/compressed_decode.cu:531,561`. The `cudaEventRecord(g_side_join)`
+      stays where the two `compressor_emit_group` calls end; the `cudaStreamWaitEvent` moves from
+      immediately after `build_qKV` down to `index_score`, the first reader of `idx_ckv`. Nothing in
+      between reads what the emits write -- `i:qidx` is a GEMM on `iqrq/iqrs` out of `build_qKV` and
+      `i:iw` is a GEMM on `x_cur`. `NO_JOIN_DEFER=1` restores the 1.8 position on the same binary,
+      which is what made both arms one build.
+
+      **THE MECHANISM IS VISIBLE IN THE MARKS, AND THE MARKS ARE NOT THE WIN.** K=5, ctx 5, same
+      binary, both arms (`dprof_1p11_marks.txt`):
+
+        | mark | joined (1.8) | deferred (1.11) |
+        |---|---|---|
+        | `cattn:compress` | 2.34 ms | **0.07** |
+        | `cattn:indexer` (parent of `i:qidx`) | 3.52 | **4.39** |
+        | `i:qidx` | 1.94 | **2.81** |
+        | `cattn:q_proj` | 15.95 | 16.19 |
+        | verify TOTAL | 127.33 | **125.89** |
+
+      `cattn:compress` collapses because the barrier left it, and `i:qidx` grows by +0.87 because it
+      ABSORBS the emit traffic -- the identical signature Finding 56 recorded when `cattn:q_proj`
+      absorbed it, and the one 1.8's trap §29 is about. The conserved sum is what matters: top-level
+      marks net **-1.32 ms**, verify TOTAL **-1.44 ms**, on a step that carries one emit. Amortised
+      at 1.8's measured 64.9 % emit rate that predicts **-0.86 to -0.93 ms/forward**.
+
+      **THE FIRST ORDERING COULD NOT DECIDE IT, AND SAYING SO IS THE ITEM'S MAIN RESULT.** Run 1
+      (control arm first, per the standing drift rule) gave paired mean **-0.324, 2 SE
+      [-0.670, +0.022] -- the band COVERS ZERO**, which under this item's own pre-registration is a
+      null. But the effect being chased is ~0.9 ms/forward and traps §19 measures the offset BETWEEN
+      CHECKPOINT LOADS at 0.6 % = ~0.8 ms/forward: pairing removes between-LEG variance and does
+      nothing to a constant offset between two loads. So the pair was run AGAIN with the arm order
+      REVERSED (`PHASE_FROM=6`, two more loads). Run 2 gave **-0.760, 2 SE [-1.109, -0.411]**.
+      Averaging the two per-leg deltas cancels the drift and half their difference measures it:
+
+        | | paired mean | 2 SE band | legs faster |
+        |---|---|---|---|
+        | run 1 — control arm first | -0.324 | [-0.670, **+0.022**] | 13/18 |
+        | run 2 — deferred arm first | -0.760 | [-1.109, -0.411] | 14/18 |
+        | **pooled, drift-free** | **-0.542** | **[-0.852, -0.232]** | 12/18 |
+        | drift itself (half the difference) | **+0.218** | [+0.061, +0.375] | — |
+
+      **`+0.218 ms/forward` is what the second checkpoint load of a session costs**, measured rather
+      than assumed, and it is 40 % of the effect this item was looking for. Every future A/B on this
+      ladder whose expected size is under ~1 ms/forward needs both orderings or it is guessing.
+
+      **WHERE IT RESOLVES, AND THE PRE-REGISTRATION IT BREAKS.** By context group, drift-free:
+
+        | ctx | n | mean | 2 SE band | legs faster | run 1 | run 2 |
+        |---|---|---|---|---|---|---|
+        | 3,197 | 6 | -0.282 | [-0.759, +0.195] | 3/6 | 3/6 | 6/6 |
+        | 6,260 | 6 | -0.252 | [-0.858, +0.353] | 3/6 | 4/6 | 2/6 |
+        | **12,410** | 6 | **-1.092** | **[-1.238, -0.946]** | **6/6** | **6/6** | **6/6** |
+
+      This item pre-registered "TERM A ONLY, and that is a prediction, not a hope: every byte in this
+      window is context-independent. If the paired split shows the saving in the CONTEXT term
+      instead, the mechanism claimed here is wrong and the item says so." **The item says so.** The
+      saving resolves only at the deepest context; the fitted split is flat `+0.150 +/- 0.564` against
+      context `-0.0949 +/- 0.0685` per 1000, R^2 0.324. **I have no mechanism for a context tilt
+      here and am not inventing one** -- the two candidates both fail: the emits read one group of
+      `ratio` tokens regardless of context, and the emit rate moves only 7 % across these three
+      points (realised width 2.56 -> 2.74, P(boundary) ~ w/4). The other reading is that the two
+      shorter groups are simply noisier (sd 0.585 and 0.741 against **0.179** at 12,410) and the fit
+      is being carried by that difference in scatter, which is precisely the situation rule 7 says
+      not to read a slope out of.
+
+      **THEREFORE THE RATCHET IS STATED WHERE IT RESOLVES AND THE ATTRIBUTION IS LEFT OPEN.**
+      `a` and `b` are UNCHANGED at 125.11 and 1.887: this measurement cannot say which term moved,
+      and writing it into one of them would be inventing the attribution. What it can say is that
+      **`a + b*ctx` at ctx 12,410 falls 142.24 -> 141.15 ms, -1.092 +/- 0.146, i.e. +0.77 % tok/s**,
+      and that the overall saving across 3,197-12,410 is -0.542 +/- 0.310. Resolving the term needs a
+      sweep with more context points in BOTH arm orders; that is item 1.13.
+
+      **BIT-EXACT, and the gate for it did not exist.** `tests/gate_join_defer.cu` is the **first
+      gate in this repo that calls `arena_init()` before driving these kernels** -- every other one
+      links them without an arena, so `g_side` is null, `asplit` is false, and the fork/join 1.8
+      priced at 0.81 ms/forward had never been under test at all. It refuses to report PASS if
+      `g_side` came back null. Four cases (1 emit, 2 emits, 0 emits, and a second shape), both join
+      positions in one process on identical weights: **0 of 143,360 floats differ**, same under
+      `--swap`, and `--negctl` (one perturbed input float) fires on every case, so the memcmp is
+      live. Engine: identical generated ids `11111 16 455 6102 294 16603 344 29168` in both arms,
+      LOSSLESS gate PASS in both, and **44 of 44 sweep legs byte-identical with `tau` equal to three
+      decimals** across the four loads.
+
+      **The gate's first run said FAIL, and the null control is why that is not in this entry as a
+      defect.** One row differed -- row 0, an M=1 decode step, which 1.11 does not touch. Pinning
+      BOTH arms to the SAME join position still differed, including with the pre-1.11 code in both;
+      duplicating a case showed instance 1 differing and instance 2 of identical data clean. It is
+      the FIRST `run_arm()` in a process: the arena slab is `cudaMalloc`'d and never zeroed, so some
+      scratch in the M=1 step is read before it is written and sees driver garbage on pass 1 and the
+      previous pass's bytes forever after. Pre-existing, unrelated to 1.11, burned off with a
+      discarded warm arm, and written up in `measurement-and-traps.md` §32. **The uninitialised read
+      itself is item 1.14 and is not fixed here.**
+
+      Instruments: `scripts/joindefer_ab_run.sh` (8 phases, both arm orders, named in
+      `detach_audit.sh` in this commit); `tools/paired_band.py` (per-leg band, sign count, flat/ctx
+      split, and `--reversed` for the drift-free pooling). Evidence:
+      `evidence/decode_loop/{gate_join_defer_1p11.log,decode_1p11_off.log,decode_1p11_on.log,
+      dprof_1p11_marks.txt,fit_1p11_band.txt,fit_1p11_band_rev.txt,fit_1p11_band_pooled.txt,
+      fit_1p11_bygroup.txt,fit_1p11_paired.txt}`.
+- [ ] **1.13** **Resolve 1.11's term.** 1.11 measured a real drift-free `-0.542 +/- 0.310 ms/forward`
+      that is `-1.092 +/- 0.146` at ctx 12,410 and covers zero at 3,197 and 6,260, and its own
+      mechanism argument says it should be FLAT. Three context points cannot separate "the saving
+      grows with context" from "the two short groups are noisier". Re-sweep in BOTH arm orders with
+      >= 6 context points spanning 1.5k-12.4k. This is a MEASUREMENT item and it is ranked below the
+      kernel items on purpose: it changes no kernel and buys no throughput. Take it only when a
+      kernel item needs the attribution.
+- [ ] **1.14** **The first arena pass reads scratch it never wrote.** `gate_join_defer`'s null
+      control found it: the FIRST `compressed_decode_step_indexer` in a process produces a different
+      row 0 from every later one, with the same inputs and the same code, and the second instance of
+      an identical case is clean. The arena slab is `cudaMalloc`'d and never zeroed. Find the kernel
+      that reads before it writes (start with the `dmalloc`'d scratch in the M=1 step that is not
+      fully overwritten before use) and either zero it or fix the read. **In the engine this is one
+      token per process**, so it is LOW on throughput -- but it is a correctness hole that every
+      bit-exactness gate in this repo has been silently working around.
 - [ ] **1.12** **The ratio-128 emit re-reads its weights 32 times.** `gemm_fp32` chunks M in 8s
       (`kernels/compressor.cu:76`) and the strided path calls it with `ntok = 2*ratio = 256`, so B —
       33.55 MB of f32 `mc_wkv`/`mc_wgate` — is read `ceil(256/8) = 32` times per layer per group.

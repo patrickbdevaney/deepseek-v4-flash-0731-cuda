@@ -1,0 +1,36 @@
+[joindefer] arena on, g_side=0xaaaacbf871f0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER: PASS  (arm mismatches 0)
+[joindefer] arena on, g_side=0xaaaacdf2cf70, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER: PASS  (arm mismatches 0)  [--swap arm order]
+[joindefer] arena on, g_side=0xaaab16165da0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER NULLCTL: CLEAN  (arm mismatches 0)  [NULL CONTROL: both arms joined -- any
+    difference here is the HARNESS, not 1.11]
+[joindefer] arena on, g_side=0xaaaaeb5b51f0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER NULLCTL: CLEAN  (arm mismatches 0)  [NULL CONTROL: both arms deferred -- any
+    difference here is the HARNESS, not 1.11]
+[joindefer] arena on, g_side=0xaaaaddc371f0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  20471 / 32768 floats differ   <<<< NOT BIT-EXACT
+   first at 12288 (row 3 col 0): deferred -0.569001436  joined -0.569068909
+s0=480 decode=6 verify_K=6 emits_in_block=2  45055 / 49152 floats differ   <<<< NOT BIT-EXACT
+   first at 4096 (row 1 col 0): deferred 2.42540479  joined 2.49499416
+s0=480 decode=6 verify_K=1 emits_in_block=0  24575 / 28672 floats differ   <<<< NOT BIT-EXACT
+   first at 4096 (row 1 col 0): deferred 2.26584768  joined 2.24696088
+s0=184 decode=3 verify_K=5 emits_in_block=2  20480 / 32768 floats differ   <<<< NOT BIT-EXACT
+   first at 12288 (row 3 col 0): deferred 0.414937019  joined 0.391071081
+GATE JOIN_DEFER NEGCTL: PASS  [--negctl: every arm pair MUST differ]

@@ -11,7 +11,7 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation, **and §8: how a promoted head finally got served (2.2)** |
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
-| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, **1.7, the item that moved Term A instead**, and **1b.2, which moves `b` another 26 % and charges Term A for it** |
+| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, **1.7, the item that moved Term A instead**, and **1b.2, which moves `b` another 26 % and charges Term A for it**, and **1.11, a Term-A change that only resolved at long context** |
 | [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
 | [`hardware-sm110a.md` §5](hardware-sm110a.md) | operating rules, **including what the clocks actually do under load (3.1) — the governed box already runs at the pinned frequencies 97.7 % of the time** |
 | [`oom-and-memory-safety.md`](oom-and-memory-safety.md) | why the OOM killer never fires here (unified memory is invisible to the cgroup), and the two guards that replace it |
@@ -50,14 +50,14 @@ gates PASS on both. **This row is a weights change, not a kernel one** — `s3` 
 hardcoded the base checkpoint. [`kernel-optimisations.md` §2.8](kernel-optimisations.md),
 [`draft-head-finetuning.md` §8](draft-head-finetuning.md).
 
-| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | after 1.7 | after 1.8 | |
-|---|---|---|---|---|---|---|---|---|
-| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | 10.69 tok/s | *unchanged* | **+4.57 % paired** (10.46 → 10.93 in-session) | **+3.25 % paired** (11.71 → 12.09 in-session) | *no kernel change* | +24.4 %, +8.2 %, nothing, +4.6 %, **+3.3 %**, nothing |
-| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | not swept | not swept | +21.7 % then +6.7 % |
-| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | **+3.32 % paired** (11.74 → 12.13 in-session) | *no kernel change* | +15.8 %, +5.8 %, nothing, +2.2 %, **+3.3 %**, nothing |
-| spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | not swept | the pre-knee leg |
-| **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | 1.571× → **1.522×** its 82.18 ms floor |
-| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | *untouched* (the swing is flat in context) | **−74 % cumulative** |
+| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | after 1.7 | after 1.8 | after 1.11 | |
+|---|---|---|---|---|---|---|---|---|---|
+| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | 10.69 tok/s | *unchanged* | **+4.57 % paired** (10.46 → 10.93 in-session) | **+3.25 % paired** (11.71 → 12.09 in-session) | *no kernel change* | **+0.77 % paired** (−1.092 ± 0.146 ms/forward, 6/6 in both arm orders) | +24.4 %, +8.2 %, nothing, +4.6 %, **+3.3 %**, nothing, **+0.8 %** |
+| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | not swept | not swept | not swept | +21.7 % then +6.7 % |
+| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | **+3.32 % paired** (11.74 → 12.13 in-session) | *no kernel change* | −0.252 ± 0.606 ms/forward — **band covers zero** | +15.8 %, +5.8 %, nothing, +2.2 %, **+3.3 %**, nothing, unresolved |
+| spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | not swept | not swept | the pre-knee leg |
+| **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | **125.11 ms** — 1.11's saving is real but its term is not resolved | 1.571× → **1.522×** its 82.18 ms floor |
+| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | *untouched* (the swing is flat in context) | **1.887 ms/1000** — see `a` | **−74 % cumulative** |
 
 | the one switchable row — `DSV4_KV_PACK` (1b.2, default **OFF**) | default | packed | |
 |---|---|---|---|
@@ -71,6 +71,25 @@ hardcoded the base checkpoint. [`kernel-optimisations.md` §2.8](kernel-optimisa
 > no — a 2.84× byte reduction made the reader kernel *slower at every shape*
 > (0.78–0.90×), because bytes are not what it is short of.
 > [`negative-results.md` §4i](negative-results.md), [`context-scaling.md`](context-scaling.md).
+
+**1.11 is a real, bit-exact, adopted saving that ONE arm order reported as a null — and that is the
+transferable part.** Deferring the ATTN_SPLIT join past `i:qidx` and `i:iw` is
+**−0.542 ± 0.310 ms/forward drift-free** over 18 paired legs and four checkpoint loads, and
+**−1.092 ± 0.146 at ctx 12,410** where it is 6/6 in each arm order independently. Run with the
+control arm first — the standing drift rule — it measured **−0.324, 2 SE [−0.670, +0.022]**, a band
+covering zero, i.e. a negative result. Reversing the arm order and pooling gave the number above and
+also *measured the drift*: **the second checkpoint load of a session costs +0.218 ± 0.157 ms/forward**,
+40 % of the effect being chased. Pairing removes between-leg variance and does nothing to a
+between-load offset. **Below ~1 ms/forward — which is now most of what is left — a null from one arm
+order is not a result.** [`measurement-and-traps.md` §33](measurement-and-traps.md),
+[`kernel-optimisations.md` §2.10](kernel-optimisations.md).
+
+**1.11 also wrote the first gate in this repo that can reach the side-stream fork at all.** Every
+gate that links these kernels does so without calling `arena_init()`, so `g_side` is null, `asplit`
+is false, and the fork 1.8 priced at 0.81 ms/forward had never been under test.
+`tests/gate_join_defer.cu` calls `arena_init()` first and refuses to PASS if `g_side` comes back
+null — and its null control immediately found a *pre-existing* uninitialised read in the M=1 step,
+now ladder 1.14. [`measurement-and-traps.md` §32](measurement-and-traps.md).
 
 **1.7 is the first item on this ladder to move Term A, and it is the term with the headroom.** `b ×
 6592` is now 12.44 ms against a stop condition of 5.0; `a` is 125.11 against a byte floor of 82.18

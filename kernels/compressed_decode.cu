@@ -510,7 +510,26 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     // (it absorbs the traffic, exactly as the shared expert did), K=5 verify 155.22 -> 153.48 ms,
     // spec 17.32 -> 17.48 tok/s, base AR 10.50 -> 10.68, token sequence byte-identical.
     // NO_ATTN_SPLIT=1 restores the serial order for A/B.
+    // LADDER 1.11 — DEFER THE JOIN PAST i:qidx AND i:iw. 1.8 measured 2.50 ms of side-stream work
+    // still un-hidden in cattn:compress on every emit step, because the join sat here, immediately
+    // after build_qKV. But nothing between here and `index_score` reads what the emits write: the
+    // first consumer of `idx_ckv` is index_score and of `comp_kv` is the kv_all copy, while i:qidx
+    // (fp8_block_gemm/rope/hadamard on iqrq/iqrs) and i:iw (gemm_fp32 on x_cur) read neither. That
+    // is 1.99 ms of independent main-stream work that was sitting behind the barrier.
+    //
+    // BIT-EXACT BY CONSTRUCTION: kernels move between streams, dependency order is unchanged, no
+    // arithmetic is touched. The arena is safe for the same reason the fork already is — every
+    // dmalloc happens on the HOST in program order, so the emits' scratch and qidx/qtmp/iw are
+    // disjoint ranges; `compressor_emit_group` ends in dsync+dfree, both no-ops under the arena,
+    // and arena_reset() is per layer, outside this function.
+    //
+    // READ THE dprof MARKS WITH CARE AFTER THIS. Deferring the join MOVES time between marks: with
+    // the wait gone, cattn:compress collapses toward zero on the main stream and the emit traffic
+    // reappears inside i:qidx / i:iw, exactly as 1.8 showed it reappearing in cattn:compress under
+    // NO_ATTN_SPLIT=1. A shrinking cattn:compress is NOT the win; only the paired ms/forward is.
+    // NO_JOIN_DEFER=1 restores the 1.8 join position for A/B on ONE binary.
     const bool asplit = g_side && !getenv("NO_ATTN_SPLIT");
+    const bool jdefer = asplit && !getenv("NO_JOIN_DEFER");
     cudaStream_t cs = asplit ? g_side : stream;
     if(asplit){ cudaEventRecord(g_side_fork,stream); cudaStreamWaitEvent(cs,g_side_fork,0); }
     build_qKV(w, x_cur, K, pos, q, win_kv, &iqrq, &iqrs, eps, stream);
@@ -519,7 +538,8 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     for(int j=pos;j<pos+K;++j) if((j+1)%ratio==0){ int g=j/ratio; int t=*T;
         compressor_emit_group(kv_row(comp_kv, t), x_full, g, ratio, w.mc_wkv,w.mc_wgate,w.mc_ape,w.mc_norm,w.cc_cos,w.cc_sin,DIM,HEAD_DIM,true,ROPE_DIM,eps,false,cs);
         compressor_emit_group(idx_ckv+(size_t)t*ihd, x_full, g, ratio, w.idx_c_wkv,w.idx_c_wgate,w.idx_c_ape,w.idx_c_norm,w.cc_cos,w.cc_sin,DIM,ihd,true,ROPE_DIM,eps,true,cs); ++(*T); }
-    if(asplit){ cudaEventRecord(g_side_join,cs); cudaStreamWaitEvent(stream,g_side_join,0); }
+    if(asplit) cudaEventRecord(g_side_join,cs);                 // "the emits are done" — recorded here
+    if(asplit && !jdefer) cudaStreamWaitEvent(stream,g_side_join,0);   // ...but waited on where it is needed
     dprof_end(DP_C_COMPRESS,stream);
     int Tf=*T, nwin=pos+K;
     dprof_begin(DP_C_INDEXER,stream);
@@ -536,6 +556,9 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     k_iw_scale<<<((size_t)K*nH+63)/64,64,0,stream>>>(iw,wscale,K*nH);
     dprof_end(DP_I_IW,stream);
     iscore=(float*)dmalloc((size_t)K*Tf*4);
+    // 1.11: THE TRUE DEPENDENCY. index_score is the first reader of `idx_ckv`, so this is the
+    // earliest point the compressor emits must have landed. Everything above ran against them.
+    if(jdefer) cudaStreamWaitEvent(stream,g_side_join,0);
     // index_score is one THREAD per (query, compressed-row) and there are only K*Tf ~ 95 of them, so
     // it launches a single block. If this mark is large that is 3 warps on one SM doing 1024 MACs
     // each, and the fix is warp-per-output — which changes the reduction order, so it needs the

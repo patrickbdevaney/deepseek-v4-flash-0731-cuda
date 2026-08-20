@@ -1,0 +1,4 @@
+[forkjoin] 172 graph nodes over 43 layers on one event pair
+[forkjoin] eager=86.0 graph=86.0 expected=86.0 -> PASS
+
+Gate FORKJOIN_GRAPH: PASS

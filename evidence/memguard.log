@@ -229,3 +229,21 @@
 [memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-20T17:20:05-04:00
 [memguard] watching pid 1217603 (dsv4-server)
 [memguard] victim gone, exiting. low-water 8130 MB, peak fall rate 6460 MB/s 2026-08-20T17:21:22-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T18:14:22-04:00
+[memguard] watching pid 1321953 (decode)
+[memguard] victim gone, exiting. low-water 9110 MB, peak fall rate 6240 MB/s 2026-08-20T18:15:50-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-20T18:15:53-04:00
+[memguard] watching pid 1325360 (decode)
+[memguard] victim gone, exiting. low-water 8492 MB, peak fall rate 6615 MB/s 2026-08-20T18:17:19-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-20T18:17:26-04:00
+[memguard] watching pid 1328834 (dsv4-server)
+[memguard] victim gone, exiting. low-water 8456 MB, peak fall rate 6030 MB/s 2026-08-20T18:32:01-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-20T18:32:03-04:00
+[memguard] watching pid 1355748 (dsv4-server)
+[memguard] victim gone, exiting. low-water 8777 MB, peak fall rate 5960 MB/s 2026-08-20T18:46:32-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-20T18:50:15-04:00
+[memguard] watching pid 1388738 (dsv4-server)
+[memguard] victim gone, exiting. low-water 8565 MB, peak fall rate 6165 MB/s 2026-08-20T19:04:50-04:00
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-20T19:04:53-04:00
+[memguard] watching pid 1415385 (dsv4-server)
+[memguard] victim gone, exiting. low-water 7972 MB, peak fall rate 6360 MB/s 2026-08-20T19:19:37-04:00

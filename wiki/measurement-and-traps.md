@@ -935,3 +935,84 @@ Two consequences, both of which apply beyond this item:
 
 The same distinction is why `EVALS.md`'s seqmax ceiling was ever a real constraint: it binds when
 the context is used, not when it is reserved.
+
+## 32. The first pass through the arena reads scratch it never wrote, so run 1 of a process disagrees with every later run (ladder 1.11, 2026-08-20)
+
+`gate_join_defer` was written to prove 1.11 bit-exact. Its first run said **FAIL: 4,096 floats
+differ** — exactly one row, row 0, and row 0 is an **M=1 decode step**, which 1.11 does not touch.
+Perfectly reproducible across three runs.
+
+**The null control is the whole story.** Pin BOTH arms to the SAME join position and the row still
+differs — including with the *pre-1.11* code in both arms, i.e. with the change out of the picture
+entirely. Then duplicate the case: **instance 1 differs, instance 2 of byte-identical data is
+clean.** It is not the change and it is not the data; it is being first.
+
+    Case cases[] = { {480,6,2}, {480,6,2}, ... };   // same seed, same weights
+    s0=480 decode=6 verify_K=2   4096 / 32768 floats differ   <<<<
+    s0=480 decode=6 verify_K=2      0 / 32768 floats differ
+
+**The mechanism.** The arena slab is `cudaMalloc`'d once and never zeroed (`kernels/dscratch.cu`),
+and `dfree` is a no-op under it, so every pass hands out the same addresses. A kernel in the M=1
+step reads some `dmalloc`'d scratch before writing all of it: on pass 1 that read sees driver
+garbage, and on pass 2 and forever after it sees the *previous pass's* bytes, which repeat. The
+symptom is therefore "run 1 is the odd one out", not "the results are random" — which is exactly why
+it looked like a deterministic kernel difference rather than uninitialised memory.
+
+**Three things to take from it.**
+
+1. **A two-arm gate needs a NULL control — both arms pinned to the same setting — before its FAIL
+   means anything.** Without it, a harness bug and a kernel bug produce the identical output, and
+   the natural reading is the one that indicts the change you just made. This cost twenty minutes;
+   reading it the other way would have reverted a real 0.54 ms/forward win.
+2. **`--swap` is not that control.** Reversing the arm order still runs case 1 first, so it cannot
+   see a first-in-process effect at all. `--swap` controls for *arm order*; `--same-X` controls for
+   *the arm being the cause*. They are different controls and this gate now carries both.
+3. **The bug is real and is now ladder item 1.14.** It is one token per process in the engine, so it
+   is low on throughput — but every bit-exactness gate in this repo has been silently working
+   around it, and gates are the instrument the first hard invariant rests on.
+
+## 33. Pairing does not remove a between-load offset — one arm order could not resolve a 0.9 ms effect, and two could (ladder 1.11, 2026-08-20)
+
+1.11's pre-registered ceiling was **1.29 ms/forward, ~0.9 % of a 140 ms forward**. Run it the
+standard way — control arm first so drift penalises the change — and the answer is:
+
+    n=18  paired mean -0.324 ms/forward   sd 0.734   2 SE band [-0.670, +0.022]
+    VERDICT: the band COVERS ZERO — this is a NULL, not a win.
+
+By the item's own pre-registration that is a negative result, and it would have been written up as
+one. **It is not one.** Run the identical pair again with the ARM ORDER REVERSED and the same
+18 legs give **−0.760, 2 SE [−1.109, −0.411]** — a clean win.
+
+**Why pairing was not enough.** `decode_fit_probe.py` runs the same prompt with `seed=1000+rep` in
+both arms, so leg `t6144-r3` before and after are the same sample. Pairing removes the variance
+BETWEEN LEGS, which is large. It does nothing to a **constant offset between the two arms**, and
+§19 of this page measured exactly that offset — the run-to-run spread is 0.6 % *within* a checkpoint
+load and 5.7 % *between* loads. 0.6 % of 140 ms is **0.84 ms/forward**, which is the size of the
+entire effect. A two-load A/B of a sub-1 ms change is a coin-flip dressed as a band.
+
+**The fix is arithmetic and costs two more loads.** Run 1 measures `effect + drift`; run 2, with the
+arms swapped, measures `effect − drift`. Average the two per-leg deltas and drift cancels; half
+their difference *is* the drift:
+
+| | paired mean | 2 SE band | legs faster |
+|---|---|---|---|
+| run 1 — control arm first | −0.324 | [−0.670, **+0.022**] | 13/18 |
+| run 2 — change arm first | −0.760 | [−1.109, −0.411] | 14/18 |
+| **pooled, drift-free** | **−0.542** | **[−0.852, −0.232]** | 12/18 |
+| **drift itself** | **+0.218** | [+0.061, +0.375] | — |
+
+**`+0.218 ± 0.157 ms/forward` is now a measured number: what the second checkpoint load of a session
+costs relative to the first.** It is 40 % of the effect 1.11 was chasing. `tools/paired_band.py
+--reversed` does the pooling and prints both.
+
+**The standing rule this replaces.** "Run the control arm first so drift penalises the change" is a
+*bound*, not a correction: it tells you a positive result is real and tells you nothing at all about
+a null. Where the expected effect is under ~1 ms/forward — which is now most of what is left on this
+ladder, since `a` needs 22 ms in pieces this size — **a null from one arm order is not a result, and
+reporting it as one retires a real win.**
+
+**And the reversed pair paid a second time.** With drift out, the by-context structure became
+readable: −1.092 ± 0.146 at ctx 12,410 with 6/6 in *both* orders, against bands covering zero at
+3,197 and 6,260. That contradicted 1.11's pre-registered "the saving must be flat in context", which
+is a finding the single-order run could not have produced either way.
+

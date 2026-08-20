@@ -1,0 +1,47 @@
++ bash scripts/build_decode.sh
+src/decode.cu(119): warning #550-D: variable "n" was set but never used
+          char* line=nullptr; size_t cap=0; ssize_t n; int nl=0;
+                                                    ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+built build/decode
++ bash scripts/build_server.sh
+built build/gate_tokenizer
+built build/gate_stream
+built build/gate_encoding
+built build/gate_api
+built build/dsv4-chat
+built build/dsv4-server
+built build/gate_engine
++ bash scripts/build_gate.sh
+built build/gate_topk_radix
+built build/gate_topk_smem_ctx
+built build/gate_sdpa_smem
+built build/gate_index_score
+tests/gate_units.cu(421): warning #177-D: variable "half" was declared but never referenced
+      const auto& dm=S.get("dims"); int seqlen=i32(dm,0), dim=i32(dm,1); int half=dim/2;
+                                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+built build/gate_units
+built build/gate_encoding
+built build/gate_bf16w
+built build/gate_api
+built build/gate_suffix_draft
+built build/gate_forkjoin_graph
+built build/gate_ogroup_gemv
+built build/gate_tc_fp8_smem
+built build/gate_prefill_len
+built build/gate_moe_scan
+built build/gate_tc_fp8_kc
+built build/gate_og_ws1
+built build/gate_sparse_hpb
+built build/gate_kv_pack
+built build/gate_kv_pack_e2e
+built build/gate_compressed_decode
+built build/gate_indexer_decode
+scripts/build_gate.sh: line 179: the: command not found
++ echo BUILD_RC=0
+BUILD_RC=0

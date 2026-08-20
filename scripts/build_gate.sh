@@ -150,6 +150,18 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   kernels/dscratch.cu kernels/dprof.cu kernels/nvfp4_dense.cu -o build/gate_kv_pack_e2e
 echo "built build/gate_kv_pack_e2e"
 
+# Gate JOIN_DEFER (DECODE_LADDER 1.11) -- the deferred ATTN_SPLIT join, bit for bit. This is the
+# FIRST gate in this repo that calls arena_init() before driving these kernels, which is what makes
+# `g_side` non-null and the fork/join path reachable at all: every other gate here links them
+# without an arena, so `asplit` is false and the side stream that 1.8 measured at 0.81 ms/forward
+# has never been under test. Two arms in one process (NO_JOIN_DEFER set / unset), memcmp, `--swap`
+# for arm order and `--negctl` to prove the memcmp is live.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_join_defer.cu kernels/compressed_decode.cu kernels/compressed_attn.cu kernels/compressor.cu \
+  kernels/indexer.cu kernels/mla_attn.cu kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu \
+  kernels/dscratch.cu kernels/dprof.cu kernels/nvfp4_dense.cu -o build/gate_join_defer
+echo "built build/gate_join_defer"
+
 # ---------------------------------------------------------------------------------------------
 # THE OTHER EIGHT (Finding 76). Before this block, build_gate.sh built 10 of the 18 gate binaries
 # and the rest went stale SILENTLY: F74 found gate_compressed_decode and gate_indexer_decode a day
