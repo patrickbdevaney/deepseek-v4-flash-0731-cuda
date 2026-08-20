@@ -56,3 +56,7 @@ TypeError: '<' not supported between instances of 'NoneType' and 'float'
 [aime25@low -> low24k] 60 base records: 39 terminated (kept as-is), 21 truncated (to continue), 0 already written
   [1/21] aime2025-0001 gold=588 got=588 OK  +2526 tok (total 10526) stop (8.9 min)
   [2/21] aime2025-0008 gold=62 got=62 OK  +7254 tok (total 15254) stop (29.4 min)
+  [3/21] aime2025-0009 gold=81 got=81 OK  +4386 tok (total 12386) stop (44.3 min)
+  [4/21] aime2025-0010 gold=259 got=259 OK  +3819 tok (total 11819) stop (57.3 min)
+  [5/21] aime2025-0012 gold=204 got=204 OK  +12799 tok (total 20799) stop (104.9 min)
+  [6/21] aime2025-0013 gold=60 got=24     +16000 tok (total 24000) TRUNC (161.7 min)

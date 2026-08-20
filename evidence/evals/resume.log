@@ -993,3 +993,89 @@ started them. Restart them through scripts/eval_resume.sh, which detaches every 
 [resume 2026-08-19T18:58:38-04:00] forcing already running
 [resume 2026-08-19T18:58:38-04:00] multi-turn already running
 [resume 2026-08-19T18:58:39-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T19:09:08-04:00] battery already complete
+[resume 2026-08-19T19:09:08-04:00] extension already running
+[resume 2026-08-19T19:09:08-04:00] extension retry already running
+[resume 2026-08-19T19:09:08-04:00] forcing already running
+[resume 2026-08-19T19:09:08-04:00] multi-turn already running
+[resume 2026-08-19T19:09:09-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T19:19:38-04:00] battery already complete
+[resume 2026-08-19T19:19:38-04:00] extension already running
+[resume 2026-08-19T19:19:38-04:00] extension retry already running
+[resume 2026-08-19T19:19:38-04:00] forcing already running
+[resume 2026-08-19T19:19:38-04:00] multi-turn already running
+[resume 2026-08-19T19:19:39-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T19:30:08-04:00] battery already complete
+[resume 2026-08-19T19:30:08-04:00] extension already running
+[resume 2026-08-19T19:30:08-04:00] extension retry already running
+[resume 2026-08-19T19:30:08-04:00] forcing already running
+[resume 2026-08-19T19:30:08-04:00] multi-turn already running
+[resume 2026-08-19T19:30:09-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T19:40:38-04:00] battery already complete
+[resume 2026-08-19T19:40:38-04:00] extension already running
+[resume 2026-08-19T19:40:38-04:00] extension retry already running
+[resume 2026-08-19T19:40:38-04:00] forcing already running
+[resume 2026-08-19T19:40:38-04:00] multi-turn already running
+[resume 2026-08-19T19:40:39-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T19:51:08-04:00] battery already complete
+[resume 2026-08-19T19:51:08-04:00] extension already running
+[resume 2026-08-19T19:51:08-04:00] extension retry already running
+[resume 2026-08-19T19:51:08-04:00] forcing already running
+[resume 2026-08-19T19:51:08-04:00] multi-turn already running
+[resume 2026-08-19T19:51:09-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T20:01:38-04:00] battery already complete
+[resume 2026-08-19T20:01:38-04:00] extension already running
+[resume 2026-08-19T20:01:38-04:00] extension retry already running
+[resume 2026-08-19T20:01:38-04:00] forcing already running
+[resume 2026-08-19T20:01:38-04:00] multi-turn already running
+[resume 2026-08-19T20:01:39-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T20:12:08-04:00] battery already complete
+[resume 2026-08-19T20:12:08-04:00] extension already running
+[resume 2026-08-19T20:12:08-04:00] extension retry already running
+[resume 2026-08-19T20:12:08-04:00] forcing already running
+[resume 2026-08-19T20:12:08-04:00] multi-turn already running
+[resume 2026-08-19T20:12:09-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T20:22:38-04:00] battery already complete
+[resume 2026-08-19T20:22:38-04:00] extension already running
+[resume 2026-08-19T20:22:38-04:00] extension retry already running
+[resume 2026-08-19T20:22:38-04:00] forcing already running
+[resume 2026-08-19T20:22:38-04:00] multi-turn already running
+[resume 2026-08-19T20:22:39-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T20:33:08-04:00] battery already complete
+[resume 2026-08-19T20:33:08-04:00] extension already running
+[resume 2026-08-19T20:33:08-04:00] extension retry already running
+[resume 2026-08-19T20:33:08-04:00] forcing already running
+[resume 2026-08-19T20:33:08-04:00] multi-turn already running
+[resume 2026-08-19T20:33:09-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T20:43:38-04:00] battery already complete
+[resume 2026-08-19T20:43:38-04:00] extension already running
+[resume 2026-08-19T20:43:38-04:00] extension retry already running
+[resume 2026-08-19T20:43:38-04:00] forcing already running
+[resume 2026-08-19T20:43:38-04:00] multi-turn already running
+[resume 2026-08-19T20:43:39-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T20:54:08-04:00] battery already complete
+[resume 2026-08-19T20:54:08-04:00] extension already running
+[resume 2026-08-19T20:54:08-04:00] extension retry already running
+[resume 2026-08-19T20:54:08-04:00] forcing already running
+[resume 2026-08-19T20:54:08-04:00] multi-turn already running
+[resume 2026-08-19T20:54:09-04:00] resume complete — stages self-order from here
+[resume 2026-08-19T21:04:38-04:00] battery already complete
+[resume 2026-08-19T21:04:38-04:00] extension already running
+[resume 2026-08-19T21:04:38-04:00] extension retry already running
+[resume 2026-08-19T21:04:38-04:00] forcing already running
+[resume 2026-08-19T21:04:38-04:00] multi-turn already running
+[resume 2026-08-19T21:04:39-04:00] DETACHMENT FAULT — something is session-bound and will die with its terminal:
+PID      PPID     PARENT    TTY    PROCESS
+143571   2231     systemd   ?      ./build/dsv4-server --ckpt /home/patrickd/models/DeepSeek-
+146963   2231     systemd   ?      bash scripts/eval_extend_all.sh
+1336654  2231     systemd   ?      bash scripts/eval_force_all.sh
+1336665  2231     systemd   ?      bash scripts/eval_bfcl_mt_run.sh
+1550462  1        systemd   ?      python3 tools/perf_sample.py --every 30
+1742825  146963   bash      ?      python3 tools/eval_extend.py --task aime25 --effort low --
+1768339  2231     systemd   ?      bash scripts/eval_extend_retry.sh
+1936625  138519   claude    ?      /bin/bash -c source /home/patrickd/.claude/shell-snapshots   <-- SESSION-BOUND
+3739651  1        systemd   ?      bash scripts/memguard.sh
+
+detach_audit: 1 of 9 process(es) are SESSION-BOUND and will die with the terminal that
+started them. Restart them through scripts/eval_resume.sh, which detaches every stage.
+[resume 2026-08-19T21:04:39-04:00] resume complete — stages self-order from here

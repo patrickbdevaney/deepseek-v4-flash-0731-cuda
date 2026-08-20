@@ -25,6 +25,51 @@ No Python on the hot path. Every kernel gated against a PyTorch oracle before it
 
 ---
 
+## ⏸️ The eval battery is SUSPENDED mid-flight (2026-08-19)
+
+**Deliberately paused to free the GPU for decode-kernel work**, not stalled. Resume with
+`bash scripts/eval_resume.sh` — every stage continues from exactly where it stopped. Full state in
+[`evidence/evals/SUSPENDED.md`](evidence/evals/SUSPENDED.md); re-enable the units too:
+
+```bash
+systemctl --user enable --now dsv4-evals-watchdog.timer   # disarmed at suspend, or it resurrects
+systemctl --user enable dsv4-evals.service
+```
+
+**Why.** `tools/decode_model.py` fits decode at `136.44 + 30.053 × (context/1000)` ms per target
+forward (R² 0.965, n=2156). The context-linear half is **389× off its own roofline** and turned out
+to be a **one-thread selection sort** (`FINDING_TOPK_SELECTION_SORT.md`). Finishing the battery on
+the current engine means ~3 more days of extension plus forcing plus multi-turn, all at roughly half
+the decode speed the box can reach. The battery is idempotent and resumptive; the kernel work is not
+getting cheaper by waiting. Plan: [`DECODE_ZENITH_FINDINGS.md`](DECODE_ZENITH_FINDINGS.md).
+
+### Where each row actually stands
+
+| task | row | n | acc | trunc | state |
+|---|---|---:|---:|---:|---|
+| math500 | low | 100 | 95.0 | 1.0 % | **quotable** |
+| humaneval | low | 164 | 95.1 | 3.7 % | **quotable** |
+| bfcl | low | 240 | 86.2 | 1.2 % | **quotable** |
+| bfcl_live | low | 508 | 78.7 | 1.0 % | **quotable** |
+| aime24 | low24k | 60 | 91.7 | 10.0 % | extended and landed; **over the 5 % gate → needs forcing** |
+| mmlu_pro | low24k | 141/150 | *76.6* | *1.4 %* | ⚠️ **extension partial** |
+| gpqa_diamond | low24k | 147/198 | *93.9* | *0.0 %* | ⚠️ **extension partial** |
+| aime25 | low24k | 45/60 | *96.2* | *2.2 %* | ⚠️ **extension partial** — suspended cleanly after item 6/21 |
+| scicode | low | 291 | 30.2 | 18.6 % | extension not started |
+| lcb | low | 175 | 46.9 | **59.4 %** | extension not started |
+
+> **The three italicised rows are NOT partial results — they are biased ones, and must not be
+> quoted.** An extension writes the traces that *terminated* first and continues the truncated ones
+> one at a time, so a partial file contains a disproportionate share of the easy half. GPQA reading
+> 93.9 % at 0.0 % truncation is that artefact, not a number: its base row is 72.7 % at 25.8 %
+> truncated. `tools/eval_ext_complete.py` is the oracle both the retry and forcing stages ask, and
+> `tools/stage_top.py` shows the same thing live.
+
+**On resume**, `eval_extend_retry.sh` finishes the three partial files first, then the sweep reaches
+scicode and lcb, then forcing, then BFCL multi-turn. Nothing needs to be re-done by hand.
+
+---
+
 ## Where the numbers are today
 
 | | measured | ceiling | |
