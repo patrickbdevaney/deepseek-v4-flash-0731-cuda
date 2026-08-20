@@ -1,0 +1,637 @@
+[parse] DSV4_PROMPTS_FILE evidence/decode_loop/lenladder_prompts.txt -> 10 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=16 seqmax=3103
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 111.6/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 208.5 ms = 24.0 tok/s (41.705 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (71.6 ms warmup)
+  step 1 pos 6 -> token 16  (72.1 ms)
+  step 2 pos 7 -> token 455  (80.1 ms)
+  step 3 pos 8 -> token 6102  (72.8 ms)
+  step 4 pos 9 -> token 294  (70.6 ms)
+  step 5 pos 10 -> token 16603  (70.7 ms)
+  step 6 pos 11 -> token 344  (77.9 ms)
+  step 7 pos 12 -> token 29168  (70.7 ms)
+  step 8 pos 13 -> token 16  (71.1 ms)
+  step 9 pos 14 -> token 455  (70.3 ms)
+  step 10 pos 15 -> token 6102  (78.7 ms)
+  step 11 pos 16 -> token 294  (71.1 ms)
+  step 12 pos 17 -> token 14251  (70.4 ms)
+  step 13 pos 18 -> token 344  (70.8 ms)
+  step 14 pos 19 -> token 16235  (78.8 ms)
+  step 15 pos 20 -> token 16  (70.6 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 344 16235 16
+[decode] WARM decode: 73.1 ms/tok = 13.68 tok/s  (M=1 steady state, 15-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 125.7 ms (= 25.1 ms/tok if all accepted vs 73.1 M=1 -> 2.91x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 6 6 6 6 6 6 6 6 6 6
+[spec] head built. mem 118.7/122.8 GiB
+[ihash] point 0 : h0(embed)=3b59e935fa050383  h(hc_expand)=5d3aca16ece70383  hptr=0xfffef1600000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 0 layer  0 ratio   0 : 881f07ed990bf849
+[lhash] point 0 layer  1 ratio   0 : 5c2b95387462f8a1
+[lhash] point 0 layer  2 ratio   4 : da9b5950f03ebcf6
+[lhash] point 0 layer  3 ratio 128 : 38b0b137f788ba54
+[lhash] point 0 layer  4 ratio   4 : 291acaeffdb8b2d7
+[lhash] point 0 layer  5 ratio 128 : ec9d353d6558968c
+[lhash] point 0 layer  6 ratio   4 : a624f9b3e5109938
+[lhash] point 0 layer  7 ratio 128 : c6deea819edba9f6
+[lhash] point 0 layer  8 ratio   4 : 7c40d48275b2328f
+[lhash] point 0 layer  9 ratio 128 : 4b99e0373ce393d3
+[lhash] point 0 layer 10 ratio   4 : 8f1808aee6a1f087
+[lhash] point 0 layer 11 ratio 128 : 8bca09d1083cdbc7
+[lhash] point 0 layer 12 ratio   4 : dedd5f1744c4559f
+[lhash] point 0 layer 13 ratio 128 : e6bec6dd1f38b68e
+[lhash] point 0 layer 14 ratio   4 : 74b8f3b5f7989f3c
+[lhash] point 0 layer 15 ratio 128 : e736b26991e20d48
+[lhash] point 0 layer 16 ratio   4 : b4e43bc6e02538bf
+[lhash] point 0 layer 17 ratio 128 : dc406a38ed654bd5
+[lhash] point 0 layer 18 ratio   4 : feee4f1df91628a0
+[lhash] point 0 layer 19 ratio 128 : 2d6c3320bf3ebfbe
+[lhash] point 0 layer 20 ratio   4 : a3622564de28d8e3
+[lhash] point 0 layer 21 ratio 128 : a914e68fed261cb1
+[lhash] point 0 layer 22 ratio   4 : 126a771ebcb93886
+[lhash] point 0 layer 23 ratio 128 : f0390b7f8417cf96
+[lhash] point 0 layer 24 ratio   4 : 9c37017919b52dd1
+[lhash] point 0 layer 25 ratio 128 : 8460473953a14af9
+[lhash] point 0 layer 26 ratio   4 : b76507c915ce4748
+[lhash] point 0 layer 27 ratio 128 : aff595b97a351594
+[lhash] point 0 layer 28 ratio   4 : 82c1efceb795ea70
+[lhash] point 0 layer 29 ratio 128 : 62e9351df641dcd5
+[lhash] point 0 layer 30 ratio   4 : 86df47199d2dc23c
+[lhash] point 0 layer 31 ratio 128 : 39c45fc65064726f
+[lhash] point 0 layer 32 ratio   4 : b9c4144384072b09
+[lhash] point 0 layer 33 ratio 128 : 3b8d501aa0cc5afb
+[lhash] point 0 layer 34 ratio   4 : 7f6e0b621447911d
+[lhash] point 0 layer 35 ratio 128 : 61bb2c8bbbfa26c8
+[lhash] point 0 layer 36 ratio   4 : 51163e30015f0224
+[lhash] point 0 layer 37 ratio 128 : 07e0b77fe8d86161
+[lhash] point 0 layer 38 ratio   4 : 6610a032e3e66513
+[lhash] point 0 layer 39 ratio 128 : 90913d28d622c2a0
+[lhash] point 0 layer 40 ratio   4 : 3aabaf0e6a06f196
+[lhash] point 0 layer 41 ratio 128 : df428126eae3a802
+[lhash] point 0 layer 42 ratio   4 : d73bdcbe89ab6dcb
+[decode] PREFILL: 16 positions in 348.1 ms = 46.0 tok/s (21.758 ms/tok)
+[hash] point 0 prompt 1 PSp=16 : main_x=0ec3134e0da3d8a5 mh_pre=a26f0071ee924f9e scratch0=0000fffe93fe4a00
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=1 s=17)...
+[arena] first draft: draft footprint 214.39 MB, global hwm 214.39 MB / cap 6656.00 MB (3.2%), draft path = ARENA
+  [margins] 0.88 5.05 0.10 4.73 0.09 3.41  K=3
+  verify 1: accepted 2/2 (K=3) + correction -> +3 tokens (122.2 ms)  cpos=19
+  [margins] 3.44 0.50 0.57 1.69 0.73 0.73  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (117.9 ms)  cpos=21
+
+[spec] generated 5 tokens over 2 verifies: mean tokens/verify = 2.50 (block=6, max 7)
+[spec] tokens: 5227 6787 4271 6787 4933
+[genout] wrote 17 prompt + 5 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 59.0 ms/tok = 16.96 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 1.24x)
+[stephash] point 0 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 1 : h0(embed)=0aa072fb351d0383  h(hc_expand)=a959e0f88dd90383  hptr=0xfffec0000000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 1 layer  0 ratio   0 : 61af2bf394b6a7c2
+[lhash] point 1 layer  1 ratio   0 : e45f4589b70cdd4f
+[lhash] point 1 layer  2 ratio   4 : c5e81016ccf9e026
+[lhash] point 1 layer  3 ratio 128 : 9882e89427a67268
+[lhash] point 1 layer  4 ratio   4 : 068edae9772082ca
+[lhash] point 1 layer  5 ratio 128 : 38d1092782538a72
+[lhash] point 1 layer  6 ratio   4 : 885e88aca710e8ea
+[lhash] point 1 layer  7 ratio 128 : 0779234136364688
+[lhash] point 1 layer  8 ratio   4 : 673f8067e22ac3e7
+[lhash] point 1 layer  9 ratio 128 : dadb3d9ca41a9218
+[lhash] point 1 layer 10 ratio   4 : 1b1954eec6531175
+[lhash] point 1 layer 11 ratio 128 : 3ebedd338d4f6db6
+[lhash] point 1 layer 12 ratio   4 : 3f213496e18f01da
+[lhash] point 1 layer 13 ratio 128 : 4ac5d201b639f89b
+[lhash] point 1 layer 14 ratio   4 : 770f99fa19541bad
+[lhash] point 1 layer 15 ratio 128 : f539c74a6e5da8c5
+[lhash] point 1 layer 16 ratio   4 : 6f2542d5bdc823ce
+[lhash] point 1 layer 17 ratio 128 : 45e45497442feef8
+[lhash] point 1 layer 18 ratio   4 : 3fa277fce6432cbc
+[lhash] point 1 layer 19 ratio 128 : 3f0cf8a32b5a224f
+[lhash] point 1 layer 20 ratio   4 : 614ccd630d417dc7
+[lhash] point 1 layer 21 ratio 128 : d251dc614e693073
+[lhash] point 1 layer 22 ratio   4 : 1ff80c67a4ff1707
+[lhash] point 1 layer 23 ratio 128 : 20bfea2e2f1f4c48
+[lhash] point 1 layer 24 ratio   4 : 2bda86b859949f64
+[lhash] point 1 layer 25 ratio 128 : 8b99674ec86e2581
+[lhash] point 1 layer 26 ratio   4 : ee0411f5b8f45faa
+[lhash] point 1 layer 27 ratio 128 : 6bc2fb19e9974639
+[lhash] point 1 layer 28 ratio   4 : 82a37e758a08f52a
+[lhash] point 1 layer 29 ratio 128 : 45291691aad5bcaa
+[lhash] point 1 layer 30 ratio   4 : 772b23bfb82dec40
+[lhash] point 1 layer 31 ratio 128 : 9b8170de54518025
+[lhash] point 1 layer 32 ratio   4 : 8b883216a67b1664
+[lhash] point 1 layer 33 ratio 128 : 38246e26d5540363
+[lhash] point 1 layer 34 ratio   4 : c7a4ef7c649e1c20
+[lhash] point 1 layer 35 ratio 128 : 5f5f1a24266aec5d
+[lhash] point 1 layer 36 ratio   4 : de11083e7d7f193e
+[lhash] point 1 layer 37 ratio 128 : 650b84b2edcbc1dd
+[lhash] point 1 layer 38 ratio   4 : eb8cd004f13ad0a7
+[lhash] point 1 layer 39 ratio 128 : de4fdca3337c8159
+[lhash] point 1 layer 40 ratio   4 : 7cd21e0779d98b9e
+[lhash] point 1 layer 41 ratio 128 : ac9cc242d9ace964
+[lhash] point 1 layer 42 ratio   4 : 57eab9a3e8d0c39a
+[decode] PREFILL: 32 positions in 609.5 ms = 52.5 tok/s (19.046 ms/tok)
+[hash] point 1 prompt 2 PSp=32 : main_x=6e530c010618378d mh_pre=a603de5c367f30bc scratch0=0000fffcddb34000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=2 s=33)...
+  [margins] 0.42 1.38 0.03 0.89 0.27 0.84  K=2
+  verify 1: accepted 0/1 (K=2) + correction -> +1 tokens (111.7 ms)  cpos=33
+  [margins] 0.11 0.21 0.87 0.35 0.22 2.33  K=2
+  verify 2: accepted 0/1 (K=2) + correction -> +1 tokens (113.8 ms)  cpos=34
+  [margins] 3.99 1.38 2.08 0.09 0.11 0.47  K=2
+  verify 3: accepted 0/1 (K=2) + correction -> +1 tokens (120.6 ms)  cpos=35
+  [margins] 0.58 0.26 0.01 0.16 0.05 1.65  K=2
+  verify 4: accepted 0/1 (K=2) + correction -> +1 tokens (123.7 ms)  cpos=36
+
+[spec] generated 4 tokens over 4 verifies: mean tokens/verify = 1.00 (block=6, max 7)
+[spec] tokens: 14 11320 342 2008
+[genout] wrote 33 prompt + 4 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 119.4 ms/tok = 8.38 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 0.61x)
+[stephash] point 1 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 2 : h0(embed)=9ebca2f9afed0383  h(hc_expand)=e23d83e5b5550383  hptr=0xfffef1600000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 2 layer  0 ratio   0 : 121e8721b0a3dbd5
+[lhash] point 2 layer  1 ratio   0 : c3e06ca038dde082
+[lhash] point 2 layer  2 ratio   4 : 68d23366b1c643a1
+[lhash] point 2 layer  3 ratio 128 : 02f2b39ec1c56e1d
+[lhash] point 2 layer  4 ratio   4 : 5f956131c39e4507
+[lhash] point 2 layer  5 ratio 128 : cd4f791577e2a1bf
+[lhash] point 2 layer  6 ratio   4 : 12418dc8cf88fe04
+[lhash] point 2 layer  7 ratio 128 : c1df3f14fa6f4225
+[lhash] point 2 layer  8 ratio   4 : 7d31fb26b16d76bf
+[lhash] point 2 layer  9 ratio 128 : 189cc3b8864c95aa
+[lhash] point 2 layer 10 ratio   4 : f3883976bb0b9a61
+[lhash] point 2 layer 11 ratio 128 : 4539a890035c9804
+[lhash] point 2 layer 12 ratio   4 : 81c5e9ae124d05a1
+[lhash] point 2 layer 13 ratio 128 : 89f1303634c388e7
+[lhash] point 2 layer 14 ratio   4 : 293c3a57fde6dd17
+[lhash] point 2 layer 15 ratio 128 : 895e6f71fe380cbb
+[lhash] point 2 layer 16 ratio   4 : 61f818a34af7c34d
+[lhash] point 2 layer 17 ratio 128 : 02f89e6ab5ec6c6e
+[lhash] point 2 layer 18 ratio   4 : b96097158603c90c
+[lhash] point 2 layer 19 ratio 128 : b4f429efdead0647
+[lhash] point 2 layer 20 ratio   4 : a8b8083c97b6be2b
+[lhash] point 2 layer 21 ratio 128 : 690c24bcf070a1f2
+[lhash] point 2 layer 22 ratio   4 : d2dff3283e6d5234
+[lhash] point 2 layer 23 ratio 128 : d44378c716aea29f
+[lhash] point 2 layer 24 ratio   4 : dafd61c74ac53374
+[lhash] point 2 layer 25 ratio 128 : 231a556d8ce3f992
+[lhash] point 2 layer 26 ratio   4 : 738384802dea5bc2
+[lhash] point 2 layer 27 ratio 128 : 758d8f3af5362e2f
+[lhash] point 2 layer 28 ratio   4 : 53112e21144a6009
+[lhash] point 2 layer 29 ratio 128 : 713c8048c3788729
+[lhash] point 2 layer 30 ratio   4 : 23d14e65810357ce
+[lhash] point 2 layer 31 ratio 128 : df354eda76c3efc5
+[lhash] point 2 layer 32 ratio   4 : 6750f13ae25bc8db
+[lhash] point 2 layer 33 ratio 128 : 392915b8f5db0eea
+[lhash] point 2 layer 34 ratio   4 : 46a75169f87ef393
+[lhash] point 2 layer 35 ratio 128 : 413240ccb5e094ee
+[lhash] point 2 layer 36 ratio   4 : 5d7d02b4349f9ae8
+[lhash] point 2 layer 37 ratio 128 : 5acad4ca6760c606
+[lhash] point 2 layer 38 ratio   4 : 47441df07623fde5
+[lhash] point 2 layer 39 ratio 128 : 8c3a13af9cd7ecc0
+[lhash] point 2 layer 40 ratio   4 : 89b6098ae1a8e51c
+[lhash] point 2 layer 41 ratio 128 : 2fd281e0a407d88d
+[lhash] point 2 layer 42 ratio   4 : 4814a0224c639cfd
+[decode] PREFILL: 64 positions in 1145.9 ms = 55.9 tok/s (17.905 ms/tok)
+[hash] point 2 prompt 3 PSp=64 : main_x=ebc7cfe758a11bef mh_pre=f3cdb850865fba73 scratch0=0000fffcddb34000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=3 s=65)...
+  [margins] 0.68 0.08 0.33 1.93 1.90 1.87  K=2
+  verify 1: accepted 0/1 (K=2) + correction -> +1 tokens (115.2 ms)  cpos=65
+  [margins] 0.73 0.23 0.65 0.35 3.07 1.53  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (114.4 ms)  cpos=67
+  [margins] 0.43 0.13 0.38 0.72 3.78 2.24  K=2
+  verify 3: accepted 0/1 (K=2) + correction -> +1 tokens (123.2 ms)  cpos=68
+
+[spec] generated 4 tokens over 3 verifies: mean tokens/verify = 1.33 (block=6, max 7)
+[spec] tokens: 19 28 8796 120158
+[genout] wrote 65 prompt + 4 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 79.2 ms/tok = 12.63 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 0.92x)
+[stephash] point 2 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 3 : h0(embed)=5f8b7c5ef82c0383  h(hc_expand)=f89b8827d29f0383  hptr=0xfffec0000000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 3 layer  0 ratio   0 : 2100813d10a4eded
+[lhash] point 3 layer  1 ratio   0 : fab6bc932a6c382f
+[lhash] point 3 layer  2 ratio   4 : e44bd1e23bbfb80e
+[lhash] point 3 layer  3 ratio 128 : f14e9c3184d6ee73
+[lhash] point 3 layer  4 ratio   4 : f5cfd0fe0fa0b941
+[lhash] point 3 layer  5 ratio 128 : 1e202893e3ab4485
+[lhash] point 3 layer  6 ratio   4 : eb33752b522fe95f
+[lhash] point 3 layer  7 ratio 128 : ae00ee7099c46626
+[lhash] point 3 layer  8 ratio   4 : babb133129da0d99
+[lhash] point 3 layer  9 ratio 128 : aa50b68b5e195d46
+[lhash] point 3 layer 10 ratio   4 : 35d56141ac05ae86
+[lhash] point 3 layer 11 ratio 128 : 549819d8110a06e9
+[lhash] point 3 layer 12 ratio   4 : f891715caf1246f1
+[lhash] point 3 layer 13 ratio 128 : ddb6d1cc59e080d7
+[lhash] point 3 layer 14 ratio   4 : e56f50257ace26f4
+[lhash] point 3 layer 15 ratio 128 : 35fe27cc3334506b
+[lhash] point 3 layer 16 ratio   4 : f591d93d92b8da0e
+[lhash] point 3 layer 17 ratio 128 : f2773960f0849d8a
+[lhash] point 3 layer 18 ratio   4 : 163612a10959f96e
+[lhash] point 3 layer 19 ratio 128 : 907bc6384b69a8d8
+[lhash] point 3 layer 20 ratio   4 : 865dd0d3e1f77df0
+[lhash] point 3 layer 21 ratio 128 : b4d6988a4dc03ef3
+[lhash] point 3 layer 22 ratio   4 : 0d03ea593207e484
+[lhash] point 3 layer 23 ratio 128 : e5bb0be0662e29c1
+[lhash] point 3 layer 24 ratio   4 : 56ccaa73354af14c
+[lhash] point 3 layer 25 ratio 128 : 55774dc2560b2759
+[lhash] point 3 layer 26 ratio   4 : 56fa723acd520b39
+[lhash] point 3 layer 27 ratio 128 : 387f892861c2dccd
+[lhash] point 3 layer 28 ratio   4 : 98c695865bb1bdfb
+[lhash] point 3 layer 29 ratio 128 : 0a9c6c3b5977e965
+[lhash] point 3 layer 30 ratio   4 : 233043f43625a844
+[lhash] point 3 layer 31 ratio 128 : 6a4ec0f12ec784ac
+[lhash] point 3 layer 32 ratio   4 : 47573164981db979
+[lhash] point 3 layer 33 ratio 128 : 5f29d5fb0c4cc462
+[lhash] point 3 layer 34 ratio   4 : 66ad2cf51d44a9c3
+[lhash] point 3 layer 35 ratio 128 : c81d713ab43e923f
+[lhash] point 3 layer 36 ratio   4 : 65cc1003e21554a4
+[lhash] point 3 layer 37 ratio 128 : ee1092f3f2787e07
+[lhash] point 3 layer 38 ratio   4 : 646807017ef19196
+[lhash] point 3 layer 39 ratio 128 : 12b9808a692c31c8
+[lhash] point 3 layer 40 ratio   4 : ab5a717edd3374bf
+[lhash] point 3 layer 41 ratio 128 : 894af83de0d321d4
+[lhash] point 3 layer 42 ratio   4 : 34a2966469ce26b0
+[decode] PREFILL: 128 positions in 2306.6 ms = 55.5 tok/s (18.021 ms/tok)
+[hash] point 3 prompt 4 PSp=128 : main_x=f0ef505fa91682f4 mh_pre=bba2448f8160680c scratch0=0000fffcddb34000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=4 s=129)...
+  [margins] 1.63 0.22 0.73 0.14 0.49 0.95  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (119.6 ms)  cpos=130
+  [margins] 1.34 2.26 1.26 0.25 1.25 0.01  K=3
+  verify 2: accepted 2/2 (K=3) + correction -> +3 tokens (134.1 ms)  cpos=133
+
+[spec] generated 5 tokens over 2 verifies: mean tokens/verify = 2.50 (block=6, max 7)
+[spec] tokens: 223 2892 27962 36357 14
+[genout] wrote 129 prompt + 5 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 44.7 ms/tok = 22.37 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 1.64x)
+[stephash] point 3 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 4 : h0(embed)=d61e1eff952a0383  h(hc_expand)=fda2bc90164d0383  hptr=0xfffef1600000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 4 layer  0 ratio   0 : 1d909ee34563c5a9
+[lhash] point 4 layer  1 ratio   0 : 5d384096cff4b6e7
+[lhash] point 4 layer  2 ratio   4 : fbcd4a46cda6c4cd
+[lhash] point 4 layer  3 ratio 128 : 2f6d44c4f8c3ff89
+[lhash] point 4 layer  4 ratio   4 : d899f467c825a7bf
+[lhash] point 4 layer  5 ratio 128 : ac35fe76f04ff7f4
+[lhash] point 4 layer  6 ratio   4 : d07f1eddd2483256
+[lhash] point 4 layer  7 ratio 128 : 77697e5996a2b025
+[lhash] point 4 layer  8 ratio   4 : 50452ab0719c0ad0
+[lhash] point 4 layer  9 ratio 128 : 0ff27962828d6191
+[lhash] point 4 layer 10 ratio   4 : b1e277263d7772af
+[lhash] point 4 layer 11 ratio 128 : fdbeb7f662824bf7
+[lhash] point 4 layer 12 ratio   4 : 642286a8a8356704
+[lhash] point 4 layer 13 ratio 128 : 00beeb09d5668db7
+[lhash] point 4 layer 14 ratio   4 : 98a54cca95f1448a
+[lhash] point 4 layer 15 ratio 128 : 22903b9b0bd4a32b
+[lhash] point 4 layer 16 ratio   4 : f81d3d7abb5e2a5e
+[lhash] point 4 layer 17 ratio 128 : b3009e1bbf7944a1
+[lhash] point 4 layer 18 ratio   4 : c88fd089bb32babf
+[lhash] point 4 layer 19 ratio 128 : bc66c7bd373406ac
+[lhash] point 4 layer 20 ratio   4 : 38b42d0dcf010d2e
+[lhash] point 4 layer 21 ratio 128 : ceb7319cff495432
+[lhash] point 4 layer 22 ratio   4 : fab6c7dac521ddf5
+[lhash] point 4 layer 23 ratio 128 : 0fcf3d73c6fa97de
+[lhash] point 4 layer 24 ratio   4 : ce3443d71df6cbd6
+[lhash] point 4 layer 25 ratio 128 : 52c4183eb15d3946
+[lhash] point 4 layer 26 ratio   4 : 686c8df2b932500d
+[lhash] point 4 layer 27 ratio 128 : 411648556fa187fc
+[lhash] point 4 layer 28 ratio   4 : ed59d312e9abb147
+[lhash] point 4 layer 29 ratio 128 : bc45bf49257b23d4
+[lhash] point 4 layer 30 ratio   4 : 52944d0dd6b64f1b
+[lhash] point 4 layer 31 ratio 128 : f916adcbdf3a548f
+[lhash] point 4 layer 32 ratio   4 : 231df1af47236822
+[lhash] point 4 layer 33 ratio 128 : 8042d968c9a36a39
+[lhash] point 4 layer 34 ratio   4 : 9c92bb3733df9dd2
+[lhash] point 4 layer 35 ratio 128 : afc1671fcb237d00
+[lhash] point 4 layer 36 ratio   4 : 70fe9d2cd47c2683
+[lhash] point 4 layer 37 ratio 128 : 9f50422f590d6ebb
+[lhash] point 4 layer 38 ratio   4 : c70310f9706c2261
+[lhash] point 4 layer 39 ratio 128 : 32a17cc5dd1d18e9
+[lhash] point 4 layer 40 ratio   4 : 55711a88da45ffad
+[lhash] point 4 layer 41 ratio 128 : b0be80be691aa58a
+[lhash] point 4 layer 42 ratio   4 : 19b235939549da54
+[decode] PREFILL: 256 positions in 4670.0 ms = 54.8 tok/s (18.242 ms/tok)
+[hash] point 4 prompt 5 PSp=256 : main_x=6407faac99333ca2 mh_pre=d5ea712597413302 scratch0=0000fffcde200000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=5 s=257)...
+  [margins] 2.39 3.77 0.80 1.56 2.07 0.49  K=3
+  verify 1: accepted 2/2 (K=3) + correction -> +3 tokens (132.1 ms)  cpos=259
+  [margins] 1.61 1.85 2.56 0.34 0.95 0.36  K=4
+  verify 2: accepted 2/3 (K=4) + correction -> +3 tokens (150.3 ms)  cpos=262
+
+[spec] generated 6 tokens over 2 verifies: mean tokens/verify = 3.00 (block=6, max 7)
+[spec] tokens: 568 2742 16 1162 344 270
+[genout] wrote 257 prompt + 6 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 50.1 ms/tok = 19.96 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 1.46x)
+[stephash] point 4 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 5 : h0(embed)=d7321a9351080383  h(hc_expand)=e2583cf1c9590383  hptr=0xfffec0000000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 5 layer  0 ratio   0 : 002e597b9ca17e88
+[lhash] point 5 layer  1 ratio   0 : 6871852812e78193
+[lhash] point 5 layer  2 ratio   4 : 6fb9939d22605e2a
+[lhash] point 5 layer  3 ratio 128 : 2c9a6c0b23a3a54b
+[lhash] point 5 layer  4 ratio   4 : 58fe9a824a4d0f77
+[lhash] point 5 layer  5 ratio 128 : c0a15a68cd8696e7
+[lhash] point 5 layer  6 ratio   4 : e38cb059ab4b5afe
+[lhash] point 5 layer  7 ratio 128 : 33a77f366ae68baf
+[lhash] point 5 layer  8 ratio   4 : b861d93b2a860ced
+[lhash] point 5 layer  9 ratio 128 : 382e0ffb3e29e658
+[lhash] point 5 layer 10 ratio   4 : 026503a0034813e7
+[lhash] point 5 layer 11 ratio 128 : 3b7ac6c24ba3d208
+[lhash] point 5 layer 12 ratio   4 : 5e7e93574c55dec7
+[lhash] point 5 layer 13 ratio 128 : 7b9c53e049547720
+[lhash] point 5 layer 14 ratio   4 : 47b9d0f1e03b31cd
+[lhash] point 5 layer 15 ratio 128 : ee2c9ce466a7083c
+[lhash] point 5 layer 16 ratio   4 : c8a053bed4a966f6
+[lhash] point 5 layer 17 ratio 128 : 1417462a3fed6a11
+[lhash] point 5 layer 18 ratio   4 : fccd12c1827bb067
+[lhash] point 5 layer 19 ratio 128 : 9e45f4aadb6ea39a
+[lhash] point 5 layer 20 ratio   4 : 194186585e9db334
+[lhash] point 5 layer 21 ratio 128 : 144f1a74f66456b9
+[lhash] point 5 layer 22 ratio   4 : bc8c4c66c659a257
+[lhash] point 5 layer 23 ratio 128 : 1c033455c37046d7
+[lhash] point 5 layer 24 ratio   4 : 9461a1001bc5f8ba
+[lhash] point 5 layer 25 ratio 128 : 2af7ccfb748f7bed
+[lhash] point 5 layer 26 ratio   4 : 5ce225cab58752b3
+[lhash] point 5 layer 27 ratio 128 : 1d4d971e3c7969d3
+[lhash] point 5 layer 28 ratio   4 : 2c2a5c0570878228
+[lhash] point 5 layer 29 ratio 128 : 5b5fb37ff27d03a6
+[lhash] point 5 layer 30 ratio   4 : 698eb41a6c6b9537
+[lhash] point 5 layer 31 ratio 128 : ec8b44537f7af26b
+[lhash] point 5 layer 32 ratio   4 : 783320a2f753668c
+[lhash] point 5 layer 33 ratio 128 : 69db2700d5764537
+[lhash] point 5 layer 34 ratio   4 : 91335563ecfd1cf6
+[lhash] point 5 layer 35 ratio 128 : a3cd06bae297c091
+[lhash] point 5 layer 36 ratio   4 : 48bfbf3dc7ba416a
+[lhash] point 5 layer 37 ratio 128 : 6970012e5da55555
+[lhash] point 5 layer 38 ratio   4 : 4aad03ca350ce7c8
+[lhash] point 5 layer 39 ratio 128 : aef09a7da4cadccc
+[lhash] point 5 layer 40 ratio   4 : 225dcf10a6a3e070
+[lhash] point 5 layer 41 ratio 128 : 3c2e7e1980b223b5
+[lhash] point 5 layer 42 ratio   4 : a81e5eda9ac94225
+[decode] PREFILL: 512 positions in 9720.8 ms = 52.7 tok/s (18.986 ms/tok)
+[hash] point 5 prompt 6 PSp=512 : main_x=e46e0041dc1b81ac mh_pre=826cabc5f3da1418 scratch0=0000fffcde200000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=6 s=513)...
+  [margins] 1.60 1.14 2.20 5.02 1.36 0.13  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (123.0 ms)  cpos=514
+  [margins] 0.08 1.29 3.17 0.66 1.01 0.01  K=2
+  verify 2: accepted 0/1 (K=2) + correction -> +1 tokens (126.1 ms)  cpos=515
+  [margins] 0.78 0.32 0.07 3.25 0.62 1.51  K=2
+  verify 3: accepted 1/1 (K=2) + correction -> +2 tokens (131.2 ms)  cpos=517
+
+[spec] generated 5 tokens over 3 verifies: mean tokens/verify = 1.67 (block=6, max 7)
+[spec] tokens: 23 27962 29870 418 582
+[genout] wrote 513 prompt + 5 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 85.8 ms/tok = 11.66 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 0.85x)
+[stephash] point 5 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 6 : h0(embed)=2cb8b2c18ff90383  h(hc_expand)=94ceb3860ab90383  hptr=0xfffef1600000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 6 layer  0 ratio   0 : 7c82287ae3f829c3
+[lhash] point 6 layer  1 ratio   0 : ff5baa036b45960b
+[lhash] point 6 layer  2 ratio   4 : b3b95e10ecb699e1
+[lhash] point 6 layer  3 ratio 128 : f884c0b171c92a37
+[lhash] point 6 layer  4 ratio   4 : eb95486481cef809
+[lhash] point 6 layer  5 ratio 128 : 81a2722e350633f0
+[lhash] point 6 layer  6 ratio   4 : 47f5921bc06ebad5
+[lhash] point 6 layer  7 ratio 128 : 7e5e8577e23070ae
+[lhash] point 6 layer  8 ratio   4 : 060bb3805df888f4
+[lhash] point 6 layer  9 ratio 128 : efd7ac20eaedb88c
+[lhash] point 6 layer 10 ratio   4 : 7383dbe0ccaf6875
+[lhash] point 6 layer 11 ratio 128 : 1ac6a77e1916d1ae
+[lhash] point 6 layer 12 ratio   4 : ad0a09b439237bd9
+[lhash] point 6 layer 13 ratio 128 : 8b25fdcf298a633a
+[lhash] point 6 layer 14 ratio   4 : 52d48e597ced54c0
+[lhash] point 6 layer 15 ratio 128 : 10ce9bffdaddddf8
+[lhash] point 6 layer 16 ratio   4 : 449adf9f141e1082
+[lhash] point 6 layer 17 ratio 128 : 309d31078eae1454
+[lhash] point 6 layer 18 ratio   4 : 5395dcd18d5283cd
+[lhash] point 6 layer 19 ratio 128 : 029c57445415b0e1
+[lhash] point 6 layer 20 ratio   4 : a10d537ba2a43e77
+[lhash] point 6 layer 21 ratio 128 : a44925446c5728df
+[lhash] point 6 layer 22 ratio   4 : 0e9270d44ba149a3
+[lhash] point 6 layer 23 ratio 128 : 6fdafc00a1caf08e
+[lhash] point 6 layer 24 ratio   4 : 5f6909dd7bdc6fcd
+[lhash] point 6 layer 25 ratio 128 : fa13d20e448598e5
+[lhash] point 6 layer 26 ratio   4 : c2ce7d20c81e846f
+[lhash] point 6 layer 27 ratio 128 : edd55106962ee3d1
+[lhash] point 6 layer 28 ratio   4 : e85b57df622ea689
+[lhash] point 6 layer 29 ratio 128 : d6058d32510ae769
+[lhash] point 6 layer 30 ratio   4 : 3317c6ecb3ce3297
+[lhash] point 6 layer 31 ratio 128 : 6efb0365313cf32c
+[lhash] point 6 layer 32 ratio   4 : 7a26be67c8523b73
+[lhash] point 6 layer 33 ratio 128 : b3eaab0aa7aa7e27
+[lhash] point 6 layer 34 ratio   4 : 11daf4e362326611
+[lhash] point 6 layer 35 ratio 128 : d561c0d510c4e065
+[lhash] point 6 layer 36 ratio   4 : f04a0120c5448390
+[lhash] point 6 layer 37 ratio 128 : 5f365c913adb2710
+[lhash] point 6 layer 38 ratio   4 : 6d2e9fffeff7cdfb
+[lhash] point 6 layer 39 ratio 128 : d95df81e46862344
+[lhash] point 6 layer 40 ratio   4 : 61f75ead86288350
+[lhash] point 6 layer 41 ratio 128 : f10f7d8892485970
+[lhash] point 6 layer 42 ratio   4 : 09d58ec75e3cf9ad
+[decode] PREFILL: 1024 positions in 20032.7 ms = 51.1 tok/s (19.563 ms/tok)
+[hash] point 6 prompt 7 PSp=1024 : main_x=5f43e2c98a649343 mh_pre=3382b4296eafcb99 scratch0=0000fffcde200000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=7 s=1025)...
+  [margins] 10.00 0.45 5.82 1.24 6.12 4.67  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (129.4 ms)  cpos=1026
+  [margins] 4.77 0.12 3.00 0.88 0.63 1.65  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (135.6 ms)  cpos=1028
+
+[spec] generated 4 tokens over 2 verifies: mean tokens/verify = 2.00 (block=6, max 7)
+[spec] tokens: 26 14 223 19
+[genout] wrote 1025 prompt + 4 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 67.8 ms/tok = 14.75 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 1.08x)
+[stephash] point 6 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 7 : h0(embed)=ee62b5b2f28b0383  h(hc_expand)=98f17d2574890383  hptr=0xfffec0000000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 7 layer  0 ratio   0 : 7ddf4baba9dd8235
+[lhash] point 7 layer  1 ratio   0 : 2f86923fe4062092
+[lhash] point 7 layer  2 ratio   4 : 39e99543e255114b
+[lhash] point 7 layer  3 ratio 128 : a61113e9cc34ec69
+[lhash] point 7 layer  4 ratio   4 : dfa44f6bb3a9341b
+[lhash] point 7 layer  5 ratio 128 : 389b7551d401d693
+[lhash] point 7 layer  6 ratio   4 : 6e7d402afcb8a85a
+[lhash] point 7 layer  7 ratio 128 : fbd513ee6fa5bdbc
+[lhash] point 7 layer  8 ratio   4 : 768543ce50a97643
+[lhash] point 7 layer  9 ratio 128 : e73e60a713fdcabd
+[lhash] point 7 layer 10 ratio   4 : 9062e7358d3786ab
+[lhash] point 7 layer 11 ratio 128 : 3efda06301ab70b3
+[lhash] point 7 layer 12 ratio   4 : 2e714dde67fb5f1c
+[lhash] point 7 layer 13 ratio 128 : 8948580311b6de7a
+[lhash] point 7 layer 14 ratio   4 : f358d62100e5c26b
+[lhash] point 7 layer 15 ratio 128 : e53ea65cf31c18a2
+[lhash] point 7 layer 16 ratio   4 : a0a663fe2038b7f3
+[lhash] point 7 layer 17 ratio 128 : ce3c5ae2578ff878
+[lhash] point 7 layer 18 ratio   4 : 0291870825352ba2
+[lhash] point 7 layer 19 ratio 128 : d1e00b7485f5e135
+[lhash] point 7 layer 20 ratio   4 : 3413bebf04e1037c
+[lhash] point 7 layer 21 ratio 128 : b9abf37cd2b0554f
+[lhash] point 7 layer 22 ratio   4 : 2babc588478301ab
+[lhash] point 7 layer 23 ratio 128 : 7e83a76529c99fa0
+[lhash] point 7 layer 24 ratio   4 : d2c9997e10d8d732
+[lhash] point 7 layer 25 ratio 128 : 990605df787b9ade
+[lhash] point 7 layer 26 ratio   4 : dd233d8d7201ec1b
+[lhash] point 7 layer 27 ratio 128 : b461d1d84223a44c
+[lhash] point 7 layer 28 ratio   4 : dcf7ad854541941b
+[lhash] point 7 layer 29 ratio 128 : 48055df0a429e5a6
+[lhash] point 7 layer 30 ratio   4 : a26c8f1ed2a16fec
+[lhash] point 7 layer 31 ratio 128 : be6d827ea55325c6
+[lhash] point 7 layer 32 ratio   4 : bc4f027687c77c3f
+[lhash] point 7 layer 33 ratio 128 : 4ece8bdfc777c644
+[lhash] point 7 layer 34 ratio   4 : c7a5f88dca9b25bd
+[lhash] point 7 layer 35 ratio 128 : de61288659e8699c
+[lhash] point 7 layer 36 ratio   4 : f0fc8ddc84ccdb44
+[lhash] point 7 layer 37 ratio 128 : 1cd4f18412268288
+[lhash] point 7 layer 38 ratio   4 : 3604856ae41ddae2
+[lhash] point 7 layer 39 ratio 128 : be0156f7f7e7cfae
+[lhash] point 7 layer 40 ratio   4 : d28e2f1ff77f0fc5
+[lhash] point 7 layer 41 ratio 128 : 8a150c318e4da25a
+[lhash] point 7 layer 42 ratio   4 : 1aa126a043d2bf60
+[decode] PREFILL: 2048 positions in 41863.1 ms = 48.9 tok/s (20.441 ms/tok)
+[hash] point 7 prompt 8 PSp=2048 : main_x=689ee55b296b2ab4 mh_pre=0ffb198121a11e2c scratch0=0000fffcde200000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=8 s=2049)...
+  [margins] 0.56 0.45 0.27 0.86 0.45 2.04  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (126.0 ms)  cpos=2050
+  [margins] 0.05 0.72 0.63 1.12 0.20 2.26  K=2
+  verify 2: accepted 0/1 (K=2) + correction -> +1 tokens (132.8 ms)  cpos=2051
+  [margins] 1.79 0.22 1.22 5.43 0.22 1.31  K=2
+  verify 3: accepted 1/1 (K=2) + correction -> +2 tokens (130.6 ms)  cpos=2053
+
+[spec] generated 5 tokens over 3 verifies: mean tokens/verify = 1.67 (block=6, max 7)
+[spec] tokens: 305 3608 5044 17 15721
+[genout] wrote 2049 prompt + 5 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 87.8 ms/tok = 11.39 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 0.83x)
+[stephash] point 7 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 8 : h0(embed)=f969940bedbb0383  h(hc_expand)=2d14368a66650383  hptr=0xfffef1600000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 8 layer  0 ratio   0 : 11a2945c3235438f
+[lhash] point 8 layer  1 ratio   0 : ed3137c5d0a73578
+[lhash] point 8 layer  2 ratio   4 : b36bb7353cc0a54d
+[lhash] point 8 layer  3 ratio 128 : dad8342c574c9142
+[lhash] point 8 layer  4 ratio   4 : 9a7151c2a5df53d9
+[lhash] point 8 layer  5 ratio 128 : d8bb990ea3f7d2b6
+[lhash] point 8 layer  6 ratio   4 : 69513d500dabdca9
+[lhash] point 8 layer  7 ratio 128 : 9e94bd6742bff815
+[lhash] point 8 layer  8 ratio   4 : f7f6ea2722fc7ef5
+[lhash] point 8 layer  9 ratio 128 : e71314ca614df684
+[lhash] point 8 layer 10 ratio   4 : 28d95c2a13e1480d
+[lhash] point 8 layer 11 ratio 128 : 080e8bb41d80bd3b
+[lhash] point 8 layer 12 ratio   4 : 7752ac5cba2821ec
+[lhash] point 8 layer 13 ratio 128 : c61b597954e1227e
+[lhash] point 8 layer 14 ratio   4 : d591dfea68f55695
+[lhash] point 8 layer 15 ratio 128 : cbc79070ccc7b85c
+[lhash] point 8 layer 16 ratio   4 : 6589633ecf4b32b7
+[lhash] point 8 layer 17 ratio 128 : 70f84e52b801a8ff
+[lhash] point 8 layer 18 ratio   4 : 61246f716073cbf3
+[lhash] point 8 layer 19 ratio 128 : b49f7abdd18d68b0
+[lhash] point 8 layer 20 ratio   4 : 2b3237642b1e44e1
+[lhash] point 8 layer 21 ratio 128 : ff0e1812c285dc9b
+[lhash] point 8 layer 22 ratio   4 : 17c9ff3f54c75f28
+[lhash] point 8 layer 23 ratio 128 : 9f7b3510b68f204c
+[lhash] point 8 layer 24 ratio   4 : ce8515bd20d05df5
+[lhash] point 8 layer 25 ratio 128 : 423cd1f707b56682
+[lhash] point 8 layer 26 ratio   4 : 73364d5654b9cbb7
+[lhash] point 8 layer 27 ratio 128 : 158270709489a11a
+[lhash] point 8 layer 28 ratio   4 : 0f9e28ae5aa764ac
+[lhash] point 8 layer 29 ratio 128 : 655ee870d3b57cdd
+[lhash] point 8 layer 30 ratio   4 : bb0773549a405e4d
+[lhash] point 8 layer 31 ratio 128 : 4052ba1100219f1b
+[lhash] point 8 layer 32 ratio   4 : e486eae47de77844
+[lhash] point 8 layer 33 ratio 128 : 4284caeef7352dee
+[lhash] point 8 layer 34 ratio   4 : 61264941b9387130
+[lhash] point 8 layer 35 ratio 128 : d223cc90ee1ae797
+[lhash] point 8 layer 36 ratio   4 : 61860422438946bf
+[lhash] point 8 layer 37 ratio 128 : 611b2d35e76bd32f
+[lhash] point 8 layer 38 ratio   4 : 6f1cdae556186566
+[lhash] point 8 layer 39 ratio 128 : 66da60f319be3d11
+[lhash] point 8 layer 40 ratio   4 : cbf7dfc2222d1677
+[lhash] point 8 layer 41 ratio 128 : ff8805b777335233
+[lhash] point 8 layer 42 ratio   4 : b62775fc5dd8b739
+[decode] PREFILL: 2560 positions in 52734.2 ms = 48.5 tok/s (20.599 ms/tok)
+[hash] point 8 prompt 9 PSp=2560 : main_x=c7cb104cf123dfb6 mh_pre=17102fda10faa51e scratch0=0000fffcde200000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=9 s=2561)...
+  [margins] 0.33 0.32 0.23 0.10 0.09 0.49  K=2
+  verify 1: accepted 0/1 (K=2) + correction -> +1 tokens (128.0 ms)  cpos=2561
+  [margins] 0.42 3.24 6.09 3.50 1.06 0.14  K=5
+  verify 2: accepted 0/4 (K=5) + correction -> +1 tokens (175.0 ms)  cpos=2562
+  [margins] 0.01 2.13 5.17 3.46 2.42 0.38  K=6
+  verify 3: accepted 0/5 (K=6) + correction -> +1 tokens (198.5 ms)  cpos=2563
+  [margins] 3.99 0.61 2.71 2.56 1.41 0.66  K=2
+  verify 4: accepted 1/1 (K=2) + correction -> +2 tokens (138.0 ms)  cpos=2565
+
+[spec] generated 5 tokens over 4 verifies: mean tokens/verify = 1.25 (block=6, max 7)
+[spec] tokens: 2619 96 19 16 20
+[genout] wrote 2561 prompt + 5 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 127.9 ms/tok = 7.82 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 0.57x)
+[stephash] point 8 written to evidence/decode_loop/stephash_L1.txt
+[ihash] point 9 : h0(embed)=530ff752dae94383  h(hc_expand)=3cb0170fcbde0383  hptr=0xfffec0000000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 9 layer  0 ratio   0 : 1b84522c99d90332
+[lhash] point 9 layer  1 ratio   0 : d46d166a2fa43a42
+[lhash] point 9 layer  2 ratio   4 : e1c0b9a75bf21d70
+[lhash] point 9 layer  3 ratio 128 : f6befccb6dd28fd1
+[lhash] point 9 layer  4 ratio   4 : fdff68147fca5462
+[lhash] point 9 layer  5 ratio 128 : a60a78c649a44534
+[lhash] point 9 layer  6 ratio   4 : cca2738f3a330d9f
+[lhash] point 9 layer  7 ratio 128 : 0eee67c58ba57adf
+[lhash] point 9 layer  8 ratio   4 : 008f77a665e7fba3
+[lhash] point 9 layer  9 ratio 128 : 04deee2b457643ea
+[lhash] point 9 layer 10 ratio   4 : 68ec6259530ce3c1
+[lhash] point 9 layer 11 ratio 128 : c0847f8de4dc2843
+[lhash] point 9 layer 12 ratio   4 : fecfa0d2d860d150
+[lhash] point 9 layer 13 ratio 128 : 093b0d7348b5d948
+[lhash] point 9 layer 14 ratio   4 : f0be3c812e0cd638
+[lhash] point 9 layer 15 ratio 128 : e403fc1dfc7846d2
+[lhash] point 9 layer 16 ratio   4 : c2f7fa1d16b87946
+[lhash] point 9 layer 17 ratio 128 : 3c43cb92d0de6767
+[lhash] point 9 layer 18 ratio   4 : cc86979173cb5472
+[lhash] point 9 layer 19 ratio 128 : 18f799e7cf9ca103
+[lhash] point 9 layer 20 ratio   4 : 1fb1b3ff6da33775
+[lhash] point 9 layer 21 ratio 128 : 2de826a977e1b11f
+[lhash] point 9 layer 22 ratio   4 : 5941bef68cf71dd1
+[lhash] point 9 layer 23 ratio 128 : 96724a968a9ff0fe
+[lhash] point 9 layer 24 ratio   4 : 9f1519fbe2b27603
+[lhash] point 9 layer 25 ratio 128 : 0a3744412a56d56b
+[lhash] point 9 layer 26 ratio   4 : 076b04c9070cf45a
+[lhash] point 9 layer 27 ratio 128 : dee94d6d8706a43e
+[lhash] point 9 layer 28 ratio   4 : a6fdf2c4ebd33194
+[lhash] point 9 layer 29 ratio 128 : b331752311826dab
+[lhash] point 9 layer 30 ratio   4 : e949849057db6088
+[lhash] point 9 layer 31 ratio 128 : c70b29a3fcd1cbdf
+[lhash] point 9 layer 32 ratio   4 : bfa4bf935f0278de
+[lhash] point 9 layer 33 ratio 128 : eace4a3903c42555
+[lhash] point 9 layer 34 ratio   4 : 1d6cbfafc10ace02
+[lhash] point 9 layer 35 ratio 128 : cd221488aeeaecfc
+[lhash] point 9 layer 36 ratio   4 : b4bcaf5c1b305eee
+[lhash] point 9 layer 37 ratio 128 : ccf7e4c3d6a6ef5f
+[lhash] point 9 layer 38 ratio   4 : c44d3a2db8f14fd0
+[lhash] point 9 layer 39 ratio 128 : ea79fccf561256e1
+[lhash] point 9 layer 40 ratio   4 : 6219ac4e6f20a68f
+[lhash] point 9 layer 41 ratio 128 : def33b29f8f97f70
+[lhash] point 9 layer 42 ratio   4 : c9456a1b70ef7ca0
+[decode] PREFILL: 3071 positions in 63644.1 ms = 48.3 tok/s (20.724 ms/tok)
+[hash] point 9 prompt 10 PSp=3071 : main_x=0b64f8222a5b8935 mh_pre=3155f5b21ec3331b scratch0=0000fffcde200000
+[spec] decoding 4 tokens (block=6, draft passes=1, adaptK=1.50, prompt=10 s=3072)...
+  [margins] 0.74 7.68 0.51 0.72 7.15 0.11  K=3
+  verify 1: accepted 0/2 (K=3) + correction -> +1 tokens (193.2 ms)  cpos=3072
+  [margins] 0.17 0.94 9.69 0.63 1.50 8.12  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (131.1 ms)  cpos=3074
+  [margins] 9.92 0.45 0.08 1.35 0.09 0.52  K=2
+  verify 3: accepted 1/1 (K=2) + correction -> +2 tokens (139.3 ms)  cpos=3076
+
+[spec] generated 5 tokens over 3 verifies: mean tokens/verify = 1.67 (block=6, max 7)
+[spec] tokens: 49676 418 313 15483 29
+[genout] wrote 3072 prompt + 5 generated ids to evidence/decode_loop/genout_1p9_L1.txt
+[spec] SPEC-DECODE: 67.6 ms/tok = 14.80 tok/s  (vs base M=1 73.1 ms/tok = 13.68 tok/s -> 1.08x)
+[stephash] point 9 written to evidence/decode_loop/stephash_L1.txt
+
+[blksweep]  BLK passes adaptK->eff prompt | mean tok/verify | ms/tok | tok/s | vs base 13.68 tok/s
+[blksweep]    6      1   1.50   1.50      1 |            2.50 |   59.0 | 16.96 | 1.24x
+[blksweep]    6      1   1.50   1.50      2 |            1.00 |  119.4 |  8.38 | 0.61x
+[blksweep]    6      1   1.50   1.50      3 |            1.33 |   79.2 | 12.63 | 0.92x
+[blksweep]    6      1   1.50   1.50      4 |            2.50 |   44.7 | 22.37 | 1.64x
+[blksweep]    6      1   1.50   1.50      5 |            3.00 |   50.1 | 19.96 | 1.46x
+[blksweep]    6      1   1.50   1.50      6 |            1.67 |   85.8 | 11.66 | 0.85x
+[blksweep]    6      1   1.50   1.50      7 |            2.00 |   67.8 | 14.75 | 1.08x
+[blksweep]    6      1   1.50   1.50      8 |            1.67 |   87.8 | 11.39 | 0.83x
+[blksweep]    6      1   1.50   1.50      9 |            1.25 |  127.9 |  7.82 | 0.57x
+[blksweep]    6      1   1.50   1.50     10 |            1.67 |   67.6 | 14.80 | 1.08x
+[decode] mem 118.9/122.8 GiB

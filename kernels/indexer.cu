@@ -328,7 +328,14 @@ void index_score(float* score, const float* q, const float* kv, const float* wei
 // vectors from 8/8 to 5/8", read as evidence of an uninitialised read. tests/gate_scratch_init then
 // tested the thing directly — same weights, same input, scratch filled with 0x00 vs 0xFF vs 0x3C,
 // arena included — and compressed_attn_forward is bitwise IDENTICAL at every length 1..29. The
-// prefill chain does not read uninitialised scratch. The 8/8 -> 5/8 was a 5-cycle in the engine
+// prefill chain does not read uninitialised scratch AT THOSE LENGTHS, and that qualifier is
+// load-bearing: ladder 1.9 measured this function's run-to-run reproducibility as a function of
+// prefill length and found it byte-identical to 160 positions and NONDETERMINISTIC from 192 up, to
+// 3071. The gate's range stops six times short of where the defect lives, so it is evidence about
+// 1..29 and nothing else. 1.9 also re-ran the 128..256 ladder with DSV4_ARENA_ZERO=1 on both arms
+// (unchanged verdict) and four times inside ONE process (four different answers), so the residual
+// is a RACE in this file's call graph, not uninitialised memory. See DECODE_LADDER.md item 1.10 and
+// wiki/measurement-and-traps.md §25. The 8/8 -> 5/8 was a 5-cycle in the engine
 // (Finding 61) sampled 8 times, not a change caused by zeroing: with the sharper instrument the
 // engine produces the SAME hash sequence zeroed and unzeroed.
 //

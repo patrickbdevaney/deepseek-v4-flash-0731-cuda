@@ -1,0 +1,139 @@
+[parse] DSV4_PROMPTS_FILE evidence/decode_loop/mainkv_prompts.txt -> 2 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=16 seqmax=3151
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 113.4/122.8 GiB
+[decode] prefill 5 positions...
+[decode] PREFILL: 5 positions in 212.2 ms = 23.6 tok/s (42.436 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (71.8 ms warmup)
+  step 1 pos 6 -> token 16  (70.4 ms)
+  step 2 pos 7 -> token 455  (77.1 ms)
+  step 3 pos 8 -> token 6102  (69.8 ms)
+  step 4 pos 9 -> token 294  (71.6 ms)
+  step 5 pos 10 -> token 16603  (70.7 ms)
+  step 6 pos 11 -> token 344  (78.4 ms)
+  step 7 pos 12 -> token 29168  (70.5 ms)
+  step 8 pos 13 -> token 16  (70.8 ms)
+  step 9 pos 14 -> token 455  (70.3 ms)
+  step 10 pos 15 -> token 6102  (78.0 ms)
+  step 11 pos 16 -> token 294  (70.2 ms)
+  step 12 pos 17 -> token 14251  (70.3 ms)
+  step 13 pos 18 -> token 344  (71.2 ms)
+  step 14 pos 19 -> token 16235  (77.9 ms)
+  step 15 pos 20 -> token 16  (71.2 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 344 16235 16
+[decode] WARM decode: 72.6 ms/tok = 13.78 tok/s  (M=1 steady state, 15-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 126.1 ms (= 25.2 ms/tok if all accepted vs 72.6 M=1 -> 2.88x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 6 6
+[spec] head built. mem 120.4/122.8 GiB
+[ihash] point 0 : h0(embed)=54082a4a9b35c383  h(hc_expand)=8bb3648358b80383  hptr=0xfffef1600000  wq_a[0..1MB]=7fb713f4d96b9386
+[lhash] point 0 layer  0 ratio   0 : 30577446801a9e3a
+[lhash] point 0 layer  1 ratio   0 : e79db1e6be5bc7c2
+[lhash] point 0 layer  2 ratio   4 : 47e2c8427a2c5348
+[lhash] point 0 layer  3 ratio 128 : 112c79c21f0f1e6d
+[lhash] point 0 layer  4 ratio   4 : f1aee05ba44f6950
+[lhash] point 0 layer  5 ratio 128 : a74ad290b3cabe5f
+[lhash] point 0 layer  6 ratio   4 : 471fba876650466c
+[lhash] point 0 layer  7 ratio 128 : 873552d8d1cc9185
+[lhash] point 0 layer  8 ratio   4 : 07ab410e7c60a3ee
+[lhash] point 0 layer  9 ratio 128 : 0b9fb93ba3d6b16f
+[lhash] point 0 layer 10 ratio   4 : beebad5e1ddb78e1
+[lhash] point 0 layer 11 ratio 128 : cd7e33222dc8e264
+[lhash] point 0 layer 12 ratio   4 : cc5579ae206e1250
+[lhash] point 0 layer 13 ratio 128 : dbd08c946266ddd8
+[lhash] point 0 layer 14 ratio   4 : 6599a5d23659cc4e
+[lhash] point 0 layer 15 ratio 128 : 56cdad1289d8819e
+[lhash] point 0 layer 16 ratio   4 : 5850cdcbd64b5656
+[lhash] point 0 layer 17 ratio 128 : 02df3f8b627c161b
+[lhash] point 0 layer 18 ratio   4 : 953ecb40f2ab62a6
+[lhash] point 0 layer 19 ratio 128 : a02838469207f35b
+[lhash] point 0 layer 20 ratio   4 : b7907a4c7a558146
+[lhash] point 0 layer 21 ratio 128 : a9126d478753b18b
+[lhash] point 0 layer 22 ratio   4 : e950740a5cf68996
+[lhash] point 0 layer 23 ratio 128 : 3064786d06437aec
+[lhash] point 0 layer 24 ratio   4 : 05b527dd5fb6a6ed
+[lhash] point 0 layer 25 ratio 128 : 10f6821c5c8159be
+[lhash] point 0 layer 26 ratio   4 : 94a05f6246611b12
+[lhash] point 0 layer 27 ratio 128 : bb5079700a5fb73a
+[lhash] point 0 layer 28 ratio   4 : 52cf599fea5fb500
+[lhash] point 0 layer 29 ratio 128 : 4e02c36226f467ca
+[lhash] point 0 layer 30 ratio   4 : 986689ec2cbd2d51
+[lhash] point 0 layer 31 ratio 128 : f2c0b23893930910
+[lhash] point 0 layer 32 ratio   4 : 667d48da96f1d822
+[lhash] point 0 layer 33 ratio 128 : cbdbf9dc379b2a32
+[lhash] point 0 layer 34 ratio   4 : d1059b3d2a290055
+[lhash] point 0 layer 35 ratio 128 : 60aae14be25427e2
+[lhash] point 0 layer 36 ratio   4 : 2d4f8343e2267d6d
+[lhash] point 0 layer 37 ratio 128 : c544239658fc48dc
+[lhash] point 0 layer 38 ratio   4 : fce280bfd848f0e0
+[lhash] point 0 layer 39 ratio 128 : bce137255b1eff1e
+[lhash] point 0 layer 40 ratio   4 : 70ad0ee7db1e0e63
+[lhash] point 0 layer 41 ratio 128 : 64257fb5bd2cf2fb
+[lhash] point 0 layer 42 ratio   4 : b38d7df9cf09c4e2
+[decode] PREFILL: 5 positions in 153.7 ms = 32.5 tok/s (30.732 ms/tok)
+[hash] point 0 prompt 0 PSp=5 : main_x=6b58850aef5d9a50 mh_pre=28cc96070743fda1 scratch0=0000fffcddbf4000
+[spec] decoding 64 tokens (block=6, draft passes=1, adaptK=1.50, prompt=0 s=6)...
+[arena] first draft: draft footprint 214.32 MB, global hwm 214.32 MB / cap 6656.00 MB (3.2%), draft path = ARENA
+  [margins] 3.74 0.25 0.84 1.00 0.17 5.66  K=2
+  verify 1: accepted 1/1 (K=2) + correction -> +2 tokens (111.4 ms)  cpos=7
+  [margins] 1.05 0.20 2.96 0.88 0.28 0.65  K=2
+  verify 2: accepted 1/1 (K=2) + correction -> +2 tokens (122.5 ms)  cpos=9
+  [margins] 5.70 4.24 6.70 0.77 3.17 2.22  K=4
+  verify 3: accepted 1/3 (K=4) + correction -> +2 tokens (138.9 ms)  cpos=11
+  [margins] 7.69 2.39 3.60 3.04 3.60 0.95  K=6
+  verify 4: accepted 1/5 (K=6) + correction -> +2 tokens (177.7 ms)  cpos=13
+  [margins] 2.65 3.67 5.26 0.24 1.66 4.33  K=4
+  verify 5: accepted 3/3 (K=4) + correction -> +4 tokens (139.6 ms)  cpos=17
+  [margins] 0.20 4.39 0.20 3.09 3.99 5.63  K=3
+  verify 6: accepted 2/2 (K=3) + correction -> +3 tokens (127.5 ms)  cpos=20
+  [margins] 2.24 3.68 4.74 1.28 0.31 3.22  K=4
+  verify 7: accepted 3/3 (K=4) + correction -> +4 tokens (141.4 ms)  cpos=24
+  [margins] 0.32 6.82 0.04 4.17 4.63 6.04  K=3
+  verify 8: accepted 0/2 (K=3) + correction -> +1 tokens (122.6 ms)  cpos=25
+  [margins] 9.30 2.42 3.03 4.30 6.69 2.91  K=7
+  verify 9: accepted 1/6 (K=7) + correction -> +2 tokens (192.4 ms)  cpos=27
+  [margins] 2.93 4.26 7.04 1.83 1.39 5.00  K=5
+  verify 10: accepted 4/4 (K=5) + correction -> +5 tokens (163.3 ms)  cpos=32
+  [margins] 10.69 1.30 3.21 3.77 5.76 1.59  K=2
+  verify 11: accepted 1/1 (K=2) + correction -> +2 tokens (110.8 ms)  cpos=34
+  [margins] 1.82 4.67 7.91 1.32 0.72 3.62  K=4
+  verify 12: accepted 3/3 (K=4) + correction -> +4 tokens (143.6 ms)  cpos=38
+  [margins] 0.08 8.52 0.61 5.10 5.90 7.33  K=3
+  verify 13: accepted 0/2 (K=3) + correction -> +1 tokens (129.7 ms)  cpos=39
+  [margins] 10.47 2.25 3.84 6.40 6.26 3.23  K=7
+  verify 14: accepted 1/6 (K=7) + correction -> +2 tokens (192.9 ms)  cpos=41
+  [margins] 2.86 4.47 7.23 0.33 1.46 4.66  K=4
+  verify 15: accepted 3/3 (K=4) + correction -> +4 tokens (143.3 ms)  cpos=45
+  [margins] 1.74 0.79 7.14 0.86 6.91 6.65  K=2
+  verify 16: accepted 1/1 (K=2) + correction -> +2 tokens (111.1 ms)  cpos=47
+  [margins] 1.48 9.68 0.33 0.89 3.99 6.79  K=3
+  verify 17: accepted 2/2 (K=3) + correction -> +3 tokens (128.9 ms)  cpos=50
+  [margins] 3.64 5.82 8.29 1.82 1.30 2.09  K=5
+  verify 18: accepted 4/4 (K=5) + correction -> +5 tokens (158.0 ms)  cpos=55
+  [margins] 0.51 3.35 2.92 2.03 5.76 6.07  K=7
+  verify 19: accepted 0/6 (K=7) + correction -> +1 tokens (195.0 ms)  cpos=56
+  [margins] 10.11 0.38 5.41 8.25 5.27 2.58  K=2
+  verify 20: accepted 1/1 (K=2) + correction -> +2 tokens (112.3 ms)  cpos=58
+  [margins] 5.95 4.95 6.60 8.40 0.70 4.73  K=5
+  verify 21: accepted 4/4 (K=5) + correction -> +5 tokens (156.7 ms)  cpos=63
+  [margins] 0.07 9.29 0.25 1.91 7.07 6.10  K=3
+  verify 22: accepted 2/2 (K=3) + correction -> +3 tokens (130.4 ms)  cpos=66
+  [margins] 5.01 6.80 7.81 2.63 0.42 0.05  K=5
+  verify 23: accepted 4/4 (K=5) + correction -> +5 tokens (158.2 ms)  cpos=71
+
+[spec] generated 66 tokens over 23 verifies: mean tokens/verify = 2.87 (block=6, max 7)
+[spec] tokens: 11111 16 455 6102 294 16603 344 29168 16 455 6102 294 14251 344 16235 16 455 6102 294 29585 344 76405 16 455 6102 294 25062 344 40977 16 455 6102 294 10322 344 17575 16 455 6102 294
+[genout] wrote 6 prompt + 66 generated ids to evidence/decode_loop/genout_1p9_H2.txt
+[spec] LOSSLESS GATE: first 16 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 49.9 ms/tok = 20.02 tok/s  (vs base M=1 72.6 ms/tok = 13.78 tok/s -> 1.45x)
+[stephash] point 0 written to evidence/decode_loop/stephash_H2.txt
+[ihash] point 1 : h0(embed)=530ff752dae94383  h(hc_expand)=3cb0170fcbde0383  hptr=0xfffec0000000  wq_a[0..1MB]=7fb713f4d96b9386

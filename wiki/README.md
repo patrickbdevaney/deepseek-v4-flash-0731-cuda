@@ -27,6 +27,7 @@ historical measurement; the second is where agentic work actually runs.
 | base AR decode | **13.83 tok/s** *(pinned; 11.3 governed — see below)* | 14.33–15.98 | 97 % |
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
+| `build/decode` prefill reproducibility | **byte-identical to 160 positions; racing at 192+** | byte-identical at every length | ladder 1.9; server path unaffected |
 
 | the frozen 8-prompt suite | shipped head | `s3` (live since 2.2) | |
 |---|---|---|---|
@@ -130,6 +131,17 @@ where a clean fit with a tight SE meant something other than it looked like.
 > established that **the engine does not reproduce itself run-to-run at context**, which makes the
 > ladder's "byte-identical token ids" invariant untestable as written at long context; see
 > [`measurement-and-traps.md` §12](measurement-and-traps.md).
+>
+> **Bounded 2026-08-20 by ladder 1.9, and "at long context" turned out to be the wrong axis.** The
+> mechanism is `build/decode`'s **prefill**, inside the compressed layers, and it has a measured
+> threshold: the whole 43-layer prefill is byte-identical run-to-run at **160 prefill positions and
+> below** (430 layer hashes, zero differences) and nondeterministic at **192 and above**, to 3,071.
+> Four repeats of the identical point inside ONE process disagree with each other, so it is a race,
+> not per-process state; the arena is exonerated at those lengths too.
+> **`dsv4-server` is not affected by this mechanism** — it prefills in `EXT_CHUNK` = 64-row chunks
+> through a different function — which is why 1.5's 16-leg server A/B was byte-identical at ctx
+> 12,410 and is not a contradiction. [`measurement-and-traps.md` §25–§27](measurement-and-traps.md),
+> [`negative-results.md` §4f](negative-results.md).
 >
 > **Update 2026-08-20, same day:** the second of the two retired-on-a-135×-wrong-number levers is
 > also spent — the indexer's top-512 is a single-CTA radix select rather than 512 sequential argmax

@@ -1,0 +1,75 @@
+[1.9] 2026-08-20T12:08:52-04:00 binary: decode 2026-08-20T12:00:44-04:00  sweep=6:1:1.50:1,6:1:1.50:2,6:1:1.50:3,6:1:1.50:4,6:1:1.50:5,6:1:1.50:6,6:1:1.50:7,6:1:1.50:8,6:1:1.50:9,6:1:1.50:10 NGEN=4 level=1
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/stephash_L1.log
+[run_model] pid 622340   watch: tail -f evidence/decode_loop/stephash_L1.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_L1.memguard.log
+[1.9] 2026-08-20T12:13:43-04:00 L1: 28 stephash lines, 10 genout lines
+[run_model] 104 GiB available, below 105 — reclaiming page cache and re-checking
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/stephash_L2.log
+[run_model] pid 632389   watch: tail -f evidence/decode_loop/stephash_L2.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_L2.memguard.log
+[1.9] 2026-08-20T12:18:27-04:00 L2: 26 stephash lines, 10 genout lines
+[1.9] 2026-08-20T12:18:27-04:00 === token-id level (what 1.0 saw) ===
+evidence/decode_loop/genout_1p9_L1.txt: 10 point(s)   evidence/decode_loop/genout_1p9_L2.txt: 10 point(s)
+  point 0: IDENTICAL — 22 ids (prompt+generated) match at every position
+  point 1: IDENTICAL — 37 ids (prompt+generated) match at every position
+  point 2: IDENTICAL — 69 ids (prompt+generated) match at every position
+  point 3: IDENTICAL — 134 ids (prompt+generated) match at every position
+  point 4: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 5: LENGTH MISMATCH — 518 vs 517 ids, common prefix of 517 identical
+  point 6: IDENTICAL — 1029 ids (prompt+generated) match at every position
+  point 7: LENGTH MISMATCH — 2054 vs 2053 ids, common prefix of 2053 identical
+  point 8: DIVERGES at id index 2561 of 2566/2565: 2619 vs 223
+            context: ...[36, 16, 3841, 344] -> [2619, 96, 19, 16]
+                     ...[36, 16, 3841, 344] -> [223, 5198, 1127, 1977]
+  point 9: IDENTICAL — 3077 ids (prompt+generated) match at every position
+
+token-id identity: 7/10 points byte-identical, 3 differ
+[1.9] 2026-08-20T12:18:27-04:00 === per-step field level (what this probe adds) ===
+evidence/decode_loop/stephash_L1.txt: 28 steps   evidence/decode_loop/stephash_L2.txt: 26 steps
+  NOT MEASURED in these files (zero on both sides, excluded): mkv,mx
+  -> re-run with DSV4_STEPHASH_LVL=2 before drawing any conclusion about them
+  p0: IDENTICAL over 2 verifies, every field
+  p1: IDENTICAL over 4 verifies, every field
+  p2: IDENTICAL over 3 verifies, every field
+  p3: IDENTICAL over 2 verifies, every field
+  p4: DIVERGES at verify v0 (index 0 of 2), cpos=256 ctx=256
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=b6a209d5537af2f3  B=dc1fb06211f78c63   <-- differs
+          lg     A=15b170397c04f160  B=319dabe3e9dd632a   <-- differs
+  p5: DIVERGES at verify v0 (index 0 of 2), cpos=512 ctx=512
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=364e5856ee0546fd  B=bee2bc6855e195f9   <-- differs
+          lg     A=5e47c3f760a610eb  B=5fef9cb1061c0638   <-- differs
+  p6: DIVERGES at verify v0 (index 0 of 2), cpos=1024 ctx=1024
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=2ad2d2e3169661c3  B=ff24c102caf04773   <-- differs
+          lg     A=c9027f9849383574  B=b534e646e4afc304   <-- differs
+  p7: DIVERGES at verify v0 (index 0 of 2), cpos=2048 ctx=2048
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=c9845c8bb3c62708  B=64e71fef77e675e8   <-- differs
+          lg     A=cd086d2a938a4ae8  B=6570ad9469584ae6   <-- differs
+  p8: DIVERGES at verify v0 (index 0 of 4), cpos=2560 ctx=2560
+        first differing field: draft   (all differing here: draft,lg,corr)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=300690cb8a19c7bf  B=1a97d566bdf314ad   <-- differs
+          lg     A=76c28e5393ca9f24  B=1eb26aa573aff597   <-- differs
+          corr   A=2619  B=223   <-- differs
+  p9: DIVERGES at verify v0 (index 0 of 3), cpos=3071 ctx=3071
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=b7353c39406cffd0  B=f973f87938fd9dbc   <-- differs
+          lg     A=2b3b92dca9cfcf71  B=a45c76b687de4b3c   <-- differs
+VERDICT: the two runs DIVERGE
+[1.9] 2026-08-20T12:18:27-04:00 done.

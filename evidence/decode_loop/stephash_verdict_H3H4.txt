@@ -1,0 +1,8 @@
+evidence/decode_loop/stephash_H3.txt: 55 steps   evidence/decode_loop/stephash_H4.txt: 56 steps
+  p0: IDENTICAL over 23 verifies, every field
+  p1: DIVERGES at verify v0 (index 0 of 32), cpos=3071 ctx=3071
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+          draft  A=746eee1810257d32  B=dfbe7dd3c33dcf3c   <-- differs
+          lg     A=fe228a816b0e34fa  B=73ed09645caadd06   <-- differs
+VERDICT: the two runs DIVERGE

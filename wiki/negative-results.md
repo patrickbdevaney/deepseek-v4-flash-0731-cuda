@@ -239,6 +239,34 @@ clock (3.1). The check that would have caught 3.1 costs one sampler and no model
 same check §16 asks for: **before spending an iteration closing a gap, measure the gap under the
 conditions the workload actually runs in.**
 
+## 4f. Two hypotheses killed on the way to localising the prefill race (ladder 1.9, 2026-08-20)
+
+Neither of these was a performance lever; both were *causes* proposed for the engine's
+nondeterminism, and both are now dead at the lengths where the defect actually lives. Recorded here
+because a cause eliminated with a measurement is worth exactly as much as a lever retired with one,
+and Finding 60/61 spent four hypotheses reaching a conclusion that was bounded to lengths 1–29.
+
+**Uninitialised arena scratch — dead, again, and this time in the right regime.** Finding 61
+exonerated the arena with `DSV4_ARENA_ZERO=1` against the point-to-point 5-cycle. 1.9 re-ran the
+eight-point length ladder with `DSV4_ARENA_ZERO=1` **on both arms** and got the identical verdict:
+clean at prefill 128–160, divergent at 192 and 256 (`evidence/decode_loop/lhash_Z.txt` against
+`lhash_W.txt`). Zeroing the arena to its high-water mark on every reset changes nothing. The same
+run also killed the weaker form of the hypothesis: with the arena zeroed, the *first differing
+layer* moved (14 and 2, against 2 and 10 unzeroed), which is not what a deterministic wrong branch
+does.
+
+**"It is per-process state" — dead.** Every result up to this point compared two *processes*, which
+leaves address layout and whatever a fresh `cudaMalloc` happens to contain as live explanations.
+The R protocol runs the identical sweep point **four times inside one process**: at prefill 192 the
+four prefills disagree with each other, first differing layer 2 / 4 / 12 / 28 across the pairs, and
+the pattern is not the same in the second process either
+(`evidence/decode_loop/lhash_R.txt`). Same process, same addresses, same buffer contents, four
+different answers — it is a race or an order-dependent reduction, not state.
+
+What survives is stated in the ladder entry: the divergence is confined to `compress_ratio != 0`
+layers, so the shortlist is `compressor_forward`, `indexer_forward` and `sparse_attn` over the
+combined index list, and nothing else in `compressed_attn_forward`.
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

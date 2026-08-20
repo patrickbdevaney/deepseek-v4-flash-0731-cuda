@@ -75,6 +75,12 @@ rule, and also its limit: **the remaining items are smaller and none of them nee
 instrument.** `i:topk`, `i:score` and `cattn:sparse` are already attributed with error bars. Build
 them. The one open instrument-shaped item, 1.9, is deliberately ranked below both kernel changes.
 
+**1.9 RAN ON 2026-08-20 AND SHIPPED NO KERNEL, so rule 5 is now live: the next iteration takes the
+highest-expected-value kernel item even if it is less certain.** It was worth its slot -- it turned
+"the engine stops reproducing itself" into one function, one length threshold and a race, and it
+killed two standing hypotheses -- but it is the fifth instrument in ten items and the engine has not
+gotten faster since 1.5.
+
 So, in order:
 
 1. **Prefer an item that changes a kernel over an item that measures one.** If both are available,
@@ -125,6 +131,17 @@ So, in order:
    against the untouched reference, in situ, on every call; that is strictly stronger, because it
    proves the whole intermediate identical rather than one downstream consumer's output. See
    `wiki/measurement-and-traps.md` §12 and item 1.9.
+
+   **BOUNDED 2026-08-20 by 1.9, which replaces "at context" with a measured number.** The mechanism
+   is `build/decode`'s PREFILL, inside the compressed layers, and it has a threshold: the whole
+   43-layer prefill is byte-identical run-to-run at **160 prefill positions and below** (430 layer
+   hashes, ten point-comparisons, zero differences) and nondeterministic at **192 and above**, all
+   the way to 3,071. So the token-id invariant is a VALID gate for any comparison whose prompts
+   prefill 160 positions or fewer — including the canonical 6-id gate prompt — and is reliably
+   invalid above ~192. `dsv4-server` prefills in `EXT_CHUNK` = 64-row chunks through a different
+   function and does not reach the threshold at all, which is why 1.5's 16-leg server A/B was
+   byte-identical at ctx 12,410; a bit-exactness result on one binary's prefill does not transfer to
+   the other. `wiki/measurement-and-traps.md` §25-§27.
 2. **tau is reported in every A/B.** A byte-identical token sequence can still collapse acceptance
    3.12 -> 1.00 (`LOOP_LOG`), because acceptance is an exact draft/target comparison. Throughput
    without tau is not a measurement.
@@ -893,7 +910,7 @@ So, in order:
       `tests/gate_compressed_decode.cu`, `tests/gate_indexer_graph.cu`,
       `tests/gate_compressed_graph.cu`.
 
-- [ ] **1.9** **Find out why the engine stops reproducing itself part-way through a long run.**
+- [x] **1.9** **Find out why the engine stops reproducing itself part-way through a long run.**
       **Opened by 1.0, 2026-08-20, and it is a correctness item before it is a performance one.**
       **RANKED HERE, BELOW 1.2 AND 1.5, DELIBERATELY.** It is the most interesting thing on this
       page and it is still not the next thing to build: the ladder has spent four of its first six
@@ -941,6 +958,125 @@ So, in order:
       **Why it matters beyond tidiness:** it disables the ladder's primary correctness invariant for
       every remaining item, forcing each onto buffer-memcmp gates; and if a reduction really is
       order-nondeterministic, `tau` is being measured against a moving target.
+
+      ---
+
+      **ANSWERED, 2026-08-20, and almost every word of the question above was wrong.** It is not
+      "part-way through a long run", it is not the decode loop, it is not accumulated drift, and it
+      is not per-process state. **`build/decode`'s PREFILL is nondeterministic inside the compressed
+      (`compress_ratio != 0`) layers, for any prefill of about 192 positions or more, run-to-run AND
+      repeat-to-repeat inside one process.** Everything downstream is an autoregressive consequence
+      of that. **NO KERNEL CHANGED THIS ITERATION** — this is a diagnosis, and rule 5 applies to the
+      next one: if the following iteration also ships no kernel, say so at the top of its entry and
+      take the highest-expected-value kernel item regardless of certainty.
+
+      **1. IT IS NOT THE DECODE LOOP.** `DSV4_STEPHASH=<file>` (new, `src/decode.cu`, default off)
+      writes one line per verify carrying that step's whole causal chain in dataflow order —
+      `mkv -> mx -> din -> draft -> lg -> acc/corr` — so two runs `diff` to the first differing
+      FIELD and the field names the link. Run on **exactly** 1.0's divergent arm (same prompts file,
+      same sweep, NDEC 16, NGEN 256, `DSV4_MAINKV_CACHE=0` on both sides): point 0 (ctx 5) is
+      identical at every field of **all 72 verifies**; points 1 (ctx 3,071) and 2 (ctx 1,023) diverge
+      at **verify 0**, with `mkv` and `mx` — the draft's two persistent inputs, both pure functions
+      of the prefill — already different **before the first draft ran**.
+      `evidence/decode_loop/stephash_verdict_AB.txt`.
+
+      **2. IT IS THE FIRST COMPRESSED LAYER OF THE PREFILL.** `DSV4_HASH=2` already hashed the
+      hidden state after every one of the 43 prefill layers; it had only ever been read
+      point-to-point (Finding 61), never run-to-run, and its byte-wise FNV was too slow to point at
+      real context (~17e9 rounds per point). Made word-wise and chunked here. Two runs, PSp 5 and
+      PSp 3,071: at 5, **43/43 layers byte-identical**; at 3,071, layers 0 and 1 — both `ratio 0`,
+      pure sliding — are **byte-identical**, and layer **2**, the first `ratio 4` layer, is the first
+      to differ. `lhash_H.txt`, `tools/lhash_compare.py`.
+
+      **3. THE THRESHOLD IS A PREFILL LENGTH BETWEEN 160 AND 192, AND IT IS SHARP.** Two length
+      ladders, two runs each, 43 layers hashed per point:
+
+      | prefill positions | 16 | 32 | 64 | 128 | 129 | 132 | 136 | 144 | 160 | 192 | 256 | 512 | 1024 | 2048 | 2560 | 3071 |
+      |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+      | layers differing, run to run | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **41** | **41/33** | **41** | **41** | **41** | **41** | **41** |
+
+      Ten point-comparisons at or below 160 are clean — **430 layer hashes, zero differences** — and
+      every point at 192 and above diverges. `lhash_L.txt`, `lhash_W.txt`. The boundary is not
+      `WINDOW` (128): 129, 132, 136, 144 and 160 are all above the window and all clean.
+
+      **4. IT IS A RACE, NOT STATE — AND THAT COST TWO HYPOTHESES.** `DSV4_ARENA_ZERO=1` on **both**
+      arms of the 128–256 ladder reproduces the identical verdict (`lhash_Z.txt`), so the arena is
+      dead at the lengths where the defect lives and not merely at Finding 61's. Then the decisive
+      one: run the **identical sweep point four times inside ONE process**. At PSp 192 the four
+      prefills disagree **with each other** — first differing layer 2 / 4 / 12 / 28 across the
+      pairs, and a different pattern in a second process (`lhash_R_within.txt`, and
+      `lhash_R.txt` for the cross-run half). Same process, same
+      addresses, same buffer contents, four different answers. Finding 61's "deterministic 5-cycle"
+      does not survive at these lengths; whatever it was measuring at PSp≈5 is not this.
+
+      **5. WHAT IS EXONERATED, AT THE LENGTHS THAT MATTER.** Layers 0 and 1 are `ratio 0` and are
+      byte-identical in **every** comparison of all six experiments, at every length up to 3,071.
+      They run `k_embed`, `k_hc_expand`, `hc_pre`/`hc_post`, `rmsnorm`, `mla_cache_kv`,
+      `mla_forward` and `moe_forward` — including the MoE's `atomicAdd` counting-sort grouping and
+      its `k_scatter_ts`/`k_reduce_ts` combine, the family the paragraph above nominated first. All
+      clear. **The entire residue is `compressed_attn_forward`**: `compressor_forward`,
+      `indexer_forward` (`index_score` -> `k_causal_mask` -> `k_topk_offset*`), and `sparse_attn`
+      over the combined index list. Every "first differing layer" recorded in any of the six
+      experiments has `ratio 4`; not one has `ratio 0`.
+
+      **6. WHY THE SERVER LOOKED CLEAN AND IS NOT A CONTRADICTION.** 1.5's 16 legs at ctx
+      1,656–12,410 were byte-identical across two server starts. They are different code:
+      `build/decode` prefills through `cblock_prefill_cache` -> `kernels/compressed_attn.cu` in ONE
+      call as wide as the prompt, while `Engine::Impl::prefill_full` prefills through
+      `cblock_verify_step` -> `kernels/compressed_decode.cu` in **`EXT_CHUNK` = 64**-row chunks and
+      therefore never issues a compressed prefill call wide enough to reach the threshold. That
+      predicts both observations. It also means **no bit-exactness result on one binary's prefill
+      transfers to the other**, which nothing in this repo said before.
+      `wiki/measurement-and-traps.md` §27.
+
+      **7. WHY EVERY GATE MISSED IT.** `tests/gate_scratch_init` proved `compressed_attn_forward`
+      poison-independent **at every length 1..29**, and Finding 61 quoted that as the retraction
+      that exonerated the prefill chain — a sentence still carried verbatim in the comments of
+      `compressed_attn.cu` and `indexer.cu`. The defect starts between 160 and 192. The gate stops
+      six times short of the regime its verdict was used to close. §25.
+
+      **8. AND THE INSTRUMENT BUILT HERE LIED ONCE, IN THE SAME WAY.** `DSV4_STEPHASH_LVL=1` skips
+      the two expensive device hashes and writes them as **zero**; `stephash_compare.py` read
+      equal-as-exonerated and printed *"mkv, main_x and the draft input all MATCH … the DSpark draft
+      chain is the nondeterministic component"* — the opposite subsystem, manufactured entirely by
+      the level flag. Fixed in the tool: all-zero-on-both-sides fields are excluded, printed as
+      `NOT MEASURED`, and any verdict resting on them carries an explicit caveat line. §26.
+
+      **WHAT THIS COSTS THE LADDER.** Token-id bit-exactness is a valid gate for prefills of **160
+      positions or fewer** and is reliably invalid above ~192 on `build/decode`; buffer-memcmp stays
+      the substitute (1.0). `tau` measured on `build/decode` above that length is measured against a
+      moving target, which is why 1.5's paired per-leg saving and not a fitted difference was the
+      right ratchet. The server suite is unaffected by *this* mechanism (point 6), so no landed
+      number is retracted.
+
+      Evidence: `evidence/decode_loop/stephash_verdict_AB.txt`, `stephash_genout_AB.txt`,
+      `lhash_H.txt` / `lhash_L.txt` / `lhash_W.txt` / `lhash_Z.txt` / `lhash_R.txt`, and the raw
+      arm logs `stephash_{A,B,H3,H4,L1,L2,W1,W2,Z1,Z2,R1,R2}.log` + `stephash_{A,B,...}.txt`.
+      Code: `src/decode.cu` (`DSV4_STEPHASH`, word-wise chunked `DSV4_HASH`),
+      `tools/stephash_compare.py`, `tools/lhash_compare.py`, `scripts/stephash_run.sh`,
+      `scripts/detach_audit.sh`.
+
+- [ ] **1.10** **Name the kernel inside `compressed_attn_forward` that is racing.** Opened by 1.9,
+      2026-08-20, and it is the only unfinished half of it. 1.9 bounded the fault to one function
+      and proved it is a race rather than state, but it did not say whether it is
+      `compressor_forward`, `indexer_forward` or `sparse_attn`.
+
+      **THE INSTRUMENT THIS UNBLOCKS IS NAMED IN ADVANCE, per rule 2.** A sub-layer hash inside
+      `compressed_attn_forward` — after `compressor_forward`'s `ckv`, after `index_score`, after
+      `k_topk_offset*`'s `compress_topk`, after `sparse_attn`'s `o` — bisects three candidates in
+      ONE run, because 1.9's R protocol reproduces the divergence **four times inside a single
+      process at prefill 192 in about three minutes**. The optimisation it unblocks is not a
+      speed-up: it is the restoration of the ladder's primary correctness invariant, which every
+      remaining item currently has to work around with buffer memcmp.
+
+      **RANK IT BELOW 1.7 UNLESS THE FIX IS ALSO A SPEED-UP.** The engine has not gotten faster
+      since the warp top-k, 1.9 shipped no kernel, and rule 5 is now live. If the racing kernel
+      turns out to be `index_score` or the top-k, the fix and 1.7 are the same edit and this
+      promotes above it; otherwise it waits.
+
+      Cheapest first step, no new code: re-run 1.9's R protocol with `DSV4_TOPK_RADIX=0`, then with
+      `NO_IXGEMM=1`. Each is one existing env flag and one pair of ~3-minute runs, and either one
+      coming back clean names the kernel outright.
 
 - [ ] **1.7** `cattn:sparse` — **0.709 +/- 0.050 ms per 1000 context (10 % of the term), measured
       by 0.4**: 11.00 ms at ctx 768 rising to 21.17 ms at 12,288. Note the shape: it nearly

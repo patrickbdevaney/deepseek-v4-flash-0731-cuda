@@ -1,0 +1,15 @@
+evidence/decode_loop/genout_1p9_L1.txt: 10 point(s)   evidence/decode_loop/genout_1p9_L2.txt: 10 point(s)
+  point 0: IDENTICAL — 22 ids (prompt+generated) match at every position
+  point 1: IDENTICAL — 37 ids (prompt+generated) match at every position
+  point 2: IDENTICAL — 69 ids (prompt+generated) match at every position
+  point 3: IDENTICAL — 134 ids (prompt+generated) match at every position
+  point 4: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 5: LENGTH MISMATCH — 518 vs 517 ids, common prefix of 517 identical
+  point 6: IDENTICAL — 1029 ids (prompt+generated) match at every position
+  point 7: LENGTH MISMATCH — 2054 vs 2053 ids, common prefix of 2053 identical
+  point 8: DIVERGES at id index 2561 of 2566/2565: 2619 vs 223
+            context: ...[36, 16, 3841, 344] -> [2619, 96, 19, 16]
+                     ...[36, 16, 3841, 344] -> [223, 5198, 1127, 1977]
+  point 9: IDENTICAL — 3077 ids (prompt+generated) match at every position
+
+token-id identity: 7/10 points byte-identical, 3 differ

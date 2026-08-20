@@ -838,8 +838,13 @@ int main(int argc, char** argv){
             std::vector<float> hv0((size_t)PSp*hc*d), hv0b((size_t)PSp*d);
             CU(cudaMemcpy(hv0.data(),h,hv0.size()*4,cudaMemcpyDeviceToHost));
             CU(cudaMemcpy(hv0b.data(),h0,hv0b.size()*4,cudaMemcpyDeviceToHost));
+            // LADDER 1.9: word-wise FNV-1a, not byte-wise. Same construction, 4x fewer rounds.
+            // At real context this runs over PSp*hc*d = 25 M floats per layer x 43 layers, where the
+            // byte loop is ~17e9 rounds and turns a 7-minute diagnostic into an hour. The values do
+            // not compare against pre-1.9 logs; nothing does, they are only ever compared to another
+            // hash from the same build.
             auto fnv=[](const std::vector<float>& v){ unsigned long long x=1469598103934665603ULL;
-                for(float f: v){ unsigned u; memcpy(&u,&f,4); for(int b=0;b<4;++b){ x^=(u>>(b*8))&0xff; x*=1099511628211ULL; } } return x; };
+                for(float f: v){ unsigned u; memcpy(&u,&f,4); x^=(unsigned long long)u; x*=1099511628211ULL; } return x; };
             // WEIGHT INTEGRITY. Everything the prefill reads has now been shown bit-identical at
             // every point, yet layer 0's OUTPUT differs — and the effect needs the previous point to
             // have decoded far enough (NGEN0=60 reproduces, 20 does not). The remaining explanation
@@ -861,11 +866,21 @@ int main(int argc, char** argv){
         // is constant, so it is not the allocator. Hash the hidden state after EVERY layer: the
         // first layer whose hash differs between two identical points names the kernel.
         const int hashlvl = getenv("DSV4_HASH") ? atoi(getenv("DSV4_HASH")) : 0;
+        // CHUNKED, and that is not a style choice. At PSp=3071 one layer's hidden state is
+        // PSp*hc*d floats and a fresh std::vector per layer, 43 layers deep, drove MemAvailable to
+        // 1192 MB and the memguard killed the run mid-prefill (stephash_H2.memguard.log). A 16 MB
+        // reused staging buffer makes the diagnostic's host footprint independent of context, which
+        // is the only way it can be pointed at the contexts where the defect lives.
+        static std::vector<float> hstage;
         auto hlayer=[&](const float* dptr, size_t n)->unsigned long long {
-            std::vector<float> hv2v(n); cudaMemcpy(hv2v.data(),dptr,n*4,cudaMemcpyDeviceToHost);
+            const size_t CH = 4u<<20;                       // 4 M floats = 16 MB
+            if(hstage.size()<CH) hstage.resize(CH);
             unsigned long long v=1469598103934665603ULL;
-            for(size_t i=0;i<n;++i){ unsigned u; memcpy(&u,&hv2v[i],4);
-                for(int b=0;b<4;++b){ v^=(u>>(b*8))&0xff; v*=1099511628211ULL; } }
+            for(size_t off=0; off<n; off+=CH){
+                const size_t m = (n-off<CH)?(n-off):CH;
+                CU(cudaMemcpy(hstage.data(),dptr+off,m*4,cudaMemcpyDeviceToHost));
+                const unsigned* uw=(const unsigned*)hstage.data();
+                for(size_t i=0;i<m;++i){ v^=(unsigned long long)uw[i]; v*=1099511628211ULL; } }
             return v; };
         CU(cudaDeviceSynchronize());
         // B9. Prefill has never been profiled: F75 measured it end-to-end (48 tok/s, only 3.5x the
@@ -1086,10 +1101,13 @@ int main(int argc, char** argv){
         // hashes => the composition is nondeterministic even though its parts gate clean.
         if(getenv("DSV4_HASH")){
             auto h64=[&](const float* dptr, size_t n)->unsigned long long {
-                std::vector<float> hv(n); CU(cudaMemcpy(hv.data(),dptr,n*4,cudaMemcpyDeviceToHost));
-                unsigned long long x=1469598103934665603ULL;                 // FNV-1a over the raw bits
-                for(size_t i=0;i<n;++i){ unsigned u; memcpy(&u,&hv[i],4);
-                    for(int b=0;b<4;++b){ x^=(u>>(b*8))&0xff; x*=1099511628211ULL; } }
+                const size_t CH = 4u<<20; if(hstage.size()<CH) hstage.resize(CH);
+                unsigned long long x=1469598103934665603ULL;                 // FNV-1a over the raw bits, word-wise
+                for(size_t off=0; off<n; off+=CH){
+                    const size_t m=(n-off<CH)?(n-off):CH;
+                    CU(cudaMemcpy(hstage.data(),dptr+off,m*4,cudaMemcpyDeviceToHost));
+                    const unsigned* uw=(const unsigned*)hstage.data();
+                    for(size_t i=0;i<m;++i){ x^=(unsigned long long)uw[i]; x*=1099511628211ULL; } }
                 return x; };
             printf("[hash] point %zu prompt %d PSp=%d : main_x=%016llx mh_pre=%016llx scratch0=%016llx\n",
                    bsi, promptSweep[bsi], PSp,
@@ -1137,6 +1155,46 @@ int main(int argc, char** argv){
         int sfx_n=0, sfx_hit=0, sfx_win=0, sfx_lose=0;
         printf("[spec] decoding %d tokens (block=%d, draft passes=%d, adaptK=%.2f, prompt=%d s=%d)...\n",
                NGEN, BLK, NPASS, adaptK, promptSweep[bsi], ps);
+        // ---- LADDER 1.9: PER-STEP STATE HASH (DSV4_STEPHASH=<path>, default OFF) ----
+        // The engine stops reproducing itself part-way through a long run: point 0 of the 1.0 sweep
+        // is identical across three runs, points 1 and 2 diverge at generated token 25 and 43. The
+        // divergence is autoregressive, so ONE flipped token hides everything after it and a
+        // token-id diff can only name the step, never the quantity. This names the quantity.
+        //
+        // It writes one line per verify with the whole causal chain of that step, in dataflow
+        // order, so a plain `diff` of two runs points at the FIRST link that differs:
+        //   mkv/mainx -> draft input -> draft ids+margins -> verify logits -> acc/correction
+        // If `mkv` and `mainx` match and `dh` (draft out) differs, the draft chain is the source.
+        // If everything up to `dh` matches and `lg` differs, the target verify is. If `lg` matches
+        // and `acc` differs, it is the host-side accept logic (i.e. not the GPU at all).
+        //
+        // READ-ONLY: device-to-host copies and host arithmetic only, no device write, no engine
+        // state touched. Off by default so the shipped path is byte-identical.
+        // Level 1 = the cheap half (draft out, logits, accept) -- everything already on the host.
+        // Level 2 (default when set) adds the two big persistent inputs, `mkv[0]` and `main_x`,
+        // which is what makes "the input was identical" a claim rather than an assumption.
+        const char* stephash_path = getenv("DSV4_STEPHASH");
+        const int stephash_lvl = stephash_path ? (getenv("DSV4_STEPHASH_LVL") ? atoi(getenv("DSV4_STEPHASH_LVL")) : 2) : 0;
+        FILE* shf = nullptr;
+        if(stephash_path){ shf = fopen(stephash_path, bsi==0 ? "w" : "a");
+            if(!shf) printf("[stephash] WARN: cannot open %s\n", stephash_path); else setvbuf(shf,nullptr,_IOLBF,0); }
+        // FNV-1a over the raw bits, one 32-bit word at a time. Not byte-at-a-time: this runs over
+        // main_x (up to 25 MB per step) and the byte loop would cost more than the forward.
+        auto fnvw=[](const void* p2, size_t nwords, unsigned long long x=1469598103934665603ULL)->unsigned long long{
+            const unsigned* u=(const unsigned*)p2;
+            for(size_t i=0;i<nwords;++i){ x ^= (unsigned long long)u[i]; x *= 1099511628211ULL; }
+            return x; };
+        // Chunked for the same reason as `hlayer` above: at ctx 12k this is 100 MB per verify.
+        static std::vector<float> shbuf;
+        auto dhash=[&](const float* dptr, size_t n)->unsigned long long{
+            if(!n) return 0ULL;
+            const size_t CH = 4u<<20; if(shbuf.size()<CH) shbuf.resize(CH);
+            unsigned long long x=1469598103934665603ULL;
+            for(size_t off=0; off<n; off+=CH){
+                const size_t m=(n-off<CH)?(n-off):CH;
+                CU(cudaMemcpy(shbuf.data(), dptr+off, m*4, cudaMemcpyDeviceToHost));
+                x = fnvw(shbuf.data(), m, x); }
+            return x; };
         while((int)sgen.size()<NGEN && cpos+BLK+1<seqmax){
             cudaEventRecord(s0);
             int anchor=cpos-1, ctx=cpos;           // main context [0..cpos-1]
@@ -1153,6 +1211,11 @@ int main(int argc, char** argv){
             } else {
                 for(int st=0;st<NSTAGE;++st) dspark_main_kv(mkv[st], main_x, mb[st].attn, ctx, EPS);
             }
+            // LADDER 1.9. The draft's two persistent inputs, hashed BEFORE the draft reads them.
+            unsigned long long sh_mkv=0, sh_mx=0, sh_din=0;
+            if(stephash_lvl>=2){ CU(cudaDeviceSynchronize());
+                sh_mkv = dhash(mkv[0], (size_t)ctx*HEAD_DIM);
+                sh_mx  = dhash(main_x, (size_t)ctx*d); }
             if(specprof) cudaEventRecord(p1);
             // DRAFT: block [cur, noise x (BLK-1)].
             //
@@ -1170,6 +1233,7 @@ int main(int argc, char** argv){
                 arena_reset();     // each pass re-dmallocs the whole block chain; 3 passes overflow without this
                 CU(cudaMemcpy(dbid,bid.data(),BLK*4,cudaMemcpyHostToDevice));
                 k_embed<<<((size_t)BLK*d+255)/256,256>>>(xemb,emb,dbid,BLK,d); k_hc_expand<<<((size_t)BLK*hc*d+255)/256,256>>>(xa,xemb,BLK,hc,d); CU(cudaDeviceSynchronize());
+                if(stephash_lvl && pass==0) sh_din = dhash(xa, (size_t)BLK*hc*d);
                 cb=xa; nb=xb;
                 for(int st=0;st<NSTAGE;++st){ dspark_block_forward(nb,cb,dbid,mkv[st],anchor,mb[st],blk_cos+(size_t)ctx*hf,blk_sin+(size_t)ctx*hf,BLK,WINDOW,HC_SINKHORN_ITERS,EPS); std::swap(cb,nb); }
                 if(specprof && pass==NPASS-1) cudaEventRecord(p2);
@@ -1180,6 +1244,11 @@ int main(int argc, char** argv){
                 for(int i=0;i<BLK;++i) draft[i]=oo[1+i];   // proposals for cpos+1..cpos+BLK
                 for(int i=1;i<BLK;++i) bid[i]=draft[i-1];  // feed them back for the next pass
             }
+            // LADDER 1.9. The draft's whole output: proposed ids and the margins the width
+            // controller reads. Both are already on the host, so this costs nothing.
+            unsigned long long sh_draft=0;
+            if(stephash_lvl){ sh_draft = fnvw(oo.data(), oo.size());
+                              sh_draft = fnvw(hmarg.data(), hmarg.size(), sh_draft); }
             if(specprof){ cudaEventRecord(p3);
                 rawd=g_raw_ms-raw0; rsyd=g_rawsync_ms-rsy0; rawnd=g_raw_n-rawn0; rsynd=g_rawsync_n-rsyn0; }
             // Lever B10 / Finding 83 capacity check, printed ONCE and in a clean run too. The draft
@@ -1247,6 +1316,14 @@ int main(int argc, char** argv){
             // ACCEPT longest matching prefix: draft[i]==tam[i] (target's token for pos cpos+1+i)
             int acc=0; while(acc<VB-1 && draft[acc]==tam[acc]) ++acc;
             int correction=tam[acc];                        // target's token for pos cpos+acc+1
+            // LADDER 1.9. One line per verify, in dataflow order. Two runs of the same binary
+            // diff to the first differing FIELD, which names the link that broke, not just the step.
+            if(shf){
+                unsigned long long sh_lg = fnvw(lg.data(), lg.size());
+                fprintf(shf, "p%zu v%d cpos=%d ctx=%d cur=%d VK=%d mkv=%016llx mx=%016llx din=%016llx "
+                             "draft=%016llx lg=%016llx acc=%d corr=%d\n",
+                        bsi, nverify, cpos, ctx, cur, VB, sh_mkv, sh_mx, sh_din, sh_draft, sh_lg, acc, correction);
+            }
             if(sfxprobe){
                 // S = the committed sequence, positions 0..cpos. pids covers 0..PSp and sgen covers
                 // PSp+1..cpos, so S.back() == cur by construction. Built BEFORE sgen is extended.
@@ -1390,6 +1467,7 @@ int main(int argc, char** argv){
         }
         printf("[spec] SPEC-DECODE: %.1f ms/tok = %.2f tok/s  (vs base M=1 %.1f ms/tok = %.2f tok/s -> %.2fx)\n",
                ms_per_tok, ms_per_tok>0?1000.0/ms_per_tok:0, warm_ms, 1000.0/warm_ms, ms_per_tok>0?warm_ms/ms_per_tok:0);
+        if(shf){ fclose(shf); printf("[stephash] point %zu written to %s\n", bsi, stephash_path); fflush(stdout); }
         sweep_mstok[bsi]=ms_per_tok; sweep_acc[bsi]=avg_acc; sweep_akeff[bsi]=adaptK;
       }
       if(blkSweep.size()>1){

@@ -1,0 +1,10 @@
+ pt    PSp  layers  first DIFF layer  its ratio  #layers DIFF
+  0    128      43              none          -      0/43
+  1    129      43              none          -      0/43
+  2    132      43              none          -      0/43
+  3    136      43              none          -      0/43
+  4    144      43              none          -      0/43
+  5    160      43              none          -      0/43
+  6    192      43                14          4     29/43
+  7    256      43                 2          4     41/43
+VERDICT: the prefill does NOT reproduce itself at every point above

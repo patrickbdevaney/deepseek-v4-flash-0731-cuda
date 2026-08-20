@@ -1,0 +1,7 @@
+evidence/decode_loop/genout_1p9_H3.txt: 2 point(s)   evidence/decode_loop/genout_1p9_H4.txt: 2 point(s)
+  point 0: IDENTICAL — 72 ids (prompt+generated) match at every position
+  point 1: DIVERGES at id index 3089 of 3137/3141: 30362 vs 566
+            context: ...[52636, 4, 50305, 2483] -> [30362, 396, 4085, 344]
+                     ...[52636, 4, 50305, 2483] -> [566, 24000, 396, 1950]
+
+token-id identity: 1/2 points byte-identical, 1 differ

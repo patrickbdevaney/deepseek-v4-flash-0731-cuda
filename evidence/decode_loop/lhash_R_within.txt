@@ -1,0 +1,17 @@
+=== WITHIN-PROCESS repeats, run R1 ===
+  PSp 192: point 0 vs point 1: first DIFF layer 4  (39/43 differ)
+  PSp 192: point 0 vs point 2: first DIFF layer 4  (39/43 differ)
+  PSp 192: point 0 vs point 3: first DIFF layer 4  (39/43 differ)
+  PSp 256: point 4 vs point 5: first DIFF layer 4  (39/43 differ)
+  PSp 256: point 4 vs point 6: first DIFF layer 2  (41/43 differ)
+  PSp 256: point 4 vs point 7: first DIFF layer 4  (39/43 differ)
+VERDICT: identical sweep points inside ONE process DISAGREE -> a race, not per-process state
+
+=== WITHIN-PROCESS repeats, run R2 ===
+  PSp 192: point 0 vs point 1: first DIFF layer 2  (41/43 differ)
+  PSp 192: point 0 vs point 2: first DIFF layer 4  (39/43 differ)
+  PSp 192: point 0 vs point 3: first DIFF layer 12  (31/43 differ)
+  PSp 256: point 4 vs point 5: first DIFF layer 2  (41/43 differ)
+  PSp 256: point 4 vs point 6: first DIFF layer 2  (41/43 differ)
+  PSp 256: point 4 vs point 7: first DIFF layer 2  (41/43 differ)
+VERDICT: identical sweep points inside ONE process DISAGREE -> a race, not per-process state

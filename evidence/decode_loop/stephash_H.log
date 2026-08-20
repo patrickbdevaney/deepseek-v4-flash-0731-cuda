@@ -1,0 +1,22 @@
+[1.9] 2026-08-20T11:53:57-04:00 binary: decode 2026-08-20T11:53:52-04:00  sweep=6:1:1.50:0,6:1:1.50:1 NGEN=64 level=1
+[run_model] 104 GiB available, below 105 — reclaiming page cache and re-checking
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/stephash_H1.log
+[run_model] pid 591248   watch: tail -f evidence/decode_loop/stephash_H1.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_H1.memguard.log
+[1.9] 2026-08-20T11:56:40-04:00 H1: 55 stephash lines, 2 genout lines
+[run_model] 104 GiB available, below 105 — reclaiming page cache and re-checking
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/stephash_H2.log
+[run_model] pid 596925   watch: tail -f evidence/decode_loop/stephash_H2.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_H2.memguard.log
+[1.9] 2026-08-20T11:58:13-04:00 H2: 23 stephash lines, 1 genout lines
+[1.9] 2026-08-20T11:58:13-04:00 === token-id level (what 1.0 saw) ===
+evidence/decode_loop/genout_1p9_H1.txt: 2 point(s)   evidence/decode_loop/genout_1p9_H2.txt: 1 point(s)
+FAIL: the two arms did not emit the same number of sweep points; comparison is void.
+[1.9] 2026-08-20T11:58:13-04:00 === per-step field level (what this probe adds) ===
+evidence/decode_loop/stephash_H1.txt: 55 steps   evidence/decode_loop/stephash_H2.txt: 23 steps
+  p0: IDENTICAL over 23 verifies, every field
+  p1: MISSING on one side (32 vs 0 steps)
+VERDICT: the two runs DIVERGE
+[1.9] 2026-08-20T11:58:13-04:00 done.

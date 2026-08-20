@@ -1,0 +1,17 @@
+evidence/decode_loop/stephash_A.txt: 296 steps   evidence/decode_loop/stephash_B.txt: 300 steps
+  p0: IDENTICAL over 72 verifies, every field
+  p1: DIVERGES at verify v0 (index 0 of 110), cpos=3071 ctx=3071
+        first differing field: mkv   (all differing here: mkv,mx,draft,lg)
+        -> the draft's PERSISTENT main-KV cache differs before the draft reads it: dspark_main_kv (or its incremental form) is the source
+          mkv    A=5f09d9f4e4fb1491  B=df43b1e9d41e53b1   <-- differs
+          mx     A=6122c0f2a1f1bb9f  B=7f635198a1a101c8   <-- differs
+          draft  A=25390abe99d0fa48  B=235ea40d2952c2fa   <-- differs
+          lg     A=02b12609b49d8426  B=08e19795f9c18f4d   <-- differs
+  p2: DIVERGES at verify v0 (index 0 of 112), cpos=1023 ctx=1023
+        first differing field: mkv   (all differing here: mkv,mx,draft,lg)
+        -> the draft's PERSISTENT main-KV cache differs before the draft reads it: dspark_main_kv (or its incremental form) is the source
+          mkv    A=dcc5779dbdac1d4a  B=d42722ce2a7c846b   <-- differs
+          mx     A=efe59c553cac71f5  B=b8ebf5334be30251   <-- differs
+          draft  A=672e6fe6f91caf74  B=3677cfe09cdfc9a9   <-- differs
+          lg     A=c10e566d60278289  B=b219b20c6bfc0012   <-- differs
+VERDICT: the two runs DIVERGE

@@ -1,0 +1,71 @@
+1.9: the engine's prefill races in the compressed layers above ~192 positions -- localised, bounded, and it was never the decode loop
+
+WHAT WAS MEASURED. build/decode does not reproduce its own PREFILL. Not the decode loop, not
+accumulated drift, not per-process state, and not "part-way through a long run": it is
+`compressed_attn_forward`, it fires on any prefill of about 192 positions or more, and it fires
+again on the identical point four times inside ONE process. Six A/B experiments, no kernel changed.
+
+  1. NOT THE DECODE LOOP. New DSV4_STEPHASH writes one line per verify carrying that step's whole
+     causal chain in dataflow order (mkv -> mx -> din -> draft -> lg -> acc/corr), so two runs diff
+     to the first differing FIELD. On exactly 1.0's divergent arm: point 0 (ctx 5) identical at
+     every field of all 72 verifies; points 1 and 2 diverge at VERIFY 0, with mkv and mx -- the
+     draft's persistent inputs, both pure functions of the prefill -- already different before the
+     first draft ran.  stephash_verdict_AB.txt
+
+  2. FIRST COMPRESSED LAYER. DSV4_HASH=2 (made word-wise and chunked so it can reach real context)
+     hashes all 43 prefill layers. At PSp 5: 43/43 identical. At PSp 3071: layers 0 and 1 -- both
+     ratio 0, pure sliding -- byte-identical, and layer 2, the first ratio-4 layer, first to differ.
+     Every "first differing layer" in all six experiments has ratio 4. Not one has ratio 0.
+
+  3. THE THRESHOLD IS 160 -> 192 AND IT IS SHARP. Two length ladders x two runs, 43 layers hashed
+     per point: clean at 16/32/64/128/129/132/136/144/160 -- ten point-comparisons, 430 layer
+     hashes, zero differences -- and 41 of 43 layers differing at 192, 256, 512, 1024, 2048, 2560
+     and 3071. Not the sliding WINDOW (128): 129 through 160 are above it and clean.
+     lhash_L.txt, lhash_W.txt
+
+  4. IT IS A RACE. DSV4_ARENA_ZERO=1 on BOTH arms reproduces the identical verdict, so the arena is
+     dead at the lengths where the defect lives and not only at Finding 61's. Then the decisive
+     one: the same sweep point run four times in ONE process disagrees with itself, first differing
+     layer 2/4/12/28 across the pairs and a different pattern in a second process. Same addresses,
+     same buffer contents, four answers.  lhash_Z.txt, lhash_R.txt
+
+  5. EXONERATED at those lengths: everything the sliding layers do -- k_embed, k_hc_expand,
+     hc_pre/hc_post, rmsnorm, mla_cache_kv, mla_forward, and moe_forward INCLUDING its atomicAdd
+     counting-sort grouping, which this ladder entry had nominated first. The residue is exactly
+     compressor_forward, indexer_forward and sparse_attn. Item 1.10 opens to name which.
+
+WHY THE SERVER LOOKED CLEAN, AND WHY THAT IS NOT A CONTRADICTION. 1.5's 16 legs at ctx 1,656-12,410
+were byte-identical across two server starts because dsv4-server prefills through
+cblock_verify_step (kernels/compressed_decode.cu) in EXT_CHUNK = 64-row chunks and never issues a
+compressed prefill call wide enough to reach the threshold, while build/decode prefills through
+cblock_prefill_cache (kernels/compressed_attn.cu) in one call as wide as the prompt. Two binaries,
+two prefills, and no bit-exactness result on one transfers to the other. Nothing in this repo said
+that before. No landed number is retracted.
+
+WHAT IT COSTS THE LADDER. Invariant 1 is now BOUNDED rather than vague: token-id bit-exactness is a
+VALID gate at 160 prefill positions and below -- including the canonical 6-id gate prompt -- and is
+reliably invalid above ~192 on build/decode. Buffer memcmp stays the substitute above it.
+
+TWO WAYS A NUMBER PROVED UNTRUSTWORTHY, both written up:
+  * tests/gate_scratch_init proved compressed_attn_forward poison-independent AT EVERY LENGTH 1..29,
+    and Finding 61 quoted that as the retraction exonerating the prefill chain -- a sentence still
+    carried verbatim in two kernel files. The defect starts between 160 and 192. The gate stops six
+    times short of the regime its verdict was used to close. Both comments now state the range.
+  * DSV4_STEPHASH_LVL=1 writes its two skipped hashes as ZERO, and the comparator read equal as
+    exonerated: it printed "mkv, main_x and the draft input all MATCH ... the DSpark draft chain is
+    the nondeterministic component" -- the opposite subsystem, manufactured by the level flag. The
+    tool now excludes all-zero-on-both-sides fields, prints them as NOT MEASURED, and attaches a
+    caveat to any verdict resting on them.
+
+THE SHIPPED PATH IS UNTOUCHED. Every addition is behind a getenv and off by default. Point 0 of the
+instrumented binary is BYTE-IDENTICAL, all 266 ids, to the archived genout_1p0_off.txt taken before
+both 1.5 and 1.9; the first-token GATE and the LOSSLESS GATE PASS in all twelve arms.
+
+NO KERNEL CHANGED, so ladder rule 5 is live: the next iteration takes the highest-expected-value
+kernel item even if it is less certain.
+
+wiki: measurement-and-traps.md §25 (a gate quoted past its range), §26 (a field that was never
+computed compares equal), §27 (build/decode and dsv4-server do not share a prefill);
+negative-results.md §4f (arena and per-process state, both killed); README state table.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

@@ -686,3 +686,83 @@ one window measured before it.
 > clocks were pinned" since 2026-08-07; **nothing enforced it, so nothing did it**, and every A/B on
 > this ladder ran against a ramping governor without knowing. A rule that lives only in prose is
 > followed when someone remembers.
+
+---
+
+## 25. A unit gate that stops six times short of the regime it is quoted about (ladder 1.9, 2026-08-20)
+
+`tests/gate_scratch_init` was built to answer Finding 60's leading suspect — does the prefill chain
+read uninitialised scratch? It poisons the scratch with `0x00`, `0xFF` and `0x3C`, includes the
+arena, and runs `compressed_attn_forward` **at every length 1..29**. It came back bitwise identical
+everywhere. Finding 61 then quoted it as the retraction that exonerated the prefill chain, and both
+`kernels/compressed_attn.cu` and `kernels/indexer.cu` still carry the comment *"The prefill chain
+does not read uninitialised scratch."*
+
+Ladder 1.9 measured the same function's reproducibility as a function of prefill length. It is
+byte-identical run-to-run at 16, 32, 64, 128, 129, 132, 136, 144 and 160 positions, and
+**nondeterministic at 192 and at every length above, to 3071**. The gate's range stops at 29. It
+never touched the regime its result was used to close.
+
+Nothing about the gate was wrong. What was wrong was the sentence built on it: a bounded experiment
+was quoted as an unbounded conclusion, and that conclusion then removed the prefill from the suspect
+list for two more ladder items.
+
+> **Rule.** State a gate's range in the sentence that quotes its verdict, not only in its source.
+> "`compressed_attn_forward` is poison-independent" is a claim about the function; "…at lengths
+> 1–29" is the measurement. When the two get separated the first one survives, and it is the one
+> that is not true.
+
+The same shape, stated positively: **1.9's own length ladder is the instrument the gate should have
+been.** It costs two runs, it is `tools/lhash_compare.py` plus `DSV4_HASH=2`, and it converts "is
+this deterministic?" from a yes/no into a threshold — which is what actually names a mechanism.
+
+---
+
+## 26. A field that was never computed compares equal, and equal reads as exonerated (ladder 1.9)
+
+`DSV4_STEPHASH` writes one line per verify carrying the causal chain of that step, and
+`DSV4_STEPHASH_LVL=1` skips the two expensive device hashes — `mkv` and `mx` — writing them as
+zero. `tools/stephash_compare.py` walks the fields in dataflow order and reports the first one that
+differs. On a level-1 pair it duly reported:
+
+```
+first differing field: draft
+-> mkv, main_x and the draft input all MATCH and the draft's output does not --
+   the DSpark draft chain (3 blocks + head) is the nondeterministic component
+```
+
+Every word of that is false, and the tool produced it from data that was correct. `mkv` and `mx`
+matched because they were **both zero**, because level 1 does not compute them. Run at level 2 the
+same comparison names `mkv` as the first differing field and points at the prefill instead — the
+opposite subsystem.
+
+The fix is in the tool: a field that is all-zero on both sides is dropped from the ordering, printed
+as `NOT MEASURED`, and any verdict that rests on it carries an explicit "that reading ASSUMES … they
+were NOT COMPUTED" line.
+
+> **Rule.** An instrument with levels must distinguish *equal* from *not measured*, in the output,
+> at the point of the claim. A sentinel that is a legal value of the thing it is a sentinel for
+> (zero, for a hash) will be read as evidence exactly when the evidence is absent.
+
+---
+
+## 27. `build/decode` and `dsv4-server` do not share a prefill, and a bit-exactness result on one says nothing about the other (ladder 1.9)
+
+Ladder 1.9's tension, and the thing that resolved it. `build/decode` fails to reproduce its own
+prefill above ~192 positions. 1.5's A/B ran 16 legs per arm at contexts 1,656–12,410 across two
+independent `dsv4-server` starts and every pair was byte-identical, `tau` to four decimals. Both are
+correct, because they are different code:
+
+| | prefill entry point | compressed layer takes | widest compressed call |
+|---|---|---|---|
+| `build/decode` | `run_layer(prefill=true)` → `cblock_prefill_cache` | `kernels/compressed_attn.cu` | the whole prompt, in one call |
+| `dsv4-server` | `Engine::Impl::prefill_full` | `cblock_verify_step`, `kernels/compressed_decode.cu` | `EXT_CHUNK` = **64** rows |
+
+The server chunks its prefill at 64 and never issues a compressed prefill call wide enough to reach
+the threshold; `build/decode` issues one call as wide as the prompt. That predicts what was
+observed on both binaries, and it means the two are not replicates of each other in any respect that
+touches the prefill.
+
+> **Rule.** Name the binary in every bit-exactness claim. "The engine is deterministic" is not a
+> property of the checkpoint or of the kernels; it is a property of a call graph, and this project
+> has two.

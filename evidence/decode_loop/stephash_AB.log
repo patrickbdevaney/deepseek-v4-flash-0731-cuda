@@ -1,0 +1,42 @@
+[1.9] 2026-08-20T11:42:29-04:00 binary: decode 2026-08-20T11:40:59-04:00  sweep=6:1:1.50:0,6:1:1.50:1,6:1:1.50:2 NGEN=256 level=2
+[run_model] [clocks] pinned: gpu-gpc-0 1386 MHz
+[run_model] 114 GiB available; launching detached -> evidence/decode_loop/stephash_A.log
+[run_model] pid 568399   watch: tail -f evidence/decode_loop/stephash_A.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_A.memguard.log
+[1.9] 2026-08-20T11:46:13-04:00 A: 296 stephash lines, 3 genout lines
+[run_model] 104 GiB available, below 105 — reclaiming page cache and re-checking
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/stephash_B.log
+[run_model] pid 576090   watch: tail -f evidence/decode_loop/stephash_B.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_B.memguard.log
+[1.9] 2026-08-20T11:49:56-04:00 B: 300 stephash lines, 3 genout lines
+[1.9] 2026-08-20T11:49:56-04:00 === token-id level (what 1.0 saw) ===
+evidence/decode_loop/genout_1p9_A.txt: 3 point(s)   evidence/decode_loop/genout_1p9_B.txt: 3 point(s)
+  point 0: IDENTICAL — 266 ids (prompt+generated) match at every position
+  point 1: DIVERGES at id index 3074 of 3331/3328: 313 vs 3608
+            context: ...[982, 4, 49676, 418] -> [313, 15483, 29, 855]
+                     ...[982, 4, 49676, 418] -> [3608, 80, 15483, 66]
+  point 2: DIVERGES at id index 1050 of 1281/1281: 3608 vs 126157
+            context: ...[26, 63, 66, 418] -> [3608, 40, 26, 27574]
+                     ...[26, 63, 66, 418] -> [126157, 36452, 66, 3608]
+
+token-id identity: 1/3 points byte-identical, 2 differ
+[1.9] 2026-08-20T11:49:56-04:00 === per-step field level (what this probe adds) ===
+evidence/decode_loop/stephash_A.txt: 296 steps   evidence/decode_loop/stephash_B.txt: 300 steps
+  p0: IDENTICAL over 72 verifies, every field
+  p1: DIVERGES at verify v0 (index 0 of 110), cpos=3071 ctx=3071
+        first differing field: mkv   (all differing here: mkv,mx,draft,lg)
+        -> the draft's PERSISTENT main-KV cache differs before the draft reads it: dspark_main_kv (or its incremental form) is the source
+          mkv    A=5f09d9f4e4fb1491  B=df43b1e9d41e53b1   <-- differs
+          mx     A=6122c0f2a1f1bb9f  B=7f635198a1a101c8   <-- differs
+          draft  A=25390abe99d0fa48  B=235ea40d2952c2fa   <-- differs
+          lg     A=02b12609b49d8426  B=08e19795f9c18f4d   <-- differs
+  p2: DIVERGES at verify v0 (index 0 of 112), cpos=1023 ctx=1023
+        first differing field: mkv   (all differing here: mkv,mx,draft,lg)
+        -> the draft's PERSISTENT main-KV cache differs before the draft reads it: dspark_main_kv (or its incremental form) is the source
+          mkv    A=dcc5779dbdac1d4a  B=d42722ce2a7c846b   <-- differs
+          mx     A=efe59c553cac71f5  B=b8ebf5334be30251   <-- differs
+          draft  A=672e6fe6f91caf74  B=3677cfe09cdfc9a9   <-- differs
+          lg     A=c10e566d60278289  B=b219b20c6bfc0012   <-- differs
+VERDICT: the two runs DIVERGE
+[1.9] 2026-08-20T11:49:56-04:00 done.

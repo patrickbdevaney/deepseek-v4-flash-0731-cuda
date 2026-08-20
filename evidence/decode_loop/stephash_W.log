@@ -1,0 +1,48 @@
+[1.9] 2026-08-20T12:20:47-04:00 binary: decode 2026-08-20T12:00:44-04:00  sweep=6:1:1.50:1,6:1:1.50:2,6:1:1.50:3,6:1:1.50:4,6:1:1.50:5,6:1:1.50:6,6:1:1.50:7,6:1:1.50:8 NGEN=4 level=1
+[run_model] 104 GiB available, below 105 — reclaiming page cache and re-checking
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/stephash_W1.log
+[run_model] pid 646002   watch: tail -f evidence/decode_loop/stephash_W1.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_W1.memguard.log
+[1.9] 2026-08-20T12:22:40-04:00 W1: 19 stephash lines, 8 genout lines
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 113 GiB available; launching detached -> evidence/decode_loop/stephash_W2.log
+[run_model] pid 650107   watch: tail -f evidence/decode_loop/stephash_W2.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_W2.memguard.log
+[1.9] 2026-08-20T12:24:31-04:00 W2: 19 stephash lines, 8 genout lines
+[1.9] 2026-08-20T12:24:31-04:00 === token-id level (what 1.0 saw) ===
+evidence/decode_loop/genout_1p9_W1.txt: 8 point(s)   evidence/decode_loop/genout_1p9_W2.txt: 8 point(s)
+  point 0: IDENTICAL — 134 ids (prompt+generated) match at every position
+  point 1: IDENTICAL — 134 ids (prompt+generated) match at every position
+  point 2: IDENTICAL — 137 ids (prompt+generated) match at every position
+  point 3: IDENTICAL — 141 ids (prompt+generated) match at every position
+  point 4: IDENTICAL — 149 ids (prompt+generated) match at every position
+  point 5: IDENTICAL — 165 ids (prompt+generated) match at every position
+  point 6: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 7: IDENTICAL — 263 ids (prompt+generated) match at every position
+
+token-id identity: 8/8 points byte-identical, 0 differ
+[1.9] 2026-08-20T12:24:31-04:00 === per-step field level (what this probe adds) ===
+evidence/decode_loop/stephash_W1.txt: 19 steps   evidence/decode_loop/stephash_W2.txt: 19 steps
+  NOT MEASURED in these files (zero on both sides, excluded): mkv,mx
+  -> re-run with DSV4_STEPHASH_LVL=2 before drawing any conclusion about them
+  p0: IDENTICAL over 2 verifies, every field
+  p1: IDENTICAL over 2 verifies, every field
+  p2: IDENTICAL over 2 verifies, every field
+  p3: IDENTICAL over 2 verifies, every field
+  p4: IDENTICAL over 3 verifies, every field
+  p5: IDENTICAL over 3 verifies, every field
+  p6: DIVERGES at verify v0 (index 0 of 3), cpos=192 ctx=192
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=f29d4305426d6087  B=9b0e690de9de901f   <-- differs
+          lg     A=647e3b46a640fc90  B=5dcffb4437e93cef   <-- differs
+  p7: DIVERGES at verify v0 (index 0 of 2), cpos=256 ctx=256
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=75e8a871b911d203  B=c443d749bf745b7b   <-- differs
+          lg     A=9bed47818053e50d  B=c790b6b201d85410   <-- differs
+VERDICT: the two runs DIVERGE
+[1.9] 2026-08-20T12:24:31-04:00 done.

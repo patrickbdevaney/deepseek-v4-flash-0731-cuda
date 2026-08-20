@@ -1,0 +1,2 @@
+evidence/decode_loop/genout_1p9_H1.txt: 2 point(s)   evidence/decode_loop/genout_1p9_H2.txt: 1 point(s)
+FAIL: the two arms did not emit the same number of sweep points; comparison is void.

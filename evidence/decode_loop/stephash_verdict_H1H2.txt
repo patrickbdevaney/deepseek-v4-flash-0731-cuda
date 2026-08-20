@@ -1,0 +1,4 @@
+evidence/decode_loop/stephash_H1.txt: 55 steps   evidence/decode_loop/stephash_H2.txt: 23 steps
+  p0: IDENTICAL over 23 verifies, every field
+  p1: MISSING on one side (32 vs 0 steps)
+VERDICT: the two runs DIVERGE
