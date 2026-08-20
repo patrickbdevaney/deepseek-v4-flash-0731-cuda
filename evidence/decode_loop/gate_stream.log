@@ -1,0 +1,13 @@
+  [PASS] thinking then content
+  [PASS] chat mode, no think marker
+  [PASS] thinking with no content
+  [PASS] empty reasoning
+  [PASS] content then tools
+  [PASS] reasoning, content, tools
+  [PASS] multibyte content
+  [PASS] marker-like text that is not a marker
+  [PASS] no markers at all
+  [PASS] every delta is independently valid UTF-8
+  [PASS] buffered tool block parses to one call via the gated DSML parser
+
+Gate STREAM: 11 passed, 0 failed -> PASS

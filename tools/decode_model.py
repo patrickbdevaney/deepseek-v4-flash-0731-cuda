@@ -17,9 +17,10 @@ and only the split says which one to work on.
 PER LEG, NOT PER RECORD. An extended record carries the BASE leg's `timings` while its `usage`
 has been updated to the TOTAL completion tokens -- eval_extend.py keeps them apart on purpose, and
 dividing one by the other silently understates cost on exactly the longest generations. The
-continuation leg's own timings are empty because /v1/completions returns no `timings` object at
-all, so decode above the base budget is currently UNMEASURED. Fix that in the server before
-trusting any number at high context.
+continuation legs recorded on disk have EMPTY timings, because /v1/completions returned no
+`timings` object when they ran, so the 8k-24k regime is absent from this corpus. Ladder item 0.1
+fixed the endpoint on 2026-08-19; records written before that date still cannot be read deeper
+than ~6.6k, which is why re-fitting after a kernel change needs a fresh corpus, not this one.
 
 PER FORWARD, NOT PER TOKEN. Speculation commits tau tokens per target forward (tau ~2.9 here), so
 tok/s is not comparable with a roofline computed from bytes per forward. Records carry
@@ -29,6 +30,8 @@ entirely. Without that correction the constant term looks ~3x better than it is.
   python3 tools/decode_model.py                    # every row on disk
   python3 tools/decode_model.py --task lcb         # one task
   python3 tools/decode_model.py --per-token        # tok/s view instead of the roofline view
+  python3 tools/decode_model.py --dir evidence/decode_loop/fit --task postfix
+                                                  # a controlled sweep from decode_fit_probe.py
 
 Report BOTH coefficients after every optimisation, never a single number at one context.
 """
@@ -58,9 +61,9 @@ def forward_wall_ms(union):
     return mb / (BW * 1000.0) * 1000.0, mb
 
 
-def collect(pattern, per_token):
+def collect(pattern, per_token, outdir=None):
     pts = []
-    for p in glob.glob(os.path.join(OUT, pattern)):
+    for p in glob.glob(os.path.join(outdir or OUT, pattern)):
         if '.meta.' in p:
             continue
         for line in open(p):
@@ -101,31 +104,58 @@ def fit(pts):
     # R^2, so a fit over a task with almost no context spread announces itself as untrustworthy
     ss_res = sum((y - (a + b * x)) ** 2 for x, y, _ in pts)
     ss_tot = sum((y - my) ** 2 for _, y, _ in pts)
-    return a, b, (1 - ss_res / ss_tot) if ss_tot else 0.0
+    # STANDARD ERRORS, BECAUSE R^2 IS THE WRONG STATISTIC ONCE b IS SMALL. A fit whose slope is
+    # genuinely zero has R^2 ~ 0 no matter how precisely that zero is known -- which reads as "bad
+    # fit" and is in fact the result. The stop condition in DECODE_LADDER.md is a statement about
+    # b (`b*6592 <= 5 ms`), so it needs an interval on b, not a goodness-of-fit score.
+    s2 = ss_res / (n - 2) if n > 2 else 0.0
+    se_b = (s2 / sxx) ** 0.5 if sxx else 0.0
+    se_a = (s2 * (1.0 / n + mx * mx / sxx)) ** 0.5 if sxx else 0.0
+    return a, b, (1 - ss_res / ss_tot) if ss_tot else 0.0, se_a, se_b
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--task', default='*')
+    ap.add_argument('--dir', default=None,
+                    help='directory of *.jsonl records (default evidence/evals). Point this at a '
+                         'controlled sweep from tools/decode_fit_probe.py to re-fit after a kernel '
+                         'change without re-running the battery.')
     ap.add_argument('--per-token', action='store_true',
                     help='fit ms/token (throughput view) instead of ms/forward (roofline view)')
     a = ap.parse_args()
 
-    pts = collect(f'{a.task}.*.jsonl', a.per_token)
+    pts = collect(f'{a.task}.*.jsonl', a.per_token, a.dir)
     if len(pts) < 40:
         sys.exit(f'only {len(pts)} usable generations — need ~40 with a real spread of context')
-    A, B, r2 = fit(pts)
+    A, B, r2, SE_A, SE_B = fit(pts)
     taus = sorted(t for _, _, t in pts)
     unit = 'token' if a.per_token else 'target forward'
 
-    print(f'n = {len(pts)} generations   tau p50 = {taus[len(taus)//2]:.2f}   R^2 = {r2:.3f}')
-    print(f'\n  ms per {unit} = {A:.2f} + {B*1000:.3f} x (context / 1000)\n')
+    print(f'n = {len(pts)} generations   tau p50 = {taus[len(taus)//2]:.2f}   R^2 = {r2:.3f}'
+          f'   source = {a.dir or OUT}')
+    print(f'\n  ms per {unit} = {A:.2f} + {B*1000:.3f} x (context / 1000)')
+    print(f'    a = {A:.2f} +/- {1.96*SE_A:.2f} ms          (95% CI {A-1.96*SE_A:.2f} .. {A+1.96*SE_A:.2f})')
+    print(f'    b = {B*1000:.3f} +/- {1.96*SE_B*1000:.3f} ms/1000 ctx  '
+          f'(95% CI {(B-1.96*SE_B)*1000:.3f} .. {(B+1.96*SE_B)*1000:.3f})')
+    # The ladder's stop condition is written in terms of the context term at 6592, the deepest
+    # context the ORIGINAL battery corpus reached, so it is printed here in exactly that form.
+    print(f'    b x 6592 = {B*6592:.2f} +/- {1.96*SE_B*6592:.2f} ms   '
+          f'[ladder stop condition: <= 5.0 ms]\n')
     # NEVER PRINT A ROW THE DATA DOES NOT REACH. The first version of this tool extrapolated the
     # fit to 24000 and reported "78 % of a forward is context" as though it had been measured; the
     # records stop near 6000, because the only generations that go deeper are continuation legs and
     # those carry no timings. An extrapolation printed in the same table as a measurement is
     # indistinguishable from one, which is the exact failure this instrument exists to end.
     ctx_max = max(x for x, _, _ in pts)
+    # tau IN EVERY MEASUREMENT (DECODE_LADDER.md invariant 2), and at both ends: a median hides a
+    # collapse that only happens deep, and acceptance is exactly where a "byte-identical" kernel
+    # change can still regress.
+    byctx = sorted(pts)
+    q = max(1, len(byctx) // 4)
+    tlo = sorted(t for _, _, t in byctx[:q]); thi = sorted(t for _, _, t in byctx[-q:])
+    print(f'  tau: shallowest quartile p50 = {tlo[len(tlo)//2]:.3f}   '
+          f'deepest quartile p50 = {thi[len(thi)//2]:.3f}')
     print(f'  measured context range: {min(x for x,_,_ in pts):.0f} to {ctx_max:.0f}\n')
     print(f'  {"context":>8}{"ms":>10}{"tok/s":>9}{"ctx share":>11}')
     for c in (0, 2000, 4000, 8000, 16000, 24000):

@@ -1,0 +1,8 @@
+[vector 1, thinking]   2390 bytes byte-exact -> PASS
+[vector 2, thinking]    342 bytes byte-exact -> PASS
+[vector 3, thinking]   3313 bytes byte-exact -> PASS
+[vector 4, chat    ]   2552 bytes byte-exact -> PASS
+[roundtrip] BOS + <think> present -> PASS
+[effort] low+prefix==high:1 prefix present:1 absent in chat:1 -> PASS
+
+Gate ENCODING: 6 passed, 0 failed -> PASS

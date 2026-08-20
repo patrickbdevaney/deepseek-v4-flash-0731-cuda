@@ -12,6 +12,7 @@ cache/
 
 # runtime state, never tracked: a committed stop flag silently disables the loop on checkout
 FLYWHEEL_STOP
+DECODE_LOOP_STOP
 .flywheel_audited
 .flywheel_commit_msg
 .flywheel_last_run.jsonl

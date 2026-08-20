@@ -1,0 +1,56 @@
+0.3 re-fitted post-fix: b is 4.08x smaller, not gone, and a is unchanged
+
+The ladder's cost model, re-fitted against a binary rebuilt from HEAD, on a controlled
+context sweep instead of the battery corpus (which cannot be re-run):
+
+                pre-fix (battery, n 2158)     post-fix (sweep, n 48)
+  a             136.44 +/- 0.52 ms            130.98 +/- 2.25 ms
+  b              30.051 +/- 0.241 ms/1000       7.362 +/- 0.370 ms/1000
+  b x 6592      198.10 ms                      48.53 +/- 2.44 ms
+  context        71 - 6592                    249 - 12,410
+  tau p50         2.91                          1.68
+
+R^2 0.971. NEITHER STOP CONDITION IS MET: a is 1.59x its 82.18 ms byte floor against a
+target of 1.25x, and b x 6592 is 9.7x the 5.0 ms threshold. The loop continues.
+
+This SUPERSEDES 0.2's headline that "the context term is GONE". 0.2 was two single runs at
+ctx 480 and 3000, where the residual term is 22 ms of a 153 ms forward -- invisible at the
+measured 3.5% run-to-run spread. At ctx 12,410 it is 91 ms, 41% of the forward. New item
+0.4 re-profiles at 12k, because 0.2's retirement of items 1.2 and 1.5 rests on i:topk =
+0.10 ms and i:score = 0.02 ms measured at ctx <= 3000, and those two marks cannot account
+for 91 ms at any context unless they grow.
+
+a must be read as UNCHANGED, not improved. This corpus runs at tau 1.68 against the
+battery's 2.91, so fewer positions are verified per forward and a smaller expert union is
+read; 130.98 is the optimistic end of the same number, for reasons that have nothing to do
+with any kernel. The b comparison is the sound one -- each is a slope fitted within its own
+corpus, and the ~4x is far outside either interval.
+
+The slope is not a speculation artifact. Realised verify width correlates +0.35 with
+context here and width is what sets bytes per forward, so the raw slope could have been an
+acceptance effect in disguise. Fitting both: fwd = 70.74 + 7.029 x (ctx/1000) + 23.04 x
+width, R^2 0.985. Width costs a real 23 ms per unit and absorbs 0.33 of the 7.36; the
+context term survives at 7.03 +/- 0.28 with width held fixed.
+
+The cheap prefill was checked, not assumed. The sweep descends through token-prefixes of
+one document so the engine's longest-common-prefix cache turns 47 of 48 prefills into a
+rewind_to. If rewind_to left the compressed or index caches cheaper than a freshly built
+context, every number would describe a path the engine does not ship. Four control legs
+built their context from a different document: 181.59 vs 179.18 ms/forward at ctx ~6250,
+and 150.09 vs 147.66 at ctx ~1660 -- both inside the 3.5% spread.
+
+Instruments:
+  tools/decode_fit_probe.py  new. Detached, named in detach_audit.sh, fatal on transport
+                             failure, writes no record for a leg that generated nothing.
+                             --report re-derives every table above from the records.
+  tools/decode_model.py      --dir, plus standard errors on both coefficients. Once b is
+                             small R^2 is the wrong statistic: a genuinely flat slope
+                             scores R^2 ~ 0 however precisely the zero is known, and the
+                             stop condition is a claim about an interval on b.
+
+Run hygiene: server rebuilt from HEAD (all six CPU gates pass), launched detached via
+run_server.sh at seqmax 16384 with a memguard armed, mem 120.0/122.8 GiB, and stopped at
+the end of the iteration -- nothing is resident. No kernel changed, so no bit-exactness
+question arises; tau is reported at every point.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

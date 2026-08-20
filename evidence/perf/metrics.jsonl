@@ -10943,3 +10943,11 @@
 {"ts": 1787187922.464752, "requests_total": 172, "errors_total": 0, "prompt_tokens_total": 245422, "cached_prompt_tokens_total": 1178, "completion_tokens_total": 868511, "verifies_total": 312764, "decode_seconds_total": 106117.506, "prefill_seconds_total": 5218.165, "decode_tokens_per_second": 8.184, "tokens_per_verify": 2.777, "prefix_cache_hit_ratio": 0.0048, "queue_depth": 2}
 {"ts": 1787187952.4657133, "unreachable": "[Errno 104] Connection reset by peer"}
 {"ts": 1787187985.4003496, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787188045.4009373, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787188135.4015222, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787188255.40209, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787188405.4026515, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787188585.4033072, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787188795.4048655, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787189035.4062576, "unreachable": "<urlopen error [Errno 111] Connection refused>"}
+{"ts": 1787189305.424529, "unreachable": "<urlopen error [Errno 111] Connection refused>"}

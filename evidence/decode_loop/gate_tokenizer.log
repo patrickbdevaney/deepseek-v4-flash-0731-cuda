@@ -1,0 +1,9 @@
+[tok] vocab 128000  merges 127741  added 1283  bos 0 eos 1
+  [PASS] canonical gate 'The capital of France is'
+  encode: 2118/2118 cases exact (173399 reference tokens)
+  roundtrip: 2118/2118 cases lossless
+  stream:    2118/2118 cases match one-shot decode
+  [PASS] </think> and DSML markers survive decode_stream(skip_special=false)
+  speed:     4.0 MB/s  (577033 bytes -> 173344 tokens in 142.8 ms)
+
+Gate TOKENIZER: PASS

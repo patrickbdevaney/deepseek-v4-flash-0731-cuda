@@ -1,0 +1,20 @@
+[loop 2026-08-19T23:04:53-04:00] checkpoint fingerprint e178ba516c3c468c (read-only for the duration)
+[loop 2026-08-19T23:04:53-04:00] iteration 1/40 — next item: 155:- [ ] **0.4** `DSV4_DPROF` again at **ctx 12k**, and attribute the residual 7.36 ms/1000. 0.2
+[loop 2026-08-19T23:05:01-04:00] invoking headless claude -> evidence/decode_loop/iter1.log  (timeout 5400s, live feed: evidence/decode_loop/live.log)
+23:05:07  think   I'll start by reading the contract documents.
+23:05:08  Bash    sed -n '1,200p' DECODE_LADDER.md
+23:05:09  Bash    sed -n '1,160p' DECODE_ZENITH_FINDINGS.md
+23:05:15  Bash    ls && echo ---- && git log --oneline -5 && echo ---- && grep -rn "DSV4_DPROF" --include=*.cpp --include=*.cu --include=*.h --include=*.sh --include=*…
+23:05:16  Bash    sed -n '1,120p' tools/decode_fit_probe.py
+23:05:20  Bash    cat include/dprof.h && echo "=== dprof.cu" && cat kernels/dprof.cu
+23:05:21  Bash    ls evidence/decode_loop/ && echo ---- && python3 -c " import json for l in open('evidence/decode_loop.jsonl'): d=json.loads(l) print(json.dumps(d)[:6…
+23:05:25  Bash    grep -rn "dprof_report\|dprof_init" --include=*.cu --include=*.cpp --include=*.h src server kernels tools 2>/dev/null | head -30
+23:05:26  Bash    git show --stat 8f9d5dc | head -40; echo ----; ls evidence | grep -i dprof | head -40
+23:05:30  Bash    sed -n '370,400p;560,660p' src/decode.cu
+23:05:30  Bash    sed -n '1,120p' scripts/run_model.sh
+23:05:38  Bash    grep -n "dprof_report\|g_dprof_on\|DSV4_" src/decode.cu | head -80; echo ====; wc -l src/decode.cu
+23:05:38  Bash    ls -lt evidence/*.log | head -30; echo ====; ls -lt evidence/ | head -40
+23:05:45  Bash    ps -eo pid,ppid,tty,etime,args --sort=-etime | grep -Ei "decode|serve|dsv4|eval|memguard|python3" | grep -v grep | head -20; echo ====; free -g; echo…
+23:05:45  Bash    git status --short; echo ====; git diff --stat; echo ==== ; sed -n '1,80p' scripts/decode_loop.sh
+23:05:51  Bash    head -30 ~/dprof_A480.log; echo "......"; grep -n "dprof" ~/dprof_A480.log | head -20
+23:05:52  Bash    grep -n "\[dprof\]" ~/dprof_A480.log | tail -60; echo ====SPEC; grep -n "tok/s\|mean tokens/verify\|GATE\|LOSSLESS\|prefill" ~/dprof_A480.log | head …

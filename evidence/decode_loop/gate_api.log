@@ -1,0 +1,32 @@
+[PASS] default thinking_mode is 'thinking'
+[PASS] explicit thinking_mode honoured
+[PASS] enable_thinking=false -> chat
+[PASS] chat_template_kwargs.thinking=false -> chat
+[PASS] invalid thinking_mode falls back safely
+[PASS] reasoning_effort is orthogonal to thinking_mode
+[PASS] unknown reasoning_effort falls back to the 'low' default
+[PASS] default temperature is 1.0 (NOT gemma/Laguna's 0.7)
+[PASS] default top_p is 1.0 without tools
+[PASS] top_p becomes 0.95 when tools are present (agentic)
+[PASS] has_tools detected
+[PASS] explicit top_p overrides the default
+[PASS] tools with no system message -> a system message is created to carry them
+[PASS] tools with an existing system message -> attached, no message added
+[PASS] prompt starts with BOS
+[PASS] reasoning_effort prefix sits at the FRONT (prefix-cache hazard, CHAT_FORMAT §2.2)
+[PASS] string param encoded with string="true"
+[PASS] number param encoded with string="false"
+[PASS] bool param encoded with string="false"
+[PASS] one tool call parsed back
+[PASS] string arg round-trips as a string  {"location": "Beijing", "days": 5, "metric": true}
+[PASS] number arg round-trips as a NUMBER, not "5"
+[PASS] bool arg round-trips as a bool
+[PASS] tool name round-trips
+[PASS] reasoning_content surfaced as its own field
+[PASS] finish_reason 'stop' with no tool calls
+[PASS] usage totals add up
+[PASS] finish_reason 'tool_calls' when a call is present
+[PASS] tool calls get ids
+[PASS] SSE chunk is 'data: {...}\n\n'
+
+Gate API: 30 passed, 0 failed -> PASS

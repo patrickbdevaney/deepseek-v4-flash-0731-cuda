@@ -1,0 +1,5 @@
+rows 4096  elements 524288
+bytes/row  512 -> 68  (7.53x)
+bitwise mismatches: 0   worst |delta| 0
+
+GATE: PASS — unpack(pack(x)) == x bit-for-bit on every element

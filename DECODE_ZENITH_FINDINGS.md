@@ -22,6 +22,14 @@ in this repo was taken at short context, which is the only regime where that ker
 
 ## 1. The corrected cost model
 
+**SUPERSEDED AS OF 2026-08-19 by ladder item 0.3, and left standing because the derivation below is
+what the plan was built on.** After the warp top-k fix the same regression, re-fitted on a
+controlled context sweep against the current binary, gives
+`ms per target forward = 130.98 (+/- 2.25) + 7.362 (+/- 0.370) x (context/1000)`, R^2 0.971, n 48,
+measured context **249-12,410** — `b` is **4.08x smaller** and the constant term is unchanged.
+See `DECODE_LADDER.md` 0.3 for the per-point table, the acceptance caveat (that corpus runs at
+tau 1.68, not 2.91) and the fresh-prefill controls. Everything below describes the PRE-FIX engine.
+
 ```
 ms per target forward = 136.44 + 30.053 x (context/1000)     R^2 0.965, n 2156   [M]
 measured context range 71-6592. Above that, decode is UNMEASURED (see 5.1).

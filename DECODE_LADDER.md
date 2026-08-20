@@ -13,6 +13,11 @@ Combined decode is `tok/s = tau * 1000 / ms_per_forward`, and `ms_per_forward = 
   side: **82.18 ms**. Term A was 136.44 ms at suspension = **60.2 % of achievable**.
 - **Term B floor** — 42.0 MB at ctx 6592 = 0.509 ms/forward at tau 2.91. Term B was **198.1 ms**.
 
+**Where the two terms stand now (0.3, 2026-08-19):** `a = 130.98 +/- 2.25 ms` = **1.59x** the
+82.18 ms floor (stop wants <= 1.25x); `b x 6592 = 48.53 +/- 2.44 ms` (stop wants <= 5.0 ms).
+Neither is met. The fit now reaches context 12,410, so the ladder's stop check no longer has to
+extrapolate.
+
 **The loop STOPS when either:**
 1. `a <= 1.25 * a_floor` **and** `b*6592 <= 5.0 ms` — i.e. both terms are within a quarter of their
    byte floors and the context term has stopped mattering; or
@@ -22,6 +27,27 @@ Combined decode is `tok/s = tau * 1000 / ms_per_forward`, and `ms_per_forward = 
 
 Reaching (1) is the roofline. Reaching (2) means the remaining headroom is not addressable by the
 items on this ladder and the loop should hand back rather than thrash.
+
+## THE POINT IS FASTER DECODE, NOT BETTER INSTRUMENTS
+
+Read this before picking an item. Measurement earns its place only when it changes what gets built
+next, and this ladder has now spent two of its first three items on instruments. That was defensible
+-- 0.3 caught a wrong conclusion in 0.2 and the fit now reaches 12,410 context -- but **the engine
+has not gotten faster since the warp top-k landed**, and an instrument that does not lead to a
+shipped speedup inside the next iteration is overhead.
+
+So, in order:
+
+1. **Prefer an item that changes a kernel over an item that measures one.** If both are available,
+   take the kernel.
+2. **An instrument is justified only by naming the optimisation it unblocks**, in the ladder entry,
+   before building it. "We need better data" is not a justification; "we cannot choose between 1.2
+   and 1.5 without attributing the residual" is.
+3. **Every iteration that ships a kernel change must report the before/after on the same corpus**,
+   with tau, as a band. That is the ratchet: a number that went up, on a fit that already exists.
+4. **If two consecutive iterations produce no kernel change, say so at the top of the ladder entry**
+   and take the highest-expected-value kernel item next even if it is less certain. Thrashing on
+   measurement is the failure mode this section exists to prevent.
 
 ## Hard invariants — the loop must never violate these
 
@@ -43,7 +69,10 @@ items on this ladder and the loop should hand back rather than thrash.
 ## Phase 0 — instrument (must complete before anything is trusted)
 
 - [x] **0.1** `timings` on `/v1/completions` — staged in `server.cpp`, built 2026-08-19.
-- [x] **0.2** `DSV4_DPROF` diff at two contexts. **DONE 2026-08-19 — the context term is GONE.**
+- [x] **0.2** `DSV4_DPROF` diff at two contexts. **DONE 2026-08-19.** The headline below — "the
+      context term is GONE" — is **SUPERSEDED BY 0.3, which measured it as 4.1x smaller, not gone.**
+      Both runs here were at ctx <= 3000, where the residual term is 22 ms of a 153 ms forward and
+      two single runs at a 3.5 % spread cannot see it. Read the retirements of 1.2/1.5 with 0.4.
       Two single-prompt runs on the same binary, ctx 480 and ctx 3000:
 
       | | base AR (M=1) | spec | i:topk (21 calls) | i:score | cattn:indexer |
@@ -61,13 +90,86 @@ items on this ladder and the loop should hand back rather than thrash.
       bit-exactness risk. 1.3 and 1.4 remain as correctness items, not performance ones.
       The remaining cost is **ATTENTION 44 % and MoE 38 %**, which is Term A — and Term A is the
       term with ~1.5x of headroom, not 3x.
-- [ ] **0.3** Re-fit `tools/decode_model.py` on a post-fix run and record both coefficients.
+- [x] **0.3** Re-fit `tools/decode_model.py` on a post-fix run and record both coefficients.
+      **DONE 2026-08-19. `a = 130.98 +/- 2.25 ms`, `b = 7.362 +/- 0.370 ms per 1000 context`**
+      (95 % CI; n = 48, R^2 0.971, measured context **249 to 12,410** — the first fit this repo has
+      ever had above 6.6k). Binary rebuilt from HEAD (d961544) so the fit describes shipped source;
+      all six CPU gates pass. Server at seqmax 16384, `mem 120.0/122.8 GiB`, memguard armed.
+
+      | | pre-fix (battery, n 2158) | post-fix (sweep, n 48) | |
+      |---|---|---|---|
+      | `a` | 136.44 +/- 0.52 ms | **130.98 +/- 2.25 ms** | unchanged, see caveat |
+      | `b` | 30.051 +/- 0.241 ms/1000 | **7.362 +/- 0.370 ms/1000** | **4.08x smaller** |
+      | `b x 6592` | 198.10 ms | **48.53 +/- 2.44 ms** | stop condition wants <= 5.0 |
+      | context range | 71 - 6592 | 249 - 12,410 | |
+      | tau p50 | 2.91 | 1.68 | different corpus — see caveat |
+
+      **Neither stop condition is met and the loop continues.** `a` is **1.59x** its 82.18 ms byte
+      floor against a target of 1.25x; `b x 6592` is **9.7x** the 5.0 ms threshold. The context term
+      is now 10 % of a forward at ctx 2000 (was 31 %) and **41 % at ctx 12,410**.
+
+      Per point, medians over 6 repeats (`evidence/decode_loop/fit/postfix.sweep.jsonl`):
+
+      | ctx | ms/forward | spread | tau | mean verify width | tok/s |
+      |---|---|---|---|---|---|
+      | 249 | 127.51 | 5.2 % | 1.636 | 2.62 | 12.83 |
+      | 889 | 136.77 | 2.6 % | 1.724 | 2.64 | 12.65 |
+      | 1664 | 147.66 | 2.6 % | 1.701 | 2.68 | 11.52 |
+      | 3197 | 160.54 | 3.0 % | 1.626 | 2.69 | 10.08 |
+      | 6260 | 179.18 | 2.4 % | 1.718 | 2.66 | 9.58 |
+      | 9341 | 204.68 | 7.4 % | 1.969 | 2.92 | 9.66 |
+      | 12410 | 215.33 | 4.3 % | 1.652 | 2.66 | 7.68 |
+
+      **The slope is not a speculation artifact.** `tau` and realised verify width both correlate
+      +0.35 with context here, and width is what sets bytes per forward, so the raw slope could in
+      principle have been an acceptance effect wearing a context costume. Regressing on both:
+      `fwd = 70.74 + 7.029 x (ctx/1000) + 23.04 x width` (R^2 0.985, SE 0.145 and 3.50). Width does
+      cost a real 23 ms per unit, and it absorbs **0.33 of the 7.36** — the context term survives at
+      **7.03 +/- 0.28** with width held fixed.
+
+      **The cheap prefill was checked, not assumed.** The sweep visits contexts descending through
+      token-prefixes of one document, so the engine's longest-common-prefix cache turns all but the
+      first prefill into a `rewind_to` (`prefill=0ms` on 47 of 48 legs, ~40 min of prefill saved).
+      If `rewind_to` left the compressed or index caches in a cheaper state than a freshly built
+      context, every number above would be measuring a path the engine does not ship. Four control
+      legs built their context from a **different document** (shared prefix: 1 token) and so took
+      the build path: **181.59 vs 179.18 ms/forward at ctx ~6250 (1.3 %)** and **150.09 vs 147.66 at
+      ctx ~1660 (1.6 %)**, both inside the 3.5 % run-to-run spread. The shortcut is sound.
+
+      **CAVEAT, and it decides what may be claimed.** This is a different population from the
+      battery corpus: raw `/v1/completions` continuation of one technical document, versus chat
+      benchmarks. tau is **1.68 here against 2.91 there**, so fewer positions are verified per
+      forward, a smaller expert union is read, and `a` is *expected* to come in below the battery's
+      136.44 for reasons that have nothing to do with any kernel. **`a` must therefore be read as
+      unchanged, not improved** — the top-k fix never touched Term A, and 130.98 at tau 1.68 is if
+      anything the optimistic end. The `b` comparison is the sound one: each number is a slope
+      fitted *within* its own corpus, and the ~4x is far outside either interval.
+      Likewise **the tok/s column above is not comparable to `PERF.md`'s 22.66 suite mean** — same
+      engine, lower-tau workload.
+
+      Instruments: `tools/decode_fit_probe.py` (new; detached, fatal on transport failure, writes no
+      record for a leg that generated nothing, and now named in `detach_audit.sh`);
+      `tools/decode_model.py --dir` plus standard errors on both coefficients, because once `b` is
+      small R^2 is the wrong statistic — a genuinely flat slope scores R^2 ~ 0 however precisely the
+      zero is known, and the stop condition is a claim about an interval on `b`.
+- [ ] **0.4** `DSV4_DPROF` again at **ctx 12k**, and attribute the residual 7.36 ms/1000. 0.2
+      attributed the context term at ctx <= 3000 and found `i:topk` 0.10 ms and `i:score` 0.02 ms,
+      and **retired 1.2 and 1.5 on those numbers**. 0.3 then measured 91 ms of context term at
+      ctx 12,410 — 41 % of the forward — which those two marks cannot account for at any context
+      unless they grow. So either something else carries it (`cattn:indexer` was 2.09 ms and is the
+      obvious candidate, or the compressed-cache read itself), or the marks do grow past 3000 and
+      the retirements were taken on an unrepresentative measurement. Do not act on 1.2/1.5 either
+      way until this says which. One server load; the sweep harness already exists.
 
 ## Phase 1 — the context term
 
 - [x] **1.1** Warp-parallel top-k (all four kernels). **14.2x at ctx 6592, 24.7x at 24k**,
       bit-identical on nine shapes and three distributions (`tests/gate_topk_warp.cu`).
-- [~] **1.2** RETIRED as a perf lever (0.2: top-k is now 0.10 ms). Single-CTA radix select to replace the warp scan. Reference: SGLang's
+- [ ] **1.2** **REOPENED 2026-08-19.** Retired on 0.2's "top-k is 0.10 ms", but 0.3 superseded 0.2:
+      the context term is 4.1x smaller, **not gone**, and is still 41 % of a forward at ctx 12,410.
+      0.2 could not see it because both its runs were at ctx <= 3000 against a 3.5 % spread. The
+      retirement is therefore unsupported. Whether the residual is *this* kernel is 0.4's job --
+      do not assume it, which is the exact error that produced the retirement. Single-CTA radix select to replace the warp scan. Reference: SGLang's
       `deepseek_v4_topk.cu` (Apache-2.0) and TileLang `topk_selector.py`. **Restore descending
       order with a 512-element bitonic sort** — the reference emits in `atomicAdd` order, and
       `sparse_attn` sums selected rows in order, so without the sort this is not bit-exact.
@@ -75,7 +177,9 @@ items on this ladder and the loop should hand back rather than thrash.
       does the full scan to discover it.
 - [ ] **1.4** `cudaFuncSetAttribute` opt-in for dynamic shared memory, or drop the requirement
       entirely (1.2 does). Removes a silent garbage-return above ~49k context.
-- [~] **1.5** RETIRED as a perf lever (0.2: i:score is 0.02 ms). `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
+- [ ] **1.5** **REOPENED 2026-08-19**, same reason as 1.2: the 0.2 measurement it was retired on
+      is superseded. `index_score` reads T x 128 per layer, which is genuinely O(context) and a
+      real candidate for the residual 7.36 ms/1000. Gate on 0.4. `index_score` as a GEMM + fused epilogue. Measured 15.2x standalone
       (658 us -> 39 us at T=6000). **FP32/TF32 accumulation only** — an external ablation shows
       FP16 dropping perfect-recall rows from 99.99 % to 91.82 % on this exact operation.
 
