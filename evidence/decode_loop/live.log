@@ -15,3 +15,17 @@
 23:05:45  Bash    git status --short; echo ====; git diff --stat; echo ==== ; sed -n '1,80p' scripts/decode_loop.sh
 23:05:51  Bash    head -30 ~/dprof_A480.log; echo "......"; grep -n "dprof" ~/dprof_A480.log | head -20
 23:05:52  Bash    grep -n "\[dprof\]" ~/dprof_A480.log | tail -60; echo ====SPEC; grep -n "tok/s\|mean tokens/verify\|GATE\|LOSSLESS\|prefill" ~/dprof_A480.log | head …
+23:06:09  Bash    sed -n '180,300p' src/decode.cu
+23:06:09  Bash    cat ~/dprof_ctx.log; echo ====; cat evidence/srv_dprof.log; echo ====; ls ~/dsv4-prompts/ 2>/dev/null | head
+23:06:23  Bash    grep -rn "define DIM\|DIM =\|constexpr int DIM\|HEAD_DIM\|INDEX_HEAD_DIM\|HC_MULT\|N_LAYERS\|VOCAB" include/*.h | head -20
+23:06:24  Bash    grep -rn "arena_init" src/*.cu kernels/*.cu include/*.h | head; echo ====; grep -rn -A20 "void arena_init" kernels/*.cu src/*.cu | head -40
+23:06:51  Bash    grep -n "cudaMalloc\|arena_bytes\|seqmax\|SEQMAX\|dprof" src/engine.cu | head -60
+23:06:51  Bash    grep -n "DIM\b" include/deepseek_v4.h | head; sed -n '1,60p' include/deepseek_v4.h
+23:07:02  Bash    sed -n '580,760p' src/engine.cu
+23:07:29  Bash    grep -n "dspark_main_kv\|dspark_main_x" src/*.cu kernels/*.cu include/*.h | head -20
+23:07:30  Bash    grep -n -B5 -A60 "void dspark_main_kv" kernels/dspark_attn.cu | head -120
+23:07:55  Bash    grep -rn "dprof_begin" kernels/*.cu src/*.cu | sed 's/:.*dprof_begin(/ -> /' | head -60
+23:08:10  Bash    grep -rn "dprof_begin" kernels/*.cu | grep -E "DP_M_|DP_MG_" | head; echo ====; grep -n "moe_forward\|dprof" kernels/dspark_attn.cu | head -20; echo …
+23:08:46  Bash    cat scripts/run_server.sh; echo ====; sed -n '1,60p' scripts/detach_audit.sh
+23:08:51  Bash    cat scripts/serve.sh; echo ====; ls build | head -40; echo ====; grep -n "dsv4-server\|engine.o\|server" Makefile 2>/dev/null | head -20 || ls *.mk C…
+23:08:54  Bash    cat scripts/build_server.sh 2>/dev/null | head -60; echo ====; cat evidence/decode_loop/build_server_0p3.log | tail -20
