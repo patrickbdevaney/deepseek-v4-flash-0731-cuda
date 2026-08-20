@@ -29,7 +29,9 @@ MAX_ITERS="${MAX_ITERS:-40}"
 # PER-ITERATION TIMEOUT. Iteration 1 ran 30+ minutes on a context sweep with nothing bounding it;
 # at that rate the 48h budget buys ~90 iterations of an unknown mix. A stuck iteration is worse than
 # a failed one because it looks identical to a working one, so it gets a wall.
-ITER_TIMEOUT="${ITER_TIMEOUT:-5400}"
+# THREE MODEL LOADS IS THE UNIT OF WORK HERE, NOT ONE. An A/B needs a gate load, a baseline load
+# and a cached load, ~10 min each before any sweep runs. 5400s killed iteration 2 mid-experiment.
+ITER_TIMEOUT="${ITER_TIMEOUT:-14400}"
 LIMIT_BACKOFF="${LIMIT_BACKOFF:-900}"   # wait out a usage limit rather than treating it as fatal
 MAX_HOURS="${MAX_HOURS:-48}"
 FLOOR_GB="${FLOOR_GB:-100}"          # refuse to start an iteration below this MemAvailable
@@ -174,9 +176,27 @@ $item" \
   say "claude exited rc=$rc"
 
   # POST-CHECKS. The iteration is not trusted just because it exited zero.
+  # POST-CHECKS, WITH THE RIGHT SEVERITY FOR EACH KIND OF FAILURE.
+  #
+  # Iteration 2 timed out while a background A/B it had deliberately launched with `nohup setsid`
+  # was still running -- correctly, since that work must outlive its supervisor. The post-check saw
+  # a resident model, called it "something was left running or changed", and STOPPED THE WHOLE LOOP
+  # on a healthy experiment. A model that is still resident is a reason to WAIT, exactly as the
+  # preflight already waits; it is not evidence of corruption.
+  #
+  # What IS fatal: a failing gate, or a changed checkpoint. Those mean the tree is not what the next
+  # iteration would build on.
   post_ok=1
-  if ! preflight; then say "POST: preflight now failing — something was left running or changed"; post_ok=0; fi
   if ! cpu_gates; then say "POST: a CPU gate now fails"; post_ok=0; fi
+  fp_now=$(ckpt_fingerprint)
+  [ "$fp_now" = "$CKPT_FP0" ] || { say "POST: CHECKPOINT CHANGED ($CKPT_FP0 -> $fp_now)"; post_ok=0; }
+  # Residency: wait it out rather than dying. Background work the iteration started is legitimate.
+  for _ in $(seq 1 240); do
+    resident=$(ps -eo comm= | grep -cE '^(dsv4-server|decode|decode_probe|decode_prechange)$')
+    [ "$resident" = "0" ] && break
+    say "POST: $resident model(s) still resident (background work from this iteration?) — waiting"
+    sleep 60
+  done
 
   python3 - "$iter" "$rc" "$post_ok" "$out" <<'PY' >> "$JOURNAL"
 import json, subprocess, sys, time
