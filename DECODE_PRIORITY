@@ -14,6 +14,22 @@
 1.7     # cattn:sparse, 10 % of the context term
 1.8     # cattn:q_proj bimodality
 1b.2    # KV dims 0-447 as FP8 E4M3, 2048 B -> 711 B
+
+# OPENED BY THE LOOP'S OWN WORK, 2026-08-20, and therefore not in the original ladder order. 1.9
+# opened 1.10; 1.8 opened 1.11 and 1.12. Left unlisted they sort behind 3.2, whose text ends "then
+# STOP and hand back" -- so the three findings this run paid to discover would be the three it never
+# acts on. 1.11 is pre-registered at a larger ceiling than either 2.1 or 2.3 and is bit-exact by
+# construction, which is a better bet than re-tuning a width that 2.1 itself calls free by accident.
+1.11    # defer the ATTN_SPLIT join past i:qidx and i:iw. 1.99 ms of independent main-stream work
+        # sits between the join and the true dependency. Ceiling 1.29 ms/forward (0.9 %), and 1.8
+        # explicitly does NOT establish it is recoverable -- the deferred window contends with the
+        # same emits. If the paired band covers zero, it is a negative result and goes in the wiki.
+1.12    # the ratio-128 emit re-reads 33.55 MB of weights 32x (gemm_fp32 chunks M in 8s, ntok=256).
+        # Only ~0.53 ms/forward amortised, so LOW on throughput -- but it is a 40 ms latency spike
+        # on one token in 75 and the largest single-kernel inefficiency the profile has named.
+1.10    # name the kernel inside compressed_attn_forward that is racing. Correctness, not speed:
+        # 1.9 bounded the fault to one function and proved it is a race, but did not name it. Ranked
+        # below 1.11/1.12 because it gates nothing currently running -- prefill above ~192 only.
 2.1     # re-tune block width now that 1.1/1.2 changed the shape
 2.3     # confidence head at verify time
 3.2     # final PERF.md re-run, both coefficients, then STOP
