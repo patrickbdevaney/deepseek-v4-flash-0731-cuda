@@ -59,10 +59,10 @@ __global__ void k_topk_decode(int* out, const float* score, int T, int topk, int
 // Radix-select twin (item 1.2). Same admission rule, same order, no dynamic shared memory.
 // `sel` is written in place: topk_radix_select leaves raw source indices (or -1) in `out`, then the
 // caller's own offset rule is applied to them -- which is exactly what the `if(L==0)` line did.
-__global__ void k_topk_decode_rx(int* out, const float* score, int T, int topk, int offset){
+__global__ void k_topk_decode_rx(int* out, const float* score, int T, int topk, int offset, bool early){
     if(blockIdx.x) return;
     __shared__ TopkRadixSmem S;
-    topk_radix_select<TOPK_RADIX_NT>(out, score, T, topk, -1e30f, S);
+    topk_radix_select<TOPK_RADIX_NT>(out, score, T, topk, -1e30f, S, early);
     for(int k=threadIdx.x;k<topk;k+=TOPK_RADIX_NT){ int b=out[k]; out[k] = (b<0)? -1 : b+offset; }
 }
 __global__ void k_iw_scale(float* y, float sc, int n){ int i=blockIdx.x*blockDim.x+threadIdx.x; if(i<n) y[i]*=sc; }
@@ -78,12 +78,12 @@ __global__ void k_topk_verify(int* dtop, const float* score, int K, int Tf, int 
         warp_argmax(best,bi);
         if(L==0){ if(bi<Tf){ sh[bi]=-1e30f; dtop[(size_t)i*topkc+k]=nwin+bi; } else dtop[(size_t)i*topkc+k]=-1; }
         __syncwarp(); } }
-__global__ void k_topk_verify_rx(int* dtop, const float* score, int K, int Tf, int topkc, int pos, int ratio, int nwin){
+__global__ void k_topk_verify_rx(int* dtop, const float* score, int K, int Tf, int topkc, int pos, int ratio, int nwin, bool early){
     int i=blockIdx.x; if(i>=K) return;
     __shared__ TopkRadixSmem S;
     const int thr=(pos+i+1)/ratio; const int lim = thr<Tf? thr : Tf;
     int* out = dtop + (size_t)i*topkc;
-    topk_radix_select<TOPK_RADIX_NT>(out, score+(size_t)i*Tf, lim, topkc, -1e30f, S);
+    topk_radix_select<TOPK_RADIX_NT>(out, score+(size_t)i*Tf, lim, topkc, -1e30f, S, early);
     for(int k=threadIdx.x;k<topkc;k+=TOPK_RADIX_NT){ int b=out[k]; out[k] = (b<0)? -1 : nwin+b; }
 }
 __global__ void k_comb_verify(int* dcomb, const int* dtop, int K, int topk, int wmax, int topkc, int pos){
@@ -321,7 +321,7 @@ void compressed_decode_step_indexer(float* out, const float* x_cur, const float*
     int topk = w.index_topk < Tn ? w.index_topk : Tn;
     int* dtop; dtop=(decltype(dtop))dmalloc((size_t)topk*4);
     const int coff = g_kv_winmax ? g_kv_winmax : nwin;      // row where compressed rows begin
-    if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_decode_rx<<<1,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, Tn, topk, coff);
+    if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_decode_rx<<<1,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, Tn, topk, coff, topk_early_on());
     else                                       k_topk_decode<<<1,32,topk_scan_smem(Tn),stream>>>(dtop, iscore, Tn, topk, coff);
     if(topk_gate_on() && topk_radix_on() && topk<=TOPK_RADIX_CAP) topk_gate_decode(dtop, iscore, Tn, topk, coff, pos, stream);
     // --- kv_all = [win_kv ; comp_kv] -- contiguous already when g_kv_winmax is set ---
@@ -538,7 +538,7 @@ void compressed_verify_step_indexer(float* out, const float* x_cur, const float*
     int* dtop; dtop=(int*)dmalloc((size_t)K*topkc*4);
     dprof_begin(DP_I_TOPK,stream);
     const int coff = g_kv_winmax ? g_kv_winmax : nwin;
-    if(topk_radix_on() && topkc<=TOPK_RADIX_CAP) k_topk_verify_rx<<<K,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);
+    if(topk_radix_on() && topkc<=TOPK_RADIX_CAP) k_topk_verify_rx<<<K,TOPK_RADIX_NT,0,stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff, topk_early_on());
     else                                         k_topk_verify<<<K,32,topk_scan_smem(Tf),stream>>>(dtop, iscore, K, Tf, topkc, pos, ratio, coff);   // device top-k (no D2H sync)
     if(topk_gate_on() && topk_radix_on() && topkc<=TOPK_RADIX_CAP) topk_gate_verify(dtop, iscore, K, Tf, topkc, pos, ratio, coff, stream);
     dprof_end(DP_I_TOPK,stream);
@@ -645,10 +645,10 @@ __global__ void k_topk_masked(int* out, const float* score, int Tmax, int topk, 
         warp_argmax(best,bi);
         if(L==0){ if(bi<Tmax){ sh[bi]=-1e30f; out[k]=winmax+bi; } else out[k]=-1; }
         __syncwarp(); } }
-__global__ void k_topk_masked_rx(int* out, const float* score, int Tmax, int topk, int winmax){
+__global__ void k_topk_masked_rx(int* out, const float* score, int Tmax, int topk, int winmax, bool early){
     if(blockIdx.x) return;
     __shared__ TopkRadixSmem S;
-    topk_radix_select<TOPK_RADIX_NT>(out, score, Tmax, topk, -1e29f, S);   // NOTE the -1e29f floor, verbatim
+    topk_radix_select<TOPK_RADIX_NT>(out, score, Tmax, topk, -1e29f, S, early);   // NOTE the -1e29f floor, verbatim
     for(int k=threadIdx.x;k<topk;k+=TOPK_RADIX_NT){ int b=out[k]; out[k] = (b<0)? -1 : winmax+b; }
 }
 __global__ void k_comb_join(int* comb, const int* win, const int* sel, int wtop, int topk_c){   // [window ⊕ selected]
@@ -681,7 +681,7 @@ void compressed_decode_step_indexer_dp(float* out, const float* x, const float* 
     rope_interleaved_dp(qidx+(ihd-rd),a.cosT,a.sinT,nH,rd,false,ihd,nH,d_pos,stream); hadamard(qtmp,qidx,nH,ihd,stream); act_quant_fp4sim(qtmp,nH,ihd,32,ihd,stream);
     gemm_fp32(iw,x,w.idx_weights_proj,1,nH,DIM,stream); dprobe(stream); k_iw_scale<<<(nH+63)/64,64,0,stream>>>(iw,wscale,nH); dprobe(stream);
     index_score(isc,qtmp,idx_kvc,iw,1,Tmax,nH,ihd,stream); dprobe(stream); k_mask_scores<<<(Tmax+63)/64,64,0,stream>>>(isc,d_T,Tmax); dprobe(stream);
-    if(topk_radix_on() && topk_c<=TOPK_RADIX_CAP) k_topk_masked_rx<<<1,TOPK_RADIX_NT,0,stream>>>(sel,isc,Tmax,topk_c,winmax);
+    if(topk_radix_on() && topk_c<=TOPK_RADIX_CAP) k_topk_masked_rx<<<1,TOPK_RADIX_NT,0,stream>>>(sel,isc,Tmax,topk_c,winmax,topk_early_on());
     else                                          k_topk_masked<<<1,32,topk_scan_smem(Tmax),stream>>>(sel,isc,Tmax,topk_c,winmax);
     dprobe(stream);
     k_comb_strided_dp<<<(wtop+63)/64,64,0,stream>>>(win,d_pos,d_T,winmax,wtop,0); dprobe(stream);   // window part only (Tmax=0)

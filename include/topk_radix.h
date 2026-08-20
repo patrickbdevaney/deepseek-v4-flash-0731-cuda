@@ -68,12 +68,27 @@ __device__ __forceinline__ unsigned long long topk_comp(float v, int t){
 // into sel[j] for j < min(topk, #candidates), and -1 into every remaining slot. `sel` may be global.
 template<int NT>
 __device__ void topk_radix_select(int* sel, const float* score, int lim, int topk,
-                                  float floorv, TopkRadixSmem& S)
+                                  float floorv, TopkRadixSmem& S, bool early_out)
 {
     const int tid = threadIdx.x;
     const int limpad = ((lim + NT - 1) / NT) * NT;            // uniform trip count, see the histogram
-    if(tid == 0){ S.prefix = 0ull; S.need = 0u; S.keff = 0u; S.done = 0; }
+    if(tid == 0){ S.prefix = 0ull; S.need = 0u; S.keff = 0u; S.done = 0; S.nsel = 0u; }
     __syncthreads();
+
+    // ---- ITEM 1.3: lim <= topk means the threshold search cannot exclude anything ---------------
+    // Every candidate satisfies `#candidates <= lim <= topk`, so `k_eff == #candidates` and the
+    // selected SET is "all of them" before a single score has been read. The radix loop below still
+    // has to discover that: it runs one full level (clear 256 bins, one strided pass over the row
+    // with a shared atomicAdd per surviving element, then a 512-iteration SERIAL scan on thread 0 to
+    // find the lowest non-empty bucket) and only then concludes `hist[d] == need` and stops. That
+    // level is pure discovery -- its threshold admits every candidate the gather would have taken
+    // anyway -- so skipping it is a strict work reduction with an identical output, not an
+    // approximation. `lim <= topk` holds on the decode side below ctx 2048 (T = ctx/ratio, ratio 4,
+    // INDEX_TOPK 512) and on the verify side for every query whose causal limit is under 512.
+    // BIT-EXACTNESS: the gather admits `comp >= thr`; the skipped level would have set `thr` to
+    // `lowest_non_empty_top_byte << 56`, which is <= every candidate's composite, so `thr = 0`
+    // selects the identical set. The bitonic sort that orders it is untouched.
+    const bool early = early_out && (lim <= topk);
 
     // ---- MSB-first 8-bit radix select over the 64-bit composite --------------------------------
     // Invariant at the top of each level: `S.prefix` holds the bits of the threshold composite above
@@ -81,6 +96,7 @@ __device__ void topk_radix_select(int* sel, const float* score, int lim, int top
     // carrying that prefix. Levels below the first cost a scan and almost no atomics, because only
     // the surviving bucket matches. The `hist[d] == need` early exit is what makes the common case
     // (no exact float ties) stop after ~4 levels rather than 8.
+    if(!early)
     for(int shift = 56; shift >= 0; shift -= 8){
         for(int b = tid; b < 256; b += NT) S.hist[b] = 0u;
         __syncthreads();
@@ -126,9 +142,23 @@ __device__ void topk_radix_select(int* sel, const float* score, int lim, int top
     }
 
     for(int j = tid; j < topk; j += NT) sel[j] = -1;
+    if(early){
+        // One unconditional gather instead of (one histogram level + one gather). No `c < thr`
+        // test, because the threshold that was never computed would have admitted everything.
+        for(int t = tid; t < lim; t += NT){
+            float v = score[t];
+            if(!(v > floorv)) continue;
+            unsigned int p = atomicAdd(&S.nsel, 1u);
+            if(p < TOPK_RADIX_CAP) S.buf[p] = topk_comp(v, t);      // p < lim <= topk <= CAP
+        }
+        __syncthreads();
+        if(tid == 0) S.keff = S.nsel;                               // k_eff IS the candidate count
+        __syncthreads();
+    }
     const unsigned int keff = S.keff;
     if(keff){
         // ---- gather: exactly keff elements satisfy comp >= threshold (composites are distinct) --
+        if(!early){
         if(tid == 0) S.nsel = 0u;
         __syncthreads();
         const unsigned long long thr = S.prefix;
@@ -139,6 +169,7 @@ __device__ void topk_radix_select(int* sel, const float* score, int lim, int top
             if(c < thr) continue;
             unsigned int p = atomicAdd(&S.nsel, 1u);
             if(p < TOPK_RADIX_CAP) S.buf[p] = c;
+        }
         }
         int P = 1; while(P < (int)keff) P <<= 1;               // sort length, uniform across the block
         __syncthreads();
@@ -167,5 +198,13 @@ __device__ void topk_radix_select(int* sel, const float* score, int lim, int top
 // The A/B arm. DSV4_TOPK_RADIX=0 restores the warp selection sort on the same binary.
 static inline bool topk_radix_on(){
     static const bool on = [](){ const char* e = getenv("DSV4_TOPK_RADIX"); return !e || atoi(e) != 0; }();
+    return on;
+}
+// Item 1.3's arm. DSV4_TOPK_EARLY=0 restores the full threshold search on the same binary, so both
+// legs of the A/B are one build, one corpus, one server start each -- the only difference is this
+// flag. It is a HOST predicate turned into a kernel ARGUMENT rather than a getenv inside the device
+// function, because `topk_radix_select` is also reached from the CUDA-graph-captured `_dp` path.
+static inline bool topk_early_on(){
+    static const bool on = [](){ const char* e = getenv("DSV4_TOPK_EARLY"); return !e || atoi(e) != 0; }();
     return on;
 }

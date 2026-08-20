@@ -1,0 +1,456 @@
+[1.3] 2026-08-20T05:51:35-04:00 binaries: server 2026-08-20T05:48:01-04:00, decode 2026-08-20T05:44:53-04:00
+[1.3] 2026-08-20T05:51:35-04:00 === PHASE 0: gate_topk_radix (no checkpoint, both early arms) ===
+== k_topk_masked: correctness on 6 distributions, then timing on mode 0 ==
+       T     topk   shipped us     radix us   speedup   all modes
+---------------------------------------------------------------------------
+       1        1          8.2         10.3      0.8x   identical
+       3        3         12.3         14.3      0.9x   identical
+      17       17         39.0         22.5      1.7x   identical
+      64       64        137.5         26.8      5.1x   identical
+     128      128        212.9         10.3     20.8x   identical
+     512      512        258.0         14.4     18.0x   identical
+    1024      512        323.8         28.7     11.3x   identical
+    1648      512        501.5         24.7     20.3x   identical
+    2048      512        458.5         24.5     18.7x   identical
+    3072      512        591.7         33.2     17.8x   identical
+    4096      512        725.2         36.9     19.6x   identical
+    6000      512       1075.8         35.0     30.8x   identical
+    8192      512       1259.7         37.0     34.1x   identical
+
+== k_topk_verify (K queries, per-query causal limit) ==
+  Tf=1648  mode=0 K=5 topkc=512 : identical
+  Tf=3072  mode=0 K=5 topkc=512 : identical
+  Tf=1648  mode=1 K=5 topkc=512 : identical
+  Tf=3072  mode=1 K=5 topkc=512 : identical
+  Tf=1648  mode=2 K=5 topkc=512 : identical
+  Tf=3072  mode=2 K=5 topkc=512 : identical
+  Tf=1648  mode=3 K=5 topkc=512 : identical
+  Tf=3072  mode=3 K=5 topkc=512 : identical
+  Tf=1648  mode=4 K=5 topkc=512 : identical
+  Tf=3072  mode=4 K=5 topkc=512 : identical
+  Tf=1648  mode=5 K=5 topkc=512 : identical
+  Tf=3072  mode=5 K=5 topkc=512 : identical
+  short causal limit (lim=200 < topkc=512)          : identical
+
+== k_topk_decode / k_topk_offset ==
+  k_topk_decode  T=1648 mode=0 : identical
+  k_topk_decode  T=1648 mode=1 : identical
+  k_topk_decode  T=1648 mode=2 : identical
+  k_topk_decode  T=1648 mode=3 : identical
+  k_topk_decode  T=1648 mode=4 : identical
+  k_topk_decode  T=1648 mode=5 : identical
+  k_topk_offset  s=64 T=400 mode=0 : identical
+  k_topk_offset  s=64 T=400 mode=1 : identical
+  k_topk_offset  s=64 T=400 mode=2 : identical
+  k_topk_offset  s=64 T=400 mode=3 : identical
+  k_topk_offset  s=64 T=400 mode=4 : identical
+  k_topk_offset  s=64 T=400 mode=5 : identical
+
+== item 1.3: full threshold search vs `lim <= topk` early-out (k_topk_decode shape) ==
+     T   topk fires   full us (min/med/max)  early us (min/med/max) saving us
+------------------------------------------------------------------------------------------
+    32     32   yes   10.25/10.26/10.31      6.63/6.65/6.71             +3.61
+    64     64   yes   12.26/12.29/12.59      8.20/8.21/8.65             +4.08
+   128    128   yes   12.30/12.31/12.36      10.20/10.20/10.23          +2.10
+   256    256   yes   14.35/14.46/14.81      11.71/11.78/12.26          +2.67
+   384    384   yes   18.37/18.38/18.43      14.34/14.34/14.38          +4.04
+   512    512   yes   18.40/18.47/18.73      14.34/14.57/14.79          +3.90
+  1024    512    no   28.70/28.75/28.80      28.70/28.73/28.80          +0.01
+  2048    512    no   24.54/24.57/25.66      24.57/24.62/24.95          -0.05
+  3072    512    no   32.76/32.77/32.79      32.76/32.77/32.81          +0.00
+
+GATE: PASS — radix select is bit-identical to the shipped warp scan on every shape and distribution,
+        with the item-1.3 early-out both ON and OFF
+[1.3] 2026-08-20T05:51:36-04:00 === PHASE 1: bit-exactness gate (DSV4_TOPK_GATE=1, early ON) ===
+[1.3] 2026-08-20T05:51:36-04:00 starting server [gate] seqmax=16384 -> evidence/decode_loop/server_1p3_gate.log
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p3_gate.log
+[run_server] pid=115943 ppid=115940 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p3_gate.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.3] 2026-08-20T05:51:39-04:00 memguard armed -> evidence/decode_loop/server_1p3_gate.memguard.log
+[1.3] 2026-08-20T05:53:05-04:00 healthy [gate]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t1536-r0: pt=1536 cached=None ct=64 prefill=28691ms decode=5907ms tau=1.684 -> 155.44 ms/forward  (35s)
+[probe] sweep-t768-r0: pt=761 cached=None ct=64 prefill=0ms decode=5180ms tau=1.829 -> 148.00 ms/forward  (5s)
+[probe] sweep-t384-r0: pt=364 cached=None ct=64 prefill=0ms decode=6355ms tau=1.422 -> 141.23 ms/forward  (6s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=64 prefill=133957ms decode=5661ms tau=2.000 -> 176.91 ms/forward  (140s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=64 prefill=0ms decode=7147ms tau=1.422 -> 158.83 ms/forward  (7s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=64 prefill=0ms decode=4971ms tau=2.133 -> 165.71 ms/forward  (5s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=64 prefill=0ms decode=4175ms tau=2.370 -> 154.63 ms/forward  (4s)
+[probe] wrote 7 usable records -> evidence/decode_loop/fit_1p3_gate/postfix.sweep.jsonl and evidence/decode_loop/fit_1p3_gate/control.fresh.jsonl
+[1.3] 2026-08-20T05:56:28-04:00 gate probe rc=0
+[1.3] 2026-08-20T05:56:28-04:00 server down
+[1.3] 2026-08-20T05:56:33-04:00 gate: 125 PASS lines, 0 FAIL lines
+[topk-gate] PASS verify ctx=1538 n=770 (7360 checks, 66369842 slots)
+[topk-gate] PASS verify ctx=1543 n=772 (7424 checks, 66443504 slots)
+[topk-gate] PASS verify ctx=1549 n=1940 (7488 checks, 66515097 slots)
+[topk-gate] PASS verify ctx=1557 n=778 (7552 checks, 66616192 slots)
+[topk-gate] PASS verify ctx=1562 n=1564 (7616 checks, 66709832 slots)
+[topk-gate] PASS verify ctx=1570 n=1965 (7680 checks, 66807795 slots)
+[topk-gate] PASS verify ctx=1580 n=1980 (7744 checks, 66892698 slots)
+[topk-gate] PASS verify ctx=1590 n=1194 (7808 checks, 66972918 slots)
+[1.3] 2026-08-20T05:56:33-04:00 === PHASE 2: tok/s sweep, DSV4_TOPK_EARLY=0 (full threshold search) ===
+[1.3] 2026-08-20T05:56:35-04:00 starting server [off] seqmax=16384 -> evidence/decode_loop/server_1p3_off.log
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p3_off.log
+[run_server] pid=119343 ppid=119340 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p3_off.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.3] 2026-08-20T05:56:38-04:00 memguard armed -> evidence/decode_loop/server_1p3_off.memguard.log
+[1.3] 2026-08-20T05:58:09-04:00 healthy [off]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=125280ms decode=22729ms tau=1.631 -> 144.77 ms/forward  (148s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=19829ms tau=1.939 -> 150.22 ms/forward  (20s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=24945ms tau=1.480 -> 144.19 ms/forward  (25s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=20510ms tau=1.855 -> 148.62 ms/forward  (21s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=22695ms tau=1.620 -> 143.64 ms/forward  (23s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=23780ms tau=1.552 -> 144.12 ms/forward  (24s)
+[probe] sweep-t1536-r0: pt=1536 cached=None ct=256 prefill=0ms decode=22664ms tau=1.524 -> 134.91 ms/forward  (23s)
+[probe] sweep-t1536-r1: pt=1536 cached=None ct=256 prefill=0ms decode=20300ms tau=1.730 -> 137.16 ms/forward  (20s)
+[probe] sweep-t1536-r2: pt=1536 cached=None ct=256 prefill=0ms decode=22598ms tau=1.524 -> 134.51 ms/forward  (23s)
+[probe] sweep-t1536-r3: pt=1536 cached=None ct=256 prefill=0ms decode=22511ms tau=1.542 -> 135.61 ms/forward  (23s)
+[probe] sweep-t1536-r4: pt=1536 cached=None ct=256 prefill=0ms decode=19287ms tau=1.803 -> 135.82 ms/forward  (19s)
+[probe] sweep-t1536-r5: pt=1536 cached=None ct=256 prefill=0ms decode=20112ms tau=1.766 -> 138.70 ms/forward  (20s)
+[probe] sweep-t768-r0: pt=761 cached=None ct=256 prefill=0ms decode=18875ms tau=1.766 -> 130.17 ms/forward  (19s)
+[probe] sweep-t768-r1: pt=761 cached=None ct=256 prefill=0ms decode=21005ms tau=1.662 -> 136.40 ms/forward  (21s)
+[probe] sweep-t768-r2: pt=761 cached=None ct=256 prefill=0ms decode=19716ms tau=1.707 -> 131.44 ms/forward  (20s)
+[probe] sweep-t768-r3: pt=761 cached=None ct=256 prefill=0ms decode=21539ms tau=1.533 -> 128.98 ms/forward  (22s)
+[probe] sweep-t768-r4: pt=761 cached=None ct=256 prefill=0ms decode=19141ms tau=1.766 -> 132.00 ms/forward  (19s)
+[probe] sweep-t768-r5: pt=761 cached=None ct=256 prefill=0ms decode=20597ms tau=1.673 -> 134.62 ms/forward  (21s)
+[probe] sweep-t384-r0: pt=364 cached=None ct=256 prefill=0ms decode=18993ms tau=1.707 -> 126.62 ms/forward  (19s)
+[probe] sweep-t384-r1: pt=364 cached=None ct=256 prefill=0ms decode=20362ms tau=1.580 -> 125.69 ms/forward  (20s)
+[probe] sweep-t384-r2: pt=364 cached=None ct=256 prefill=0ms decode=18335ms tau=1.790 -> 128.22 ms/forward  (18s)
+[probe] sweep-t384-r3: pt=364 cached=None ct=256 prefill=0ms decode=20748ms tau=1.571 -> 127.29 ms/forward  (21s)
+[probe] sweep-t384-r4: pt=364 cached=None ct=256 prefill=0ms decode=20336ms tau=1.600 -> 127.10 ms/forward  (20s)
+[probe] sweep-t384-r5: pt=364 cached=None ct=256 prefill=0ms decode=21292ms tau=1.515 -> 125.99 ms/forward  (21s)
+[probe] sweep-t128-r0: pt=121 cached=None ct=256 prefill=0ms decode=19549ms tau=1.662 -> 126.94 ms/forward  (20s)
+[probe] sweep-t128-r1: pt=121 cached=None ct=256 prefill=0ms decode=20943ms tau=1.561 -> 127.70 ms/forward  (21s)
+[probe] sweep-t128-r2: pt=121 cached=None ct=256 prefill=0ms decode=16465ms tau=1.984 -> 127.63 ms/forward  (16s)
+[probe] sweep-t128-r3: pt=121 cached=None ct=256 prefill=0ms decode=21261ms tau=1.506 -> 125.06 ms/forward  (21s)
+[probe] sweep-t128-r4: pt=121 cached=None ct=256 prefill=0ms decode=19615ms tau=1.695 -> 129.90 ms/forward  (20s)
+[probe] sweep-t128-r5: pt=121 cached=None ct=256 prefill=0ms decode=21302ms tau=1.515 -> 126.05 ms/forward  (21s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=123945ms decode=21675ms tau=1.753 -> 148.46 ms/forward  (146s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=20941ms tau=1.790 -> 146.44 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=19141ms tau=1.869 -> 139.72 ms/forward  (19s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=17828ms tau=2.048 -> 142.63 ms/forward  (18s)
+[probe] wrote 34 usable records -> evidence/decode_loop/fit_1p3_off/postfix.sweep.jsonl and evidence/decode_loop/fit_1p3_off/control.fresh.jsonl
+[1.3] 2026-08-20T06:14:01-04:00 off probe rc=0
+[1.3] 2026-08-20T06:14:01-04:00 server down
+[1.3] 2026-08-20T06:14:06-04:00 === PHASE 3: tok/s sweep, early-out ON ===
+[1.3] 2026-08-20T06:14:08-04:00 starting server [on] seqmax=16384 -> evidence/decode_loop/server_1p3_on.log
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p3_on.log
+[run_server] pid=130172 ppid=130169 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p3_on.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.3] 2026-08-20T06:14:11-04:00 memguard armed -> evidence/decode_loop/server_1p3_on.memguard.log
+[1.3] 2026-08-20T06:15:27-04:00 healthy [on]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=124656ms decode=22764ms tau=1.631 -> 144.99 ms/forward  (147s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=19799ms tau=1.939 -> 149.99 ms/forward  (20s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=25026ms tau=1.480 -> 144.66 ms/forward  (25s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=20487ms tau=1.855 -> 148.46 ms/forward  (20s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=22707ms tau=1.620 -> 143.71 ms/forward  (23s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=23810ms tau=1.552 -> 144.30 ms/forward  (24s)
+[probe] sweep-t1536-r0: pt=1536 cached=None ct=256 prefill=0ms decode=22728ms tau=1.524 -> 135.29 ms/forward  (23s)
+[probe] sweep-t1536-r1: pt=1536 cached=None ct=256 prefill=0ms decode=20251ms tau=1.730 -> 136.83 ms/forward  (20s)
+[probe] sweep-t1536-r2: pt=1536 cached=None ct=256 prefill=0ms decode=22544ms tau=1.524 -> 134.19 ms/forward  (23s)
+[probe] sweep-t1536-r3: pt=1536 cached=None ct=256 prefill=0ms decode=22532ms tau=1.542 -> 135.74 ms/forward  (23s)
+[probe] sweep-t1536-r4: pt=1536 cached=None ct=256 prefill=0ms decode=19296ms tau=1.803 -> 135.89 ms/forward  (19s)
+[probe] sweep-t1536-r5: pt=1536 cached=None ct=256 prefill=0ms decode=20078ms tau=1.766 -> 138.47 ms/forward  (20s)
+[probe] sweep-t768-r0: pt=761 cached=None ct=256 prefill=0ms decode=18845ms tau=1.766 -> 129.97 ms/forward  (19s)
+[probe] sweep-t768-r1: pt=761 cached=None ct=256 prefill=0ms decode=21040ms tau=1.662 -> 136.62 ms/forward  (21s)
+[probe] sweep-t768-r2: pt=761 cached=None ct=256 prefill=0ms decode=19737ms tau=1.707 -> 131.58 ms/forward  (20s)
+[probe] sweep-t768-r3: pt=761 cached=None ct=256 prefill=0ms decode=21506ms tau=1.533 -> 128.78 ms/forward  (22s)
+[probe] sweep-t768-r4: pt=761 cached=None ct=256 prefill=0ms decode=19153ms tau=1.766 -> 132.09 ms/forward  (19s)
+[probe] sweep-t768-r5: pt=761 cached=None ct=256 prefill=0ms decode=20586ms tau=1.673 -> 134.55 ms/forward  (21s)
+[probe] sweep-t384-r0: pt=364 cached=None ct=256 prefill=0ms decode=18891ms tau=1.707 -> 125.94 ms/forward  (19s)
+[probe] sweep-t384-r1: pt=364 cached=None ct=256 prefill=0ms decode=20348ms tau=1.580 -> 125.61 ms/forward  (20s)
+[probe] sweep-t384-r2: pt=364 cached=None ct=256 prefill=0ms decode=18331ms tau=1.790 -> 128.19 ms/forward  (18s)
+[probe] sweep-t384-r3: pt=364 cached=None ct=256 prefill=0ms decode=20780ms tau=1.571 -> 127.48 ms/forward  (21s)
+[probe] sweep-t384-r4: pt=364 cached=None ct=256 prefill=0ms decode=20252ms tau=1.600 -> 126.57 ms/forward  (20s)
+[probe] sweep-t384-r5: pt=364 cached=None ct=256 prefill=0ms decode=21309ms tau=1.515 -> 126.09 ms/forward  (21s)
+[probe] sweep-t128-r0: pt=121 cached=None ct=256 prefill=0ms decode=19498ms tau=1.662 -> 126.61 ms/forward  (20s)
+[probe] sweep-t128-r1: pt=121 cached=None ct=256 prefill=0ms decode=20974ms tau=1.561 -> 127.89 ms/forward  (21s)
+[probe] sweep-t128-r2: pt=121 cached=None ct=256 prefill=0ms decode=16453ms tau=1.984 -> 127.55 ms/forward  (16s)
+[probe] sweep-t128-r3: pt=121 cached=None ct=256 prefill=0ms decode=21251ms tau=1.506 -> 125.01 ms/forward  (21s)
+[probe] sweep-t128-r4: pt=121 cached=None ct=256 prefill=0ms decode=19570ms tau=1.695 -> 129.60 ms/forward  (20s)
+[probe] sweep-t128-r5: pt=121 cached=None ct=256 prefill=0ms decode=21376ms tau=1.515 -> 126.48 ms/forward  (21s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=124052ms decode=21686ms tau=1.753 -> 148.53 ms/forward  (146s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=21000ms tau=1.790 -> 146.85 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=19129ms tau=1.869 -> 139.63 ms/forward  (19s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=17824ms tau=2.048 -> 142.59 ms/forward  (18s)
+[probe] wrote 34 usable records -> evidence/decode_loop/fit_1p3_on/postfix.sweep.jsonl and evidence/decode_loop/fit_1p3_on/control.fresh.jsonl
+[1.3] 2026-08-20T06:31:18-04:00 on probe rc=0
+[1.3] 2026-08-20T06:31:18-04:00 server down
+[1.3] 2026-08-20T06:31:23-04:00 === PHASE 4off: dprof attribution, early=off ===
+[1.3] 2026-08-20T06:31:26-04:00 starting server [dprof-off] seqmax=16384 -> evidence/decode_loop/server_1p3_dprof_off.log
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p3_dprof_off.log
+[run_server] pid=140766 ppid=140763 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p3_dprof_off.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.3] 2026-08-20T06:31:29-04:00 memguard armed -> evidence/decode_loop/server_1p3_dprof_off.memguard.log
+[1.3] 2026-08-20T06:32:44-04:00 healthy [dprof-off]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=128 prefill=124574ms decode=11612ms tau=1.620 -> 146.98 ms/forward  (136s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=128 prefill=0ms decode=11295ms tau=1.641 -> 144.80 ms/forward  (11s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=128 prefill=0ms decode=9464ms tau=2.032 -> 150.22 ms/forward  (9s)
+[probe] sweep-t1536-r0: pt=1536 cached=None ct=128 prefill=0ms decode=10091ms tau=1.730 -> 136.36 ms/forward  (10s)
+[probe] sweep-t1536-r1: pt=1536 cached=None ct=128 prefill=0ms decode=10961ms tau=1.580 -> 135.32 ms/forward  (11s)
+[probe] sweep-t1536-r2: pt=1536 cached=None ct=128 prefill=0ms decode=9312ms tau=1.882 -> 136.94 ms/forward  (9s)
+[probe] sweep-t768-r0: pt=761 cached=None ct=128 prefill=0ms decode=9274ms tau=1.829 -> 132.48 ms/forward  (9s)
+[probe] sweep-t768-r1: pt=761 cached=None ct=128 prefill=0ms decode=11216ms tau=1.488 -> 130.42 ms/forward  (11s)
+[probe] sweep-t768-r2: pt=761 cached=None ct=128 prefill=0ms decode=9416ms tau=1.778 -> 130.77 ms/forward  (9s)
+[probe] sweep-t384-r0: pt=364 cached=None ct=128 prefill=0ms decode=10825ms tau=1.524 -> 128.87 ms/forward  (11s)
+[probe] sweep-t384-r1: pt=364 cached=None ct=128 prefill=0ms decode=11243ms tau=1.422 -> 124.92 ms/forward  (11s)
+[probe] sweep-t384-r2: pt=364 cached=None ct=128 prefill=0ms decode=8743ms tau=1.882 -> 128.57 ms/forward  (9s)
+[probe] wrote 12 usable records -> evidence/decode_loop/dprof_1p3_off/postfix.sweep.jsonl and evidence/decode_loop/dprof_1p3_off/control.fresh.jsonl
+[1.3] 2026-08-20T06:36:53-04:00 dprof-off probe rc=0
+[1.3] 2026-08-20T06:36:53-04:00 server down
+dropped 12 warmup samples (verify=0); --keep-warmup to retain them
+220 verify samples, context 369..6255, 3 points: [768, 1536, 6144]
+mean verify width VB 2.58 (min 2, max 7)
+
+SLOPE PER MARK, ms per 1000 context.  "+VB" holds the realised verify width fixed,
+because width sets bytes-per-forward and correlates with context (0.3).
+mark                 ms@med        b    +/-     b|VB    +/-    R^2   share  n
+STEP (tot+draft)     123.99    3.738  0.500    3.555  0.198  0.204       -  220
+TOTAL                101.21    3.737  0.500    3.554  0.197  0.204       -  220
+ATTENTION             50.34    3.635  0.224    3.586  0.186  0.548   97.2%  220
+  cattn:sparse        11.68    1.705  0.070    1.694  0.065  0.731       -  220
+  cattn:indexer        3.76    0.697  0.031    0.687  0.019  0.698       -  220
+    i:score            1.08    0.636  0.025    0.629  0.018  0.742       -  220
+  cattn:compress       2.52    0.473  0.151    0.465  0.150  0.043       -  220
+  cattn:q_proj        14.36    0.081  0.063    0.071  0.059  0.007       -  220
+    q:wq_a             5.07    0.081  0.052    0.073  0.049  0.011       -  220
+MoE                   35.14    0.081  0.305   -0.039  0.044  0.000    2.2%  220
+    i:topk             0.47    0.053  0.001    0.053  0.001  0.962       -  220
+  cattn:ogroup        15.57    0.038  0.028    0.028  0.010  0.008       -  220
+    o:wo_a             7.71    0.034  0.020    0.027  0.008  0.013       -  220
+  moe:w1w3            22.61    0.031  0.194   -0.046  0.032  0.000       -  220
+  moe:w2              10.27    0.024  0.105   -0.017  0.012  0.000       -  220
+hc_pre  (ffn)          2.82    0.013  0.010    0.010  0.006  0.008    0.3%  220
+  moe:group            1.96    0.009  0.004    0.007  0.001  0.025       -  220
+  moe:combine          0.53    0.007  0.001    0.007  0.001  0.150       -  220
+hc_pre  (attn)         1.83    0.007  0.008    0.004  0.001  0.004    0.2%  220
+    q:rms+aq           0.97    0.007  0.006    0.007  0.006  0.005       -  220
+    o:wo_b             7.42    0.005  0.009    0.001  0.003  0.001       -  220
+  moe:act              1.48    0.004  0.003    0.003  0.002  0.010       -  220
+      mg:tiles         0.25    0.004  0.000    0.004  0.000  0.389       -  220
+  moe:router           1.95    0.004  0.001    0.003  0.001  0.057       -  220
+    i:qidx             1.53    0.003  0.004    0.002  0.001  0.004       -  220
+    i:iw               0.47    0.003  0.003    0.002  0.001  0.004       -  220
+      mg:count         0.22    0.002  0.000    0.002  0.000  0.146       -  220
+rmsnorm (attn)         0.77    0.002  0.000    0.002  0.000  0.069    0.0%  220
+draft:head            10.28    0.002  0.001    0.002  0.001  0.011    0.0%  220
+hc_post (attn)         0.32    0.002  0.001    0.001  0.000  0.008    0.0%  220
+  moe:shared           0.26    0.001  0.000    0.001  0.000  0.035       -  220
+draft:main_kv          0.14    0.001  0.000    0.001  0.000  0.041    0.0%  220
+    q:tail             0.52    0.001  0.002    0.000  0.001  0.001       -  220
+    o:rope             0.24    0.001  0.000    0.001  0.000  0.017       -  220
+  attn:ogroup          0.74    0.000  0.002   -0.000  0.001  0.000       -  220
+  attn:q_proj          0.45    0.000  0.000    0.000  0.000  0.001       -  220
+      mg:scatter       0.24    0.000  0.000    0.000  0.000  0.004       -  220
+lm_head                5.02    0.000  0.019   -0.006  0.012  0.000    0.0%  220
+      mg:prefix        0.24    0.000  0.000    0.000  0.000  0.001       -  220
+hc_head+norm           0.03    0.000  0.000    0.000  0.000  0.001    0.0%  220
+  attn:kv_write        0.08    0.000  0.000    0.000  0.000  0.001       -  220
+kv xin copy            0.23    0.000  0.000    0.000  0.000  0.000    0.0%  220
+    q:wq_b             6.79   -0.000  0.004   -0.002  0.002  0.000       -  220
+    q:kv_join          0.05   -0.000  0.000   -0.000  0.000  0.011       -  220
+hc_post (ffn)          0.30   -0.001  0.001   -0.001  0.000  0.001   -0.0%  220
+    q:aq(x)            0.28   -0.001  0.003   -0.001  0.003  0.000       -  220
+  attn:sparse          0.61   -0.001  0.001   -0.001  0.001  0.003       -  220
+draft:block           12.39   -0.001  0.003   -0.002  0.003  0.001   -0.0%  220
+rmsnorm (ffn)          0.76   -0.002  0.000   -0.002  0.000  0.087   -0.0%  220
+
+sum of partitioning slopes = 3.738 ms/1000 vs measured STEP slope 3.738 +/- 0.500 ms/1000  (they should agree; a gap is time inside the step that no mark covers)
+
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                    768     1536     6144
+STEP (tot+draft)     117.99   125.25   135.12
+TOTAL                 95.28   102.48   112.44
+ATTENTION             47.49    55.38    65.31
+  cattn:sparse         9.35    15.71    19.90
+  cattn:indexer        3.44     3.88     6.39
+    i:score            0.88     1.25     3.53
+  cattn:compress       2.52     2.51     2.54
+  cattn:q_proj        14.21    14.57    14.59
+    q:wq_a             4.96     5.13     5.39
+MoE                   35.11    35.25    35.21
+    i:topk             0.42     0.52     0.72
+  cattn:ogroup        15.55    15.54    15.63
+    o:wo_a             7.68     7.68     7.74
+  moe:w1w3            22.57    22.68    22.53
+[1.3] 2026-08-20T06:36:58-04:00 === PHASE 4on: dprof attribution, early=on ===
+[1.3] 2026-08-20T06:37:01-04:00 starting server [dprof-on] seqmax=16384 -> evidence/decode_loop/server_1p3_dprof_on.log
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p3_dprof_on.log
+[run_server] pid=144224 ppid=144221 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p3_dprof_on.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.3] 2026-08-20T06:37:04-04:00 memguard armed -> evidence/decode_loop/server_1p3_dprof_on.memguard.log
+[1.3] 2026-08-20T06:38:19-04:00 healthy [dprof-on]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=128 prefill=124719ms decode=11636ms tau=1.620 -> 147.29 ms/forward  (136s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=128 prefill=0ms decode=11307ms tau=1.641 -> 144.96 ms/forward  (11s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=128 prefill=0ms decode=9464ms tau=2.032 -> 150.22 ms/forward  (9s)
+[probe] sweep-t1536-r0: pt=1536 cached=None ct=128 prefill=0ms decode=10090ms tau=1.730 -> 136.35 ms/forward  (10s)
+[probe] sweep-t1536-r1: pt=1536 cached=None ct=128 prefill=0ms decode=10966ms tau=1.580 -> 135.39 ms/forward  (11s)
+[probe] sweep-t1536-r2: pt=1536 cached=None ct=128 prefill=0ms decode=9312ms tau=1.882 -> 136.94 ms/forward  (9s)
+[probe] sweep-t768-r0: pt=761 cached=None ct=128 prefill=0ms decode=9282ms tau=1.829 -> 132.61 ms/forward  (9s)
+[probe] sweep-t768-r1: pt=761 cached=None ct=128 prefill=0ms decode=11214ms tau=1.488 -> 130.39 ms/forward  (11s)
+[probe] sweep-t768-r2: pt=761 cached=None ct=128 prefill=0ms decode=9430ms tau=1.778 -> 130.97 ms/forward  (9s)
+[probe] sweep-t384-r0: pt=364 cached=None ct=128 prefill=0ms decode=10841ms tau=1.524 -> 129.06 ms/forward  (11s)
+[probe] sweep-t384-r1: pt=364 cached=None ct=128 prefill=0ms decode=11225ms tau=1.422 -> 124.72 ms/forward  (11s)
+[probe] sweep-t384-r2: pt=364 cached=None ct=128 prefill=0ms decode=8726ms tau=1.882 -> 128.33 ms/forward  (9s)
+[probe] wrote 12 usable records -> evidence/decode_loop/dprof_1p3_on/postfix.sweep.jsonl and evidence/decode_loop/dprof_1p3_on/control.fresh.jsonl
+[1.3] 2026-08-20T06:42:28-04:00 dprof-on probe rc=0
+[1.3] 2026-08-20T06:42:29-04:00 server down
+dropped 12 warmup samples (verify=0); --keep-warmup to retain them
+220 verify samples, context 369..6255, 3 points: [768, 1536, 6144]
+mean verify width VB 2.58 (min 2, max 7)
+
+SLOPE PER MARK, ms per 1000 context.  "+VB" holds the realised verify width fixed,
+because width sets bytes-per-forward and correlates with context (0.3).
+mark                 ms@med        b    +/-     b|VB    +/-    R^2   share  n
+STEP (tot+draft)     124.29    3.778  0.501    3.595  0.198  0.207       -  220
+TOTAL                101.44    3.776  0.500    3.593  0.198  0.207       -  220
+ATTENTION             50.31    3.676  0.225    3.626  0.187  0.551   97.3%  220
+  cattn:sparse        11.65    1.705  0.070    1.694  0.065  0.731       -  220
+  cattn:indexer        3.62    0.725  0.031    0.715  0.019  0.712       -  220
+    i:score            1.08    0.636  0.025    0.629  0.018  0.742       -  220
+  cattn:compress       2.54    0.471  0.151    0.463  0.151  0.043       -  220
+MoE                   35.20    0.095  0.305   -0.025  0.044  0.000    2.5%  220
+  cattn:q_proj        14.41    0.088  0.064    0.079  0.059  0.009       -  220
+    i:topk             0.30    0.084  0.001    0.084  0.001  0.988       -  220
+    q:wq_a             5.15    0.079  0.053    0.072  0.050  0.010       -  220
+  cattn:ogroup        15.61    0.038  0.029    0.027  0.010  0.008       -  220
+    o:wo_a             7.74    0.034  0.020    0.026  0.009  0.013       -  220
+  moe:w1w3            22.67    0.028  0.194   -0.048  0.032  0.000       -  220
+  moe:w2              10.26    0.023  0.105   -0.019  0.012  0.000       -  220
+  moe:group            1.99    0.016  0.004    0.015  0.001  0.084       -  220
+hc_pre  (ffn)          2.82    0.015  0.009    0.012  0.006  0.011    0.4%  220
+    q:rms+aq           0.96    0.008  0.006    0.008  0.006  0.008       -  220
+  moe:combine          0.54    0.008  0.001    0.008  0.001  0.159       -  220
+  moe:router           1.95    0.006  0.001    0.006  0.001  0.171       -  220
+  moe:act              1.50    0.006  0.003    0.006  0.002  0.026       -  220
+      mg:tiles         0.26    0.006  0.000    0.006  0.000  0.511       -  220
+hc_pre  (attn)         1.83    0.006  0.008    0.003  0.001  0.002    0.2%  220
+      mg:count         0.21    0.004  0.000    0.004  0.000  0.490       -  220
+    o:wo_b             7.43    0.004  0.009    0.000  0.003  0.001       -  220
+    q:aq(x)            0.28    0.003  0.002    0.003  0.002  0.009       -  220
+    i:qidx             1.54    0.003  0.004    0.002  0.001  0.003       -  220
+  moe:shared           0.27    0.003  0.001    0.002  0.000  0.093       -  220
+    i:iw               0.47    0.003  0.004    0.001  0.001  0.002       -  220
+rmsnorm (attn)         0.77    0.002  0.000    0.002  0.000  0.130    0.1%  220
+hc_post (attn)         0.32    0.002  0.001    0.002  0.000  0.014    0.1%  220
+draft:head            10.29    0.002  0.001    0.002  0.001  0.006    0.0%  220
+  attn:ogroup          0.74    0.002  0.002    0.001  0.001  0.004       -  220
+    q:tail             0.52    0.001  0.002    0.000  0.001  0.002       -  220
+      mg:prefix        0.25    0.001  0.000    0.001  0.000  0.041       -  220
+hc_post (ffn)          0.29    0.001  0.001    0.000  0.000  0.001    0.0%  220
+draft:block           12.38    0.001  0.003    0.000  0.003  0.000    0.0%  220
+kv xin copy            0.23    0.001  0.000    0.001  0.000  0.011    0.0%  220
+      mg:scatter       0.24    0.000  0.000    0.000  0.000  0.010       -  220
+    o:rope             0.25    0.000  0.000    0.000  0.000  0.003       -  220
+hc_head+norm           0.03    0.000  0.000    0.000  0.000  0.005    0.0%  220
+    q:kv_join          0.05   -0.000  0.000   -0.000  0.000  0.000       -  220
+    q:wq_b             6.79   -0.000  0.004   -0.002  0.002  0.000       -  220
+  attn:q_proj          0.45   -0.000  0.000   -0.000  0.000  0.001       -  220
+draft:main_kv          0.14   -0.000  0.000   -0.000  0.000  0.002   -0.0%  220
+  attn:kv_write        0.08   -0.000  0.000   -0.000  0.000  0.014       -  220
+  attn:sparse          0.61   -0.001  0.001   -0.001  0.001  0.002       -  220
+rmsnorm (ffn)          0.76   -0.001  0.000   -0.001  0.000  0.031   -0.0%  220
+lm_head                5.01   -0.020  0.019   -0.026  0.012  0.005   -0.5%  220
+
+sum of partitioning slopes = 3.778 ms/1000 vs measured STEP slope 3.778 +/- 0.501 ms/1000  (they should agree; a gap is time inside the step that no mark covers)
+
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                    768     1536     6144
+STEP (tot+draft)     118.00   125.19   135.29
+TOTAL                 95.26   102.33   112.61
+ATTENTION             47.38    55.47    65.50
+  cattn:sparse         9.35    15.72    19.89
+  cattn:indexer        3.28     3.71     6.38
+    i:score            0.88     1.25     3.53
+  cattn:compress       2.54     2.51     2.55
+MoE                   35.03    35.41    35.24
+  cattn:q_proj        14.31    14.57    14.66
+    i:topk             0.28     0.34     0.72
+    q:wq_a             5.08     5.24     5.44
+  cattn:ogroup        15.60    15.62    15.64
+    o:wo_a             7.69     7.75     7.76
+  moe:w1w3            22.63    22.95    22.54
+[1.3] 2026-08-20T06:42:34-04:00 === PHASE 5: standing GATE + LOSSLESS GATE (build/decode, early ON) ===
+[1.3] 2026-08-20T06:42:34-04:00 waiting for the page cache: 31 GiB available, need 105
+[run_model] 106 GiB available; launching detached -> evidence/decode_loop/decode_1p3_lossless.log
+[run_model] pid 147966   watch: tail -f evidence/decode_loop/decode_1p3_lossless.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/decode_1p3_lossless.memguard.log
+[1.3] 2026-08-20T06:44:19-04:00 decode finished; gates:
+[decode] PREFILL: 5 positions in 257.9 ms = 19.4 tok/s (51.574 ms/tok)
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] WARM decode: 87.5 ms/tok = 11.43 tok/s  (M=1 steady state, 7-step avg)
+[decode] PREFILL: 5 positions in 135.4 ms = 36.9 tok/s (27.089 ms/tok)
+[spec] LOSSLESS GATE: first 8 tokens match base AR -> PASS
+[spec] SPEC-DECODE: 47.9 ms/tok = 20.89 tok/s  (vs base M=1 87.5 ms/tok = 11.43 tok/s -> 1.83x)
+[1.3] 2026-08-20T06:44:19-04:00 === PHASE 6: reports ===
+[1.3] 2026-08-20T06:44:19-04:00 --- BEFORE (full threshold search) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+control    6248  2      147.45    1.4%   1.772   2.709   12.02
+control    1656  2      141.17    2.1%   1.958   2.988   13.87
+sweep      6260  6      144.48    4.6%   1.625   2.556   11.27
+sweep      1664  6      135.72    3.1%   1.636   2.649   11.99
+sweep       889  6      131.72    5.6%   1.690   2.702   12.71
+sweep       492  6      126.86    2.0%   1.590   2.539   12.58
+sweep       249  6      127.29    3.8%   1.612   2.615   12.64
+
+  context only   fwd = 127.92 + 3.008 x (ctx/1000)                    R^2 0.848  SE(b) 0.241
+  + verify width fwd = 78.05 + 2.977 x (ctx/1000) + 18.96 x width   R^2 0.948  SE(b) 0.143  SE(c) 2.62
+
+  corr(mean_width, ctx) = +0.030   corr(tau, ctx) = +0.082
+[1.3] 2026-08-20T06:44:19-04:00 --- AFTER (lim <= topk early-out) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+control    6248  2      147.69    1.1%   1.772   2.709   12.00
+control    1656  2      141.11    2.1%   1.958   2.988   13.87
+sweep      6260  6      144.83    4.3%   1.625   2.556   11.26
+sweep      1664  6      135.81    3.2%   1.636   2.649   12.00
+sweep       889  6      131.83    5.9%   1.690   2.702   12.70
+sweep       492  6      126.33    2.0%   1.590   2.539   12.61
+sweep       249  6      127.08    3.6%   1.612   2.615   12.64
+
+  context only   fwd = 127.84 + 3.036 x (ctx/1000)                    R^2 0.851  SE(b) 0.240
+  + verify width fwd = 78.90 + 3.006 x (ctx/1000) + 18.60 x width   R^2 0.946  SE(b) 0.147  SE(c) 2.69
+
+  corr(mean_width, ctx) = +0.030   corr(tau, ctx) = +0.082
+[1.3] 2026-08-20T06:44:19-04:00 --- paired, per (target, rep), tau and width reported per leg ---
+corpus sha256: before ['79ac6563f97e53e5', 'ac10134c87e3d0fe']  after ['79ac6563f97e53e5', 'ac10134c87e3d0fe']
+
+token identity: 34/34 legs proven byte-identical, 0 differ, 0 unproven (no hash on record)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+control     6144  2   6248    147.45    147.69    +0.24   0.998x   1.772   1.772   2.71   2.71    12.02    12.00
+control     1536  2   1656    141.17    141.11    -0.06   1.000x   1.958   1.958   2.99   2.99    13.87    13.87
+sweep       6144  6   6260    144.48    144.83    +0.35   0.998x   1.625   1.625   2.56   2.56    11.27    11.26
+sweep       1536  6   1664    135.72    135.81    +0.10   0.999x   1.636   1.636   2.65   2.65    11.99    12.00
+sweep        768  6    889    131.72    131.83    +0.11   0.999x   1.690   1.690   2.70   2.70    12.71    12.70
+sweep        384  6    492    126.86    126.33    -0.53   1.004x   1.590   1.590   2.54   2.54    12.58    12.61
+sweep        128  6    249    127.29    127.08    -0.21   1.002x   1.612   1.612   2.61   2.61    12.64    12.64
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.
+[1.3] 2026-08-20T06:44:19-04:00 --- i:topk, the mark that brackets the changed launch ---
+### early=off
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                    768     1536     6144
+STEP (tot+draft)     117.99   125.25   135.12
+  cattn:indexer        3.44     3.88     6.39
+    i:topk             0.42     0.52     0.72
+### early=on
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                    768     1536     6144
+STEP (tot+draft)     118.00   125.19   135.29
+  cattn:indexer        3.28     3.71     6.38
+    i:topk             0.28     0.34     0.72
+[1.3] 2026-08-20T06:44:19-04:00 done.

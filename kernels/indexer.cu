@@ -141,11 +141,11 @@ __global__ void k_topk_offset(int* out, const float* score, int s, int T, int to
 
 // Radix-select twin (item 1.2). The asymmetry above is preserved: the SELECTION covers the full row
 // and out-of-range picks are rejected only at the OUTPUT, still consuming a slot.
-__global__ void k_topk_offset_rx(int* out, const float* score, int s, int T, int topk, int ratio, int offset){
+__global__ void k_topk_offset_rx(int* out, const float* score, int s, int T, int topk, int ratio, int offset, bool early){
     int si=blockIdx.x; if(si>=s) return;
     __shared__ TopkRadixSmem S;
     int* o = out + (size_t)si*topk;
-    topk_radix_select<TOPK_RADIX_NT>(o, score+(size_t)si*T, T, topk, -1e30f, S);
+    topk_radix_select<TOPK_RADIX_NT>(o, score+(size_t)si*T, T, topk, -1e30f, S, early);
     const int thr=(si+1)/ratio;
     for(int k=threadIdx.x;k<topk;k+=TOPK_RADIX_NT){ int b=o[k]; o[k] = (b<0 || b>=thr)? -1 : b+offset; }
 }
@@ -179,7 +179,7 @@ void indexer_forward(float* index_score_out, int* topk_idxs, const float* x, con
     index_score(index_score_out, qtmp, ckv, weights, s, T, n_heads, idx_hd, stream); dprobe(stream);
     k_causal_mask<<<(s*T+255)/256,256,0,stream>>>(index_score_out, s, T, ratio); dprobe(stream);
     int topk = index_topk < T ? index_topk : T;
-    if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_offset_rx<<<s, TOPK_RADIX_NT, 0, stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
+    if(topk_radix_on() && topk<=TOPK_RADIX_CAP) k_topk_offset_rx<<<s, TOPK_RADIX_NT, 0, stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset, topk_early_on());
     else                                        k_topk_offset<<<s, 32, topk_scan_smem(T), stream>>>(topk_idxs, index_score_out, s, T, topk, ratio, offset);
     dprobe(stream);
     CUI(cudaStreamSynchronize(stream));

@@ -668,3 +668,125 @@
 05:35:04  DONE    subtype=success turns=144 tools=143 dur=5903s cost=$16.62 err=False
 [loop 2026-08-20T05:35:04-04:00] claude exited rc=0
 [loop 2026-08-20T05:35:13-04:00] committing iteration 2 using COMMIT_MSG_1p2.txt
+[loop 2026-08-20T05:35:15-04:00] pushed fb9a283
+[loop 2026-08-20T05:35:15-04:00] iteration 3/40 — next item: 471:- [ ] **1.3** `seq_len <= topk` early-out. Below ctx 2048 every row survives and the kernel still
+[loop 2026-08-20T05:35:24-04:00] invoking headless claude -> evidence/decode_loop/iter3.log  (timeout 14400s, live feed: evidence/decode_loop/live.log)
+05:35:28  think   I'll start by reading the contract and state files.
+05:35:30  Bash    sed -n '440,520p' DECODE_LADDER.md
+05:35:30  Bash    git log --oneline -12 && echo "---STATUS---" && git status --short
+05:35:34  think   Now let me read the ladder's invariants and confirm 1.3 is genuinely topmost.
+05:35:35  Bash    grep -n '^- \[' DECODE_LADDER.md | head -40
+05:35:35  Bash    sed -n '1,80p' DECODE_LADDER.md
+05:35:39  Bash    sed -n '80,110p' DECODE_LADDER.md
+05:35:41  Bash    ls && echo "---" && grep -rn "k_topk_decode\|k_topk_verify\|k_topk_masked\|topk_radix" --include=*.cu --include=*.cuh --include=*.cpp --include=*.h -l
+05:35:43  Bash    wc -l include/topk_radix.h kernels/indexer.cu include/indexer.h && echo "=== topk_radix.h ===" && cat include/topk_radix.h
+05:35:57  Bash    cat kernels/indexer.cu
+05:36:01  Bash    grep -n "k_topk_decode\|k_topk_verify\|k_topk_masked\|topk_radix\|TOPK_RADIX\|topk_scan_smem\|INDEX_TOPK" kernels/compressed_decode.cu | head -80
+05:36:04  Bash    sed -n '40,100p' kernels/compressed_decode.cu
+05:36:04  Bash    sed -n '300,330p;530,545p;675,690p' kernels/compressed_decode.cu
+05:36:43  Bash    ls scripts/ | head -60 && echo "=== evidence/decode_loop ===" && ls evidence/decode_loop/ | head -60
+05:36:46  Bash    cat scripts/topk_ab_run.sh 2>/dev/null | head -100; echo "=== EXISTS? ==="; ls scripts/topk_ab_run.sh scripts/mainkv_ab_run.sh
+05:36:48  Bash    sed -n '100,220p' scripts/topk_ab_run.sh
+05:37:17  Bash    grep -n "k_topk_masked\|_dp\b" kernels/compressed_decode.cu | sed -n '1,60p'; echo "=== who calls the _dp/graph path ==="; grep -rn "compressed_decod…
+05:37:23  Bash    grep -rn "compressed_decode_step_indexer_dp\|compressed_decode_step_indexer\b" --include=*.cu --include=*.cpp --include=*.h . | grep -v "^./kernels/c…
+05:37:28  Bash    sed -n '195,230p' kernels/block_decode.cu; echo "=== callers of the block_dp fn ==="; sed -n '205,215p' kernels/block_decode.cu; grep -rn "block_deco…
+05:37:33  Bash    ls tests/ tools/ | head -70; echo "=== build_gate.sh ==="; cat scripts/build_gate.sh
+05:37:36  Bash    sed -n '1,200p' tests/gate_topk_radix.cu
+05:38:37  Bash    nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv 2>/dev/null; echo "---"; pgrep -af 'dsv4-server|build/decode|eval_' | he…
+05:38:42  think   GPU free, 106 GiB available. Now implementing the early-out in `topk_radix_select`.
+05:39:09  Bash    cp include/topk_radix.h /tmp/topk_radix.h.bak && python3 - <<'PY' import re p='include/topk_radix.h' s=open(p).read() # 1. signature old_sig = """tem…
+05:39:12  Bash    sed -n '74,175p' include/topk_radix.h
+05:39:30  Bash    python3 - <<'PY' p='kernels/compressed_decode.cu' s=open(p).read() subs = [ # decode ("""__global__ void k_topk_decode_rx(int* out, const float* scor…
+05:39:37  Bash    sed -n '200,280p' tests/gate_topk_radix.cu
+05:40:32  Bash    python3 - <<'PY' p='tests/gate_topk_radix.cu' s=open(p).read() # --- 1. new_* kernels take the arm --------------------------------------------------…
+05:40:47  Bash    python3 - <<'PY' p='tests/gate_topk_radix.cu' s=open(p).read() anchor = """ printf("\\nGATE: %s\\n", all_ok? "PASS""" add = """ // ================= …
+05:40:52  Bash    nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include tests/gate_topk_radix.cu -o build/gate_topk_radix 2>&1 | head -30 && echo "BUI…
+05:40:54  Bash    ls /usr/local/cuda*/bin/nvcc 2>/dev/null; grep -rn "PATH" scripts/build_decode.sh scripts/build_server.sh 2>/dev/null | head
+05:40:58  Bash    export PATH=/usr/local/cuda/bin:$PATH; nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include tests/gate_topk_radix.cu -o build/gate_…
+05:41:03  Bash    ./build/gate_topk_radix 2>&1 | tail -60
+05:41:22  Bash    head -60 evidence/decode_loop/dprof_ctx_0p4.txt
+05:41:35  Bash    grep -n "PER-POINT MEDIANS" -A 30 evidence/decode_loop/dprof_ctx_0p4.txt | head -35
+05:41:36  Bash    grep -rn "ratio" src/decode.cu | grep -i "==4\|ratio=\|n_comp\|CW\[" | head -20; echo "---"; grep -rn "ratio" include/*.h | grep -i "layer\|per\|patt…
+05:42:09  Bash    sed -n '1,60p' scripts/dprof_ctx_run.sh; echo "=== dprof env ==="; grep -rn "DSV4_DPROF" --include=*.cu --include=*.h --include=*.cpp . | head
+05:42:28  Bash    grep -n "add_argument" tools/decode_fit_probe.py | head -20; echo "=== dprof_ctx_run tail ==="; sed -n '60,120p' scripts/dprof_ctx_run.sh
+05:42:33  Bash    head -20 scripts/build_server.sh; echo "=== decode ==="; head -15 scripts/build_decode.sh
+05:42:37  Bash    export PATH=/usr/local/cuda/bin:$PATH && (bash scripts/build_decode.sh > evidence/decode_loop/build_decode_1p3.log 2>&1; echo "decode rc=$?" >> evide…
+05:50:23  Bash    tail -3 evidence/decode_loop/build_decode_1p3.log; echo "---"; tail -5 evidence/decode_loop/build_server_1p3.log; echo "---"; ls -l --time-style=+%H:…
+05:50:29  Bash    sed -n '100,150p' kernels/compressed_decode.cu
+05:51:28  Write   /home/patrickd/deepseek-v4-flash-0731-cuda/scripts/topk_early_ab_run.sh
+05:51:32  Bash    sed -i 's/|topk_ab_run\.sh}"/|topk_ab_run.sh|topk_early_ab_run.sh}"/' scripts/detach_audit.sh && grep -n "topk_early_ab_run" scripts/detach_audit.sh …
+05:51:34  think   Launching the run detached.
+05:51:35  Bash    nohup setsid bash scripts/topk_early_ab_run.sh > evidence/decode_loop/topk_early_ab.log 2>&1 < /dev/null & sleep 20; tail -20 evidence/decode_loop/to…
+05:51:58  Bash    bash scripts/detach_audit.sh 2>&1 | tail -15
+05:52:02  Bash    ls wiki/ && echo "=== README state table ===" && sed -n '1,80p' wiki/README.md
+05:52:05  Bash    grep -n "^## \|^### " wiki/kernel-optimisations.md | tail -20; echo "=== NEG ==="; grep -n "^## \|^### " wiki/negative-results.md | tail -20
+05:52:07  Bash    sed -n '206,230p;290,310p' wiki/kernel-optimisations.md
+05:52:10  Bash    tail -5 evidence/decode_loop/topk_early_ab.log; echo "--- server ---"; tail -3 evidence/decode_loop/server_1p3_gate.log 2>/dev/null; echo "--- gate l…
+05:52:14  ToolSearch 
+05:52:18  Monitor tail -f -n0 evidence/decode_loop/topk_early_ab.log | grep -E --line-buffered "PHASE|FATAL|REFUSING|rc=|gate:|done\.|healthy \["
+05:52:27  Bash    head -40 tools/mainkv_ab_compare.py
+05:52:41  think   Run is in flight (6 checkpoint loads, ~2h). Phase 0 already passed. While it runs, here's what's landed so far: **Implementation** — `include/topk_ra…
+05:52:42  Bash    sleep 1; tail -3 evidence/decode_loop/server_1p3_gate.log
+05:52:48  Bash    grep -rn "compress_ratio" include/deepseek_v4.h | head; sed -n '70,90p' include/deepseek_v4.h
+05:52:55  Bash    grep -rn "cblock_decode_step\|compressed_decode_step_indexer\|dspark_attn" kernels/dspark*.cu src/decode.cu | head -20
+05:53:16  think   Confirmed the arithmetic while it loads: `compress_ratio` gives ratio-4 (indexer) on even layers 2–42 = **21 layers per forward**. So the predicted e…
+05:53:18  Bash    grep -n "topk-gate" evidence/decode_loop/server_1p3_gate.log 2>/dev/null | tail -5; echo "--- phase ---"; grep -E "PHASE|rc=|gate:" evidence/decode_l…
+05:53:34  think   Gate is passing in situ (998k slots at pos 576, 0 FAIL). Those `n=4096/7168/10240` lines decode as the prompt-extend path — `K=64` chunk × `topkc=Tf`…
+05:53:35  Bash    grep -c "topk-gate. PASS" evidence/decode_loop/server_1p3_gate.log; grep -c "topk-gate. FAIL" evidence/decode_loop/server_1p3_gate.log; tail -2 evide…
+05:53:42  think   Gate: 12 PASS, 0 FAIL. Waiting on phase transitions — I'll report when the tok/s and dprof arms land.
+05:53:42  Bash    grep -E "^\[1.3\]" evidence/decode_loop/topk_early_ab.log | tail -4
+05:53:51  think   The run is in Phase 1 of 6. I'll wait for the monitor rather than poll. **Status so far, iteration 3, ladder item 1.3 (`seq_len <= topk` early-out):*…
+05:53:52  DONE    subtype=success turns=57 tools=56 dur=1106s cost=$5.29 err=False
+[loop 2026-08-20T05:53:57-04:00] claude exited rc=0
+[loop 2026-08-20T05:54:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T05:55:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T05:56:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T05:57:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T05:58:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T05:59:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:00:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:01:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:02:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:03:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:04:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:05:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:06:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:07:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:08:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:09:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:10:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:11:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:12:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:13:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:14:12-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:15:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:16:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:17:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:18:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:19:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:20:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:21:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:22:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:23:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:24:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:25:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:26:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:27:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:28:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:29:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:30:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:31:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:32:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:33:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:34:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:35:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:36:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:37:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:38:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:39:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:40:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:41:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:42:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:43:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:44:13-04:00] POST: 1 model(s) still resident (background work from this iteration?) — waiting
+[loop 2026-08-20T06:45:13-04:00] committing iteration 3 (no prepared message; the agent should write one)

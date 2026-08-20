@@ -1,0 +1,2 @@
+[memguard] floor=1500 MB x3 poll=2s pat=decode started 2026-08-20T06:42:49-04:00
+[memguard] victim gone, exiting. low-water was 5275 MB 2026-08-20T06:44:16-04:00

@@ -1,0 +1,12 @@
+### early=off
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                    768     1536     6144
+STEP (tot+draft)     117.99   125.25   135.12
+  cattn:indexer        3.44     3.88     6.39
+    i:topk             0.42     0.52     0.72
+### early=on
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                    768     1536     6144
+STEP (tot+draft)     118.00   125.19   135.29
+  cattn:indexer        3.28     3.71     6.38
+    i:topk             0.28     0.34     0.72
