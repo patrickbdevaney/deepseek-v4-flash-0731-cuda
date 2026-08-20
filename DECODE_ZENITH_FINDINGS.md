@@ -205,7 +205,43 @@ auto-selects `eagle-topk=1` for *every* DeepSeek architecture, TensorRT-LLM's Py
 chain-only, vLLM has no tree speculation at all **[X]**. Our own DDTree result already said
 "correct but depth-dominated".
 
-### Phase 1b — the bit-exact FP4 index cache
+### Phase 1b — the bit-exact packing (see `KV_PRECISION_FINDINGS.md`)
+
+**Bigger than first reported: BOTH caches are already quantized and stored in FP32.**
+`act_quant_fp8sim` (block 64, dims 0-447) runs at every KV write site and `act_quant_fp4sim`
+(block 32, all 128 dims, post-Hadamard) at every index write site. Both compute
+`scale = exp2f(ceilf(log2f(...)))` -- an **exact power of two**, losslessly representable in one
+UE8M0 byte -- and both write the **dequantized** value back into an FP32 buffer. So the values sit
+exactly on the E4M3 and E2M1 grids already, and packing is **bit-exact for the main KV too**, not
+just the index.
+
+| row | FP32 today | bit-exact packed |
+|---|---|---|
+| KV (512 dims), RoPE left FP32 | 2048 B | **711 B (2.88x)** |
+| DSA index (128 dims) | 512 B | **68 B (7.53x)** |
+
+This is the format DeepSeek's own tech report specifies (§2.3.4: BF16 RoPE, FP8 elsewhere, FP4
+indexer; §5.2.1: FP4 indexer QK gives *"a 2x speedup for the top-k selector, while preserving a
+99.7 % recall rate"*), and SGLang ships the DSV4 index pool at exactly 68 B/token. **We already
+compute the paper's format and throw the saving away at the store.**
+
+**The prize is capacity, not bandwidth.** seqmax 32768 needs 3.11 GiB today and does not fit;
+packed it is 0.87 GiB. seqmax 65536 is 6.21 GiB (impossible) versus **1.74 GiB packed**. `EVALS.md`
+records seqmax as *the* binding constraint on which eval items can run at all. Bandwidth-wise the
+index path is 389x off its own roofline, so it is not bandwidth-bound and byte reduction buys little
+until Phase 1 lands -- `COMPRESSION_PLAYBOOK.md` §0 applied to itself.
+
+**Acceptance test is `memcmp` on generated token ids plus the existing lossless gate, not a
+benchmark.** The battery cannot detect a 1-point regression (GPQA CI +/-5.0, AIME +/-15.6 at n=30);
+delta=1pt unpaired needs ~20,000 items. At a flip rate of zero the required n is zero.
+
+**One hazard that would otherwise be invisible:** `LOOP_LOG` records a dequant change that produced
+a **byte-identical token sequence**, passed the lossless gate, and still collapsed DSpark acceptance
+**3.12 -> 1.00** -- acceptance is an exact draft/target token comparison, so perturbed logits break
+agreement even when the greedy output does not move. **Apply any format change atomically to target
+and draft paths, and report tau in every A/B.**
+
+### Phase 1b-old — the bit-exact FP4 index cache
 
 `kernels/compressor.cu:500` already does this to every row it writes into the DSA index cache:
 
