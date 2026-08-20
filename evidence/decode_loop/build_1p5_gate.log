@@ -1,0 +1,74 @@
+built build/gate_topk_radix
+built build/gate_topk_smem_ctx
+built build/gate_sdpa_smem
+built build/gate_index_score
+tests/gate_units.cu(421): warning #177-D: variable "half" was declared but never referenced
+      const auto& dm=S.get("dims"); int seqlen=i32(dm,0), dim=i32(dm,1); int half=dim/2;
+                                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+built build/gate_units
+built build/gate_encoding
+built build/gate_bf16w
+built build/gate_api
+built build/gate_suffix_draft
+built build/gate_forkjoin_graph
+built build/gate_ogroup_gemv
+built build/gate_tc_fp8_smem
+built build/gate_prefill_len
+built build/gate_moe_scan
+built build/gate_tc_fp8_kc
+built build/gate_og_ws1
+tests/gate_compressed_decode.cu(62): error: argument of type "int" is incompatible with parameter of type "const float *"
+      compressed_decode_step_strided(out_dec, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
+                                                 ^
+
+tests/gate_compressed_decode.cu(62): error: no suitable conversion function from "CompressedAttnWeights" to "int" exists
+      compressed_decode_step_strided(out_dec, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
+                                                      ^
+
+tests/gate_compressed_decode.cu(62): error: no suitable constructor exists to convert from "float *" to "CompressedAttnWeights"
+      compressed_decode_step_strided(out_dec, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
+                                                         ^
+
+tests/gate_compressed_decode.cu(62): error: argument of type "int *" is incompatible with parameter of type "float *"
+      compressed_decode_step_strided(out_dec, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
+                                                                          ^
+
+tests/gate_compressed_decode.cu(62): error: argument of type "int" is incompatible with parameter of type "int *"
+      compressed_decode_step_strided(out_dec, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
+                                                                               ^
+
+tests/gate_compressed_decode.cu(62): error: too few arguments in function call
+      compressed_decode_step_strided(out_dec, x, s-1, w, win_kv, comp_kv, &Th, ratio, EPS);
+                                                                                         ^
+
+6 errors detected in the compilation of "tests/gate_compressed_decode.cu".
+FAILED TO BUILD build/gate_compressed_decode
+tests/gate_indexer_decode.cu(66): error: argument of type "int" is incompatible with parameter of type "const float *"
+      compressed_decode_step_indexer(out_dec, x, s-1, w, win_kv, comp_kv, idx_ckv, &Th, ratio, EPS);
+                                                 ^
+
+tests/gate_indexer_decode.cu(66): error: no suitable conversion function from "CompressedAttnWeights" to "int" exists
+      compressed_decode_step_indexer(out_dec, x, s-1, w, win_kv, comp_kv, idx_ckv, &Th, ratio, EPS);
+                                                      ^
+
+tests/gate_indexer_decode.cu(66): error: no suitable constructor exists to convert from "float *" to "CompressedAttnWeights"
+      compressed_decode_step_indexer(out_dec, x, s-1, w, win_kv, comp_kv, idx_ckv, &Th, ratio, EPS);
+                                                         ^
+
+tests/gate_indexer_decode.cu(66): error: argument of type "int *" is incompatible with parameter of type "float *"
+      compressed_decode_step_indexer(out_dec, x, s-1, w, win_kv, comp_kv, idx_ckv, &Th, ratio, EPS);
+                                                                                   ^
+
+tests/gate_indexer_decode.cu(66): error: argument of type "int" is incompatible with parameter of type "int *"
+      compressed_decode_step_indexer(out_dec, x, s-1, w, win_kv, comp_kv, idx_ckv, &Th, ratio, EPS);
+                                                                                        ^
+
+tests/gate_indexer_decode.cu(66): error: too few arguments in function call
+      compressed_decode_step_indexer(out_dec, x, s-1, w, win_kv, comp_kv, idx_ckv, &Th, ratio, EPS);
+                                                                                                  ^
+
+6 errors detected in the compilation of "tests/gate_indexer_decode.cu".
+FAILED TO BUILD build/gate_indexer_decode

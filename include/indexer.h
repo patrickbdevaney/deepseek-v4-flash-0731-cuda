@@ -205,6 +205,13 @@ void hadamard(float* y, const float* x, int rows, int D, cudaStream_t stream = 0
 void index_score(float* score, const float* q, const float* kv, const float* weights,
                  int S, int T, int H, int d, cudaStream_t stream = 0);
 
+// DECODE_LADDER 1.5. Explicit-implementation entry point, for gates and A/B only: the shipped
+// `index_score` picks IXS_TILED and falls back leftward. Returns false when `impl` cannot serve the
+// shape (tiled is templated on `d`; warp needs d%32==0), so a caller can chain.
+enum { IXS_SCALAR = 0, IXS_WARP = 1, IXS_TILED = 2, IXS_GEMM = 3 };
+bool index_score_impl(int impl, float* score, const float* q, const float* kv, const float* weights,
+                      int S, int T, int H, int d, cudaStream_t stream = 0);
+
 // Full DSA Indexer forward (prefill, b=1). wq_b:[n_heads*idx_hd, q_lora] fp8 + scale; weights_proj:[n_heads,dim];
 // rotate-compressor weights (c_*); q_cos/q_sin:[s,rd/2] (query freqs), c_cos/c_sin:[s/ratio,rd/2] (compressed).
 // Outputs: index_score:[s, s/ratio] (post causal-mask, for gating) and topk_idxs:[s, min(index_topk,s/ratio)]

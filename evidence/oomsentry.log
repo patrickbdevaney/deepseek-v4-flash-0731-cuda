@@ -1,0 +1,3 @@
+[oomsentry 2026-08-20T08:46:57-04:00] started: floor=1200MB slope=<-400MB/s below 1800MB poll=0.2s allow='dsv4-server decode decode_probe decode_prechange decode_pre1p4_ref forward load_device'
+[oomsentry 2026-08-20T08:51:54-04:00] started: floor=1200MB slope=<-400MB/s below 1800MB poll=0.2s allow='dsv4-server decode decode_probe decode_prechange decode_pre1p4_ref forward load_device'
+[oomsentry 2026-08-20T08:53:56-04:00] started: floor=1200MB slope=<-400MB/s below 1800MB poll=0.2s allow='dsv4-server decode decode_probe decode_prechange decode_pre1p4_ref forward load_device'

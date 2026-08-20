@@ -63,15 +63,251 @@ __global__ void index_score_warp_kernel(float* __restrict__ score, const float* 
     }
     if (lane == 0) score[(size_t)s * T + t] = acc;
 }
+// ================= DECODE_LADDER 1.5 — the same arithmetic, off a different memory hierarchy =====
+//
+// WHAT WAS WRONG WITH THE KERNEL ABOVE, precisely. `index_score_warp_kernel` is warp-per-(query,row)
+// and its inner body reads BOTH operands from global on every head:
+//
+//     for h in 0..H:  for e = lane; e < d; e += 32:  dot += qh[e] * kvt[e];
+//
+// `q` for one query is H*d = 64*128 = 8192 floats = 32 KiB — the whole thing — and it is re-read
+// once per row `t`. `kv[t]` is d = 128 floats and it is re-read once per HEAD. So the kernel moves
+// 2*S*T*H*d*4 bytes = 1.2 GB per call at the verify shape (S=6, T=3072) to do 151 M MACs, an
+// arithmetic intensity of 0.5 FLOP/byte on a machine whose FFMA peak is 5.45 TFLOPS. It also cannot
+// unroll: `d` is a runtime argument, so the e-loop is a serial chain of two dependent global loads.
+// That is the whole of the 6.58 ms `i:score` costs at ctx 12,288 (ladder 0.4).
+//
+// THE FIX IS MEMORY PLACEMENT, NOT MATHEMATICS, AND THAT IS DELIBERATE. Both re-reads are removed:
+//   * `q` for this query is staged ONCE per block into shared memory (33 KiB incl. the head
+//     weights) and read from there by every row the block owns;
+//   * `kv[t]` is held in REGISTERS by the warp that owns row t (d/32 = 4 floats per lane) and read
+//     once, not H times;
+//   * `d` becomes a template parameter so the e-loop unrolls into independent FFMAs.
+//
+// THE ARITHMETIC IS BYTE-IDENTICAL TO THE WARP KERNEL, ON PURPOSE. Same lane->element mapping
+// (lane, lane+32, lane+64, ...), same serial accumulation into `dot` in that order, same 5-step
+// `__shfl_down_sync` tree, same `fmaxf` then same serial accumulation over h in h order. Nothing is
+// reassociated, so this is a memcmp claim and not a cosine claim — which matters here because
+// LOOP_LOG Finding 68 is exactly the case of a reduction-order change to THIS kernel that a
+// tolerance gate would have passed and that moves which rows the top-k selects 43 layers later.
+// tests/gate_index_score.cu is the memcmp. NO_IXTILE=1 restores the warp kernel for A/B.
+//
+// The broadcast `__shfl_sync(...,0)` that the warp kernel does after its tree is dropped: only
+// lane 0 stores, lane 0's tree result is already the full sum, and every lane still executes the
+// tree so the warp stays converged.
+template<int D>
+__global__ __launch_bounds__(256) void index_score_tiled_kernel(
+        float* __restrict__ score, const float* __restrict__ q, const float* __restrict__ kv,
+        const float* __restrict__ weights, int T, int H) {
+    extern __shared__ float smem[];
+    float* __restrict__ sq = smem;                  // [H*D] this query's heads
+    float* __restrict__ sw = smem + (size_t)H * D;  // [H]   this query's head weights
+    const int s = blockIdx.y;
+    {   const float* qs = q + (size_t)s * H * D;
+        for (int i = threadIdx.x; i < H * D; i += blockDim.x) sq[i] = qs[i];
+        for (int i = threadIdx.x; i < H;     i += blockDim.x) sw[i] = weights[(size_t)s * H + i];
+    }
+    __syncthreads();
+    const int lane = threadIdx.x & 31, warp = threadIdx.x >> 5, nw = blockDim.x >> 5;
+    for (int t = blockIdx.x * nw + warp; t < T; t += gridDim.x * nw) {
+        const float* kvt = kv + (size_t)t * D;
+        float kr[D / 32];
+        #pragma unroll
+        for (int j = 0; j < D / 32; ++j) kr[j] = kvt[lane + 32 * j];
+        float acc = 0.f;
+        for (int h = 0; h < H; ++h) {
+            const float* qh = sq + h * D;
+            float dot = 0.f;
+            #pragma unroll
+            for (int j = 0; j < D / 32; ++j) dot += qh[lane + 32 * j] * kr[j];   // same order as e=lane,lane+32,...
+            #pragma unroll
+            for (int o = 16; o > 0; o >>= 1) dot += __shfl_down_sync(0xffffffff, dot, o);
+            acc += fmaxf(dot, 0.f) * sw[h];       // same relu, same head order
+        }
+        if (lane == 0) score[(size_t)s * T + t] = acc;
+    }
+}
+
+// ================= DECODE_LADDER 1.5 — the GEMM, and the reference order it restores ==========
+//
+// THE TILED KERNEL ABOVE IS BIT-EXACT WITH THE WARP KERNEL AND THAT IS WHAT CAPS IT AT 2x. Its
+// per-(row,head) cost is 4 FFMA of useful work against ~16 instructions of overhead, and half that
+// overhead is the 5-step `__shfl_down_sync` tree. SHFL retires at one warp-instruction per SM per
+// clock on this part, so 1.18 M (row,head) pairs x 5 SHFL over 20 SMs is a ~200 us floor at the
+// verify shape no matter how the operands are staged — and the measured tiled kernel is 451 us
+// against exactly that arithmetic. The tree cannot be removed while the claim is "bit-identical to
+// the warp kernel", because the tree IS the warp kernel's summation order.
+//
+// SO CHANGE WHICH KERNEL THE CLAIM IS AGAINST — TOWARDS THE REFERENCE, NOT AWAY FROM IT.
+// `index_score_kernel` at the top of this file is the correctness-first scalar version that
+// `tests/gate_units.cu` checks against `ref/goldens/unit_index_score.safetensors`. Its order is
+// SERIAL over d:  dot += qh[0]*kvt[0]; dot += qh[1]*kvt[1]; ...  That is precisely the order a
+// register-tiled GEMM accumulates in, so a GEMM can be BIT-IDENTICAL to the reference while the
+// shipped warp kernel is not. LOOP_LOG Finding 68 records that the warp kernel was itself adopted
+// as a deviation from this order, behind the LOSSLESS gate; 1.5 spends that deviation back.
+//
+// SHAPE. score[s,t] = sum_h relu(q[s,h,:] . kv[t,:]) * w[s,h] is a GEMM P[(s,h),t] = q . kv^T with
+// M = H = 64, N = T, K = d = 128, plus a reduction over M in the epilogue. One block owns ALL H
+// heads of one query s and IXG_BT = 128 rows, so:
+//   * the k-loop is 8x8 register-tiled — 16 shared loads feed 64 FFMAs, ~4:1, against the tiled
+//     kernel's 1:1 — and accumulates serially in k, chunk by chunk, which preserves the reference
+//     order exactly;
+//   * P for the whole tile goes to shared (H x IXG_BT floats), and the epilogue then walks
+//     h = 0..H-1 IN ORDER for each row, which preserves the reference's serial `acc +=` over heads.
+//     Reducing over h in registers instead would be 8x faster and WRONG: thread-local partials
+//     recombined pairwise are not the same float as a serial sum, and this file's whole history is
+//     that such a difference relocates the top-k boundary.
+// The register tiling is STRIDED, not blocked (t = tx + j*16, h = ty + i*8): consecutive threads
+// then read consecutive shared floats with plain scalar loads and no bank conflict, which is what
+// a blocked mapping would need float4 and padding games to get.
+//
+// NOT bit-exact with the shipped warp kernel — bit-exact with the SCALAR reference. Both facts are
+// measured, both ways, by tests/gate_index_score.cu. NO_IXGEMM=1 falls back to the tiled kernel.
+#define IXG_BT 128        // rows of kv per block
+#define IXG_KC  32        // k staged per pass; d % IXG_KC == 0 required
+#define IXG_TH   8        // heads per thread
+#define IXG_TT   8        // rows per thread
+__global__ __launch_bounds__(128) void index_score_gemm_kernel(
+        float* __restrict__ score, const float* __restrict__ q, const float* __restrict__ kv,
+        const float* __restrict__ weights, int T, int H, int d) {
+    extern __shared__ float sm[];
+    const int SQS = H + 1, SKS = IXG_BT + 1, SPS = IXG_BT + 1;   // +1 = bank-conflict padding
+    float* __restrict__ sq  = sm;                                 // [IXG_KC][H+1]   staged q^T
+    float* __restrict__ skv = sm + (size_t)IXG_KC * SQS;          // [IXG_KC][BT+1]  staged kv^T
+    const int s = blockIdx.y, t0 = blockIdx.x * IXG_BT, nth = blockDim.x;
+    const int NTX = IXG_BT / IXG_TT;                              // 16
+    const int tx = threadIdx.x % NTX, ty = threadIdx.x / NTX;
+    const int NTY = H / IXG_TH;
+    float c[IXG_TH][IXG_TT];
+    #pragma unroll
+    for (int i = 0; i < IXG_TH; ++i)
+        #pragma unroll
+        for (int j = 0; j < IXG_TT; ++j) c[i][j] = 0.f;
+    const float* qs = q + (size_t)s * H * d;
+    for (int k0 = 0; k0 < d; k0 += IXG_KC) {
+        __syncthreads();
+        // COALESCED in global (consecutive threads walk k), CONFLICT-FREE in shared (the +1 pad).
+        for (int i = threadIdx.x; i < H * IXG_KC; i += nth) {
+            const int h = i / IXG_KC, kk = i % IXG_KC;
+            sq[kk * SQS + h] = qs[(size_t)h * d + k0 + kk];
+        }
+        for (int i = threadIdx.x; i < IXG_BT * IXG_KC; i += nth) {
+            const int tt = i / IXG_KC, kk = i % IXG_KC, t = t0 + tt;
+            skv[kk * SKS + tt] = (t < T) ? kv[(size_t)t * d + k0 + kk] : 0.f;
+        }
+        __syncthreads();
+        #pragma unroll 8
+        for (int kk = 0; kk < IXG_KC; ++kk) {
+            float a[IXG_TH], b[IXG_TT];
+            #pragma unroll
+            for (int i = 0; i < IXG_TH; ++i) a[i] = sq [kk * SQS + ty + i * NTY];
+            #pragma unroll
+            for (int j = 0; j < IXG_TT; ++j) b[j] = skv[kk * SKS + tx + j * NTX];
+            #pragma unroll
+            for (int i = 0; i < IXG_TH; ++i)
+                #pragma unroll
+                for (int j = 0; j < IXG_TT; ++j) c[i][j] += a[i] * b[j];   // serial in k == reference
+            }
+    }
+    __syncthreads();
+    float* __restrict__ sP = sm;                                  // [H][BT+1], overlays the staging
+    #pragma unroll
+    for (int i = 0; i < IXG_TH; ++i)
+        #pragma unroll
+        for (int j = 0; j < IXG_TT; ++j) sP[(size_t)(ty + i * NTY) * SPS + tx + j * NTX] = c[i][j];
+    __syncthreads();
+    const float* ws = weights + (size_t)s * H;
+    for (int tt = threadIdx.x; tt < IXG_BT; tt += nth) {
+        const int t = t0 + tt; if (t >= T) continue;
+        float acc = 0.f;
+        for (int h = 0; h < H; ++h) acc += fmaxf(sP[(size_t)h * SPS + tt], 0.f) * ws[h];  // serial in h
+        score[(size_t)s * T + t] = acc;
+    }
+}
+
+static bool ixgemm_launch(float* score, const float* q, const float* kv, const float* weights,
+                          int S, int T, int H, int d, cudaStream_t stream) {
+    if ((d % IXG_KC) != 0 || (H % IXG_TH) != 0 || H <= 0) return false;
+    const int nth = (H / IXG_TH) * (IXG_BT / IXG_TT);
+    if (nth > 1024) return false;
+    const size_t stage = (size_t)IXG_KC * (H + 1) + (size_t)IXG_KC * (IXG_BT + 1);
+    const size_t pbuf  = (size_t)H * (IXG_BT + 1);
+    const size_t bytes = (stage > pbuf ? stage : pbuf) * sizeof(float);
+    if (bytes > 48 * 1024) return false;
+    dim3 grid((unsigned)((T + IXG_BT - 1) / IXG_BT), (unsigned)S, 1);
+    index_score_gemm_kernel<<<grid, nth, bytes, stream>>>(score, q, kv, weights, T, H, d);
+    return true;
+}
+
+// Grid shape. Every block pays for one 32 KiB stage of `q`, so the block count is a cost, not just a
+// parallelism knob: it is capped near one full occupancy wave (7 blocks/SM is what 33 KiB of shared
+// out of 228 KiB allows) and the rows are handed out grid-stride inside that. DSV4_IXTILE_BLK
+// overrides the total for a sweep.
+//
+// This is the ONLY CUDA API call on any index_score launch path, and it is on the TILED path, which
+// the engine never takes (it needs H % 8 != 0 or d % 32 != 0, and the model is H=64 d=128). That
+// matters because `compressed_decode_step_indexer` is CUDA-graph captured: `ixgemm_launch` issues a
+// kernel launch and nothing else, so the shipped path is capture-safe by construction rather than
+// by testing. gate_indexer_graph / gate_compressed_graph are the tests anyway.
+static inline int ixtile_total_blocks() {
+    static const int tb = [](){
+        const char* e = getenv("DSV4_IXTILE_BLK");
+        if (e && atoi(e) > 0) return atoi(e);
+        int sm = 20; cudaDeviceGetAttribute(&sm, cudaDevAttrMultiProcessorCount, 0);
+        return 7 * sm;
+    }();
+    return tb;
+}
+
+template<int D>
+static bool ixtile_launch(float* score, const float* q, const float* kv, const float* weights,
+                          int S, int T, int H, cudaStream_t stream) {
+    const size_t bytes = ((size_t)H * D + H) * sizeof(float);
+    if (bytes > 48 * 1024) return false;            // stay under the default per-block ceiling
+    const int threads = 256, nw = threads >> 5;
+    const int need = (T + nw - 1) / nw;
+    int gx = ixtile_total_blocks() / (S > 0 ? S : 1); if (gx < 1) gx = 1; if (gx > need) gx = need;
+    dim3 grid((unsigned)gx, (unsigned)S, 1);
+    index_score_tiled_kernel<D><<<grid, threads, bytes, stream>>>(score, q, kv, weights, T, H);
+    return true;
+}
+
+// ONE dispatch, THREE implementations, and the gate drives this rather than the env vars — because
+// `NO_IXWARP`/`NO_IXTILE` are read through function-local statics, so a single process cannot flip
+// arms and a gate that has to fork per shape is a gate nobody runs. Returns false if `impl` cannot
+// serve this shape, which is how index_score below falls back rather than silently doing nothing.
+bool index_score_impl(int impl, float* score, const float* q, const float* kv, const float* weights,
+                      int S, int T, int H, int d, cudaStream_t stream) {
+    if (S <= 0 || T <= 0 || H <= 0 || d <= 0) return false;
+    if (impl == IXS_GEMM) return ixgemm_launch(score, q, kv, weights, S, T, H, d, stream);
+    if (impl == IXS_TILED) {
+        // Only the head dims this engine actually issues are templated; anything else reports
+        // false and the caller falls back, rather than silently taking a different code path.
+        if (d == 128) return ixtile_launch<128>(score, q, kv, weights, S, T, H, stream);
+        if (d ==  64) return ixtile_launch< 64>(score, q, kv, weights, S, T, H, stream);
+        if (d ==  32) return ixtile_launch< 32>(score, q, kv, weights, S, T, H, stream);
+        if (d == 256) return ixtile_launch<256>(score, q, kv, weights, S, T, H, stream);
+        return false;
+    }
+    if (impl == IXS_WARP) {
+        if ((d % 32) != 0) return false;
+        const int threads = 256, wpb = threads >> 5;
+        index_score_warp_kernel<<<((size_t)S * T + wpb - 1) / wpb, threads, 0, stream>>>(score, q, kv, weights, S, T, H, d);
+        return true;
+    }
+    index_score_kernel<<<((size_t)S * T + 255) / 256, 256, 0, stream>>>(score, q, kv, weights, S, T, H, d);
+    return true;
+}
+
 void index_score(float* score, const float* q, const float* kv, const float* weights,
                  int S, int T, int H, int d, cudaStream_t stream) {
     static const bool warpk = getenv("NO_IXWARP") == nullptr;
-    if (warpk && (d % 32) == 0) {
-        const int threads = 256, wpb = threads >> 5;
-        index_score_warp_kernel<<<((size_t)S * T + wpb - 1) / wpb, threads, 0, stream>>>(score, q, kv, weights, S, T, H, d);
-        return;
-    }
-    index_score_kernel<<<(S * T + 255) / 256, 256, 0, stream>>>(score, q, kv, weights, S, T, H, d);
+    static const bool tilek = getenv("NO_IXTILE") == nullptr;
+    static const bool gemmk = getenv("NO_IXGEMM") == nullptr;
+    if (warpk && tilek && gemmk && index_score_impl(IXS_GEMM, score, q, kv, weights, S, T, H, d, stream)) return;
+    if (warpk && tilek && index_score_impl(IXS_TILED, score, q, kv, weights, S, T, H, d, stream)) return;
+    if (warpk && index_score_impl(IXS_WARP, score, q, kv, weights, S, T, H, d, stream)) return;
+    index_score_impl(IXS_SCALAR, score, q, kv, weights, S, T, H, d, stream);
 }
 
 // ================= DSA Indexer forward =================
