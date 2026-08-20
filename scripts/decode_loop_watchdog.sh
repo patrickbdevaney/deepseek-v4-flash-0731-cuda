@@ -39,6 +39,12 @@ for g in gate_tokenizer gate_encoding gate_api gate_topk_warp gate_idx_pack; do
   ./build/"$g" > /dev/null 2>&1 || { say "GATE FAIL: $g — refusing to restart onto a broken tree"; exit 0; }
 done
 
+# A restart that failed on a usage limit did no work and must not count against the cap -- that is
+# what burned all four restarts overnight while the account was rate limited.
+if [ -f "$LOG" ] && tail -40 evidence/decode_loop/driver.log 2>/dev/null | grep -qiE "usage/session limit"; then
+  say "last stop was a usage limit, not a fault; clearing the restart counter"
+  rm -f "$STAMP"
+fi
 n=$(cat "$STAMP" 2>/dev/null || echo 0)
 if [ "$n" -ge "$MAX_RESTARTS" ]; then
   say "already restarted $n times; standing down. Clear $STAMP to re-arm."

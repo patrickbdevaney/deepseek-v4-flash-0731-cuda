@@ -30,6 +30,7 @@ MAX_ITERS="${MAX_ITERS:-40}"
 # at that rate the 48h budget buys ~90 iterations of an unknown mix. A stuck iteration is worse than
 # a failed one because it looks identical to a working one, so it gets a wall.
 ITER_TIMEOUT="${ITER_TIMEOUT:-5400}"
+LIMIT_BACKOFF="${LIMIT_BACKOFF:-900}"   # wait out a usage limit rather than treating it as fatal
 MAX_HOURS="${MAX_HOURS:-48}"
 FLOOR_GB="${FLOOR_GB:-100}"          # refuse to start an iteration below this MemAvailable
 NOISE_PCT="${NOISE_PCT:-2.0}"        # below this, an iteration counts as no-improvement
@@ -204,6 +205,19 @@ The iteration left no COMMIT_MSG_*.txt, so this message says only what the ladde
   fi
 
   [ "$post_ok" = "1" ] || die "post-checks failed after iteration $iter — stopping rather than compounding"
+  # A USAGE LIMIT IS NOT A FAILURE, IT IS A WAIT. Overnight the account hit its session limit and
+  # every invocation returned rc=1 after one second having done nothing. The loop treated that as
+  # fatal and stopped; the watchdog restarted it into the same wall every 15 minutes until it hit
+  # its restart cap. Four wasted restarts and a night of no work, from a condition that resolves by
+  # itself at a known time. So: detect it, sleep, and RETRY THE SAME ITEM -- it never started, so it
+  # must not be counted, journaled as a failure, or marked on the ladder.
+  if [ "$rc" != "0" ] && grep -qiE "usage limit|session limit|rate.?limit" "$out" 2>/dev/null; then
+    say "hit a usage/session limit — this is a wait, not a failure. Sleeping ${LIMIT_BACKOFF}s and retrying item unchanged."
+    rm -f "$out"
+    sleep "$LIMIT_BACKOFF"
+    iter=$((iter-1))            # this attempt did no work; do not spend an iteration on it
+    continue
+  fi
   [ "$rc" = "0" ] || { say "claude returned $rc; stopping"; break; }
 done
 
