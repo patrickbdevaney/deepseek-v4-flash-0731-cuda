@@ -41,7 +41,14 @@ low=999999999
 bad=0
 while true; do
   avail=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
-  pid=$(pgrep -f "$PAT" | head -1)
+  # SELECT THE VICTIM BY `comm`, NOT BY COMMAND LINE. `pgrep -f decode` matches every shell whose
+  # command line merely CONTAINS "decode" -- and Claude Code's bash wrapper embeds the text of the
+  # command it is running into its own command line. So the old form could adopt an interactive
+  # shell as its "victim", never exit when the real model did, and -- since this script's whole job
+  # is `kill -9` -- eventually kill that shell instead of the loader. `comm` is the executable name
+  # as the kernel reports it; a shell is `bash` regardless of what it is typing.
+  pid=$(ps -eo pid=,comm= | awk -v p="$PAT" '$2==p {print $1; exit}')
+  [ -n "$pid" ] || pid=$(ps -eo pid=,comm= | awk -v p="$(basename "$PAT")" '$2==p {print $1; exit}')
 
   if [ -z "$pid" ]; then
     # Only exit once the server has been seen and then gone; before it appears, keep waiting.

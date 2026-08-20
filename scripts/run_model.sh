@@ -66,8 +66,12 @@ echo "[run_model] pid $CHILD   watch: tail -f $LOG"
 # and the normal operating point is under 3 GiB available -- so the guard is not optional, it is
 # the only thing standing between a bad --seqmax and a reboot.
 GUARD_PAT="$(basename "$1")"
+# `9<&-` IS LOAD-BEARING. The single-tenancy lock is held by THIS shell on fd 9 and every child
+# inherits it. The guard outlives the launch by design, so without closing fd 9 the guard holds the
+# lock after the model has exited and the NEXT run_model.sh refuses with "another full-model process
+# held the lock" -- which is exactly what happened on the first attempt.
 setsid nohup env PAT="$GUARD_PAT" bash "$(dirname "$0")/memguard.sh" \
-    > "${LOG%.log}.memguard.log" 2>&1 < /dev/null &
+    > "${LOG%.log}.memguard.log" 2>&1 < /dev/null 9<&- &
 echo "[run_model] memguard armed on '$GUARD_PAT' -> ${LOG%.log}.memguard.log"
 # Keep fd 9 open for the child's lifetime without blocking the caller.
 ( while kill -0 "$CHILD" 2>/dev/null; do sleep 5; done ) >/dev/null 2>&1 &
