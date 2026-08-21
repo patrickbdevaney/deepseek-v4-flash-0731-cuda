@@ -19,7 +19,7 @@ THE SELECTION RULE IS FIXED HERE, BEFORE ANY HEAD EXISTS, so it cannot be fitted
   3. The eval must be the FROZEN protocol: 8-prompt suite, NGEN0 >= 200, block 6, adaptK 1.50,
      clean run. F92 measured tau at 1.39 over the first 32 generated tokens rising to ~3.2 after
      ~128, so a short-generation number is a transient and is not admissible.
-  4. Suite-mean tau must EXCEED the incumbent's by more than the measured run-to-run spread
+  4. Suite-mean TAU (not tok/s -- ladder 2.4) must EXCEED the incumbent's by more than the spread
      (3.5%, F94). Ties go to the incumbent -- a head that is not clearly better is not better.
 
 Everything else is bookkeeping, and the bookkeeping is the point.
@@ -73,7 +73,7 @@ def incumbent():
     best = None
     for line in open(REGISTRY):
         m = re.match(r"\|\s*`([^`]+)`\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|.*\|\s*(PROMOTED|baseline)\s*\|", line)
-        if m and (best is None or float(m.group(3)) > best["suite_tok_s"]):
+        if m and (best is None or float(m.group(2)) > best["suite_tau"]):
             best = {"name": m.group(1), "suite_tau": float(m.group(2)), "suite_tok_s": float(m.group(3))}
     return best
 
@@ -123,12 +123,29 @@ def promote(a):
     if ev["n_suite"] < 8:             fails.append(f"suite has {ev['n_suite']} real prompts, need 8")
     if ev["blocks"] != [6]:           fails.append(f"eval blocks {ev['blocks']}, protocol is block 6")
     if ev["suite_tok_s"] is None:     fails.append("no suite points parsed")
-    if inc and ev["suite_tok_s"] is not None:
-        need = inc["suite_tok_s"] * (1 + NOISE)
-        if ev["suite_tok_s"] <= need:
-            fails.append(f"suite {ev['suite_tok_s']:.2f} tok/s does not beat incumbent "
-                         f"{inc['suite_tok_s']:.2f} by the {100*NOISE:.1f}% run-to-run spread "
-                         f"(needs > {need:.2f}); ties go to the incumbent")
+    # LADDER 2.4 -- THE RULER. This compared `suite_tok_s`, against a row read out of
+    # HEAD_REGISTRY.md: a number recorded on whatever engine revision was current when THAT head
+    # was measured. The docstring above always said `tau`. 2.2 measured the difference directly --
+    # on the same frozen protocol, across 8 days and five decode-kernel rewrites, suite `tau`
+    # reproduced the archived value to FOUR DECIMAL PLACES for both heads, while suite tok/s moved
+    # -2.3 % and -5.0 % and base AR moved -17.4 %. `s2` was refused by a 2.5 % margin on exactly
+    # this comparison. tok/s is an ENGINE measurement; `tau` is a HEAD measurement, and the head is
+    # what is being graded.
+    #
+    # --incumbent-tau overrides the registry with a value re-measured in THIS session, which is the
+    # strictly correct comparison. The registry `tau` stays admissible because it demonstrably does
+    # not drift, but the source is printed either way so the reader knows which one was used.
+    inc_tau = getattr(a, "incumbent_tau", None) or (inc["suite_tau"] if inc else None)
+    inc_src = ("re-measured this session" if getattr(a, "incumbent_tau", None)
+               else "HEAD_REGISTRY.md -- NOT this session")
+    if inc_tau is not None and ev["suite_tau"] is not None:
+        need = inc_tau * (1 + NOISE)
+        print(f"  incumbent tau {inc_tau:.4f} [{inc_src}] -> needs > {need:.4f}; "
+              f"candidate {ev['suite_tau']:.4f}")
+        if ev["suite_tau"] <= need:
+            fails.append(f"suite tau {ev['suite_tau']:.4f} does not beat incumbent "
+                         f"{inc_tau:.4f} by the {100*NOISE:.1f}% run-to-run spread "
+                         f"(needs > {need:.4f}); ties go to the incumbent")
     if fails:
         print("REFUSED to promote:")
         for f in fails:
@@ -214,6 +231,9 @@ if __name__ == "__main__":
     p = sub.add_parser("promote"); p.add_argument("--head", required=True)
     p.add_argument("--eval", required=True); p.add_argument("--name", required=True)
     p.add_argument("--notes", default=""); p.add_argument("--metrics", default=None)
+    p.add_argument("--incumbent-tau", type=float, default=None, dest="incumbent_tau",
+                   help="incumbent suite-mean tau RE-MEASURED in this same session; overrides the "
+                        "HEAD_REGISTRY row, which is a different engine revision (ladder 2.4)")
     q = sub.add_parser("archive"); q.add_argument("--head", required=True)
     q.add_argument("--eval", default=None); q.add_argument("--name", required=True)
     q.add_argument("--notes", default=""); q.add_argument("--metrics", default=None)

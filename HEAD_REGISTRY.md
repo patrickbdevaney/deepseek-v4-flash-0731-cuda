@@ -20,6 +20,45 @@ speculator weights (not in git, therefore at risk). This registry plus
 | `s2-abl-ce1.0_tv0.0` | 3.6712 | 25.1038 | 13.7 | `e2a6cb47a` | not promoted: suite 25.10 tok/s does not beat incumbent 24.52 by the 3.5%  |
 | `s3` | 3.8438 | 25.5312 | 13.8 | `85dbea6cf` | PROMOTED |
 
+## Two corrections that qualify every row above
+
+**1. The ruler was wrong until 2026-08-21 (ladder 2.4).** `promote_head.py`'s docstring always said
+the gate was suite-mean **`tau`**; the code compared **`suite_tok_s`**, against a row read out of
+this file — i.e. a number recorded on whatever engine revision was current when *that* head was
+measured. `tau` is a property of the HEAD and reproduces to four decimal places across 8 days and
+five decode-kernel rewrites; tok/s is a property of the ENGINE and moved -2.3 % / -5.0 %, with base
+AR moving **-17.4 %**. Fixed: the comparison and the incumbent search both use `tau`, and
+`--incumbent-tau` accepts a value re-measured in the same session, printing which source was used.
+
+Re-adjudicating the rows under the corrected rule changes exactly one verdict:
+
+| head | `tau` | needed | corrected verdict | recorded verdict |
+|---|---|---|---|---|
+| `s1` | 3.5762 | > 3.6600 | **refuse** (+1.1 %, inside the 3.5 % spread) | PROMOTED |
+| `s2` and the three ablations | 3.6275–3.6712 | > 3.7014 | refuse | refuse |
+| `s3` | 3.8438 | > 3.7014 | **PROMOTE** | PROMOTED |
+
+`s1` was promoted on a margin that the spread cannot resolve. It is moot for what is served — `s3`
+superseded it — but the ledger should say so. Note the counterfactual: had `s1` correctly been
+refused, the incumbent would have stayed at baseline 3.5362 and `s2-abl-ce1.0_tv0.0` (3.6712) would
+have cleared 3.6600 and been promoted. The refusals were not all robust to the ruler.
+
+**2. Every head above was trained on taps captured through a racing forward.** The capture stage of
+`scripts/s5_session.sh` runs **`./build/decode`**, whose prefill was non-deterministic above ~192
+positions until ladder 1.10 landed on 2026-08-21 (an aliased `hadamard`, three call sites passing
+the same pointer twice; 56 of 56 pairs divergent before the fix, 56 of 56 byte-identical after).
+The corpora are entirely inside that regime:
+
+| corpus | sequences | min / median / max tokens | above 192 |
+|---|---|---|---|
+| `s3/gen.txt` | 1536 | 525 / 585 / 1799 | **1536 / 1536** |
+| `s1_gen.txt` | 500 | 539 / 578 / 835 | **500 / 500** |
+
+Whether this materially degraded the heads is **UNMEASURED**, and it should not be asserted either
+way. It is cheap to measure: `s3/gen.txt` is retained, so re-capturing that exact corpus post-fix
+costs pass 2 + train and needs **no vLLM generation**. That is the designated first session, and it
+is a control against an archived number rather than a new experiment.
+
 ## Which head is the *best* one, and where to upload it from
 
 Promotion (above) answers "does this beat the incumbent on the suite mean". It does not answer
