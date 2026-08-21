@@ -57,6 +57,16 @@ P2.4    # fix promote_head.py (= ladder 2.4) and re-adjudicate the 4 refused hea
         # model load. It compares suite_tok_s against a row from another engine revision; base AR
         # moved -17.4 % across the drift while tau reproduced to 4 d.p. Measuring P2 heads on the
         # current rule grades the programme with a broken ruler, so this precedes every head.
+2.4     # the SAME item as P2.4 above, under its topic number. Listed so that if the P2.4
+        # iteration closes only one of the two checkboxes, the next iteration closes the other
+        # instead of leaving an orphan that sorts behind "then stop".
+2.5     # base AR fell 72.5 -> 87.7/88.2 ms/tok on the identical WARM decode, -17.4 %, twice, in
+        # two independent loads -- while speculative throughput on the same runs stayed flat.
+        # A real 17 % forward regression cannot leave spec unchanged, so the likeliest reading is
+        # that a 7-step warm average is too short for a path 1.0 put a main-KV cache on. It sorts
+        # HERE, with the other ruler fix and ahead of every head, because it is the DENOMINATOR of
+        # every "N.NNx vs base AR" figure this project reports -- including the ones P2.9 writes
+        # into the release bundle. Unlisted it sorted behind P2.10, i.e. it would never have run.
 P2.7    # DSV4_DPROF on a PS=1023 prefill. One load, never taken. 12,282 prompt tokens = 227.6 s
         # = 3.8 min TTFT, and prefill DECLINES with prompt size. Pre-registered target: TTFT < 30 s
         # at 12 k uncached, i.e. >= 410 tok/s, a 7.6x. If the cost is diffuse, say so and stop.
