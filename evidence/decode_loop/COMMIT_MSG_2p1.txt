@@ -1,0 +1,71 @@
+2.1: the speculation block goes 6 -> 5, +3.91 +/- 1.65 % tok/s on 32 prompts AT EQUAL tau -- and making the verify expensive moved the optimum DOWN, not up
+
+WHAT CHANGED. One constant, in the two places that own it: EngineConfig::blk in
+include/dsv4_engine.h (the SERVED default -- scripts/serve.sh passes no --blk) and defblk in
+src/decode.cu (the bench default). DSV4_BLK=6 still restores the old arm. Every measurement script
+in scripts/ pins its width explicitly in the sweep string, so no frozen protocol moved underneath
+this; the head-promotion protocol is now off-policy at 6 and that is written into ladder 2.4.
+
+WHAT WAS MEASURED. Two palindromic sweeps, each inside ONE checkpoint load, on the live s3
+checkpoint, adaptK frozen at 1.50, NGEN0 200. Paired per prompt against the shipped BLK=6, bands
+2 SE of the per-prompt differences, n=32:
+
+  BLK=5   +0.926 +/- 0.454 tok/s  = +3.91 +/- 1.65 %   26/32 legs   d tau -0.0518 +/- 0.0835
+  BLK=4   +0.831 +/- 0.576 tok/s  = +3.78 +/- 2.15 %   23/32 legs   d tau -0.2942 +/- 0.1473
+  4 vs 5  -0.095 +/- 0.375 tok/s  = -0.12 +/- 1.43 %                d tau -0.2424 +/- 0.1020
+
+5 is an INTERIOR optimum: 4 buys no throughput over it and does cost acceptance, 6 loses
+3.58 +/- 1.53 %, and the first sweep closes everything above -- 7 -1.70, 8 -2.93, 9 -6.30,
+10 -9.36, 12 -10.86 %, monotone. tau CLIMBS the whole way down, 3.48 -> 4.36, which is why this
+needed ms/token beside it: a wider block buys the metric the project optimises hardest and charges
+more than that metric is worth.
+
+WHY. Priced out of the engine's own 13,392 verify rounds (ms_round ~ c0 + cB*BLK + cK*K, fitted per
+prompt, banded across prompts): one more DRAFTED position costs +3.324 +/- 0.281 ms, one more
+VERIFIED position +15.184 +/- 0.396 ms. The draft forward runs at M=BLK whatever adaptK later
+decides, and adaptK stops early far more often than the ceiling suggests -- at BLK=6 the mean
+realised verify width is 3.87 of a ceiling of 7 and only 19.3 % of rounds reach it, so 3.13
+proposals per round (10.40 ms) are drafted and thrown away. The sixth proposal buys 0.014 tokens
+per round and costs 5.40 ms. Round-level ms/token: 43.49 (BLK 4) ~ 43.53 (5) << 45.14 (6), computed
+from a different field of the same log than the paired result and agreeing with it to a tenth of a
+percent. 5 is also exactly config.json's dspark_block_size -- the width the head was TRAINED at.
+F94 pushed serving one position past training while that position was nearly free; 1.1/1.2 ended
+that, and DECODE_ZENITH_FINDINGS 3.2 had said in advance that the width would have to be
+re-decided or "you will tune to a transient". The transient was 6.
+
+THE ITEM'S OWN PREDICTION WAS WRONG IN THE DIRECTION IT NAMED, and is corrected rather than quietly
+dropped: it said the optimum "returns to ~7-9 from an apparent 11-13". It returns to 5, and the
+"apparent 11-13" was never a measurement this repo took -- the default was 6 and F94 had already
+closed 8. Right mechanism, guessed arithmetic.
+
+WHAT MADE THE FIRST SWEEP UNDER-POWERED WAS NOT REPLICATION. Sweep A gave +2.79 +/- 3.83 % for
+BLK=5 -- the right answer with a band straddling zero -- and more replicates would have bought
+nothing: repeats of the same (prompt, width) emit a BIT-IDENTICAL id sequence -- 173 mirrored pairs
+across the two sweeps, 173 identical, 0 differing -- so a repeat cancels timing drift and nothing else, and sweep B measured that drift at +0.000 +/- 0.002 tok/s over 99
+mirrored pairs. The band was between-PROMPT variance; the only estimator that shrinks it is more
+prompts. n 8 -> 32 took the band 3.83 -> 1.65 % with the point estimate essentially unmoved. Subsets
+agree: suite-8 +2.70 +/- 3.82 %, the 24 held-out prompts +4.32 +/- 1.82 %.
+
+GATES, AND A CLAIM THAT GOT STRONGER WHEN THE READER WAS FIXED. BLK sets M in the verify forward and
+therefore MoE atomic reduction order, so this was pre-registered as NOT bit-exact and instrumented
+to measure the divergence instead of assuming it. It measures none: LOSSLESS gate 24/24 points PASS
+across both sweeps, and across the 344 sequences DSV4_GENOUT recorded, every arm is id-for-id
+identical to the BLK=6 reference over every shared position -- 258 comparisons at widths 4 through
+12, ZERO differing tokens. The first reading said otherwise because tools/blkwidth_ab.py counted a
+different LENGTH as a divergence: generation stops at the first verify that carries the count past
+NGEN, so a narrower block overshoots 200 by -6 to +7 tokens and the sequences end at different
+positions with equal ids. That is measurement-and-traps 35 run backwards -- 35 compared past the
+length at which two arms agree and passed a real difference; this compared past that length and
+failed an agreement. The analyser now reports identical / same-ids-different-length / genuinely
+different as three columns, and both verdict files were regenerated. The served default
+was proven behaviourally, not by reading source: "[engine] loading .../ckpt-head-s3 (seqmax=8192,
+blk=5, adaptK=1.50)" from a real run_server.sh load (detached, ppid systemd, tty ?), and
+"[parse] point 0: BLK=5" from build/decode with no DSV4_BLK. The four cheap server gates
+(tokenizer/encoding/api/stream) pass on the rebuilt binary. No re-measurement was needed after the
+rebuild: both arms were measured by the SAME binary in the same load.
+
+Evidence: evidence/decode_loop/{blkwidth_verdict_c32.txt, blkwidth_sweep_c32.log,
+blkwidth_genout_c32.txt, blkwidth_c32.log, 2p1_server_proof.log} + iteration 11's blkwidth_*.
+Corpus: protocol/blkwidth_corpus.txt (8 frozen suite prompts + 24 s3 hold-out prompts truncated to
+192 ids). Wiki: kernel-optimisations.md 2.13, negative-results.md 4k, measurement-and-traps.md 37,
+README state table; DECODE_ZENITH_FINDINGS.md 3.2 resolved.

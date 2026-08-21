@@ -155,19 +155,33 @@ int main(int argc, char** argv){
     //
     // `DSPARK_BLOCK` is 5 because `config.json` says `dspark_block_size: 5` -- that is the width the
     // head was TRAINED at, a model constant, and it stays untouched. The number of proposals the
-    // ENGINE asks for is a serving decision, and F94 measured 6 beating 5 on 4 of 4 realistic
-    // prompts (agentic +6.3%, long_context +3.3%, code_edit +2.6%, multi_turn +1.0%) with the
-    // LOSSLESS gate passing. It also measured 8 LOSING to 6 on 3 of 4, with tau itself falling --
-    // the head generalises exactly one position past its training width, not three. So 6 is the
-    // measured optimum, not a guess, and 7+ is closed by measurement rather than left open.
+    // ENGINE asks for is a serving decision, and it was 6 from F94 until LADDER 2.1 re-measured it
+    // against a verify that is no longer free.
     //
-    // F93 is the prerequisite: until the verify checked all BLK proposals instead of BLK-1, asking
-    // for a sixth was pointless because it could never be verified.
-    // DSV4_BLK overrides; DSV4_BLK=5 restores the pre-F94 default for the A/B.
+    // F94's 6 was correct FOR ITS ENGINE. `k_topk_verify<<<K,32>>>` ran one active thread per
+    // block, so a verified position cost almost nothing in the context term and the only thing
+    // width bought was acceptance. Ladder 1.1/1.2 replaced that kernel; 2.1 then priced both sides
+    // out of 13,392 verify rounds: one more DRAFTED position (verified or not) costs
+    // +3.324 +/- 0.281 ms and one more VERIFIED position +15.184 +/- 0.396 ms. The draft forward
+    // runs at M=BLK whatever adaptK later decides, so every proposal the verify never reaches is
+    // paid for in full -- and at BLK=6 the mean realised verify width is 3.71 of a ceiling of 7,
+    // i.e. 3.29 proposals per round, 10.7 ms, are drafted and thrown away.
+    //
+    // MEASURED, 32 prompts, one load, palindromic order, drift 0.000 +/- 0.002 tok/s:
+    //   BLK=5 vs 6  +3.91 +/- 1.65 % tok/s, 26/32 legs, d tau -0.052 +/- 0.084  (tau band covers 0)
+    //   BLK=4 vs 6  +3.78 +/- 2.15 % tok/s, 23/32 legs, d tau -0.294 +/- 0.147  (tau really falls)
+    //   BLK=4 vs 5  -0.12 +/- 1.43 % tok/s               d tau -0.242 +/- 0.102
+    // So 5 is an INTERIOR optimum -- 4 buys no throughput over it and does cost acceptance -- and
+    // it is exactly the width the head was trained at. 7..12 were measured in the first sweep and
+    // fall monotonically to -10.5 %.
+    //
+    // F93 is still the prerequisite: the verify checks all BLK proposals (VB = BLK+1), so a block
+    // of 5 has a ceiling of 6 accepted tokens, not 5.
+    // DSV4_BLK overrides; DSV4_BLK=6 restores the pre-2.1 default for the A/B.
     if(blkSweep.empty()){
         const char* be = getenv("DSV4_BLK");
-        int defblk = be ? atoi(be) : 6;
-        if(defblk < 2 || defblk > 16) defblk = 6;
+        int defblk = be ? atoi(be) : 5;
+        if(defblk < 2 || defblk > 16) defblk = 5;
         blkSweep.push_back(defblk); passSweep.push_back(1); adaptSweep.push_back(0.f); promptSweep.push_back(0); }
     // A sweep point naming a prompt that was not supplied would silently run prompt 0 and report a
     // number against the wrong sequence. Refuse the whole run instead — a 10-minute load producing

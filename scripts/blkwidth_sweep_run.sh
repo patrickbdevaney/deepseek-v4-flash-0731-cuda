@@ -43,21 +43,36 @@ EV=evidence/decode_loop
 # width tuned against a head that is not being served is a width tuned for nothing.
 CKPT="${CKPT:-$(cat config/live_ckpt 2>/dev/null || echo /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP)}"
 WIDTHS="${WIDTHS:-4 5 6 7 8 9 10 12}"
-NPROMPT="${NPROMPT:-9}"          # argv prompt 0 (canonical/control) + the 8 frozen suite prompts
 ADAPTK="${ADAPTK:-1.50}"         # FROZEN. One change per measurement; the width is the change.
 NGEN="${NGEN:-200}"              # the frozen protocol's NGEN0
 TRIES="${TRIES:-3}"
-LOG=$EV/blkwidth_sweep.log
-GO=$EV/blkwidth_genout.txt
-OUT=$EV/blkwidth_verdict.txt
+TAG="${TAG:-}"                   # distinct filenames per run; the first sweep's evidence is the before-arm
+LOG=$EV/blkwidth_sweep$TAG.log
+GO=$EV/blkwidth_genout$TAG.txt
+OUT=$EV/blkwidth_verdict$TAG.txt
+# CORPUS: THE POWER OF THE FIRST SWEEP IS THE THING THAT HAS TO CHANGE, and it is not fixable with
+# replicates. Repeats of the same (prompt, width) emit a BIT-IDENTICAL id sequence -- the first
+# sweep's own divergence table proves it, the mirrored pairs agree exactly -- so a second occurrence
+# cancels timing drift and nothing else. The +/-3.83 % band on BLK=5 vs 6 is dominated by
+# between-PROMPT heterogeneity, and the only estimator that shrinks it is MORE PROMPTS. CORPUS is a
+# ';'-free id list per line, fed through DSV4_PROMPTS_FILE (an env var cannot carry this many ids).
+CORPUS="${CORPUS:-}"
 say(){ echo "[2.1] $(date -Is) $*"; }
 
-[ -s protocol/suite_prompts.txt ] || { say "REFUSING: protocol/suite_prompts.txt missing."; exit 1; }
+if [ -n "$CORPUS" ]; then
+    [ -s "$CORPUS" ] || { say "REFUSING: CORPUS $CORPUS missing or empty."; exit 1; }
+    grep -q ';' "$CORPUS" && { say "REFUSING: CORPUS $CORPUS contains ';' -- DSV4_PROMPTS_FILE is one list per LINE."; exit 1; }
+    NPROMPT="${NPROMPT:-$(( $(grep -c '[0-9]' "$CORPUS") + 1 ))}"     # + argv prompt 0
+    PROMPT_ENV=(DSV4_PROMPTS_FILE="$CORPUS")
+else
+    [ -s protocol/suite_prompts.txt ] || { say "REFUSING: protocol/suite_prompts.txt missing."; exit 1; }
+    NPROMPT="${NPROMPT:-9}"      # argv prompt 0 (canonical/control) + the 8 frozen suite prompts
+    PROMPT_ENV=(DSV4_PROMPTS="$(cat protocol/suite_prompts.txt)")
+fi
 [ -x build/decode ] || { say "REFUSING: build/decode missing."; exit 1; }
 for f in src/decode.cu include/indexer.h include/topk_radix.h; do
   [ "$f" -nt build/decode ] && { say "REFUSING: build/decode is older than $f."; exit 1; }
 done
-SUITE=$(cat protocol/suite_prompts.txt)
 
 # The sweep string. Warm-up point first and DISCARDED by the analysis (traps: the first run of a
 # batch is the slowest in every batch this repo has measured), then, per prompt, the palindrome.
@@ -74,17 +89,18 @@ PY
 )
 NPTS=$(awk -F, '{print NF}' <<< "$SWEEP")
 say "checkpoint  : $CKPT"
+say "corpus      : ${CORPUS:-protocol/suite_prompts.txt (8 frozen suite prompts)}"
 say "widths      : $WIDTHS   prompts: $NPROMPT   adaptK: $ADAPTK   NGEN0: $NGEN"
 say "sweep       : $NPTS points (1 warm-up + $NPROMPT x $(( (NPTS-1)/NPROMPT )) palindromic)"
 
 # GATE THE TABLE BEFORE SPENDING A LOAD. A mislabelled 145-point table discovered after a
 # ten-minute load is the expensive failure; DSV4_PARSE_ONLY answers in milliseconds.
-if ! DSV4_PARSE_ONLY=1 DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="$SWEEP" \
-     ./build/decode "$CKPT" "0,671,6102,294,8760,344" 8 "" "$NGEN" > "$EV/blkwidth_parse.log" 2>&1; then
-    say "PARSE GATE FAIL -- see $EV/blkwidth_parse.log"; tail -5 "$EV/blkwidth_parse.log"; exit 1; fi
-PARSED=$(grep -c '^\[parse\] point' "$EV/blkwidth_parse.log")
+if ! env DSV4_PARSE_ONLY=1 "${PROMPT_ENV[@]}" DSV4_BLKSWEEP="$SWEEP" \
+     ./build/decode "$CKPT" "0,671,6102,294,8760,344" 8 "" "$NGEN" > "$EV/blkwidth_parse$TAG.log" 2>&1; then
+    say "PARSE GATE FAIL -- see $EV/blkwidth_parse.log"; tail -5 "$EV/blkwidth_parse$TAG.log"; exit 1; fi
+PARSED=$(grep -c '^\[parse\] point' "$EV/blkwidth_parse$TAG.log")
 [ "$PARSED" = "$NPTS" ] || { say "PARSE GATE FAIL: $PARSED points parsed, $NPTS requested"; exit 1; }
-say "PARSE GATE PASS: $PARSED points, $(grep -c '^\[parse\] prompt' "$EV/blkwidth_parse.log") prompts"
+say "PARSE GATE PASS: $PARSED points, $(grep -c '^\[parse\] prompt' "$EV/blkwidth_parse$TAG.log") prompts"
 
 for try in $(seq 1 "$TRIES"); do
     rm -f "$GO"                                   # DSV4_GENOUT appends
@@ -95,7 +111,7 @@ for try in $(seq 1 "$TRIES"); do
     done
     sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true; sleep 2
     say "try $try: launching detached (MemAvailable $(awk '/MemAvailable/{printf "%d",$2/1048576}' /proc/meminfo) GiB)"
-    env DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="$SWEEP" DSV4_GENOUT="$GO" \
+    env "${PROMPT_ENV[@]}" DSV4_BLKSWEEP="$SWEEP" DSV4_GENOUT="$GO" \
         bash scripts/run_model.sh "$LOG" ./build/decode "$CKPT" \
         "0,671,6102,294,8760,344" 8 "" "$NGEN" || { say "run_model refused"; sleep 60; continue; }
     for w in $(seq 1 60);   do pgrep -x decode > /dev/null && break; sleep 2;  done
@@ -109,5 +125,11 @@ for try in $(seq 1 "$TRIES"); do
 done
 
 say "=== analysis ==="
-python3 tools/blkwidth_ab.py --log "$LOG" --genout "$GO" --baseline 6 | tee "$OUT"
+python3 tools/blkwidth_ab.py --log "$LOG" --genout "$GO" --baseline 6 ${ONLY:+--only "$ONLY"} | tee "$OUT"
+# The subsets are reported SEPARATELY as well as pooled, because a width optimum that holds on one
+# corpus and reverses on the other is the finding, not an inconvenience to be averaged away.
+for grp in ${SUBSETS:-}; do
+    say "--- subset $grp ---"
+    python3 tools/blkwidth_ab.py --log "$LOG" --baseline 6 --only "$grp" | tee -a "$OUT"
+done
 say "done -> $OUT"

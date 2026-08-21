@@ -730,6 +730,68 @@ token 26/42/45; 0/6 with it unset.**
 [`measurement-and-traps.md` §36](measurement-and-traps.md),
 [`negative-results.md` §4j](negative-results.md).
 
+### 2.13 A width that was tuned when the verify was free — block 6 -> 5 (ladder 2.1, 2026-08-21)
+
+**+3.91 ± 1.65 % tok/s on 32 prompts at unchanged `tau` (−0.052 ± 0.084, band covers zero), 26/32
+legs positive, from a one-line change to a default.** The speculation block had been 6 since F94,
+which measured 6 beating 5 on 4 of 4 realistic prompts. That measurement was correct for its engine
+and is not overturned: it was taken when `k_topk_verify<<<K,32>>>` ran **one active thread per
+block**, so a verified position cost almost nothing and the only thing extra width bought was
+acceptance. Ladder 1.1/1.2 replaced that kernel. `DECODE_ZENITH_FINDINGS.md` §3.2 said in advance
+that fixing it "changes the optimal block size" and that the width must be re-decided afterwards
+"or you will tune to a transient" — this is that re-decision, and the transient was 6.
+
+Mechanism, priced out of the engine's own 13,392 verify rounds (`ms_round ~ c0 + cB·BLK + cK·K`,
+fitted per prompt, banded across prompts):
+
+| | cost | what it is |
+|---|---|---|
+| `cB` | **+3.324 ± 0.281 ms** | one more **drafted** position — the MTP draft runs at M=BLK whether or not the verify ever reaches it |
+| `cK` | **+15.184 ± 0.396 ms** | one more **verified** position — a target forward at M=K |
+
+A verified position costs **4.6×** a drafted one, so the block's job is only to have proposals
+ready; adaptK decides how many get spent. And adaptK stops early far more often than the ceiling
+suggests — at BLK=6 the mean realised verify width is **3.87 of a ceiling of 7**, and only 19.3 % of
+rounds reach that ceiling:
+
+| BLK | mean realised K | rounds at ceiling | tokens/round | ms/round | **ms/token** | drafted, never verified |
+|---|---|---|---|---|---|---|
+| 4 | 3.507 | 37.1 % | 2.809 | 122.17 | **43.49** | 1.493 (4.96 ms) |
+| **5** | 3.736 | 27.1 % | 2.958 | 128.74 | **43.53** | 2.264 (7.53 ms) |
+| 6 | 3.871 | 19.3 % | 2.972 | 134.14 | **45.14** | 3.129 (10.40 ms) |
+
+**The sixth proposal buys 0.014 tokens per round and costs 5.40 ms**: 0.5 % more tokens for 4.2 %
+more time. This table is computed from a different field of the same log than the paired tok/s
+result and lands within a tenth of a percent of it, which is what makes the paired number an
+engine property rather than an averaging artefact.
+
+**5 is an interior optimum and lands exactly on the trained width.** 4 buys nothing over 5
+(−0.12 ± 1.43 %) and does cost acceptance (`tau` −0.242 ± 0.102); 6 loses 3.58 ± 1.53 %; the first
+sweep closes everything above — 7 −1.70, 8 −2.93, 9 −6.30, 10 −9.36, 12 −10.86 %, monotone, while
+`tau` climbs monotonically 3.48 → 4.36. `config.json`'s `dspark_block_size` is 5. F94 pushed serving
+one position past training while that position was nearly free; with it no longer free, serving
+falls back onto training.
+
+The gate that proved it: two sweeps, each in ONE checkpoint load, each palindromic per prompt so
+drift linear in run order cancels (measured drift in the deciding sweep: **+0.000 ± 0.002 tok/s over
+99 mirrored pairs**), adaptK frozen at 1.50, on the live `s3` checkpoint. BLK sets M in the verify
+forward and therefore MoE atomic reduction order, so the sweep was pre-registered as *not*
+bit-exact and instrumented to measure the divergence rather than assume it — and it measures
+**none**: LOSSLESS gate **24/24 points PASS**, and across the 344 sequences `DSV4_GENOUT` recorded,
+**every arm is id-for-id identical to the BLK=6 reference over every shared position — 258
+comparisons at widths 4 through 12, zero differing tokens.** What differs is only where the
+sequence *ends*: generation stops at the first verify that carries the count past NGEN, so a
+narrower block overshoots 200 by −6 to +7 tokens. The analyser originally counted that as
+divergence, which is [§35](measurement-and-traps.md)'s trap run backwards — comparing past the
+length at which two arms can be expected to agree, and calling agreement a difference.
+`include/dsv4_engine.h` carries the served default;
+`scripts/serve.sh` passes no `--blk`, and the change was proven behaviourally — `[engine] loading …
+(seqmax=8192, blk=5, adaptK=1.50)` from a real `run_server.sh` load. Every measurement script pins
+its width explicitly, so no frozen protocol moved.
+
+[`negative-results.md` §4k](negative-results.md),
+[`measurement-and-traps.md` §37](measurement-and-traps.md).
+
 ## 3. Precision and layout
 
 | finding | change | result |

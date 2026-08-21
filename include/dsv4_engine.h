@@ -69,7 +69,9 @@ struct GenStats {
 struct EngineConfig {
     std::string ckpt_dir;
     int   seqmax  = 8192;          // context ceiling; sizes the KV caches
-    int   blk     = 6;             // DSpark draft block (F94: 6 wins on realistic prompts)
+    int   blk     = 5;             // DSpark draft block (LADDER 2.1: +3.91 +/- 1.65 % over 6 on 32
+                                   // prompts at equal tau; F94's 6 was tuned when a verified
+                                   // position was ~free. src/decode.cu carries the derivation.)
     float adaptK  = 1.5f;          // adaptive verify-width threshold (F49; 2.0 regressed, F-registry)
     int   npass   = 1;             // draft refinement passes
     int   ext_chunk = 64;          // positions per batched forward when extending a cached prefix

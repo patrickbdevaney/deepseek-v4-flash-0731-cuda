@@ -1248,3 +1248,48 @@ Evidence: `evidence/decode_loop/gate_hadamard_alias_1p10.log`,
 Code: `kernels/indexer.cu` (`hadamard_stage_kernel`, `hadamard_set_stage`),
 `tests/gate_hadamard_alias.cu`, `tools/lhash_pairs.py`, `scripts/lhash_ablate.sh`,
 `scripts/lhash_verify.sh`, `scripts/hadamard_ab_run.sh`.
+
+## 37. Replicates cannot fix a band that between-prompt variance owns — the sweep whose repeats were bit-identical (ladder 2.1, 2026-08-21)
+
+A 9-prompt block-width sweep returned **+2.79 ± 3.83 %** for BLK=5 over the shipped BLK=6: the right
+answer, with a band straddling zero. The obvious next move is more replicates, and it would have
+bought **nothing**.
+
+`build/decode` at a fixed (prompt, width, adaptK) is deterministic, and the sweeps recorded every
+emitted sequence, so this is checkable rather than assumed: **173 mirrored pairs across the two
+sweeps, 173 id-identical, 0 differing.** The two occurrences of a cell differ only in wall time. And the
+wall-time term this design controls is already gone — the deciding sweep measured its within-window
+drift at **+0.000 ± 0.002 tok/s over 99 mirrored pairs**. Replication was estimating a variance
+component that had already been driven to zero.
+
+The band belonged to **between-prompt** heterogeneity: block width is worth +18 % on one prompt and
+0 % on another, because the emitted continuation forks and a different continuation has a different
+acceptance profile. That variance is a property of the corpus, not of the measurement, and the only
+estimator that shrinks it is **more prompts**. Going n 8 → 32 took the band **3.83 → 1.65 %** while
+the point estimate barely moved (+2.79 → +3.91), which is exactly the signature of a variance
+problem rather than a bias one.
+
+**The diagnostic, before spending a load.** Ask which of the two a repeat would resolve:
+
+| symptom | what a repeat of the same cell changes | the fix |
+|---|---|---|
+| arms differ run to run at fixed inputs | timing, scheduler, clocks, cache state | replicate; pair; palindromic order |
+| arms agree at fixed inputs, legs disagree with each other | **nothing** — the repeat is bit-identical | more prompts / more cells |
+
+**The same sweep carried the mirror-image defect in its other table, and it is worth naming beside
+this one.** The emitted-id comparison classified any pair of sequences with different LENGTHS as
+divergent and printed a "first divergence" index that was really the end of the shorter one. 70 of
+132 arms read as divergent with every shared id equal: generation stops at the first verify that
+carries the count past NGEN, so a narrower block overshoots by a different amount and the sequences
+end −6 to +7 tokens apart. Corrected, the answer inverts — **258 arm-vs-reference comparisons across
+widths 4 to 12, zero differing tokens** — and the change turns out to be bit-exact where it had been
+pre-registered as merely gated. This is §35 above run backwards: §35 compared past the length at
+which the arms agree and passed a real difference; this compared past that length and failed an
+agreement. **A byte-identity claim needs its comparison window stated, in both directions.**
+
+The frozen 8-prompt suite is the standing instance of the first trap: it can resolve a 10 % head change
+(ladder 2.2) and cannot resolve a 4 % kernel or width change, and nothing in its output says which
+regime it is in. Widen the corpus for any effect near the 3.5 % run-to-run spread — 2.1's 24 extra
+prompts were the `s3` hold-out truncated to 192 ids each, which cost ~4 s of prefill per point and
+took a straddling band to a decisive one in a single load.
+

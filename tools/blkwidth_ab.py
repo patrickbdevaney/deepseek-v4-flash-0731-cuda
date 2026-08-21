@@ -98,16 +98,31 @@ def main():
     ap.add_argument("--baseline", type=int, default=6, help="the shipped width, i.e. the before-arm")
     ap.add_argument("--drop-first", type=int, default=1, dest="drop_first",
                     help="warm-up points to discard; the first run of a batch is always the slowest")
+    ap.add_argument("--only", default=None,
+                    help="restrict to a prompt subset, e.g. '1-8' or '9-32' or '1,3,5'. Prompt 0 (the "
+                         "control) is always kept. A width optimum that holds on one corpus and "
+                         "reverses on another is a finding; pooling the two hides it.")
     a = ap.parse_args()
 
     pts, base_ar, gates = parse(a.log)
+    if a.only:
+        keep = set()
+        for tok in a.only.split(","):
+            if "-" in tok:
+                lo, hi = tok.split("-"); keep.update(range(int(lo), int(hi) + 1))
+            elif tok.strip():
+                keep.add(int(tok))
+        # the warm-up point is prompt 0 and drop_first slices from the FRONT, so prompt 0 must stay
+        # in the list even when the subset excludes it, or the wrong point is discarded.
+        keep.add(0)
+        pts = [r for r in pts if r["prompt"] in keep]
     if not pts:
         print("no completed sweep points in %s -- NOT evidence" % a.log)
         return 1
     warm, pts = pts[:a.drop_first], pts[a.drop_first:]
 
     print("blkwidth sweep -- DECODE_LADDER 2.1")
-    print("  log            : %s" % a.log)
+    print("  log            : %s%s" % (a.log, ("   subset prompts %s" % a.only) if a.only else ""))
     print("  points          : %d completed (+%d warm-up discarded)" % (len(pts), len(warm)))
     print("  base AR (M=1)   : %s tok/s" % (("%.2f" % base_ar) if base_ar else "?"))
     nfail = sum(1 for _, _, v in gates if v != "PASS")
@@ -254,6 +269,31 @@ def main():
         print("  break-even: a wider block pays only if the extra acceptance it buys exceeds its own")
         print("  draft cost -- at cB above, one extra block position costs %.4f ms/round." % mb)
 
+    # --- WHY the optimum is where it is -----------------------------------
+    # A width can only pay through the verify, and the verify width is NOT the block width: adaptK
+    # stops extending at the first proposal whose margin is below threshold. Every drafted position
+    # the verify never reaches was still computed in the M=BLK draft forward, at cB ms each. This
+    # table is the mechanism behind whatever the paired table above found, out of the same rounds.
+    per_w = defaultdict(lambda: [0, 0, 0, 0.0, 0])   # n, sum K, sum accepted, sum ms, n at ceiling
+    for r in pts:
+        for rd in r.get("rounds", [])[SKIP:]:
+            v = per_w[r["blk"]]
+            v[0] += 1; v[1] += rd["K"]; v[2] += rd["acc"]; v[3] += rd["ms"]
+            v[4] += 1 if rd["K"] == r["blk"] + 1 else 0
+    if per_w:
+        print("\nWHERE THE WIDTH GOES (per verify round, pooled over prompts, first %d rounds dropped)" % SKIP)
+        print("| BLK | mean realised K | rounds at ceiling K=BLK+1 | tokens/round | ms/round | ms/token |"
+              " drafted, never verified | its cost/round |")
+        print("|---|---|---|---|---|---|---|---|")
+        cbm = (sum(cb) / len(cb)) if cb else 0.0
+        for b in sorted(per_w):
+            n, sk, sa, sm, nc = per_w[b]
+            mk, ma, mm = sk / n, sa / n, sm / n
+            waste = b - (mk - 1)      # the verify of width K consumes K-1 of the BLK proposals
+            print("| %d | %.3f | %.1f %% | %.3f | %.2f | %.2f | %.3f | %s |"
+                  % (b, mk, 100.0 * nc / n, ma, mm, mm / ma if ma else 0.0, waste,
+                     ("%.2f ms" % (waste * cbm)) if cbm else "-"))
+
     # --- emitted-id divergence -------------------------------------------
     if a.genout:
         seqs = parse_genout(a.genout)
@@ -268,21 +308,35 @@ def main():
         bykey = defaultdict(list)
         for i in range(n):
             bykey[allpts[i]["prompt"]].append((allpts[i]["blk"], seqs[i]))
-        print("| prompt | sequences | identical to the BLK=%d reference | first divergence |" % a.baseline)
-        print("|---|---|---|---|")
+        # A DIFFERENT LENGTH IS NOT A DIFFERENT TOKEN, and reporting it as one buries the finding.
+        # The generation stops at the first verify that carries the count past NGEN, so a narrower
+        # block overshoots by a different amount and the sequences end at different positions with
+        # every shared id equal. That is bit-exactness up to the stop rule, not divergence
+        # (`measurement-and-traps.md` §35 is the same trap from the other direction). Counted
+        # separately: `same` = identical including length, `over` = every shared id identical and
+        # only the length differs, `firsts` = a genuinely different token, with its index.
+        print("| prompt | sequences | identical to the BLK=%d reference | same ids, different length"
+              " (overshoot) | GENUINELY different tokens |" % a.baseline)
+        print("|---|---|---|---|---|")
+        tot = [0, 0, 0]
         for p in sorted(bykey):
-            group = bykey[p]
-            refseq = next((s for b, s in group if b == a.baseline), group[0][1])
-            same, firsts = 0, []
+            group = [(b, s) for b, s in bykey[p] if b != a.baseline]
+            refseq = next((s for b, s in bykey[p] if b == a.baseline), bykey[p][0][1])
+            same, over, firsts = 0, [], []
             for b, s in group:
                 k = next((i for i in range(min(len(s), len(refseq))) if s[i] != refseq[i]), None)
                 if k is None and len(s) == len(refseq):
                     same += 1
+                elif k is None:
+                    over.append((b, len(s) - len(refseq)))
                 else:
-                    firsts.append((b, k if k is not None else min(len(s), len(refseq))))
-            print("| %d | %d | %d | %s |"
-                  % (p, len(group), same,
-                     "-" if not firsts else ", ".join("BLK %d@%d" % t for t in sorted(firsts))))
+                    firsts.append((b, k, min(len(s), len(refseq))))
+            tot[0] += same; tot[1] += len(over); tot[2] += len(firsts)
+            print("| %d | %d | %d | %s | %s |"
+                  % (p, len(group) + 1, same,
+                     "-" if not over else ", ".join("BLK %d%+d" % t for t in sorted(over)),
+                     "-" if not firsts else ", ".join("BLK %d@%d/%d" % t for t in sorted(firsts))))
+        print("| **all** | | **%d** | **%d** | **%d** |" % tuple(tot))
     return 0
 
 

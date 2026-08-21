@@ -438,6 +438,28 @@ inherited from 1.9, which had one sample per length and could not have seen the 
 **A threshold measured at one sample per point is a lower bound on where the defect starts, never
 the boundary itself.**
 
+## 4k. Wider speculation blocks, and a prediction that named the right mechanism with the wrong sign (ladder 2.1, 2026-08-21)
+
+**Killed: every block width above 5. 7 −1.70 %, 8 −2.93 %, 9 −6.30 %, 10 −9.36 %, 12 −10.86 %,
+monotone, paired per prompt against the shipped 6.** The width above which extra proposals stop
+paying is now measured rather than bounded, and the whole region 7–12 is closed.
+
+**What makes this worth a page is that `tau` rises the entire way down.** Suite mean acceptance goes
+3.48 → 3.69 → 3.85 → 3.94 → 4.07 → 4.16 → 4.19 → 4.36 as the block widens 4 → 12, while throughput
+falls 10.5 %. Acceptance is the metric this project has optimised the hardest and it is the metric
+that says "wider is better" at every single point. A wider block is a lever that buys the score and
+charges more than the score is worth: each extra drafted position costs 3.324 ± 0.281 ms whether or
+not the verify reaches it, and at BLK=12 **7.8 proposals per round are drafted and thrown away**,
+24.5 ms of a 169 ms round. Reporting `tau` without `ms/token` beside it would have adopted this.
+
+**The ladder's own prediction was wrong in the direction it named.** Item 2.1 was written as "with
+Term B small the optimum returns to ~7-9 from an apparent 11-13" — i.e. the expensive verify would
+pull the optimum down *into* 7–9. It pulls it to **5**, below the shipped 6, and the "apparent
+11-13" was never a measurement anyone took here: the default was 6 and F94 had already closed 8. The
+mechanism in the prediction was right (a verified position stopped being free, so the width had to
+be re-decided); the arithmetic was a guess dressed as a prior. See
+[`kernel-optimisations.md` §2.13](kernel-optimisations.md).
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

@@ -1957,8 +1957,132 @@ So, in order:
 
 ## Phase 2 — speculation (accuracy-neutral by construction)
 
-- [ ] **2.1** Re-tune block width AFTER 1.1/1.2. Verify width is currently free only by accident of
-      the broken kernel; with Term B small the optimum returns to ~7-9 from an apparent 11-13.
+- [x] **2.1** **DONE, 2026-08-21 — the shipped block width goes 6 -> 5: +3.91 +/- 1.65 % on 32
+      prompts, AT EQUAL `tau`, with the emitted ids BIT-IDENTICAL, and the item's own prediction was
+      wrong in the direction it named.**
+      The prediction was "the optimum returns to ~7-9 from an apparent 11-13". It returns to **5**,
+      and the "apparent 11-13" was never a measurement this repo took: the shipped default was 6,
+      F94 had already closed 8 by measurement, and nothing above 8 was ever the optimum of anything.
+      The half of the item that was right is the mechanism — 1.1/1.2 made a verified position
+      expensive, and the width had to be re-decided against that. The sign of the correction is the
+      surprise: **making the verify expensive moves the optimum DOWN, not up.**
+
+      **THE MEASUREMENT.** Two sweeps, each in ONE checkpoint load, each palindromic per prompt
+      (widths ascending then descending, so the two occurrences of a width have run indices summing
+      to a constant and any drift linear in run order cancels when the pair is averaged), adaptK
+      frozen at 1.50, NGEN0 200, `config/live_ckpt` (the deployed `s3` head — a width tuned against
+      a head that is not served is a width tuned for nothing).
+
+      | | sweep A (iteration 11) | sweep B (this iteration) |
+      |---|---|---|
+      | widths | 4 5 6 7 8 9 10 12 | 4 5 6 |
+      | prompts | 9 (control + the frozen suite) | **33** (control + suite + **24 held-out**) |
+      | points | 145 | 199 |
+      | measured drift, 2nd occurrence - 1st | +0.241 +/- 0.288 tok/s | **+0.000 +/- 0.002 tok/s** |
+      | LOSSLESS gate | 17/17 PASS | 7/7 PASS |
+
+      Paired per prompt against the shipped BLK=6, bands 2 SE of the per-prompt differences,
+      **sweep B, n=32**:
+
+      | BLK | d tok/s | d % | legs + | d `tau` |
+      |---|---|---|---|---|
+      | 4 | +0.831 +/- 0.576 | +3.78 +/- 2.15 % | 23/32 | **-0.2942 +/- 0.1473** |
+      | **5** | **+0.926 +/- 0.454** | **+3.91 +/- 1.65 %** | **26/32** | **-0.0518 +/- 0.0835** |
+      | 4 vs 5 | -0.095 +/- 0.375 | -0.12 +/- 1.43 % | 15/32 | -0.2424 +/- 0.1020 |
+
+      **5 IS AN INTERIOR OPTIMUM, WHICH IS WHY NO WIDTH BELOW 4 WAS RUN.** 4 buys nothing over 5 on
+      throughput (band covers zero) and does cost acceptance (`tau` band excludes zero, on both
+      baselines). 6 loses 3.58 +/- 1.53 %. Sweep A closes everything above: **7 -1.70, 8 -2.93,
+      9 -6.30, 10 -9.36, 12 -10.86 %**, monotone, while `tau` climbs monotonically 3.48 -> 4.36 —
+      the classic shape of a lever that is buying the metric it is scored on and paying more than it
+      is worth. Width 5 is also, exactly, `config.json`'s `dspark_block_size` — the width the head
+      was TRAINED at. F94 pushed serving one position past training when a verified position was
+      nearly free; with it no longer free, serving falls back onto training.
+
+      **WHY, OUT OF THE ENGINE'S OWN VERIFY ROUNDS AND NOT OUT OF A MODEL.** 13,392 rounds, fitted
+      per prompt as `ms_round ~ c0 + cB*BLK + cK*K` then banded across prompts: one more **drafted**
+      position costs **+3.324 +/- 0.281 ms**, one more **verified** position **+15.184 +/- 0.396
+      ms**. The draft forward runs at M=BLK whatever adaptK later decides, so every proposal the
+      verify never reaches is paid for in full — and adaptK stops early far more often than the
+      block ceiling suggests:
+
+      | BLK | mean realised K | rounds hitting the ceiling K=BLK+1 | tokens/round | ms/round | **ms/token** | drafted, never verified | its cost |
+      |---|---|---|---|---|---|---|---|
+      | 4 | 3.507 | 37.1 % | 2.809 | 122.17 | **43.49** | 1.493 | 4.96 ms |
+      | 5 | 3.736 | 27.1 % | 2.958 | 128.74 | **43.53** | 2.264 | 7.53 ms |
+      | 6 | 3.871 | 19.3 % | 2.972 | 134.14 | **45.14** | 3.129 | 10.40 ms |
+
+      **The sixth proposal buys 0.014 tokens per round and costs 5.40 ms** — 0.5 % more tokens for
+      4.2 % more time. That row is a round-level statistic computed from a different field of the
+      log than the tok/s table above it, and it reproduces the same answer to a tenth of a percent
+      (43.49 ~ 43.53 << 45.14), which is the check that the paired result is not an artefact of how
+      points were averaged.
+
+      **WHAT MADE THE FIRST SWEEP UNDER-POWERED WAS NOT REPLICATION, AND THIS IS THE REUSABLE PART.**
+      Sweep A put +2.79 +/- 3.83 % on BLK=5 — the right answer with a band straddling zero — and the
+      instinct is to run more replicates. That would have bought nothing: **repeats of the same
+      (prompt, width) emit a BIT-IDENTICAL id sequence — 173 mirrored pairs across the two sweeps,
+      173 identical, 0 differing** — so a second occurrence cancels timing drift and nothing else. Sweep B's drift term is **+0.000 +/- 0.002 tok/s over 99
+      mirrored pairs** — the timing noise this design controls is already gone. The band was
+      between-PROMPT heterogeneity, and the only estimator that shrinks it is **more prompts**:
+      n 8 -> 32 took the band 3.83 -> 1.65 % with the point estimate essentially unmoved
+      (+2.79 -> +3.91). Subsets agree: the 8 suite prompts alone give +2.70 +/- 3.82 %, the 24
+      held-out ones +4.32 +/- 1.82 %.
+
+      **PRE-REGISTERED AS NOT BIT-EXACT, THEN MEASURED AS BIT-EXACT -- 258 comparisons, ZERO
+      differing tokens.** BLK sets M in the verify forward and therefore MoE atomic reduction order,
+      so the sweep was written to ship under invariant 1's SECOND branch and to *measure* the
+      divergence rather than assume it. It measures none. The LOSSLESS gate (first 8 tokens vs base
+      AR) PASSES at every width in both sweeps, 24/24 points; and across all 344 sequences
+      `DSV4_GENOUT` recorded, **every non-reference arm is id-for-id identical to the BLK=6
+      reference over every position the two have in common** -- 126 comparisons at widths 4-12 in
+      sweep A, 132 at widths 4-5 in sweep B, **0 genuinely differing tokens in either**.
+
+      **The first reading of that table said otherwise, and the defect was in the reader.**
+      `tools/blkwidth_ab.py` counted a length difference as a divergence and printed a "first
+      divergence" index that was really the end of the shorter sequence -- so 70 of sweep B's 132
+      arms read as divergent while their ids are equal. Generation stops at the first verify that
+      carries the count past NGEN, so a narrower block overshoots 200 by a different amount and the
+      two sequences simply END at different positions (-6 to +7 tokens). That is bit-exactness up to
+      the stop rule. It is [`measurement-and-traps.md` §35] inverted: §35 read a byte-identity gate
+      PAST the length at which the arms agree and called a real difference a pass; this read one
+      past that length and called an agreement a failure. Both verdict files were regenerated with
+      the fixed classifier, which now reports identical / same-ids-different-length / genuinely
+      different as three separate columns.
+
+      So the emitted text does not depend on the block width at all on this corpus, and the MoE
+      atomic-order risk the pre-registration named did not produce one differing token.
+
+      **THE CHANGE, AND WHERE IT LANDS.** `include/dsv4_engine.h` `EngineConfig::blk 6 -> 5` and
+      `src/decode.cu`'s `defblk 6 -> 5`. `scripts/serve.sh` passes no `--blk`, so the header default
+      IS the served width; proven behaviourally rather than by reading the source —
+      `[engine] loading .../ckpt-head-s3 (seqmax=8192, blk=5, adaptK=1.50)` in
+      `evidence/decode_loop/2p1_server_proof.log` from a `run_server.sh` load (detached, ppid
+      systemd, tty `?`), and `[parse] point 0: BLK=5` from `build/decode` with no `DSV4_BLK`.
+      `DSV4_BLK=6` still restores the old arm. **Every measurement script in `scripts/` pins its
+      width explicitly in the sweep string (`6:1:...`), so no frozen protocol moved under this
+      change** — which also means the head-promotion protocol still measures at 6 and should be
+      re-frozen at 5 the next time a head is adjudicated (noted in 2.4).
+
+      **The residual is 2.6/P2.6, not a loose end here.** 5 of 32 prompts are still fastest at 6,
+      and prompt 6 realises `tau` 6.091 at BLK=6 — above what a block of 5 can return (ceiling
+      BLK+1 = 6). A per-prompt ORACLE over {4,5,6} is worth **+5.81 % over static 6 but only
+      +1.85 % over static 5** — most of what pattern-gating could have won is collected by moving
+      the static default, and that residual is itself a maximum over three noisy arms, so it is an
+      upper bound and is NOT claimed as available. What is established is that the optimum is
+      prompt-dependent and that the static best is 5.
+
+      No re-measurement was needed after the rebuild: both arms were measured by the SAME binary in
+      the same load, and the commit changes only which constant that binary defaults to.
+
+      Evidence: `evidence/decode_loop/{blkwidth_verdict_c32.txt, blkwidth_sweep_c32.log,
+      blkwidth_genout_c32.txt, blkwidth_c32.log, blkwidth_verdict.txt, blkwidth_sweep.log,
+      2p1_server_proof.log}`. Corpus: `protocol/blkwidth_corpus.txt` (8 frozen suite prompts + the
+      first 24 lines of the `s3` hold-out, truncated to 192 ids each so a 199-point sweep spends its
+      time decoding rather than re-prefilling). Driver: `scripts/blkwidth_sweep_run.sh`
+      (in `detach_audit.sh`'s PATTERNS), analysis `tools/blkwidth_ab.py`.
+      Wiki: [`kernel-optimisations.md` §2.13], [`negative-results.md` §4k],
+      [`measurement-and-traps.md` §37], README state table.
 - [x] **2.2** **DEPLOYED, 2026-08-20 — the server has now run it, and this is the first time.**
       Chose the staged checkpoint over a `--head` flag, and the engine's own source is the argument:
       on 0731-REAP all 2977 `mtp.*` tensors are EMBEDDED in shards 46-48 and those shards hold
@@ -2035,6 +2159,10 @@ So, in order:
       assertion. **Instrument-shaped, so it needs a named unblock: it decides whether s2 and the
       three ce/tv ablation heads — all measured, all archived, all currently refused — are actually
       worse than s1, and one of them may already beat the head 2.2 just deployed.**
+      **Also re-freeze the protocol's block width: it pins `6:1:1.50` in every sweep string, and
+      2.1 moved the served width to 5. Nothing broke silently — the pin is explicit in each script,
+      which is why the default change could not move a frozen protocol under anyone — but a head
+      adjudicated at a width the server no longer uses is being adjudicated off-policy.**
       [`measurement-and-traps.md` §22]
 - [ ] **2.5** **Base AR fell 72.5 -> 87.7/88.2 ms/tok on the identical `WARM decode` measurement,
       and nothing explains it.** Measured twice today in two independent loads, same gate prompt,
@@ -2263,7 +2391,14 @@ training session so far has failed to do (F117).
       M=1 by −1.3 % and M>=2 by **−14 %**. Widening moves more time into M>=2, and the retired
       `m16` B-repack needs **5.05 rows/expert** against block 6's **1.67** but pays around
       **block 40**. If width moves materially, **re-price `m16` — do not assume it stayed dead.**
-      **Gate: pattern-gated width beats static block 6 on the suite, outside the 3.5 % spread.**
+      **Gate: pattern-gated width beats static block 5 — NOT 6 — on the suite, outside the 3.5 %
+      spread.** 2.1 moved the static default and, in doing so, took most of this item's headroom:
+      the per-prompt ORACLE over {4,5,6} on 32 prompts is **+5.81 % over static 6 and +1.85 % over
+      static 5**, and an oracle is an upper bound a classifier cannot reach. 2.1 also refutes the
+      "wide (8-10) on `R-high`" half of the plan as a *static* prescription — 8 and 10 lose 2.93 %
+      and 9.36 % pooled, and `tau` rises monotonically to 12 the whole time — so the only version of
+      this item still worth building is one that narrows on `C-low`, and it must be gated on
+      ms/token rather than on `tau`.
 
 ### P2.7 — the agentic daily driver
 

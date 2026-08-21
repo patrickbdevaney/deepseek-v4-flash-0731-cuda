@@ -168,6 +168,15 @@ blocks of one active thread on 20 SMs, so K<=20 costs the same as K=1. That is f
 bug. **Fixing the top-k changes the optimal block size.** Decide block width *after* the kernel fix,
 or you will tune to a transient.
 
+**RESOLVED 2026-08-21 by ladder 2.1, and this caution was right — including about the transient.**
+Re-tuned after 1.1/1.2 over 32 prompts in one load, the optimum moves **6 -> 5**, worth
+**+3.91 +/- 1.65 % tok/s at unchanged `tau` (-0.052 +/- 0.084)**, and everything above 5 is now
+closed by measurement (7 -1.70 %, 12 -10.86 %, monotone). Note the SIGN: with the verify no longer
+free the optimum moves DOWN, not up. Priced out of 13,392 verify rounds, one more **drafted**
+position costs 3.324 +/- 0.281 ms and one more **verified** position 15.184 +/- 0.396 ms, so the
+block only pays through positions adaptK actually spends — and at BLK=6 the mean realised verify
+width was 3.87 of a ceiling of 7. [`wiki/kernel-optimisations.md` §2.13]
+
 ---
 
 ## 4. The implementation plan

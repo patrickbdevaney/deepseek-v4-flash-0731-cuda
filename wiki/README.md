@@ -5,11 +5,11 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 
 | page | what it holds |
 |---|---|
-| [`kernel-optimisations.md`](kernel-optimisations.md) | every **adopted** AR/spec-decode optimisation, by mechanism: mechanism → measured gain → the gate that proved it — **and §2.11, the 2-D tile that all five "read B once" call sites were missing (1.12)** |
-| [`negative-results.md`](negative-results.md) | levers built and **retired**, with the number that killed each. Longer than the wins list and more useful — **and §4j, a six-arm ablation campaign that returned six negatives and a boundary prediction falsified in its own gate (1.10)** |
+| [`kernel-optimisations.md`](kernel-optimisations.md) | every **adopted** AR/spec-decode optimisation, by mechanism: mechanism → measured gain → the gate that proved it — **and §2.13, the width that had been tuned back when a verified position was free (2.1)** |
+| [`negative-results.md`](negative-results.md) | levers built and **retired**, with the number that killed each. Longer than the wins list and more useful — **and §4k, a lever whose `tau` rose at every point on the way down 10.5 % of throughput (2.1)** |
 | [`prefill-optimisation.md`](prefill-optimisation.md) | B9 — why prefill ran decode-shaped kernels, and the four fixes (+30.3 %) — **and §7: one of the four had gone 0.80x and 1.7 took it back** |
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation, **and §8: how a promoted head finally got served (2.2)** |
-| [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to — **and §36, the kernel that read the buffer it was writing, which every instrument on this page pointed away from for two iterations (1.10)** |
+| [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to — **and §37, why replicating a deterministic measurement cannot narrow its band, and what does (2.1)** |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
 | [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, **1.7, the item that moved Term A instead**, and **1b.2, which moves `b` another 26 % and charges Term A for it**, and **1.11, a Term-A change that only resolved at long context**, and **1.12, the first clean "no, it is not the context term"** |
 | [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
@@ -63,6 +63,32 @@ historical measurement; the second is where agentic work actually runs.
 > millisecond in both states. That is the entirety of ladder item 2.5's "unexplained 17.4 % base-AR
 > fall" — there is no engine regression. Spec throughput never moved because the suite runs *after*
 > the ramp. [`measurement-and-traps.md` §24](measurement-and-traps.md).
+
+| the speculation block width | BLK=6 (F94) | **BLK=5 (live since 2.1)** | |
+|---|---|---|---|
+| tok/s, paired over **32 prompts**, one load | — | **+3.91 ± 1.65 %** | 26/32 legs; the 8-prompt suite alone could only say +2.70 ± 3.82 % |
+| `tau` | 3.392 | 3.341 | **−0.052 ± 0.084 — the band covers zero.** The throughput is not bought from acceptance |
+| mean realised verify width | 3.87 of a ceiling of 7 | 3.74 of a ceiling of 6 | adaptK stops early; the ceiling was never the binding constraint |
+| proposals drafted and never verified, per round | 3.13 (10.40 ms) | **2.26 (7.53 ms)** | one more drafted position costs 3.324 ± 0.281 ms, one more *verified* one 15.184 ± 0.396 |
+| widths 7 · 8 · 9 · 10 · 12 | — | **−1.70 · −2.93 · −6.30 · −9.36 · −10.86 %** | monotone, while `tau` climbs 3.48 → 4.36 the whole way |
+
+> **`tau` says "wider is better" at every single point on that last row, and it is wrong.** The
+> draft forward runs at M=BLK whether or not the verify reaches those positions, so at BLK=12
+> 7.8 proposals per round are computed and thrown away — 24.5 ms of a 169 ms round. F94's 6 was
+> correct for **its** engine, where `k_topk_verify<<<K,32>>>` ran one active thread per block and a
+> verified position was nearly free; 1.1/1.2 ended that, and `DECODE_ZENITH_FINDINGS.md` §3.2 had
+> said in advance that the width would have to be re-decided afterwards. 5 is also exactly
+> `config.json`'s `dspark_block_size` — the width the head was trained at.
+>
+> **And it is bit-exact, which it was pre-registered NOT to be.** BLK sets M in the verify forward,
+> so the sweep expected MoE atomic reduction order to move the emitted ids and instrumented itself
+> to measure that. Across **258 arm-vs-reference comparisons at widths 4 through 12: zero differing
+> tokens.** The only difference is where the sequence ends — generation stops at the first verify
+> past NGEN, so a narrower block overshoots 200 by −6 to +7 — and the analyser's first version
+> counted that as divergence, which is §35's trap run backwards.
+> [`kernel-optimisations.md` §2.13](kernel-optimisations.md),
+> [`negative-results.md` §4k](negative-results.md),
+> [`measurement-and-traps.md` §37](measurement-and-traps.md).
 
 Both arms measured back to back on `93699e6`, same binary, same protocol, LOSSLESS and first-token
 gates PASS on both. **This row is a weights change, not a kernel one** — `s3` was promoted on

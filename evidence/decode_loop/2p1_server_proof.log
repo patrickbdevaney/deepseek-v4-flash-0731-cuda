@@ -1,0 +1,9 @@
+[model-lock] acquired (2385793) — 114 GiB available
+  live checkpoint pinned by config/live_ckpt -> /home/patrickd/models/ckpt-head-s3
+  preflight gate_tokenizer ok
+  preflight gate_encoding ok
+  preflight gate_api ok
+  preflight gate_stream ok
+[server] tokenizer /home/patrickd/models/ckpt-head-s3/tokenizer.json
+[server] tokenizer ok (vocab 128000, 1283 added)
+[engine] loading /home/patrickd/models/ckpt-head-s3 (seqmax=8192, blk=5, adaptK=1.50)...
