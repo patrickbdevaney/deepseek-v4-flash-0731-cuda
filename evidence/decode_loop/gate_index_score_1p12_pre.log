@@ -1,0 +1,20 @@
+
+[gemm vs shipped warp] the deviation this change SPENDS (bit-exact vs SCALAR, not vs WARP)
+   uniform+/-    1905110/2160800  differ   max_abs=1.05e-05  max_rel=0.609
+   all-positive  1062863/2160800  differ   max_abs=0.000305  max_rel=5.38e-07
+   all-negative  1890149/2160800  differ   max_abs=0.000137  max_rel=0.847
+   near-tie       995537/2160800  differ   max_abs=0.000488  max_rel=1.19e-07
+   +/-0,denorm    583868/2160800  differ   max_abs=3.58e-07  max_rel=0.0164
+   ALL           6437527/10804000
+[control d=96 H=8 ] tiled refused = yes (want yes), gemm refused = NO (want no)
+[control d=128 H=12] tiled refused = NO (want no), gemm refused = yes (want yes)
+[gate_index_score] 1130 shapes, 21773760 floats compared, 0 differing, 0 bad shapes -> PASS
+
+[band] H=64 d=128, 30 repeats, arms interleaved   (us: min/median/max)
+   S     T        warp                  tiled                 gemm          tiled/gemm vs warp
+   6   768    236.4/  238.1/  246.3   132.9/ 135.3/ 144.9    42.1/  43.6/  53.8    1.76x   5.46x
+   6  1536    457.1/  457.3/  473.6   229.9/ 234.1/ 237.6    69.8/  70.2/  72.3    1.95x   6.51x
+   6  3072    895.8/  896.6/  904.7   445.4/ 447.9/ 453.9   129.1/ 130.8/ 140.5    2.00x   6.85x
+   6  6144   1768.8/ 1770.8/ 1781.6   875.7/ 877.2/ 889.0   235.7/ 237.2/ 240.0    2.02x   7.47x
+   1  3072    165.6/  166.6/  173.4    84.6/  85.6/  94.7    42.9/  44.5/  53.9    1.95x   3.74x
+   1  6144    308.7/  310.8/  312.5   154.5/ 156.0/ 166.5    52.3/  53.7/  55.5    1.99x   5.79x

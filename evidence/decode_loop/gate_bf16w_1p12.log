@@ -1,0 +1,23 @@
+[f32mk] tile 4x4 (DSV4_F32MK_TILE=unset)
+[lm_head M=1 ] cosine=1.000000000 max_abs=4.768e-07 rel=2.05e-07 argmax MATCH -> PASS
+[lm_head M=5 ] cosine=1.000000000 max_abs=4.768e-07 rel=1.93e-07 argmax MATCH -> PASS
+[markov  M=1 ] cosine=1.000000000 max_abs=1.192e-07 rel=1.62e-07 argmax MATCH -> PASS
+[markov  M=5 ] cosine=1.000000000 max_abs=8.941e-08 rel=1.26e-07 argmax MATCH -> PASS
+
+-- gemm_fp32 M=K vs the warp-per-output-element path, every (MM,NN) tile --
+[gemm_fp32 M=1   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=2   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=5   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=8   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=13  N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=16  N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=128 N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=1   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=2   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=5   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=8   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=13  N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=16  N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=128 N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+
+Gate BF16W: PASS

@@ -1016,3 +1016,77 @@ readable: −1.092 ± 0.146 at ctx 12,410 with 6/6 in *both* orders, against ban
 3,197 and 6,260. That contradicted 1.11's pre-registered "the saving must be flat in context", which
 is a finding the single-order run could not have produced either way.
 
+
+## 34. The arm switch never switched, and the tell was that the null was *too* clean (ladder 1.12, 2026-08-20)
+
+1.12's first engine A/B spent **four checkpoint loads** and came back a flawless null:
+
+    cattn:compress on ratio-128 emit steps   before 14.50 [14.23, 15.22]   after 14.47 [14.22, 15.16]   -0.03
+    cattn:q_proj                             before 13.97                  after 13.98                  +0.01
+    cattn:sparse                             before 15.38                  after 15.41                  +0.03
+
+against a microbenchmark that said the targeted GEMM shape was **2.32× faster** and a call-site
+trace that confirmed the engine reaches that shape 40 times per emit step. Exactly one of those can
+be true.
+
+**What happened.** The control arm is spelled `DSV4_F32MK_TILE=8x0` — `nn = 0` means "take the
+pre-1.12 host-side chunk loop". The parser was
+
+    if (sscanf(e,"%dx%d",&mm,&nn)==2 && mm>0 && nn>0) { g_f32mk_mm=mm; g_f32mk_nn=nn; }
+
+so the guard rejected **the only value that selects the before-arm** and left the default in place.
+Both arms ran the 4×4 tile. Every number above is correct; they are the run-to-run spread of two
+loads of *the same code*.
+
+**The tell is worth more than the bug.** A real null on this instrument does not look like ±0.03 ms
+on a 3.5 % spread — that is not "no effect", it is "no difference", and the two are distinguishable
+by how *small* the residual is. When an A/B returns deltas an order of magnitude below the harness's
+own noise floor, the first hypothesis is that both arms are the same build, not that the change did
+nothing. The same run's paired throughput band, which is the *noisy* instrument, said
+`+0.512, 2 SE [−0.969, +1.993]` — perfectly consistent with a null and completely uninformative
+about which kind.
+
+**The structural fix, in two places, because a comment would not have caught this.**
+1. The engine prints the tile it resolved, unconditionally, on the first `gemm_fp32` of the process:
+   `[f32mk] tile 8x0 = PRE-1.12 host chunk loop (DSV4_F32MK_TILE=8x0)`.
+2. `scripts/f32mkn_ab_run.sh` greps that line out of **both** server logs before it reports anything
+   and **exits non-zero if the two arms resolved to the same tile**. An A/B that cannot read its own
+   arm back out of the log is guessing.
+
+**What the wasted run bought.** It is the best null control this ladder has: two full checkpoint
+loads, 18 paired legs, identical binaries. The paired throughput band on identical code is
+**+0.512, sd 3.142, 2 SE [−0.969, +1.993]** — so ~±1.5 ms/forward is the resolving floor of an
+18-leg two-load design, which is why 1.12 went on to run the reversed replicate. And the conditional
+mark reproduced to **0.03 ms across two loads**, which is what makes `tools/emit_spike.py` the right
+instrument for a change whose amortised size is below the throughput noise floor.
+
+**Generalises to:** every `NO_*`/`DSV4_*` arm switch in this repo. An env-var arm is a silent
+default when it is misspelled, when the parser rejects it, when the process that reads it is not the
+process you set it on, or when a caller pinned the value first. `NO_FP32MK`, `NO_ATTN_SPLIT`,
+`NO_JOIN_DEFER`, `DSV4_KV_PACK` and `COMP_BF16` are all one typo away from this failure, and none of
+them prints what it resolved to.
+
+## 35. A byte-identity gate run past the length at which the engine is not byte-identical (ladder 1.12, 2026-08-20)
+
+The same wasted run set `--max-tokens 256` on `decode_fit_probe.py`, to get two ratio-128 boundaries
+per leg instead of one. `paired_band.py` then reported, for two loads of **the same binary**:
+
+    token identity: 0/18 legs byte-identical, 18 differ, 0 unproven
+
+**That is not a bit-exactness failure; it is ladder 1.9's race, being measured on purpose.** 1.9
+established `build/decode` prefill as **byte-identical to 160 positions and racing at 192+**, and
+this row of `wiki/README.md` has said so since. A 256-token completion runs the engine straight
+through that boundary, so the identity column stops being a gate and starts being a coin flip — in
+*both* arms, for *any* change.
+
+**The rule.** The corpus length of an A/B is not free to choose: it is bounded above by the length
+at which the engine is reproducible, and any instrument that reports identity must run below that
+bound or report nothing. 1.12 dropped to `--max-tokens 128`, which still crosses exactly one
+ratio-128 boundary per leg at every target it sweeps (ctx 12,282 → 12,410 contains 12,288), and the
+identity column became meaningful again.
+
+**And note which instrument survived the mistake.** The conditional dprof mark
+(`tools/emit_spike.py`) is indifferent to the race — it classifies steps by an *arithmetic* property
+of `(ctx, VB)` and reports a distribution, not an equality. When the reproducible window is shorter
+than the phenomenon you need to sample, a distributional instrument still works where an equality
+gate cannot.

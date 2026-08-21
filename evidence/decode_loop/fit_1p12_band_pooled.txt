@@ -1,0 +1,29 @@
+POOLED OVER TWO ARM ORDERS — the drift-free estimate.
+run 1: control arm first (drift penalises the change).
+run 2: change arm first (drift penalises the control).
+
+                 leg     ctx    effect     drift
+     sweep-t12288-r0   12346     -3.21     -2.19
+     sweep-t12288-r1   12346     +1.26     -0.90
+     sweep-t12288-r2   12346     -0.17     +1.69
+     sweep-t12288-r3   12346     -2.90     +0.95
+     sweep-t12288-r4   12346     -2.44     +0.68
+     sweep-t12288-r5   12346     -4.98     +1.69
+      sweep-t3072-r0    3133     -4.82     +3.63
+      sweep-t3072-r1    3133     -1.77     +1.65
+      sweep-t3072-r2    3133     -2.44     +0.05
+      sweep-t3072-r3    3133     -3.87     +5.29
+      sweep-t3072-r4    3133     -2.69     +2.79
+      sweep-t3072-r5    3133     -2.13     +3.86
+      sweep-t6144-r0    6196     +4.70     -1.46
+      sweep-t6144-r1    6196     +0.37     -0.21
+      sweep-t6144-r2    6196     -1.37     -3.53
+      sweep-t6144-r3    6196     -9.18     +4.48
+      sweep-t6144-r4    6196     +3.60     -0.44
+      sweep-t6144-r5    6196     -3.29     +1.23
+
+n=18  DRIFT-FREE paired mean -1.963 ms/forward   sd 3.191   2 SE band [-3.467, -0.459]
+legs faster after: 14/18
+drift term (half the difference between the two orders): +1.071 ms/forward   sd 2.365   2 SE [-0.044, +2.186]
+VERDICT: the drift-free band EXCLUDES zero — a real paired saving.
+split:   flat -2.348 +/- 3.302 ms/forward   context +0.0533 +/- 0.4038 ms per 1000 ctx   R^2 0.004

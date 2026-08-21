@@ -162,6 +162,18 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   kernels/dscratch.cu kernels/dprof.cu kernels/nvfp4_dense.cu -o build/gate_join_defer
 echo "built build/gate_join_defer"
 
+# f32mk_bench (DECODE_LADDER 1.12) -- it is a BENCH and a GATE in one binary: it times all 17
+# instantiated (MM,NN) warp tiles of `gemm_fp32` at the four shapes the engine actually issues, and
+# it returns NON-ZERO if any tile differs from the M=1 warp-per-output path by a single bit. It
+# lives in tools/ rather than tests/ because it chose the shipped default, but scripts/f32mkn_ab_run.sh
+# runs it in its gate phase and a missing binary there is a failed gate, so it is built here. The
+# baseline arm `8x0` is the pre-1.12 host-side chunk loop, so the before-arm is gated too.
+nvcc -O3 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tools/f32mk_bench.cu kernels/compressor.cu kernels/mla_attn.cu kernels/indexer.cu \
+  kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/nvfp4_dense.cu \
+  -o build/f32mk_bench
+echo "built build/f32mk_bench"
+
 # ---------------------------------------------------------------------------------------------
 # THE OTHER EIGHT (Finding 76). Before this block, build_gate.sh built 10 of the 18 gate binaries
 # and the rest went stale SILENTLY: F74 found gate_compressed_decode and gate_indexer_decode a day

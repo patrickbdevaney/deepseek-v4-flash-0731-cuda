@@ -1,0 +1,22 @@
+before: 1441 per-verify dprof tables from 1 log(s); 897 carry a ratio-4 boundary
+ after: 1426 per-verify dprof tables from 1 log(s); 898 carry a ratio-4 boundary
+
+-- g==0  (no ratio-4 emit) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress  544              0.05 [0.04, 0.07]              0.04 [0.04, 0.07]      -0.01
+           TOTAL  544          98.72 [90.37, 120.59]          99.75 [91.17, 119.48]      +1.03
+    cattn:q_proj  544            10.14 [9.93, 10.45]            10.14 [9.93, 10.41]      +0.00
+    cattn:sparse  544           14.49 [13.92, 16.86]           14.51 [13.95, 16.88]      +0.02
+
+-- g>=1  (THE SPIKE: 4-emit steps) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress  897             0.05 [0.05, 41.15]             0.05 [0.05, 14.63]      +0.00
+           TOTAL  897         111.90 [96.21, 233.76]         110.43 [95.38, 198.11]      -1.47
+    cattn:q_proj  897           14.77 [14.30, 15.97]           14.09 [13.75, 15.67]      -0.68
+    cattn:sparse  897           15.39 [13.96, 31.27]           15.39 [13.96, 33.13]      +0.00
+
+-- EXCESS of a g>=1 step over the g==0 median, WITHIN each arm (a between-load offset cancels here) --
+  cattn:compress   before    +0.00 ms    after    +0.01 ms    delta    +0.01 ms   0.00x
+           TOTAL   before   +13.19 ms    after   +10.68 ms    delta    -2.50 ms   1.23x
+    cattn:q_proj   before    +4.63 ms    after    +3.95 ms    delta    -0.68 ms   1.17x
+    cattn:sparse   before    +0.90 ms    after    +0.88 ms    delta    -0.02 ms   1.02x

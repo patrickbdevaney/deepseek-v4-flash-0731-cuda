@@ -373,3 +373,38 @@ R² 0.324.
 resolves — `a + b×ctx` at ctx 12,410 falls 142.24 → 141.15 ms — and the attribution is ladder item
 1.13, which needs ≥ 6 context points in **both** arm orders. Writing 1.11's saving into either term
 on three points would be inventing a number, and this page exists because somebody did that once.
+
+## 1.12 — a Term-A change that is genuinely flat, and the first clean "no, it is not the context term" (2026-08-20)
+
+1.11 ended this page with an unresolved term: a real drift-free saving whose own mechanism said FLAT
+and whose three context points would not say so. **1.12 is the same class of change and it does say
+so**, which is worth recording because it shows the design *can* resolve the question when the
+effect is big enough.
+
+`gemm_fp32`'s (4,4) warp tile (`kernel-optimisations.md` §2.11) speeds up the compressor emit.
+Nothing in an emit scales with context: it reads `x_full` for one group of `ratio` tokens and two
+weight matrices whose size is fixed by the config. **Pre-registered as Term A**, in
+`scripts/f32mkn_ab_run.sh`, before the run:
+
+    flat    -2.348 +/- 3.302 ms/forward
+    context +0.0533 +/- 0.4038 ms per 1000 context     R^2 0.004
+
+The context coefficient is **zero to within a twentieth of its own uncertainty**, and R² 0.004 says
+the per-leg deltas carry no context signal at all. Drift-free paired mean **−1.963 ± 1.504
+ms/forward**, 14/18 legs, over 18 legs and four checkpoint loads. So `a` **125.11 → 123.15 ms** and
+`b` **stays 1.887** — `b × 6592` stays 12.44 ms against a stop condition of 5.0.
+
+**Why this one resolved and 1.11 did not.** Same 18 legs, same three targets, same two arm orders.
+The difference is size: 1.11's effect (~0.5 ms) is a third of the ±1.5 ms floor a two-load 18-leg
+design has (`measurement-and-traps.md` §34 measures that floor on identical binaries), so its
+per-group split was fitting noise. 1.12's is 4× that floor. **The lesson is not "1.11's harness was
+wrong"; it is that a term attribution needs roughly the same power as the effect itself, and neither
+comes free.**
+
+**And the mark-level instrument agreed without using the fit at all.**
+`0.628 × 2.49 ms` (verify TOTAL excess on the 62.8 % of steps carrying a ratio-4 emit) `+ 0.0239 ×
+26.42 ms` (the extra excess on the 2.4 % carrying a ratio-128 emit) `= −2.20 ms/forward`, which
+falls inside `[−3.467, −0.459]`. Both of those excesses are differences taken **within one arm**, so
+they are immune to the between-load offset that dominates the paired band — which is why a
+schedule-conditional mark is the right instrument for a Term-A change of this size and a three-point
+context fit is not.

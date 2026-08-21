@@ -1,0 +1,87 @@
+[1.12] 2026-08-20T22:57:08-04:00 binaries: server 2026-08-20T22:18:08-04:00, decode 2026-08-20T22:15:22-04:00
+[1.12] 2026-08-20T22:57:09-04:00 === PHASE 0: in-situ gates, BOTH arms (no checkpoint) ===
+-- gemm_fp32 M=K vs the warp-per-output-element path, every (MM,NN) tile --
+[gemm_fp32 M=1   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=2   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=5   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=8   N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=13  N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=16  N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=128 N=1024] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=1   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=2   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=5   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=8   N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=13  N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=16  N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+[gemm_fp32 M=128 N=254 ] 18 tiles, worst max|diff| = 0.000e+00 -> PASS
+Gate BF16W: PASS
+f32mk_bench: reps=200  (ms = mean over reps after 5 warmup; bytes = (M+N)*K*4 + M*N*4)
+== strided emit  wkv/wgate    M=128  N=512   K=4096   (40 calls per emit step)
+    8x0 *   0.5602 ms     19.2 GB/s   1.00x vs pre   per-emit  22.406 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.2452 ms     43.8 GB/s   2.28x vs pre   per-emit   9.810 ms   max|diff|=0.0e+00 EXACT
+== indexer emit  main         M=8    N=1024  K=4096   (42 calls per emit step)
+    8x0 *   0.0637 ms    266.0 GB/s   1.00x vs pre   per-emit   2.675 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.0408 ms    415.3 GB/s   1.56x vs pre   per-emit   1.713 ms   max|diff|=0.0e+00 EXACT
+== indexer emit  idx          M=8    N=256   K=4096   (42 calls per emit step)
+    8x0 *   0.0330 ms    131.5 GB/s   1.00x vs pre   per-emit   1.384 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.0174 ms    248.6 GB/s   1.89x vs pre   per-emit   0.732 ms   max|diff|=0.0e+00 EXACT
+== indexer iw (K=5 verify)    M=5    N=64    K=4096   (21 calls per emit step)
+    8x0 *   0.0143 ms     79.0 GB/s   1.00x vs pre   per-emit   0.301 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.0146 ms     77.3 GB/s   0.98x vs pre   per-emit   0.307 ms   max|diff|=0.0e+00 EXACT
+f32mk_bench: all tiles bit-identical to the M=1 path
+[1.12] 2026-08-20T22:57:40-04:00 arm=tile gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1.12] 2026-08-20T22:57:44-04:00 arm=tile gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.12] 2026-08-20T22:57:49-04:00 arm=tile gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.12] 2026-08-20T22:57:53-04:00 arm=tile gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.12] 2026-08-20T22:57:58-04:00 arm=tile gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.12] 2026-08-20T22:57:58-04:00 arm=tile gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1.12] 2026-08-20T22:58:04-04:00 arm=tile gate_index_score rc=0
+[gate_index_score] 1130 shapes, 21773760 floats compared, 0 differing, 0 bad shapes -> PASS
+[1.12] 2026-08-20T22:58:16-04:00 arm=tile gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1.12] 2026-08-20T22:58:30-04:00 arm=tile gate_kv_pack_e2e rc=0
+GATE KV_PACK_E2E: PASS  (arm mismatches 0)
+[1.12] 2026-08-20T22:58:48-04:00 arm=tile gate_join_defer rc=0
+GATE JOIN_DEFER: PASS  (arm mismatches 0)
+[1.12] 2026-08-20T22:58:49-04:00 arm=tile gate_topk_smem_ctx rc=0
+[1.12] 2026-08-20T22:58:49-04:00 arm=pre gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1.12] 2026-08-20T22:58:54-04:00 arm=pre gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.12] 2026-08-20T22:58:58-04:00 arm=pre gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.12] 2026-08-20T22:59:03-04:00 arm=pre gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.12] 2026-08-20T22:59:07-04:00 arm=pre gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.12] 2026-08-20T22:59:08-04:00 arm=pre gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1.12] 2026-08-20T22:59:13-04:00 arm=pre gate_index_score rc=0
+[gate_index_score] 1130 shapes, 21773760 floats compared, 0 differing, 0 bad shapes -> PASS
+[1.12] 2026-08-20T22:59:25-04:00 arm=pre gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1.12] 2026-08-20T22:59:39-04:00 arm=pre gate_kv_pack_e2e rc=0
+GATE KV_PACK_E2E: PASS  (arm mismatches 0)
+[1.12] 2026-08-20T22:59:58-04:00 arm=pre gate_join_defer rc=0
+GATE JOIN_DEFER: PASS  (arm mismatches 0)
+[1.12] 2026-08-20T22:59:58-04:00 arm=pre gate_topk_smem_ctx rc=0
+[1.12] 2026-08-20T22:59:58-04:00 done.

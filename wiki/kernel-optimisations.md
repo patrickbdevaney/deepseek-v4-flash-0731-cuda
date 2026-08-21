@@ -40,6 +40,13 @@ measured histogram: RB=1 559.1  RB=2 534.7  RB=4 499.8  RB=8 530.6   -> picks RB
 The ranking **inverts** depending on which grouping the probe used. A microbenchmark whose input
 distribution does not match production will confidently select the wrong parameter.
 
+**And every one of those five call sites tiled M only (ladder 1.12).** "Read B once" as written
+above is a 1-D tile: `RB` rows of A against **one** row of B, so B traffic falls by `RB` and A
+traffic does not fall at all. Giving the warp `NN` rows of B as well makes the traffic
+`M*N*K*(1/NN + 1/MM)` instead of `M*N*K*(1/1 + 1/MM)`, and on `gemm_fp32`'s largest call site that
+is 1.125 → 0.375 for the price of `MM*NN*4` registers. §2.11 has the sweep, the point at which it
+stops paying, and the reason the guard below M=8 is not optional.
+
 ### 1.2 Thread-per-output is wrong at decode shapes
 
 **Findings 71, 73.** Kernels written for large batches degrade into near-serial work at M=1.
@@ -558,6 +565,89 @@ than removing it: `cattn:compress` fell 97 % and that is not the win, it is the 
 Only the conserved sum, and then the paired ms/forward, decides. See
 [`measurement-and-traps.md` §29](measurement-and-traps.md) for the same effect misread as a 3.2×
 swing in a GEMM, and **§33 for why one arm order could not resolve this item at all**.
+
+### 2.11 One warp, a 2-D tile — `gemm_fp32` at the compressor emit (ladder 1.12, 2026-08-20)
+
+**Mechanism.** §1.1's "read B once" was applied to `gemm_fp32` as a 1-D tile: one warp per
+(8-row chunk of A, one row of B), with the chunk loop on the HOST. `compressor_emit_group` calls it
+at `M = ratio = 128, N = d = 512, K = DIM = 4096` on the twenty ratio-128 layers, so `B =
+[512,4096]` f32 = 8.39 MB was walked **sixteen times, in sixteen separate launches**, twice per
+layer.
+
+A 1-D tile is only half the transformation. A warp owning `MM` rows of A **and `NN` rows of B**
+issues `MM + NN` loads for `MM*NN*4` FMAs, so total operand traffic is `M*N*K*(1/NN + 1/MM)` floats:
+
+| tile | traffic factor | `[128,512]x[512,4096]` |
+|---|---|---|
+| pre-1.12: 8-row chunks, host loop | 1.125 | 0.5744 ms |
+| `(8,1)` — the same tile, `gridDim.y` instead of 16 launches | 1.125 | 0.4472 ms — **1.28× from launches alone** |
+| `(8,2)` | 0.625 | 0.2864 |
+| **`(4,4)` — adopted** | **0.375** | **0.2477 ms, 2.32×** |
+| `(6,6)` | 0.333 | 0.2849 — *lower traffic, slower* |
+| `(4,8)`, `(8,4)` | 0.375 | 0.2830, 0.2937 |
+| `(16,1)`, `(32,1)` | 1.06, 1.03 | 0.4649, 0.5016 — **slower than the baseline** |
+
+Seventeen tiles, four engine shapes, `tools/f32mk_bench.cu`. `(6,6)` moving *less* traffic and
+running *slower* than `(4,4)` is the boundary of the transformation: past ~128 accumulator registers
+the kernel is register- and issue-bound, and buying traffic with occupancy stops paying.
+
+**The tile is OFF below M=8, and that guard is load-bearing.** The indexer's `idx_weights_proj`
+GEMV is `[5,64]x[64,4096]` and fires **21× on every forward**, against the emit shapes' once every 4
+or 128 positions. At `(4,4)` it becomes a 4-row chunk plus a 1-row tail — two launches where the
+legacy path templates one — and goes `0.0148 → 0.0205 ms`. Unguarded, the most frequent call site
+would have paid for the rarest one.
+
+**Measured gain — and the engine beat the bench 2:1.** The microbenchmark reuses one 8.39 MB `B`
+across 200 reps, so 15 of its 16 passes are L2 hits on a 32 MB L2. The engine walks **20 layers × 2
+matrices = 335 MB of distinct weights**, so the passes removed are DRAM. Predicted −13.07 ms per
+emit step; measured **−26.26**.
+
+| `tools/emit_spike.py`, pooled over four checkpoint loads | n | before | after | |
+|---|---|---|---|---|
+| `cattn:compress`, steps whose block contains a ratio-128 boundary | 69 | **40.76** [39.92, 45.22] | **14.50** [14.29, 14.64] | **−26.26 ms, 2.82×**, populations disjoint |
+| verify `TOTAL` excess on those steps | 69 | +63.17 | **+34.26** | **−28.91 ms** |
+| verify `TOTAL` excess on ratio-4 boundary steps (62.8 % of steps) | 1811 | +13.52 | **+11.03** | **−2.49 ms** |
+| `cattn:q_proj` excess on ratio-4 boundary steps | 1811 | +4.61 | **+3.92** | **−0.69 ms** |
+
+The last row is §2.4/§2.10's side stream showing up as a *second-order* effect: the ratio-4 emits
+run on `g_side`, 1.8 established that their contention lands in `cattn:q_proj`, and making them
+1.79–1.87× faster gives 0.69 ms of that back on nearly two steps in three. **That row, not the
+40 ms spike, is where the throughput comes from** — and it is where the item's own ranking
+("LOW on throughput") was wrong.
+
+End to end, drift-free over 18 paired legs and four loads: **−1.963 ± 1.504 ms/forward, 14/18 legs
+faster, 2 SE [−3.467, −0.459]**, flat `−2.348 ± 3.302` against `+0.0533 ± 0.4038` per 1000 context
+(R² 0.004) — **Term A, as pre-registered**. So `a` 125.11 → **123.15 ms**. The mark-level
+prediction `0.628 × 2.49 + 0.0239 × 26.42 = −2.20 ms/forward` falls inside the band: two instruments,
+one number.
+
+**The gate that proved it.** `tests/gate_bf16w.cu` sweeps **all 18 dispatchable `(MM,NN)` tiles
+including the pre-1.12 `8x0` arm**, at 7 values of M and 2 of N — 252 comparisons against the M=1
+warp-per-output path, **worst max|diff| = 0**. `N = 254` is there because a widened tile fails at
+the guarded store, not in the middle. Negative control: perturb the epilogue by one part in 1e7 and
+**17 of 18 tiles FAIL** while `8x0`, which does not use the new kernel, correctly does not.
+
+**What generalises.**
+
+1. **A 1-D tile is half a 2-D tile, and the half you skipped is usually the cheaper one.** §1.1 was
+   applied to five call sites in this repo and every one of them tiled M only. `NN` costs `MM*NN*4`
+   registers and nothing else.
+2. **Where the m-loop lives is worth 1.28× on its own.** Sixteen launches → one `gridDim.y`, same
+   arithmetic, same traffic. On this box a launch is not free and a host-side loop over chunks is a
+   launch per chunk.
+3. **Bit-exactness constrains the tile shape, not the tile size.** The claim is that lane `l`
+   accumulates k4 indices `l, l+32, …` into four chains reduced by the same shuffle tree — a
+   *warp-local* property. Any tile that keeps one warp per output is free; a classic
+   shared-memory/k-split tile is not.
+4. **Optimise the shape the engine issues, and verify that it issues it.** The ladder entry that
+   opened this item had the shape wrong in three places (`ntok`, the matrix size, the pass count),
+   and the first A/B ran both arms on the same build. `DSV4_GEMM_TRACE=1` prints a
+   per-`(route, M, N, K)` call-site histogram with byte totals and settled all four questions in one
+   90-second load. See [`measurement-and-traps.md` §34](measurement-and-traps.md).
+
+**What it leaves.** `cattn:compress` on an emit step is still **14.50 ms against a 335 MB / 1.40 ms
+byte floor — 4.3 % of roofline**. The next factor is not a bigger tile (`(6,6)` is slower); it is
+tensor cores or a shared-memory B stage, and it is a new item.
 
 ## 3. Precision and layout
 

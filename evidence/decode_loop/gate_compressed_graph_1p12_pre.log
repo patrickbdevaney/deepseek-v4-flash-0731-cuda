@@ -1,0 +1,4 @@
+[f32mk] tile 8x0 = PRE-1.12 host chunk loop (DSV4_F32MK_TILE=8x0)
+[graph-gate] KV layout: fp32, 2048 B/row
+[cgraph] captured compressed_decode_step_strided_dp OK
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)

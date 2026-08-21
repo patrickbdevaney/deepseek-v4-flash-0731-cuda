@@ -1,0 +1,28 @@
+token identity: 0/18 legs byte-identical, 18 differ, 0 unproven
+
+--- SWEEP legs (the band) ---
+                 leg     ctx   pre1p12   tile4x4    delta   tau b   tau a
+     sweep-t12288-r0   12410    148.44    143.69    -4.75   1.766   1.506
+     sweep-t12288-r1   12410    145.91    143.67    -2.24   1.707   1.631
+     sweep-t12288-r2   12410    145.91    143.08    -2.83   1.842   1.641
+     sweep-t12288-r3   12410    142.37    145.98    +3.61   1.506   1.741
+     sweep-t12288-r4   12410    144.12    139.90    -4.21   1.790   1.533
+     sweep-t12288-r5   12410    141.85    144.41    +2.57   1.580   1.741
+      sweep-t3072-r0    3197    131.36    134.04    +2.68   1.620   1.641
+      sweep-t3072-r1    3197    134.07    140.14    +6.08   1.542   1.803
+      sweep-t3072-r2    3197    132.26    134.79    +2.52   1.533   1.561
+      sweep-t3072-r3    3197    131.78    135.52    +3.74   1.430   1.730
+      sweep-t3072-r4    3197    133.80    134.14    +0.34   1.620   1.580
+      sweep-t3072-r5    3197    138.79    137.11    -1.68   1.610   1.673
+      sweep-t6144-r0    6260    138.98    139.10    +0.12   1.896   1.766
+      sweep-t6144-r1    6260    141.24    137.83    -3.41   1.753   1.497
+      sweep-t6144-r2    6260    135.32    136.32    +0.99   1.542   1.730
+      sweep-t6144-r3    6260    136.74    137.97    +1.23   1.610   1.652
+      sweep-t6144-r4    6260    135.27    139.51    +4.24   1.580   1.829
+      sweep-t6144-r5    6260    138.22    138.44    +0.22   1.673   1.766
+
+n=18  paired mean +0.512 ms/forward   sd 3.142   2 SE band [-0.969, +1.993]
+legs faster after: 6/18   tau equal to 3 d.p.: 0/18
+VERDICT: the band COVERS ZERO — this is a NULL, not a win.
+split:   flat +3.263 +/- 2.890 ms/forward   context -0.3773 +/- 0.3510 ms per 1000 ctx   R^2 0.224
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)

@@ -1,0 +1,7 @@
+[f32mk] tile 4x4 (DSV4_F32MK_TILE=unset)
+[joindefer] arena on, g_side=0xaaaaf9f76cb0, ATTN_SPLIT active. KV layout: fp32
+s0=480 decode=6 verify_K=2 emits_in_block=1  0 / 32768 floats differ
+s0=480 decode=6 verify_K=6 emits_in_block=2  0 / 49152 floats differ
+s0=480 decode=6 verify_K=1 emits_in_block=0  0 / 28672 floats differ
+s0=184 decode=3 verify_K=5 emits_in_block=2  0 / 32768 floats differ
+GATE JOIN_DEFER: PASS  (arm mismatches 0)

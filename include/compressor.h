@@ -6,6 +6,10 @@
 
 // C[M,N] = A[M,K] @ B[N,K]^T, all fp32.
 void gemm_fp32(float* C, const float* A, const float* B, int M, int N, int K, cudaStream_t stream = 0);
+// LADDER 1.12. (MM,NN) warp tile for the M>=2 path. Set from DSV4_F32MK_TILE=MMxNN unless a caller
+// pins it first; a setter exists so one binary can run both arms of an A/B without re-exec.
+void gemm_fp32_set_tile(int mm, int nn);
+void gemm_fp32_get_tile(int* mm, int* nn);
 // C[M,N] = A[M,K](f32) @ B[N,K]^T with B read natively as BF16 (no f32 dequant). See LOOP_LOG
 // Finding 26: lm_head and the markov heads ship BF16 and were being doubled to f32 before every use.
 extern bool g_compressor_bf16;   // wkv/wgate are BF16 storage when true

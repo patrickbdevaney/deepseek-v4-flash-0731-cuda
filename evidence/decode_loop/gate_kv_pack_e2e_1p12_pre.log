@@ -1,0 +1,5 @@
+[f32mk] tile 8x0 = PRE-1.12 host chunk loop (DSV4_F32MK_TILE=8x0)
+ratio=4   s0=480 decode=6 verify_K=2  0 / 32768 floats differ
+ratio=4   s0=480 decode=6 verify_K=6  0 / 49152 floats differ
+ratio=128 s0=480 decode=6 verify_K=2  0 / 32768 floats differ
+GATE KV_PACK_E2E: PASS  (arm mismatches 0)

@@ -1,0 +1,83 @@
+1.12: gemm_fp32 gets a (4x4) warp tile -- the ratio-128 emit spike falls 40.76 -> 14.50 ms (2.82x, populations disjoint) and the drift-free paired forward is -1.963 +/- 1.504 ms, band excluding zero, entirely in Term A
+
+WHAT WAS MEASURED
+
+`gemm_fp32`'s M=K path was one warp per (8-row chunk of A, one row of B), with the chunk loop on
+the HOST. `compressor_emit_group` calls it at M = ratio = 128, N = d = 512, K = DIM = 4096 on the
+twenty ratio-128 layers, so B = [512,4096] f32 = 8.39 MB was walked sixteen times, in sixteen
+separate launches, twice per layer. A warp owning MM rows of A and NN rows of B issues MM+NN loads
+for MM*NN*4 FMAs, so operand traffic is M*N*K*(1/NN + 1/MM): the shipped (8,1) is 1.125, (4,4) is
+0.375. The m-chunk loop also moves from the host to gridDim.y.
+
+Seventeen tiles benchmarked at the four shapes the engine issues (tools/f32mk_bench.cu), against
+the EXACT pre-1.12 code as the baseline arm (DSV4_F32MK_TILE=8x0):
+
+  [128,512]x[512,4096]  strided emit, x40/step   0.5744 -> 0.2477 ms   2.32x
+  [8,1024]x[1024,4096]  indexer emit main, x42   0.0729 -> 0.0407 ms   1.79x
+  [8,256] x[256,4096]   indexer emit idx,  x42   0.0331 -> 0.0177 ms   1.87x
+  [5,64]  x[64,4096]    idx_weights_proj,  x21 on EVERY step   0.0143 -> 0.0144   1.00x
+
+The last row is why the tile is OFF below M=8: at (4,4) that GEMV becomes a 4-row chunk plus a
+1-row tail and goes 0.0148 -> 0.0205 ms, and it fires 21x per forward against the emit shapes' once
+every 4 or 128 positions. The guard also makes both A/B arms identical below M=8.
+
+IN THE ENGINE THE SAVING IS TWICE WHAT THE BENCH PREDICTED. The bench reuses one 8.39 MB B across
+200 reps, so 15 of its 16 passes are L2 hits on a 32 MB L2; the engine walks 20 layers x 2 matrices
+= 335 MB of distinct weights, so the passes removed are DRAM. Predicted -13.07 ms per emit step,
+measured -26.26. tools/emit_spike.py, pooled over four checkpoint loads:
+
+  cattn:compress, steps with a ratio-128 boundary  n=69   40.76 [39.92,45.22] -> 14.50 [14.29,14.64]
+                                                          -26.26 ms, 2.82x, populations DISJOINT
+  verify TOTAL excess on those steps               n=69   +63.17 -> +34.26   -28.91 ms
+  verify TOTAL excess on ratio-4 boundary steps    n=1811 +13.52 -> +11.03   -2.49 ms
+  cattn:q_proj excess on ratio-4 boundary steps    n=1811  +4.61 ->  +3.92   -0.69 ms
+
+The ratio-4 row is what carries the throughput -- 62.8 % of steps have a ratio-4 boundary, and 1.8
+established that the side-stream emit's contention lands in cattn:q_proj. The item's own ranking
+("LOW on throughput") was wrong about where the win would come from.
+
+WHAT IT MEANS
+
+Drift-free paired over 18 legs and FOUR checkpoint loads: -1.963 +/- 1.504 ms/forward, 14/18 legs
+faster, 2 SE [-3.467, -0.459], band EXCLUDING zero. TERM A as pre-registered: flat -2.348 +/- 3.302
+against context +0.0533 +/- 0.4038 per 1000, R^2 0.004. So a 125.11 -> 123.15 ms (1.522x ->
+1.499x the 82.18 ms floor); b unchanged at 1.887.
+
+The mark-level instrument predicts that band from a different measurement entirely:
+0.628 x 2.49 + 0.0239 x 26.42 = -2.20 ms/forward, which falls inside [-3.467, -0.459]. Two
+instruments, one number.
+
+AND ONE ARM ORDER CALLED IT A NULL AGAIN. Control-first: -0.892, 2 SE [-2.134, +0.350], 10/18.
+Change-first: -3.033, 2 SE [-5.372, -0.695], 13/18. Pooled: -1.963, [-3.467, -0.459], 14/18, drift
++1.071 +/- 1.115. Exactly 1.11's lesson (traps 33) on the very next item.
+
+BIT-EXACTNESS. gate_bf16w now sweeps all 18 dispatchable tiles INCLUDING the pre-1.12 8x0 arm, at 7
+values of M and 2 of N (N=254 is the guarded-store tail): 252 comparisons, worst max|diff| = 0.
+Negative control: perturb the epilogue by one part in 1e7 and 17 of 18 tiles FAIL while 8x0
+correctly does not. build/decode emitted identical generated ids in both arms with LOSSLESS PASS,
+and 11 in-situ gates pass in both arms. The sweep-level text-identity column is NOT usable under
+DSV4_DPROF and the null control proves it: two loads of the SAME binary also gave 0/18
+byte-identical.
+
+THE FIRST ENGINE A/B WAS A FALSE NULL AND COST FOUR LOADS. DSV4_F32MK_TILE=8x0 was rejected by its
+own parser (`nn > 0`), so both arms ran 4x4 and the mark moved -0.03 ms. The tell was that the null
+was TOO CLEAN for a 3.5 %-spread instrument. The engine now prints `[f32mk] tile MMxNN` on the first
+gemm_fp32 of the process, the tile list is a whitelist rather than a parse, and the harness EXITS
+NON-ZERO if the two arms log the same tile. The wasted pair is kept as fit_1p12null_* because it is
+this ladder's best null control (+0.512, 2 SE [-0.969, +1.993] on identical code, and the
+conditional mark reproducing to 0.03 ms).
+
+WHAT IT LEAVES. cattn:compress on an emit step is still 14.50 ms against a 335 MB / 1.40 ms byte
+floor -- 4.3 % of roofline -- because at (4,4) the kernel is register- and issue-bound, not
+traffic-bound: (6,6), (4,8) and (8,4) all measured SLOWER than (4,4). The next factor is tensor
+cores or a shared-memory B stage, and it is a new item.
+
+NEW FILES. tools/f32mk_bench.cu (bench AND gate, in build_gate.sh), tools/emit_spike.py
+(schedule-conditional mark distribution), scripts/f32mkn_ab_run.sh (9 phases, both arm orders,
+named in detach_audit.sh in this commit), DSV4_GEMM_TRACE=1 (per-(route,M,N,K) call-site histogram,
+off by default -- it is what proved the shape was reached and the arm was not).
+
+WIKI. kernel-optimisations.md 2.11 (the adoption) and 1.1 (all five "read B once" sites tiled M
+only); measurement-and-traps.md 34 (the arm switch that never switched) and 35 (a byte-identity gate
+run past the length at which the engine is not byte-identical); context-scaling.md (1.12 is the
+first clean "no, it is not the context term"); README.md state table.

@@ -16,6 +16,7 @@ bool g_compressor_bf16 = false;
 #include <cuda_bf16.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "dscratch.h"
 
 // C[M,N] = A[M,K] @ B[N,K]^T. One warp per (m,n).
@@ -101,11 +102,170 @@ __global__ void gemm_fp32_mk_kernel(float* __restrict__ C, const float* __restri
         for (int o=16;o>0;o>>=1) a += __shfl_down_sync(0xffffffff,a,o);
         if (lane==0) C[(size_t)(m0+m)*N + n] = a; }
 }
+// ---------------------------------------------------------------------------------------------
+// LADDER 1.12 — N-TILING. The kernel above is one warp per (m-chunk, n), so it reads B once per
+// m-chunk: `ceil(M/8)` passes. `compressor_emit_group` on the twenty ratio-128 layers calls this
+// with M = ratio = 128, N = d = 512, K = DIM = 4096, i.e. SIXTEEN passes over B = [512,4096] f32 =
+// 8.39 MB, twice per layer (`wkv` and `wgate`). Fitting B in the 32 MB L2 is why that costs L2
+// bandwidth rather than DRAM bandwidth, which is why 1.8 saw 43-50 ms and not the 335 ms that
+// sixteen DRAM passes over 20 layers would have been -- but it is still the traffic, and the
+// arithmetic intensity is the thing to fix.
+//
+// A warp that owns MM rows of A and NN rows of B issues (MM + NN) loads for MM*NN*4 FMAs, so the
+// total operand traffic is M*N*K*(1/NN + 1/MM) floats. The shipped (MM=8, NN=1) is 1.125; (8,4) is
+// 0.375 -- 3x less -- and (8,8) would be 0.25 but needs 256 accumulator registers and spills.
+//
+// BIT-EXACT BY CONSTRUCTION, and the constraint that forces this shape rather than a classic
+// shared-memory tile: every output must still be produced by ONE warp with lane `l` accumulating
+// k4 indices l, l+32, l+64, ... into the same four chains, summed (a0+a1)+(a2+a3) and then reduced
+// down the same shuffle tree. Widening the tile changes WHICH warp owns an output and how many
+// outputs it owns; it does not touch the order of a single dot product. gate_bf16w asserts
+// max|diff| == 0 against the M=1 path for every (MM,NN) this file can dispatch.
+//
+// The m-chunk loop also moves from the HOST to gridDim.y: sixteen launches per GEMM x 2 x 20 layers
+// was 640 launches on the emit step, and on this box a null launch is not free.
+template<int MM, int NN>
+__global__ void gemm_fp32_mkn_kernel(float* __restrict__ C, const float* __restrict__ A,
+                                     const float* __restrict__ B, int M, int N, int K){
+    const int n0 = (blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5))*NN;
+    if (n0 >= N) return;
+    const int m0 = blockIdx.y*MM;
+    const int lane = threadIdx.x & 31;
+    const int n4 = K >> 2;
+    // Clamp the OOB tail rows onto a valid row and drop them in the epilogue: reading row M-1 twice
+    // is harmless, reading past the end of a mapped tensor is not.
+    const float4* ap[MM]; const float4* bp[NN];
+    #pragma unroll
+    for (int m=0;m<MM;++m){ const int r = (m0+m < M) ? (m0+m) : (M-1); ap[m] = (const float4*)(A + (size_t)r*K); }
+    #pragma unroll
+    for (int j=0;j<NN;++j){ const int c = (n0+j < N) ? (n0+j) : (N-1); bp[j] = (const float4*)(B + (size_t)c*K); }
+    float acc[MM][NN][4];
+    #pragma unroll
+    for (int m=0;m<MM;++m)
+        #pragma unroll
+        for (int j=0;j<NN;++j){ acc[m][j][0]=acc[m][j][1]=acc[m][j][2]=acc[m][j][3]=0.f; }
+    for (int k = lane; k < n4; k += 32) {
+        float4 bv[NN];
+        #pragma unroll
+        for (int j=0;j<NN;++j) bv[j] = bp[j][k];
+        #pragma unroll
+        for (int m=0;m<MM;++m){
+            const float4 av = ap[m][k];
+            #pragma unroll
+            for (int j=0;j<NN;++j){
+                acc[m][j][0]=fmaf(av.x,bv[j].x,acc[m][j][0]); acc[m][j][1]=fmaf(av.y,bv[j].y,acc[m][j][1]);
+                acc[m][j][2]=fmaf(av.z,bv[j].z,acc[m][j][2]); acc[m][j][3]=fmaf(av.w,bv[j].w,acc[m][j][3]);
+            }
+        }
+    }
+    #pragma unroll
+    for (int m=0;m<MM;++m){
+        #pragma unroll
+        for (int j=0;j<NN;++j){
+            float a=(acc[m][j][0]+acc[m][j][1])+(acc[m][j][2]+acc[m][j][3]);
+            #pragma unroll
+            for (int o=16;o>0;o>>=1) a += __shfl_down_sync(0xffffffff,a,o);
+            if (lane==0 && m0+m < M && n0+j < N) C[(size_t)(m0+m)*N + (n0+j)] = a;
+        }
+    }
+}
+// The (MM,NN) actually dispatched. Default is 1.12's measured winner; `DSV4_F32MK_TILE=MMxNN` and
+// `gemm_fp32_set_tile()` exist so ONE binary can run both arms of the A/B, and (8,1) reproduces the
+// pre-1.12 arithmetic launch-for-launch except for the host-side m loop.
+static int g_f32mk_mm = 4, g_f32mk_nn = 4;
+static int g_f32mk_env = 0;
+void gemm_fp32_set_tile(int mm, int nn){ g_f32mk_mm = mm; g_f32mk_nn = nn; g_f32mk_env = 1; }
+void gemm_fp32_get_tile(int* mm, int* nn){ *mm = g_f32mk_mm; *nn = g_f32mk_nn; }
+static inline void f32mk_tile_from_env(){
+    if (g_f32mk_env) return;
+    g_f32mk_env = 1;
+    const char* e = getenv("DSV4_F32MK_TILE");
+    // `nn >= 0`, NOT `nn > 0`. The first engine A/B of 1.12 ran BOTH ARMS AT 4x4 because this test
+    // was `nn > 0` and the control arm is spelled `8x0` -- the guard silently rejected the only
+    // value that selects the before-arm and left the default in place. It measured a PERFECT null
+    // (cattn:compress 14.50 -> 14.47, TOTAL +1.08 at g==0 and -0.73 at g>=1) and every one of those
+    // numbers was correct: they are the run-to-run spread of two loads of the SAME code.
+    // measurement-and-traps §34. Hence the unconditional line below: an arm that cannot be read
+    // back out of the log is an arm you are guessing at.
+    // WHITELIST, not just a parse. The dispatcher below is an if-chain over instantiated (MM,NN)
+    // templates with a `<8,1>` fallback whose grid was sized for a DIFFERENT mm -- so an (mm,nn)
+    // that is parsed but not instantiated would launch a kernel that strides m by 8 over a grid
+    // built for mm, and quietly compute the wrong rows. An unrecognised value must fall back to a
+    // shape that is correct, not to one that is merely present.
+    static const int OK[][2] = {{8,0},{8,1},{8,2},{8,4},{4,4},{4,8},{2,8},{16,1},{16,2},{32,1},
+                                {6,4},{4,6},{6,6},{5,5},{4,2},{2,4},{4,1},{2,2}};
+    if (e) { int mm=0,nn=0;
+        if (sscanf(e,"%dx%d",&mm,&nn)==2 && mm>0 && nn>=0){
+            bool ok=false; for (auto& t : OK) if (t[0]==mm && t[1]==nn) ok=true;
+            if (ok){ g_f32mk_mm=mm; g_f32mk_nn=nn; }
+            else fprintf(stderr,"[f32mk] DSV4_F32MK_TILE=%s is not an instantiated tile -- IGNORED\n", e);
+        } else fprintf(stderr,"[f32mk] DSV4_F32MK_TILE=%s did not parse as MMxNN -- IGNORED\n", e);
+    }
+    fprintf(stderr,"[f32mk] tile %dx%d%s (DSV4_F32MK_TILE=%s)\n", g_f32mk_mm, g_f32mk_nn,
+            g_f32mk_nn==0 ? " = PRE-1.12 host chunk loop" : "", e ? e : "unset");
+    fflush(stderr);
+}
+// ---------------------------------------------------------------------------------------------
+// CALL-SITE TRACE (DSV4_GEMM_TRACE=1). 1.12's first engine A/B came back a PERFECT null -- the
+// `cattn:compress` mark on ratio-128 emit steps was 14.50 ms before and 14.47 after -- while the
+// microbenchmark said the shape it targets is 2.32x faster. Exactly one of those can be true of the
+// engine, and the ladder entry's premise ("the strided path calls it with ntok = 2*ratio = 256")
+// was already known to be wrong in its arithmetic, so the premise about WHICH KERNEL RUNS was worth
+// checking rather than reasoning about. This prints, once per distinct (route, M, N, K, vec4) with
+// a call count and the bytes it moved, at process exit. It costs one host-side lookup per call and
+// is OFF unless the variable is set.
+#include <map>
+#include <mutex>
+namespace {
+struct GKey { int route, M, N, K, vec4; bool operator<(const GKey& o) const {
+    return route!=o.route?route<o.route : M!=o.M?M<o.M : N!=o.N?N<o.N : K!=o.K?K<o.K : vec4<o.vec4; } };
+const char* GROUTE[] = {"fp32:mkn", "fp32:chunk8", "fp32:m1warp", "fp32:cond", "bf16w:mk", "bf16w:m1"};
+struct GTrace {
+    std::map<GKey,long long> hits; std::mutex mu; bool on;
+    GTrace(): on(getenv("DSV4_GEMM_TRACE")!=nullptr) {}
+    ~GTrace(){ if(!on || hits.empty()) return;
+        fprintf(stderr,"[gemmtrace] %zu distinct (route,M,N,K,vec4) shapes\n", hits.size());
+        for(auto& kv : hits){ const GKey& k=kv.first;
+            double b = ((double)k.M + k.N)*k.K*4.0 + (double)k.M*k.N*4.0;
+            fprintf(stderr,"[gemmtrace] %-12s M=%-6d N=%-7d K=%-6d vec4=%d  calls=%-9lld  %8.2f MB/call  %9.2f GB total\n",
+                    GROUTE[k.route], k.M, k.N, k.K, k.vec4, kv.second, b/1e6, b*kv.second/1e9); }
+        fflush(stderr); }
+    void hit(int route,int M,int N,int K,int vec4){ if(!on) return;
+        std::lock_guard<std::mutex> g(mu); ++hits[GKey{route,M,N,K,vec4}]; }
+};
+GTrace g_gtrace;
+}
+void gemm_trace_hit(int route,int M,int N,int K,int vec4){ g_gtrace.hit(route,M,N,K,vec4); }
 void gemm_fp32(float* C, const float* A, const float* B, int M, int N, int K, cudaStream_t stream) {
     const int wpb = 4, threads = 32*wpb;
     if (M >= 2 && gemm_vec4_ok(A, B, K) && getenv("NO_FP32MK")==nullptr) {
+        f32mk_tile_from_env();
+        const int mm = g_f32mk_mm, nn = g_f32mk_nn;
+        // MEASURED FLOOR (tools/f32mk_bench.cu). Below M=8 the widened tile LOSES -- the M=5
+        // `idx_weights_proj` GEMV the indexer issues on EVERY verify step goes 0.0148 -> 0.0205 ms
+        // at 4x4, because a 4-row chunk plus a 1-row tail is two launches where the legacy path
+        // templates the whole thing into one. That GEMV fires 21x per forward and the tiled shapes
+        // fire once every 4 or 128 positions, so a regression there would have eaten the win. The
+        // guard also keeps both arms of the A/B IDENTICAL below M=8, which is what makes the paired
+        // measurement attributable to the emit and nothing else.
+        // gridDim.y is 16-bit: fall back rather than silently truncate the m range.
+        // nn == 0 is the EXACT pre-1.12 arm: the host-side 8-row chunk loop below, sixteen
+        // launches of gemm_fp32_mk_kernel<8> at the M=128 shape. `DSV4_F32MK_TILE=8x0` selects it,
+        // so the before-arm of the A/B is the ORIGINAL CODE and not a re-expression of it.
+        const int mfull = (nn >= 1 && M >= 8 && (M/mm) <= 65535) ? (M/mm)*mm : 0;
+        if (mfull > 0) {
+            const int nwarps = (N + nn - 1)/nn;
+            dim3 grid((nwarps + wpb - 1)/wpb, mfull/mm);
+            #define F32MKN(a,b) if (mm==a && nn==b) gemm_fp32_mkn_kernel<a,b><<<grid,threads,0,stream>>>(C,A,B,mfull,N,K); else
+            gemm_trace_hit(0,mfull,N,K,nn);
+            F32MKN(8,4) F32MKN(8,2) F32MKN(8,1) F32MKN(4,4) F32MKN(4,8) F32MKN(16,2) F32MKN(16,1) F32MKN(32,1) F32MKN(2,8) F32MKN(6,4) F32MKN(4,6) F32MKN(6,6) F32MKN(5,5) F32MKN(4,2) F32MKN(2,4) F32MKN(4,1) F32MKN(2,2)
+            { gemm_fp32_mkn_kernel<8,1><<<grid,threads,0,stream>>>(C,A,B,mfull,N,K); }
+            #undef F32MKN
+        }
+        // rows [mfull, M) -- the old chunked path, which templates on the exact remainder.
         const int blocks = (N + wpb - 1)/wpb;
-        for (int m0 = 0; m0 < M; m0 += 8) {
+        if (mfull < M) gemm_trace_hit(1,M-mfull,N,K,1);
+        for (int m0 = mfull; m0 < M; m0 += 8) {
             const int r = (M - m0 < 8) ? (M - m0) : 8;
             #define F32MK(MM) case MM: gemm_fp32_mk_kernel<MM><<<blocks,threads,0,stream>>>(C,A,B,m0,N,K); break;
             switch(r){ F32MK(1) F32MK(2) F32MK(3) F32MK(4) F32MK(5) F32MK(6) F32MK(7) F32MK(8) }
@@ -113,6 +273,7 @@ void gemm_fp32(float* C, const float* A, const float* B, int M, int N, int K, cu
         }
         return;
     }
+    gemm_trace_hit(2,M,N,K,gemm_vec4_ok(A,B,K));
     dim3 grid((N + wpb - 1)/wpb, M);
     gemm_fp32_kernel<<<grid, threads, 0, stream>>>(C, A, B, M, N, K, gemm_vec4_ok(A, B, K));
 }
@@ -353,6 +514,7 @@ __global__ __launch_bounds__(128,2) void gemm_bf16w_tc_kernel(
 }
 void gemm_bf16w(float* C, const float* A, const void* Bbf16, int M, int N, int K, cudaStream_t stream) {
     const int wpb = 4, threads = 32*wpb;
+    gemm_trace_hit(4,M,N,K,0);
     // 2 = float4 (8 bf16) path, 1 = bf16x2 path, 0 = scalar. B rows are 16-byte aligned iff the
     // base is and K*2 is a multiple of 16, i.e. K%8==0; A rows likewise need K*4 %16 == 0.
     const int vec2 = (((K & 7) == 0) && ((((uintptr_t)Bbf16) & 15) == 0) && ((((uintptr_t)A) & 15) == 0)) ? 2
@@ -412,7 +574,9 @@ __global__ void gemm_fp32_cond_kernel(float* __restrict__ C, const float* __rest
         for(int o=16;o>0;o>>=1) acc+=__shfl_down_sync(0xffffffff,acc,o);
         if(lane==0) C[idx]=acc; }
 }
+void gemm_trace_hit(int,int,int,int,int);
 void gemm_fp32_cond(float* C, const float* A, const float* B, int M, int N, int K, const int* d_pos, int ratio, cudaStream_t stream){
+    gemm_trace_hit(3,M,N,K,gemm_vec4_ok(A,B,K));
     gemm_fp32_cond_kernel<<<256,256,0,stream>>>(C,A,B,M,N,K,d_pos,ratio,gemm_vec4_ok(A,B,K));   // 256*8=2048 warps grid-stride M*N
 }
 

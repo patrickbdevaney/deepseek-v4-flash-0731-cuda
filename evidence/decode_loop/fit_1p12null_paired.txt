@@ -1,0 +1,20 @@
+corpus sha256: before ['ac10134c87e3d0fe']  after ['ac10134c87e3d0fe']
+
+token identity: 0/18 legs proven byte-identical, 18 differ, 0 unproven (no hash on record)
+  DIFFER sweep-t12288-r0: 86c25373351b4df2 vs 12f7f09fc4658043  (len 868 vs 975)
+  DIFFER sweep-t12288-r1: d9838e7bb511a36a vs e48f75a7d4fe113f  (len 852 vs 930)
+  DIFFER sweep-t12288-r2: 1d28dc09f1bd0a9a vs b5ffb933ad026a37  (len 872 vs 872)
+  DIFFER sweep-t12288-r3: 82e52cbd6fd5b360 vs 811ed6b34c6b48ff  (len 956 vs 880)
+  DIFFER sweep-t12288-r4: 749b4a988e619b18 vs 6ecda3dc3055984e  (len 925 vs 892)
+  DIFFER sweep-t12288-r5: 01d9134deab2fa62 vs de5a2044e3c82c88  (len 889 vs 919)
+  DIFFER sweep-t3072-r0: f5398160e6805d10 vs 60698cc8cc787b04  (len 883 vs 891)
+  DIFFER sweep-t3072-r1: fb4fe3a4b0dcbb53 vs c4dd6201bd4ba33c  (len 912 vs 760)
+  DIFFER sweep-t3072-r2: e53a83b757b8636b vs d3816a3013b46de0  (len 921 vs 903)
+  DIFFER sweep-t3072-r3: 52d7a201e0d6e0c5 vs d5fceacc01a119d2  (len 989 vs 932)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+sweep      12288  6  12410    145.01    143.68    -1.33   1.009x   1.736   1.636   2.74   2.62    11.80    11.41
+sweep       6144  6   6260    137.48    138.21    +0.73   0.995x   1.642   1.748   2.64   2.68    11.94    12.69
+sweep       3072  6   3197    133.03    135.15    +2.12   0.984x   1.576   1.657   2.56   2.69    11.60    12.22
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.

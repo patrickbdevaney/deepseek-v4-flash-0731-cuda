@@ -5,13 +5,13 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 
 | page | what it holds |
 |---|---|
-| [`kernel-optimisations.md`](kernel-optimisations.md) | every **adopted** AR/spec-decode optimisation, by mechanism: mechanism → measured gain → the gate that proved it |
+| [`kernel-optimisations.md`](kernel-optimisations.md) | every **adopted** AR/spec-decode optimisation, by mechanism: mechanism → measured gain → the gate that proved it — **and §2.11, the 2-D tile that all five "read B once" call sites were missing (1.12)** |
 | [`negative-results.md`](negative-results.md) | levers built and **retired**, with the number that killed each. Longer than the wins list and more useful. |
 | [`prefill-optimisation.md`](prefill-optimisation.md) | B9 — why prefill ran decode-shaped kernels, and the four fixes (+30.3 %) — **and §7: one of the four had gone 0.80x and 1.7 took it back** |
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation, **and §8: how a promoted head finally got served (2.2)** |
 | [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
-| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, **1.7, the item that moved Term A instead**, and **1b.2, which moves `b` another 26 % and charges Term A for it**, and **1.11, a Term-A change that only resolved at long context** |
+| [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, **1.7, the item that moved Term A instead**, and **1b.2, which moves `b` another 26 % and charges Term A for it**, and **1.11, a Term-A change that only resolved at long context**, and **1.12, the first clean "no, it is not the context term"** |
 | [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
 | [`hardware-sm110a.md` §5](hardware-sm110a.md) | operating rules, **including what the clocks actually do under load (3.1) — the governed box already runs at the pinned frequencies 97.7 % of the time** |
 | [`oom-and-memory-safety.md`](oom-and-memory-safety.md) | why the OOM killer never fires here (unified memory is invisible to the cgroup), and the two guards that replace it |
@@ -50,14 +50,14 @@ gates PASS on both. **This row is a weights change, not a kernel one** — `s3` 
 hardcoded the base checkpoint. [`kernel-optimisations.md` §2.8](kernel-optimisations.md),
 [`draft-head-finetuning.md` §8](draft-head-finetuning.md).
 
-| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | after 1.7 | after 1.8 | after 1.11 | |
-|---|---|---|---|---|---|---|---|---|---|
-| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | 10.69 tok/s | *unchanged* | **+4.57 % paired** (10.46 → 10.93 in-session) | **+3.25 % paired** (11.71 → 12.09 in-session) | *no kernel change* | **+0.77 % paired** (−1.092 ± 0.146 ms/forward, 6/6 in both arm orders) | +24.4 %, +8.2 %, nothing, +4.6 %, **+3.3 %**, nothing, **+0.8 %** |
-| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | not swept | not swept | not swept | +21.7 % then +6.7 % |
-| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | **+3.32 % paired** (11.74 → 12.13 in-session) | *no kernel change* | −0.252 ± 0.606 ms/forward — **band covers zero** | +15.8 %, +5.8 %, nothing, +2.2 %, **+3.3 %**, nothing, unresolved |
-| spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | not swept | not swept | the pre-knee leg |
-| **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | **125.11 ms** — 1.11's saving is real but its term is not resolved | 1.571× → **1.522×** its 82.18 ms floor |
-| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | *untouched* (the swing is flat in context) | **1.887 ms/1000** — see `a` | **−74 % cumulative** |
+| at real context | ladder open | after 1.0 | after 1.2 | after 1.3 | after 1.5 | after 1.7 | after 1.8 | after 1.11 | after 1.12 | |
+|---|---|---|---|---|---|---|---|---|---|---|
+| spec decode @ ctx ~12.3k | 7.67 tok/s | 9.54 tok/s | 10.69 tok/s | *unchanged* | **+4.57 % paired** (10.46 → 10.93 in-session) | **+3.25 % paired** (11.71 → 12.09 in-session) | *no kernel change* | **+0.77 % paired** (−1.092 ± 0.146 ms/forward, 6/6 in both arm orders) | **+1.42 % paired** (−1.963 ± 1.504 ms/forward drift-free, 14/18 legs, band excludes zero) |  +24.4 %, +8.2 %, nothing, +4.6 %, **+3.3 %**, nothing, **+0.8 %** |
+| spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | not swept | not swept | not swept | not swept |  +21.7 % then +6.7 % |
+| spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | **+3.32 % paired** (11.74 → 12.13 in-session) | *no kernel change* | −0.252 ± 0.606 ms/forward — **band covers zero** | **flat, so it lands here too** (the split is −2.348 ± 3.302 flat vs +0.0533 ± 0.4038 per 1000, R² 0.004) |  +15.8 %, +5.8 %, nothing, +2.2 %, **+3.3 %**, nothing, unresolved |
+| spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | not swept | not swept | not swept |  the pre-knee leg |
+| **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | **125.11 ms** — 1.11's saving is real but its term is not resolved | **123.15 ms** (−1.963 ± 1.504 paired, drift-free over 4 loads) |  1.571× → **1.522×** its 82.18 ms floor |
+| context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | *untouched* (the swing is flat in context) | **1.887 ms/1000** — see `a` | **1.887 ms/1000** — untouched; 1.12 is Term A |  **−74 % cumulative** |
 
 | the one switchable row — `DSV4_KV_PACK` (1b.2, default **OFF**) | default | packed | |
 |---|---|---|---|

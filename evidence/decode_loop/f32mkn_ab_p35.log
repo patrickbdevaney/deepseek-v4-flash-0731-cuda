@@ -1,0 +1,334 @@
+[1.12] 2026-08-20T21:28:37-04:00 binaries: server 2026-08-20T21:15:25-04:00, decode 2026-08-20T21:12:38-04:00
+[1.12] 2026-08-20T21:28:37-04:00 === PHASE 3: server sweep, CONTROL (pre-1.12) ===
+[1.12] 2026-08-20T21:28:37-04:00 starting server [off] seqmax=16384 DSV4_F32MK_TILE=8x0 -> evidence/decode_loop/server_1p12_off.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p12_off.log
+[run_server] pid=1688185 ppid=1687576 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p12_off.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.12] 2026-08-20T21:29:55-04:00 healthy [off]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=128 prefill=224878ms decode=10999ms tau=1.662 -> 142.85 ms/forward  (236s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=128 prefill=0ms decode=11773ms tau=1.524 -> 140.16 ms/forward  (12s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=128 prefill=0ms decode=11070ms tau=1.620 -> 140.13 ms/forward  (11s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=128 prefill=0ms decode=11240ms tau=1.600 -> 140.50 ms/forward  (11s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=128 prefill=0ms decode=11473ms tau=1.561 -> 139.91 ms/forward  (11s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=128 prefill=0ms decode=10858ms tau=1.684 -> 142.86 ms/forward  (11s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=128 prefill=0ms decode=11569ms tau=1.506 -> 136.10 ms/forward  (12s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=128 prefill=0ms decode=11116ms tau=1.561 -> 135.56 ms/forward  (11s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=128 prefill=0ms decode=9455ms tau=1.939 -> 143.26 ms/forward  (9s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=128 prefill=0ms decode=10182ms tau=1.730 -> 137.60 ms/forward  (10s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=128 prefill=0ms decode=10513ms tau=1.641 -> 134.78 ms/forward  (11s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=128 prefill=0ms decode=11505ms tau=1.506 -> 135.35 ms/forward  (12s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=128 prefill=0ms decode=11074ms tau=1.580 -> 136.71 ms/forward  (11s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=128 prefill=0ms decode=11257ms tau=1.524 -> 134.02 ms/forward  (11s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=128 prefill=0ms decode=10957ms tau=1.580 -> 135.27 ms/forward  (11s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=128 prefill=0ms decode=10684ms tau=1.620 -> 135.24 ms/forward  (11s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=128 prefill=0ms decode=11219ms tau=1.524 -> 133.56 ms/forward  (11s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=128 prefill=0ms decode=11130ms tau=1.524 -> 132.50 ms/forward  (11s)
+[probe] wrote 18 usable records -> evidence/decode_loop/fit_1p12_off/postfix.sweep.jsonl and evidence/decode_loop/fit_1p12_off/control.fresh.jsonl
+[1.12] 2026-08-20T21:36:59-04:00 control probe rc=0
+[1.12] 2026-08-20T21:36:59-04:00 server down
+[1.12] 2026-08-20T21:37:04-04:00 === PHASE 4: server sweep, 1.12 ===
+[1.12] 2026-08-20T21:37:05-04:00 starting server [on] seqmax=16384 DSV4_F32MK_TILE=unset -> evidence/decode_loop/server_1p12_on.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p12_on.log
+[run_server] pid=1703867 ppid=1703247 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p12_on.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.12] 2026-08-20T21:38:18-04:00 healthy [on]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=128 prefill=217893ms decode=12508ms tau=1.407 -> 137.45 ms/forward  (230s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=128 prefill=0ms decode=11382ms tau=1.580 -> 140.52 ms/forward  (11s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=128 prefill=0ms decode=10624ms tau=1.707 -> 141.65 ms/forward  (11s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=128 prefill=0ms decode=11222ms tau=1.580 -> 138.55 ms/forward  (11s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=128 prefill=0ms decode=11328ms tau=1.561 -> 138.15 ms/forward  (11s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=128 prefill=0ms decode=11864ms tau=1.506 -> 139.57 ms/forward  (12s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=128 prefill=0ms decode=10172ms tau=1.753 -> 139.35 ms/forward  (10s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=128 prefill=0ms decode=10451ms tau=1.662 -> 135.73 ms/forward  (10s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=128 prefill=0ms decode=9409ms tau=1.882 -> 138.36 ms/forward  (9s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=128 prefill=0ms decode=11695ms tau=1.455 -> 132.90 ms/forward  (12s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=128 prefill=0ms decode=10483ms tau=1.684 -> 137.94 ms/forward  (10s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=128 prefill=0ms decode=11596ms tau=1.471 -> 133.29 ms/forward  (12s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=128 prefill=0ms decode=10570ms tau=1.641 -> 135.52 ms/forward  (11s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=128 prefill=0ms decode=10980ms tau=1.561 -> 133.90 ms/forward  (11s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=128 prefill=0ms decode=9833ms tau=1.730 -> 132.88 ms/forward  (10s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=128 prefill=0ms decode=9566ms tau=1.829 -> 136.66 ms/forward  (10s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=128 prefill=0ms decode=10426ms tau=1.641 -> 133.66 ms/forward  (10s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=128 prefill=0ms decode=10739ms tau=1.600 -> 134.23 ms/forward  (11s)
+[probe] wrote 18 usable records -> evidence/decode_loop/fit_1p12_on/postfix.sweep.jsonl and evidence/decode_loop/fit_1p12_on/control.fresh.jsonl
+[1.12] 2026-08-20T21:45:12-04:00 1.12 probe rc=0
+[1.12] 2026-08-20T21:45:12-04:00 server down
+[1.12] 2026-08-20T21:45:17-04:00 === PHASE 5: reports ===
+[1.12] 2026-08-20T21:45:17-04:00 control arm resolved: [f32mk] tile 8x0 = PRE-1.12 host chunk loop (DSV4_F32MK_TILE=8x0)
+[1.12] 2026-08-20T21:45:17-04:00    1.12 arm resolved: [f32mk] tile 4x4 (DSV4_F32MK_TILE=unset)
+[1.12] 2026-08-20T21:45:17-04:00 --- THE HEADLINE: cattn:compress conditional on a ratio-128 boundary in the block ---
+before: 1441 per-verify dprof tables from 1 log(s); 35 carry a ratio-128 boundary
+ after: 1426 per-verify dprof tables from 1 log(s); 34 carry a ratio-128 boundary
+
+-- g==0  (no ratio-128 emit) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress 1406              0.05 [0.04, 0.09]              0.05 [0.04, 0.08]      +0.00
+           TOTAL 1406         104.66 [90.37, 195.28]         104.50 [91.17, 198.11]      -0.16
+    cattn:q_proj 1406            14.58 [9.93, 15.97]            13.97 [9.93, 15.67]      -0.61
+    cattn:sparse 1406           15.35 [13.92, 31.22]           15.37 [13.95, 33.13]      +0.02
+
+-- g>=1  (THE SPIKE: 128-emit steps) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress   35           40.67 [39.92, 41.15]           14.48 [14.29, 14.63]     -26.19
+           TOTAL   35        168.61 [138.49, 233.76]        138.76 [110.92, 177.61]     -29.85
+    cattn:q_proj   35           14.89 [14.38, 15.64]           14.29 [13.81, 15.01]      -0.61
+    cattn:sparse   35           16.79 [13.97, 31.27]           16.55 [14.03, 20.37]      -0.24
+
+-- EXCESS of a g>=1 step over the g==0 median, WITHIN each arm (a between-load offset cancels here) --
+  cattn:compress   before   +40.62 ms    after   +14.43 ms    delta   -26.19 ms   2.81x
+           TOTAL   before   +63.96 ms    after   +34.26 ms    delta   -29.70 ms   1.87x
+    cattn:q_proj   before    +0.31 ms    after    +0.31 ms    delta    +0.00 ms   0.98x
+    cattn:sparse   before    +1.44 ms    after    +1.18 ms    delta    -0.26 ms   1.22x
+[1.12] 2026-08-20T21:45:17-04:00 --- the same classifier at ratio 4, where the emits run on the side stream and are hidden ---
+before: 1441 per-verify dprof tables from 1 log(s); 897 carry a ratio-4 boundary
+ after: 1426 per-verify dprof tables from 1 log(s); 898 carry a ratio-4 boundary
+
+-- g==0  (no ratio-4 emit) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress  544              0.05 [0.04, 0.07]              0.04 [0.04, 0.07]      -0.01
+           TOTAL  544          98.72 [90.37, 120.59]          99.75 [91.17, 119.48]      +1.03
+    cattn:q_proj  544            10.14 [9.93, 10.45]            10.14 [9.93, 10.41]      +0.00
+    cattn:sparse  544           14.49 [13.92, 16.86]           14.51 [13.95, 16.88]      +0.02
+
+-- g>=1  (THE SPIKE: 4-emit steps) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress  897             0.05 [0.05, 41.15]             0.05 [0.05, 14.63]      +0.00
+           TOTAL  897         111.90 [96.21, 233.76]         110.43 [95.38, 198.11]      -1.47
+    cattn:q_proj  897           14.77 [14.30, 15.97]           14.09 [13.75, 15.67]      -0.68
+    cattn:sparse  897           15.39 [13.96, 31.27]           15.39 [13.96, 33.13]      +0.00
+
+-- EXCESS of a g>=1 step over the g==0 median, WITHIN each arm (a between-load offset cancels here) --
+  cattn:compress   before    +0.00 ms    after    +0.01 ms    delta    +0.01 ms   0.00x
+           TOTAL   before   +13.19 ms    after   +10.68 ms    delta    -2.50 ms   1.23x
+    cattn:q_proj   before    +4.63 ms    after    +3.95 ms    delta    -0.68 ms   1.17x
+    cattn:sparse   before    +0.90 ms    after    +0.88 ms    delta    -0.02 ms   1.02x
+[1.12] 2026-08-20T21:45:17-04:00 --- full attribution, both arms ---
+dropped 18 warmup samples (verify=0); --keep-warmup to retain them
+1423 verify samples, context 3070..12408, 3 points: [3072, 6144, 12288]
+mean verify width VB 2.63 (min 2, max 7)
+
+SLOPE PER MARK, ms per 1000 context.  "+VB" holds the realised verify width fixed,
+because width sets bytes-per-forward and correlates with context (0.3).
+mark                 ms@med        b    +/-     b|VB    +/-    R^2   share  n
+ATTENTION             56.38    0.946  0.056    0.987  0.045  0.166  117.1%  1423
+TOTAL                105.09    0.810  0.118    0.941  0.046  0.032       -  1423
+STEP (tot+draft)     127.66    0.808  0.118    0.938  0.046  0.032       -  1423
+  cattn:sparse        15.35    0.139  0.010    0.150  0.005  0.114       -  1423
+  cattn:indexer        4.90    0.066  0.010    0.075  0.007  0.032       -  1423
+    i:score            1.11    0.065  0.002    0.066  0.001  0.414       -  1423
+  cattn:ogroup        15.66    0.008  0.006    0.014  0.002  0.001       -  1423
+  moe:group            2.00    0.006  0.001    0.007  0.000  0.044       -  1423
+    i:topk             0.73    0.005  0.000    0.005  0.000  0.286       -  1423
+  moe:router           1.93    0.005  0.000    0.005  0.000  0.298       -  1423
+    o:wo_a             7.76    0.004  0.004    0.009  0.002  0.001       -  1423
+hc_post (attn)         0.34    0.002  0.000    0.003  0.000  0.039    0.3%  1423
+hc_pre  (ffn)          2.80    0.002  0.002    0.004  0.001  0.001    0.3%  1423
+    o:rope             0.25    0.002  0.000    0.002  0.000  0.226       -  1423
+  moe:combine          0.53    0.002  0.000    0.002  0.000  0.014       -  1423
+      mg:tiles         0.26    0.001  0.000    0.001  0.000  0.068       -  1423
+    o:wo_b             7.45    0.001  0.002    0.003  0.001  0.000       -  1423
+      mg:count         0.22    0.001  0.000    0.001  0.000  0.038       -  1423
+    q:rms+aq           0.89    0.000  0.001    0.000  0.001  0.000       -  1423
+    q:aq(x)            0.28    0.000  0.001    0.001  0.001  0.000       -  1423
+      mg:scatter       0.25    0.000  0.000    0.000  0.000  0.009       -  1423
+      mg:prefix        0.25    0.000  0.000    0.000  0.000  0.005       -  1423
+kv xin copy            0.23    0.000  0.000    0.000  0.000  0.003    0.0%  1423
+draft:main_kv          0.13    0.000  0.000    0.000  0.000  0.006    0.0%  1423
+  moe:shared           0.26    0.000  0.000    0.000  0.000  0.001       -  1423
+rmsnorm (ffn)          0.76    0.000  0.000    0.000  0.000  0.000    0.0%  1423
+  attn:kv_write        0.08   -0.000  0.000   -0.000  0.000  0.000       -  1423
+    q:kv_join          0.06   -0.000  0.000   -0.000  0.000  0.000       -  1423
+hc_head+norm           0.03   -0.000  0.000   -0.000  0.000  0.000   -0.0%  1423
+  attn:q_proj          0.45   -0.000  0.000    0.000  0.000  0.000       -  1423
+rmsnorm (attn)         0.75   -0.000  0.000   -0.000  0.000  0.000   -0.0%  1423
+draft:head            10.23   -0.000  0.000   -0.000  0.000  0.000   -0.0%  1423
+  attn:sparse          0.33   -0.000  0.000   -0.000  0.000  0.002       -  1423
+  moe:act              1.50   -0.000  0.001    0.000  0.000  0.000       -  1423
+lm_head                4.95   -0.000  0.004    0.004  0.002  0.000   -0.0%  1423
+hc_post (ffn)          0.29   -0.000  0.000   -0.000  0.000  0.001   -0.1%  1423
+    q:tail             0.51   -0.000  0.000   -0.000  0.000  0.001       -  1423
+  attn:ogroup          0.75   -0.001  0.000   -0.000  0.000  0.002       -  1423
+    i:iw               0.47   -0.001  0.001    0.000  0.001  0.000       -  1423
+hc_pre  (attn)         1.85   -0.001  0.002    0.001  0.000  0.000   -0.2%  1423
+    q:wq_b             6.79   -0.001  0.001   -0.001  0.000  0.002       -  1423
+    i:qidx             2.18   -0.002  0.003    0.000  0.002  0.000       -  1423
+draft:block           12.19   -0.003  0.001   -0.003  0.001  0.007   -0.3%  1423
+    q:wq_a             5.39   -0.006  0.013    0.001  0.012  0.000       -  1423
+  cattn:q_proj        14.58   -0.007  0.016    0.001  0.014  0.000       -  1423
+  cattn:compress       0.05   -0.040  0.040   -0.033  0.039  0.001       -  1423
+  moe:w2              10.42   -0.051  0.024   -0.023  0.003  0.003       -  1423
+  moe:w1w3            23.07   -0.103  0.043   -0.052  0.007  0.004       -  1423
+MoE                   35.69   -0.138  0.068   -0.057  0.010  0.003  -17.1%  1423
+
+sum of partitioning slopes = 0.808 ms/1000 vs measured STEP slope 0.808 +/- 0.118 ms/1000  (they should agree; a gap is time inside the step that no mark covers)
+
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                   3072     6144    12288
+ATTENTION             52.74    55.92    61.64
+TOTAL                100.09   102.88   108.21
+STEP (tot+draft)     122.60   125.51   130.71
+  cattn:sparse        14.04    14.50    15.40
+  cattn:indexer        4.83     4.98     5.23
+    i:score            0.96     1.11     1.34
+  cattn:ogroup        15.54    15.68    15.68
+  moe:group            1.96     1.99     2.03
+    i:topk             0.71     0.72     0.75
+  moe:router           1.90     1.93     1.95
+    o:wo_a             7.69     7.79     7.77
+hc_post (attn)         0.33     0.33     0.34
+hc_pre  (ffn)          2.79     2.80     2.80
+    o:rope             0.24     0.25     0.26
+dropped 18 warmup samples (verify=0); --keep-warmup to retain them
+1408 verify samples, context 3070..12408, 3 points: [3072, 6144, 12288]
+mean verify width VB 2.63 (min 2, max 7)
+
+SLOPE PER MARK, ms per 1000 context.  "+VB" holds the realised verify width fixed,
+because width sets bytes-per-forward and correlates with context (0.3).
+mark                 ms@med        b    +/-     b|VB    +/-    R^2   share  n
+ATTENTION             56.57    0.901  0.037    0.988  0.021  0.295  148.0%  1408
+TOTAL                104.86    0.610  0.112    0.920  0.024  0.021       -  1408
+STEP (tot+draft)     127.47    0.609  0.112    0.918  0.024  0.021       -  1408
+  cattn:sparse        15.37    0.126  0.013    0.156  0.007  0.067       -  1408
+    i:score            1.12    0.062  0.002    0.066  0.002  0.383       -  1408
+  cattn:indexer        4.32    0.040  0.008    0.058  0.005  0.016       -  1408
+  moe:group            2.02    0.007  0.001    0.009  0.000  0.049       -  1408
+    i:topk             0.73    0.005  0.000    0.005  0.000  0.289       -  1408
+  moe:router           1.94    0.004  0.000    0.004  0.000  0.203       -  1408
+    q:aq(x)            0.41    0.003  0.001    0.004  0.001  0.005       -  1408
+      mg:tiles         0.27    0.002  0.000    0.002  0.000  0.229       -  1408
+hc_post (attn)         0.33    0.002  0.000    0.003  0.000  0.021    0.3%  1408
+  moe:combine          0.55    0.001  0.000    0.002  0.000  0.007       -  1408
+      mg:count         0.22    0.001  0.000    0.001  0.000  0.099       -  1408
+    o:rope             0.25    0.001  0.000    0.001  0.000  0.105       -  1408
+draft:head            10.25    0.000  0.000    0.000  0.000  0.001    0.1%  1408
+  moe:shared           0.26    0.000  0.000    0.000  0.000  0.004       -  1408
+kv xin copy            0.23    0.000  0.000    0.000  0.000  0.003    0.0%  1408
+    q:rms+aq           0.59    0.000  0.000    0.000  0.000  0.000       -  1408
+      mg:scatter       0.25    0.000  0.000    0.000  0.000  0.000       -  1408
+draft:main_kv          0.13    0.000  0.000    0.000  0.000  0.000    0.0%  1408
+rmsnorm (ffn)          0.76    0.000  0.000   -0.000  0.000  0.000    0.0%  1408
+    q:kv_join          0.06   -0.000  0.000    0.000  0.000  0.000       -  1408
+      mg:prefix        0.25   -0.000  0.000   -0.000  0.000  0.000       -  1408
+  attn:kv_write        0.08   -0.000  0.000   -0.000  0.000  0.004       -  1408
+hc_head+norm           0.03   -0.000  0.000   -0.000  0.000  0.006   -0.0%  1408
+rmsnorm (attn)         0.76   -0.000  0.000   -0.000  0.000  0.001   -0.0%  1408
+  attn:sparse          0.33   -0.000  0.000   -0.000  0.000  0.005       -  1408
+  attn:q_proj          0.45   -0.000  0.000   -0.000  0.000  0.010       -  1408
+  moe:act              1.51   -0.001  0.001    0.001  0.000  0.001       -  1408
+hc_post (ffn)          0.29   -0.001  0.000    0.000  0.000  0.005   -0.2%  1408
+  attn:ogroup          0.75   -0.001  0.000   -0.000  0.000  0.010       -  1408
+    o:wo_a             7.82   -0.001  0.004    0.009  0.002  0.000       -  1408
+    q:tail             0.54   -0.001  0.000   -0.000  0.000  0.006       -  1408
+draft:block           12.28   -0.002  0.001   -0.002  0.001  0.003   -0.3%  1408
+    q:wq_b             6.77   -0.003  0.001   -0.001  0.000  0.007       -  1408
+  cattn:ogroup        15.70   -0.003  0.006    0.013  0.002  0.000       -  1408
+    o:wo_b             7.44   -0.003  0.002    0.003  0.001  0.001       -  1408
+hc_pre  (ffn)          2.80   -0.004  0.002    0.001  0.001  0.002   -0.6%  1408
+hc_pre  (attn)         1.85   -0.006  0.002   -0.000  0.000  0.006   -0.9%  1408
+    i:iw               0.47   -0.007  0.002   -0.003  0.001  0.009       -  1408
+    i:qidx             1.88   -0.007  0.002   -0.002  0.001  0.007       -  1408
+  cattn:compress       0.05   -0.012  0.014   -0.008  0.014  0.001       -  1408
+lm_head                5.03   -0.020  0.004   -0.010  0.003  0.015   -3.3%  1408
+  cattn:q_proj        13.97   -0.023  0.014   -0.006  0.012  0.002       -  1408
+    q:wq_a             4.99   -0.024  0.011   -0.012  0.011  0.003       -  1408
+  moe:w2              10.35   -0.095  0.025   -0.026  0.003  0.010       -  1408
+  moe:w1w3            22.94   -0.184  0.045   -0.057  0.007  0.012       -  1408
+MoE                   35.56   -0.262  0.071   -0.062  0.010  0.009  -43.1%  1408
+
+sum of partitioning slopes = 0.609 ms/1000 vs measured STEP slope 0.609 +/- 0.112 ms/1000  (they should agree; a gap is time inside the step that no mark covers)
+
+PER-POINT MEDIANS (ms), the marks that carry the slope:
+mark                   3072     6144    12288
+ATTENTION             51.39    54.62    60.32
+TOTAL                 98.98   101.47   106.76
+STEP (tot+draft)     121.63   124.09   129.38
+  cattn:sparse        14.04    14.50    15.40
+    i:score            0.97     1.11     1.34
+  cattn:indexer        4.19     4.31     4.59
+  moe:group            1.96     2.00     2.05
+    i:topk             0.71     0.73     0.75
+  moe:router           1.92     1.93     1.96
+    q:aq(x)            0.38     0.41     0.42
+      mg:tiles         0.26     0.27     0.28
+hc_post (attn)         0.33     0.33     0.34
+  moe:combine          0.52     0.56     0.55
+      mg:count         0.21     0.22     0.22
+[1.12] 2026-08-20T21:45:18-04:00 --- BEFORE (pre-1.12) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+sweep     12346  6      140.33    2.1%   1.610   2.561   11.48
+sweep      6196  6      135.83    6.2%   1.601   2.600   11.85
+sweep      3133  6      134.63    3.1%   1.552   2.718   11.53
+
+  context only   fwd = 132.53 + 0.698 x (ctx/1000)                    R^2 0.643  SE(b) 0.130
+  + verify width fwd = 77.33 + 0.931 x (ctx/1000) + 20.22 x width   R^2 0.968  SE(b) 0.044  SE(c) 1.64
+
+  corr(mean_width, ctx) = -0.424   corr(tau, ctx) = +0.139
+[1.12] 2026-08-20T21:45:19-04:00 --- AFTER (1.12) ---
+kind        ctx  n  ms/fwd med  spread     tau   width   tok/s
+sweep     12346  6      139.06    3.0%   1.571   2.547   11.27
+sweep      6196  6      136.83    4.7%   1.673   2.719   12.23
+sweep      3133  6      134.07    2.8%   1.641   2.696   12.19
+
+  context only   fwd = 132.92 + 0.521 x (ctx/1000)                    R^2 0.548  SE(b) 0.118
+  + verify width fwd = 90.64 + 0.870 x (ctx/1000) + 14.95 x width   R^2 0.978  SE(b) 0.034  SE(c) 0.88
+
+  corr(mean_width, ctx) = -0.604   corr(tau, ctx) = -0.386
+[1.12] 2026-08-20T21:45:19-04:00 --- paired, per (target, rep), tau and completion hash per leg ---
+corpus sha256: before ['ac10134c87e3d0fe']  after ['ac10134c87e3d0fe']
+
+token identity: 0/18 legs proven byte-identical, 18 differ, 0 unproven (no hash on record)
+  DIFFER sweep-t12288-r0: 5f32252674fab06e vs bf44913d82ad3e8e  (len 455 vs 468)
+  DIFFER sweep-t12288-r1: 34ef59f651d1086b vs 8e347daa95870b4b  (len 438 vs 473)
+  DIFFER sweep-t12288-r2: 18ae15991ea15a87 vs 2020fba90eb70c4d  (len 447 vs 478)
+  DIFFER sweep-t12288-r3: 6b443833c451a576 vs 20a723a656b845f2  (len 471 vs 477)
+  DIFFER sweep-t12288-r4: 45f920bfc44c5771 vs 83176a28ed42d138  (len 430 vs 525)
+  DIFFER sweep-t12288-r5: 15ba40f282edd449 vs 667c6fd207c8cf20  (len 502 vs 507)
+  DIFFER sweep-t3072-r0: 2f2a8c51e8c5361b vs e250db43b40704ca  (len 459 vs 421)
+  DIFFER sweep-t3072-r1: 8c8c0db1de100d5f vs 6fc0d1aea8932b9c  (len 490 vs 439)
+  DIFFER sweep-t3072-r2: 599cd72387782de9 vs cab555ecd310077c  (len 491 vs 494)
+  DIFFER sweep-t3072-r3: 58611dd280bad5ba vs 0cd84c69c4645655  (len 479 vs 461)
+
+kind      target  n    ctx    before     after    delta  speedup   tau b   tau a    w b    w a  tok/s b  tok/s a
+sweep      12288  6  12346    140.33    139.06    -1.27   1.009x   1.610   1.571   2.56   2.55    11.48    11.27
+sweep       6144  6   6196    135.83    136.83    +1.00   0.993x   1.601   1.673   2.60   2.72    11.85    12.23
+sweep       3072  6   3133    134.63    134.07    -0.56   1.004x   1.552   1.641   2.72   2.70    11.53    12.19
+
+"before"/"after" are ms per FORWARD (decode_ms/token x tau), the quantity tools/decode_model.py fits. tok/s is the user-visible number.
+[1.12] 2026-08-20T21:45:19-04:00 --- the paired band, flat / per-1000-context split ---
+token identity: 0/18 legs byte-identical, 18 differ, 0 unproven
+
+--- SWEEP legs (the band) ---
+                 leg     ctx   pre1p12   tile4x4    delta   tau b   tau a
+     sweep-t12288-r0   12346    142.85    137.45    -5.40   1.662   1.407
+     sweep-t12288-r1   12346    140.16    140.52    +0.36   1.524   1.580
+     sweep-t12288-r2   12346    140.13    141.65    +1.52   1.620   1.707
+     sweep-t12288-r3   12346    140.50    138.55    -1.95   1.600   1.580
+     sweep-t12288-r4   12346    139.91    138.15    -1.76   1.561   1.561
+     sweep-t12288-r5   12346    142.86    139.57    -3.29   1.684   1.506
+      sweep-t3072-r0    3133    136.71    135.52    -1.19   1.580   1.641
+      sweep-t3072-r1    3133    134.02    133.90    -0.12   1.524   1.561
+      sweep-t3072-r2    3133    135.27    132.88    -2.38   1.580   1.730
+      sweep-t3072-r3    3133    135.24    136.66    +1.42   1.620   1.829
+      sweep-t3072-r4    3133    133.56    133.66    +0.10   1.524   1.641
+      sweep-t3072-r5    3133    132.50    134.23    +1.73   1.524   1.600
+      sweep-t6144-r0    6196    136.10    139.35    +3.24   1.506   1.753
+      sweep-t6144-r1    6196    135.56    135.73    +0.16   1.561   1.662
+      sweep-t6144-r2    6196    143.26    138.36    -4.90   1.939   1.882
+      sweep-t6144-r3    6196    137.60    132.90    -4.70   1.730   1.455
+      sweep-t6144-r4    6196    134.78    137.94    +3.16   1.641   1.684
+      sweep-t6144-r5    6196    135.35    133.29    -2.06   1.506   1.471
+
+n=18  paired mean -0.892 ms/forward   sd 2.635   2 SE band [-2.134, +0.350]
+legs faster after: 10/18   tau equal to 3 d.p.: 1/18
+VERDICT: the band COVERS ZERO — this is a NULL, not a win.
+split:   flat +0.389 +/- 2.635 ms/forward   context -0.1774 +/- 0.3223 ms per 1000 ctx   R^2 0.070
+         (a saving that is FLAT is Term A; one that scales with ctx is Term B)
+[1.12] 2026-08-20T21:45:19-04:00 done.

@@ -1,0 +1,116 @@
+[1.12] 2026-08-20T21:48:34-04:00 binaries: server 2026-08-20T21:15:25-04:00, decode 2026-08-20T21:12:38-04:00
+[1.12] 2026-08-20T21:48:34-04:00 === PHASE 6: REVERSED replicate, 1.12 arm FIRST ===
+[1.12] 2026-08-20T21:48:34-04:00 starting server [on2] seqmax=16384 DSV4_F32MK_TILE=unset -> evidence/decode_loop/server_1p12_on2.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p12_on2.log
+[run_server] pid=1724846 ppid=1724237 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p12_on2.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.12] 2026-08-20T21:49:48-04:00 healthy [on2]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=128 prefill=217807ms decode=10446ms tau=1.707 -> 139.28 ms/forward  (228s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=128 prefill=0ms decode=11331ms tau=1.580 -> 139.88 ms/forward  (11s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=128 prefill=0ms decode=10731ms tau=1.641 -> 137.58 ms/forward  (11s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=128 prefill=0ms decode=10435ms tau=1.707 -> 139.13 ms/forward  (10s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=128 prefill=0ms decode=10985ms tau=1.600 -> 137.31 ms/forward  (11s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=128 prefill=0ms decode=11195ms tau=1.561 -> 136.52 ms/forward  (11s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=128 prefill=0ms decode=10477ms tau=1.707 -> 139.69 ms/forward  (10s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=128 prefill=0ms decode=10653ms tau=1.620 -> 134.85 ms/forward  (11s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=128 prefill=0ms decode=8266ms tau=2.207 -> 142.52 ms/forward  (8s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=128 prefill=0ms decode=11120ms tau=1.542 -> 133.97 ms/forward  (11s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=128 prefill=0ms decode=9005ms tau=1.969 -> 138.54 ms/forward  (9s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=128 prefill=0ms decode=10905ms tau=1.580 -> 134.62 ms/forward  (11s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=128 prefill=0ms decode=10593ms tau=1.580 -> 130.78 ms/forward  (11s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=128 prefill=0ms decode=10423ms tau=1.662 -> 135.37 ms/forward  (10s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=128 prefill=0ms decode=10093ms tau=1.730 -> 136.40 ms/forward  (10s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=128 prefill=0ms decode=11107ms tau=1.506 -> 130.67 ms/forward  (11s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=128 prefill=0ms decode=10937ms tau=1.561 -> 133.37 ms/forward  (11s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=128 prefill=0ms decode=11075ms tau=1.542 -> 133.43 ms/forward  (11s)
+[probe] wrote 18 usable records -> evidence/decode_loop/fit_1p12_on2/postfix.sweep.jsonl and evidence/decode_loop/fit_1p12_on2/control.fresh.jsonl
+[1.12] 2026-08-20T21:56:37-04:00 reversed 1.12 probe rc=0
+[1.12] 2026-08-20T21:56:37-04:00 server down
+[1.12] 2026-08-20T21:56:42-04:00 === PHASE 7: REVERSED replicate, CONTROL arm SECOND ===
+[1.12] 2026-08-20T21:56:43-04:00 starting server [off2] seqmax=16384 DSV4_F32MK_TILE=8x0 -> evidence/decode_loop/server_1p12_off2.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p12_off2.log
+[run_server] pid=1739927 ppid=1739308 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p12_off2.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.12] 2026-08-20T21:57:56-04:00 healthy [off2]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=128 prefill=224177ms decode=11083ms tau=1.620 -> 140.29 ms/forward  (235s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=128 prefill=0ms decode=11707ms tau=1.506 -> 137.73 ms/forward  (12s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=128 prefill=0ms decode=11016ms tau=1.620 -> 139.44 ms/forward  (11s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=128 prefill=0ms decode=11010ms tau=1.662 -> 142.99 ms/forward  (11s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=128 prefill=0ms decode=12076ms tau=1.488 -> 140.42 ms/forward  (12s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=128 prefill=0ms decode=11169ms tau=1.641 -> 143.20 ms/forward  (11s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=128 prefill=0ms decode=10949ms tau=1.561 -> 133.53 ms/forward  (11s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=128 prefill=0ms decode=10070ms tau=1.707 -> 134.26 ms/forward  (10s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=128 prefill=0ms decode=9544ms tau=1.882 -> 140.36 ms/forward  (10s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=128 prefill=0ms decode=9891ms tau=1.910 -> 147.63 ms/forward  (10s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=128 prefill=0ms decode=11702ms tau=1.471 -> 134.50 ms/forward  (12s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=128 prefill=0ms decode=11688ms tau=1.524 -> 139.14 ms/forward  (12s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=128 prefill=0ms decode=10721ms tau=1.662 -> 139.24 ms/forward  (11s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=128 prefill=0ms decode=10964ms tau=1.620 -> 138.78 ms/forward  (11s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=128 prefill=0ms decode=11806ms tau=1.506 -> 138.89 ms/forward  (12s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=128 prefill=0ms decode=11327ms tau=1.580 -> 139.84 ms/forward  (11s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=128 prefill=0ms decode=11803ms tau=1.506 -> 138.86 ms/forward  (12s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=128 prefill=0ms decode=12269ms tau=1.455 -> 139.42 ms/forward  (12s)
+[probe] wrote 18 usable records -> evidence/decode_loop/fit_1p12_off2/postfix.sweep.jsonl and evidence/decode_loop/fit_1p12_off2/control.fresh.jsonl
+[1.12] 2026-08-20T22:05:02-04:00 reversed control probe rc=0
+[1.12] 2026-08-20T22:05:02-04:00 server down
+[1.12] 2026-08-20T22:05:07-04:00 === PHASE 8: the drift-free estimate ===
+POOLED OVER TWO ARM ORDERS — the drift-free estimate.
+run 1: control arm first (drift penalises the change).
+run 2: change arm first (drift penalises the control).
+
+                 leg     ctx    effect     drift
+     sweep-t12288-r0   12346     -3.21     -2.19
+     sweep-t12288-r1   12346     +1.26     -0.90
+     sweep-t12288-r2   12346     -0.17     +1.69
+     sweep-t12288-r3   12346     -2.90     +0.95
+     sweep-t12288-r4   12346     -2.44     +0.68
+     sweep-t12288-r5   12346     -4.98     +1.69
+      sweep-t3072-r0    3133     -4.82     +3.63
+      sweep-t3072-r1    3133     -1.77     +1.65
+      sweep-t3072-r2    3133     -2.44     +0.05
+      sweep-t3072-r3    3133     -3.87     +5.29
+      sweep-t3072-r4    3133     -2.69     +2.79
+      sweep-t3072-r5    3133     -2.13     +3.86
+      sweep-t6144-r0    6196     +4.70     -1.46
+      sweep-t6144-r1    6196     +0.37     -0.21
+      sweep-t6144-r2    6196     -1.37     -3.53
+      sweep-t6144-r3    6196     -9.18     +4.48
+      sweep-t6144-r4    6196     +3.60     -0.44
+      sweep-t6144-r5    6196     -3.29     +1.23
+
+n=18  DRIFT-FREE paired mean -1.963 ms/forward   sd 3.191   2 SE band [-3.467, -0.459]
+legs faster after: 14/18
+drift term (half the difference between the two orders): +1.071 ms/forward   sd 2.365   2 SE [-0.044, +2.186]
+VERDICT: the drift-free band EXCLUDES zero — a real paired saving.
+split:   flat -2.348 +/- 3.302 ms/forward   context +0.0533 +/- 0.4038 ms per 1000 ctx   R^2 0.004
+before: 2883 per-verify dprof tables from 2 log(s); 69 carry a ratio-128 boundary
+ after: 2820 per-verify dprof tables from 2 log(s); 71 carry a ratio-128 boundary
+
+-- g==0  (no ratio-128 emit) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress 2814              0.05 [0.04, 0.09]              0.05 [0.04, 0.08]      +0.00
+           TOTAL 2814         105.03 [90.37, 197.41]         104.39 [90.06, 198.11]      -0.64
+    cattn:q_proj 2814            14.58 [9.91, 17.73]            13.91 [9.90, 15.67]      -0.67
+    cattn:sparse 2814           15.36 [13.92, 33.09]           15.36 [13.95, 33.15]      +0.00
+
+-- g>=1  (THE SPIKE: 128-emit steps) --
+            mark    n      before  median [min, max]      after   median [min, max]      delta
+  cattn:compress   69           40.76 [39.92, 45.22]           14.50 [14.29, 14.64]     -26.26
+           TOTAL   69        168.20 [138.49, 239.62]        138.65 [110.67, 177.61]     -29.55
+    cattn:q_proj   69           14.92 [14.38, 17.12]           14.24 [13.70, 15.01]      -0.68
+    cattn:sparse   69           16.79 [13.97, 31.27]           16.64 [13.98, 20.37]      -0.15
+
+-- EXCESS of a g>=1 step over the g==0 median, WITHIN each arm (a between-load offset cancels here) --
+  cattn:compress   before   +40.71 ms    after   +14.45 ms    delta   -26.26 ms   2.82x
+           TOTAL   before   +63.17 ms    after   +34.26 ms    delta   -28.91 ms   1.84x
+    cattn:q_proj   before    +0.34 ms    after    +0.33 ms    delta    -0.01 ms   1.03x
+    cattn:sparse   before    +1.43 ms    after    +1.28 ms    delta    -0.15 ms   1.12x
+[1.12] 2026-08-20T22:05:08-04:00 done.

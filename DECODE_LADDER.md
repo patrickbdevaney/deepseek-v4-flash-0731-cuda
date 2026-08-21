@@ -89,6 +89,23 @@ and 6,260 (sd 0.585, 0.741), and a three-point fit through groups with 3-4x diff
 an attribution. The ratchet is stated where it resolves -- `a + b*ctx` at ctx 12,410 goes
 **142.24 -> 141.15 ms** -- and the term is item 1.13.
 
+**1.12 MOVED TERM A, 2026-08-20 — the second item on this ladder to do so, and the first whose
+mark-level and throughput instruments agreed to within their own bands.** `gemm_fp32` gets a (4,4)
+warp tile instead of one warp per (8-row chunk, n), so operand traffic goes `M*N*K*(1/1 + 1/8) ->
+M*N*K*(1/4 + 1/4)` and sixteen host launches become one. The drift-free paired saving over 18 legs
+and FOUR checkpoint loads is **-1.963 +/- 1.504 ms/forward, 14/18 legs, band [-3.467, -0.459]
+EXCLUDING zero**, and it is FLAT: `-2.348 +/- 3.302` flat against `+0.0533 +/- 0.4038` per 1000
+context, R^2 0.004. So **`a` 125.11 -> 123.15 ms** (1.522x -> **1.499x** the 82.18 ms floor; stop
+wants <= 1.25) and **`b` stays 1.887** (`b x 6592` stays 12.44 ms; stop wants <= 5.0).
+
+The mark-level instrument predicts that band from a completely different measurement: the ratio-128
+emit spike is **40.76 -> 14.50 ms (2.82x, 69 samples, populations disjoint)**, the verify TOTAL
+excess on ratio-4 boundary steps is **-2.49 ms on 62.8 % of steps**, and
+`0.628 x 2.49 + 0.0239 x 26.42 = -2.20 ms/forward` falls inside `[-3.467, -0.459]`. **And ONE ARM
+ORDER CALLED IT A NULL AGAIN** (-0.892, 2 SE [-2.134, +0.350]) -- traps §33 on the very next item.
+Bit-exact: 252 tile x shape comparisons at max|diff| = 0 with a live negative control, identical
+generated ids, LOSSLESS PASS in both arms. See item 1.12 and `wiki/kernel-optimisations.md` §2.11.
+
 **1.11 also wrote the first gate here that can reach the side-stream fork.** Every gate that links
 these kernels does so WITHOUT `arena_init()`, so `g_side` is null, `asplit` is false, and the fork
 1.8 priced at 0.81 ms/forward had never been under test. `tests/gate_join_defer.cu` refuses to PASS
@@ -1461,13 +1478,95 @@ So, in order:
       fully overwritten before use) and either zero it or fix the read. **In the engine this is one
       token per process**, so it is LOW on throughput -- but it is a correctness hole that every
       bit-exactness gate in this repo has been silently working around.
-- [ ] **1.12** **The ratio-128 emit re-reads its weights 32 times.** `gemm_fp32` chunks M in 8s
-      (`kernels/compressor.cu:76`) and the strided path calls it with `ntok = 2*ratio = 256`, so B —
-      33.55 MB of f32 `mc_wkv`/`mc_wgate` — is read `ceil(256/8) = 32` times per layer per group.
-      1.8 measured the result directly: **43-50 ms in a single step**, 8 of 8 outliers, once every
-      128 positions. Amortised that is only ~0.53 ms/forward, so this is ranked LOW on throughput —
-      but it is a 40 ms latency spike on one token in 75 and it is the largest single-kernel
-      inefficiency the profile has named. Tile over N with B staged, or raise MM.
+- [x] **1.12 DONE 2026-08-20 — ADOPTED DEFAULT ON, AND IT IS BIGGER THAN THE ITEM PREDICTED.
+      `gemm_fp32` gets a (4x4) warp tile: the ratio-128 emit spike falls `40.76 -> 14.50 ms`
+      (`2.82x`, 69 samples over four loads, the two populations DISJOINT), and the drift-free paired
+      throughput is `-1.963 +/- 1.504 ms/forward`, 14/18 legs, band EXCLUDING zero, entirely in
+      TERM A.** `a` **125.11 -> 123.15 ms** (1.522x -> **1.499x** the 82.18 ms floor); `b` unchanged.
+
+      **The item's own premise was wrong in three places and the mechanism survived all three.**
+      (i) the strided path passes `overlap=false`, so `ntok = ratio = 128`, not `2*ratio = 256`;
+      (ii) B is therefore `[d, DIM] = [512,4096]` f32 = **8.39 MB**, not 33.55; (iii) B is read
+      `ceil(128/8) = 16` times, not 32. What was right is the shape of the defect: one warp per
+      (8-row chunk, n) reads the whole of B once per chunk, from **sixteen separate host launches**.
+
+      **The fix.** A warp owning `MM` rows of A and `NN` rows of B issues `MM + NN` loads for
+      `MM*NN*4` FMAs, so operand traffic is `M*N*K*(1/NN + 1/MM)` floats: the shipped `(8,1)` is
+      **1.125**, `(4,4)` is **0.375**. The m-chunk loop also moves from the host to `gridDim.y`.
+      Bit-exact by construction -- every output is still produced by ONE warp with lane `l`
+      accumulating k4 indices `l, l+32, ...` into the same four chains and the same shuffle tree;
+      widening the tile changes which warp owns an output, not the order of any dot product.
+
+      **17 tiles benchmarked, `(4,4)` won at every shape the engine issues**
+      (`tools/f32mk_bench.cu`, `evidence/decode_loop/f32mk_bench_1p12.txt`), against the EXACT
+      pre-1.12 code as the baseline arm (`DSV4_F32MK_TILE=8x0`):
+
+      | shape | call site | before | after | |
+      |---|---|---|---|---|
+      | `[128,512]x[512,4096]` | strided emit, x40 per emit step | 0.5744 ms | **0.2477** | **2.32x** |
+      | `[8,1024]x[1024,4096]` | indexer emit main, x42 | 0.0729 ms | **0.0407** | **1.79x** |
+      | `[8,256]x[256,4096]` | indexer emit idx, x42 | 0.0331 ms | **0.0177** | **1.87x** |
+      | `[5,64]x[64,4096]` | `idx_weights_proj`, x21 on EVERY step | 0.0143 ms | 0.0144 | 1.00x |
+
+      That last row is why the tile is **OFF below M=8**: at `(4,4)` a 5-row GEMV becomes a 4-row
+      chunk plus a 1-row tail, `0.0148 -> 0.0205 ms`, and it fires 21x per forward against the emit
+      shapes' once every 4 or 128 positions. The guard also makes both arms IDENTICAL below M=8,
+      which is what makes the paired number attributable to the emit and nothing else.
+
+      **In the engine the saving is TWICE what the bench predicted, and the mechanism says why.**
+      The bench reuses one 8.39 MB B across 200 reps, so 15 of its 16 passes are L2 hits; the engine
+      walks **20 layers x 2 matrices = 335 MB of distinct weights**, so the passes it removes are
+      DRAM. Predicted `-13.07 ms` per emit step, measured **`-26.26`**.
+
+      | `tools/emit_spike.py`, pooled over 4 loads | n | before | after | |
+      |---|---|---|---|---|
+      | `cattn:compress`, steps with a ratio-128 boundary | 69 | **40.76** [39.92, 45.22] | **14.50** [14.29, 14.64] | **-26.26 ms, 2.82x**, no overlap |
+      | verify `TOTAL` excess on those steps | 69 | +63.17 | **+34.26** | **-28.91 ms** |
+      | verify `TOTAL` excess on ratio-4 boundary steps | 1811 | +13.52 | **+11.03** | **-2.49 ms** |
+      | `cattn:q_proj` excess on ratio-4 boundary steps | 1811 | +4.61 | **+3.92** | **-0.69 ms** |
+
+      The ratio-4 row is the one that carries the throughput: **62.8 % of steps** have a ratio-4
+      boundary, and 1.8 showed `cattn:q_proj` is where the side-stream emit's contention lands.
+      `0.628 x 2.49 + 0.0239 x 26.42 = ` **`-2.20 ms/forward`** predicted from the marks -- and the
+      paired band is `-1.963 [-3.467, -0.459]`. Two instruments, one number.
+
+      **ONE ARM ORDER CALLED IT A NULL AGAIN.** Control-first: `-0.892, 2 SE [-2.134, +0.350]`,
+      10/18. Change-first: `-3.033, 2 SE [-5.372, -0.695]`, 13/18. Pooled drift-free:
+      **`-1.963, 2 SE [-3.467, -0.459]`, 14/18**, drift `+1.071 +/- 1.115`. Exactly 1.11's lesson
+      (traps §33), on the very next item. **TERM A as pre-registered**: flat `-2.348 +/- 3.302`,
+      context `+0.0533 +/- 0.4038` per 1000, R^2 0.004.
+
+      **Bit-exactness.** `gate_bf16w` now sweeps all **18 dispatchable tiles including the pre-1.12
+      `8x0` arm**, at 7 values of M and 2 of N (the `N=254` column is the guarded-store tail):
+      **252 comparisons, worst max|diff| = 0**. Negative control: perturb the epilogue by one part in
+      1e7 and **17 of 18 tiles FAIL** while `8x0` correctly does not. `build/decode` emitted
+      **identical generated ids** in both arms with LOSSLESS PASS, and 11 in-situ gates pass in both
+      arms. The sweep-level text-identity column is NOT usable here and the null control proves it:
+      **two loads of the same binary also gave 0/18 byte-identical** (traps §35).
+
+      **THE FIRST ENGINE A/B WAS A FALSE NULL AND COST FOUR LOADS.** `DSV4_F32MK_TILE=8x0` was
+      rejected by its own parser (`nn > 0`), so both arms ran 4x4 and the answer was `-0.03 ms` on
+      the mark. The tell was that the null was *too clean* for a 3.5 %-spread instrument. The engine
+      now prints `[f32mk] tile MMxNN` on the first `gemm_fp32` of the process and the harness EXITS
+      NON-ZERO if the two arms log the same tile. Written up in traps §34; the wasted pair is kept
+      as `evidence/decode_loop/fit_1p12null_*` because it is this ladder's best null control
+      (`+0.512, 2 SE [-0.969, +1.993]` on identical code).
+
+      Instruments: `tools/f32mk_bench.cu` (17 tiles x 4 engine shapes, times AND gates them);
+      `tools/emit_spike.py` (conditional-on-schedule mark distribution -- the only instrument that
+      can see a change amortised below the noise floor); `DSV4_GEMM_TRACE=1` (per-(route,M,N,K)
+      call-site histogram, which is what proved the shape was reached and the arm was not).
+      `scripts/f32mkn_ab_run.sh`, 9 phases, both arm orders, named in `detach_audit.sh` in this
+      commit. Evidence: `evidence/decode_loop/{f32mk_bench_1p12.txt,gate_bf16w_1p12.log,
+      emit_spike_1p12{,_r4,_pooled,_r4_pooled}.txt,fit_1p12_band{,_rev,_pooled}.txt,
+      fit_1p12_paired.txt,dprof_ctx_1p12_{off,on}.txt,decode_1p12_{off,on}.log,
+      decode_1p12_trace2.log,fit_1p12null_*}`.
+
+      **What it leaves.** `cattn:compress` on an emit step is still **14.50 ms against a 335 MB /
+      1.40 ms byte floor** -- 4.3 % of roofline -- because at `(4,4)` the kernel is now register- and
+      issue-bound, not traffic-bound: `(6,6)`, `(4,8)` and `(8,4)` all measured SLOWER than `(4,4)`,
+      so the next factor is not a bigger tile. It needs tensor cores or a shared-memory B stage, and
+      it is a NEW item, not this one.
 - [x] **1.6** **RESOLVED as pre-existing — proven by a control build, not by argument.**
       Built `build/decode_prechange` from `1a33cfe^` (the two kernel files and the header, before the
       warp top-k) and ran it: **`err711=42`, `err820=21` — the same fault.** The launch error has

@@ -1,0 +1,83 @@
+f32mk_bench: reps=200  (ms = mean over reps after 5 warmup; bytes = (M+N)*K*4 + M*N*4)
+
+== strided emit  wkv/wgate    M=128  N=512   K=4096   (40 calls per emit step)
+    8x0 *   0.5602 ms     19.2 GB/s   1.00x vs pre   per-emit  22.406 ms   max|diff|=0.0e+00 EXACT
+    8x1     0.4283 ms     25.1 GB/s   1.31x vs pre   per-emit  17.133 ms   max|diff|=0.0e+00 EXACT
+    8x2     0.2830 ms     38.0 GB/s   1.98x vs pre   per-emit  11.320 ms   max|diff|=0.0e+00 EXACT
+    8x4     0.2811 ms     38.2 GB/s   1.99x vs pre   per-emit  11.243 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.2452 ms     43.8 GB/s   2.28x vs pre   per-emit   9.810 ms   max|diff|=0.0e+00 EXACT
+    4x8     0.2671 ms     40.2 GB/s   2.10x vs pre   per-emit  10.685 ms   max|diff|=0.0e+00 EXACT
+    2x8     0.3581 ms     30.0 GB/s   1.56x vs pre   per-emit  14.324 ms   max|diff|=0.0e+00 EXACT
+   16x1     0.4578 ms     23.5 GB/s   1.22x vs pre   per-emit  18.312 ms   max|diff|=0.0e+00 EXACT
+   16x2     0.3262 ms     32.9 GB/s   1.72x vs pre   per-emit  13.050 ms   max|diff|=0.0e+00 EXACT
+   32x1     0.4942 ms     21.7 GB/s   1.13x vs pre   per-emit  19.769 ms   max|diff|=0.0e+00 EXACT
+    6x4     0.3057 ms     35.2 GB/s   1.83x vs pre   per-emit  12.227 ms   max|diff|=0.0e+00 EXACT
+    4x6     0.2999 ms     35.8 GB/s   1.87x vs pre   per-emit  11.996 ms   max|diff|=0.0e+00 EXACT
+    6x6     0.2764 ms     38.9 GB/s   2.03x vs pre   per-emit  11.057 ms   max|diff|=0.0e+00 EXACT
+    5x5     0.3010 ms     35.7 GB/s   1.86x vs pre   per-emit  12.039 ms   max|diff|=0.0e+00 EXACT
+    4x2     0.3732 ms     28.8 GB/s   1.50x vs pre   per-emit  14.928 ms   max|diff|=0.0e+00 EXACT
+    2x4     0.3754 ms     28.6 GB/s   1.49x vs pre   per-emit  15.016 ms   max|diff|=0.0e+00 EXACT
+    4x1     0.4332 ms     24.8 GB/s   1.29x vs pre   per-emit  17.328 ms   max|diff|=0.0e+00 EXACT
+    2x2     0.3700 ms     29.0 GB/s   1.51x vs pre   per-emit  14.801 ms   max|diff|=0.0e+00 EXACT
+
+== indexer emit  main         M=8    N=1024  K=4096   (42 calls per emit step)
+    8x0 *   0.0637 ms    266.0 GB/s   1.00x vs pre   per-emit   2.675 ms   max|diff|=0.0e+00 EXACT
+    8x1     0.0672 ms    252.1 GB/s   0.95x vs pre   per-emit   2.823 ms   max|diff|=0.0e+00 EXACT
+    8x2     0.0457 ms    370.4 GB/s   1.39x vs pre   per-emit   1.921 ms   max|diff|=0.0e+00 EXACT
+    8x4     0.0453 ms    374.1 GB/s   1.41x vs pre   per-emit   1.902 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.0408 ms    415.3 GB/s   1.56x vs pre   per-emit   1.713 ms   max|diff|=0.0e+00 EXACT
+    4x8     0.0433 ms    391.5 GB/s   1.47x vs pre   per-emit   1.818 ms   max|diff|=0.0e+00 EXACT
+    2x8     0.0553 ms    306.4 GB/s   1.15x vs pre   per-emit   2.322 ms   max|diff|=0.0e+00 EXACT
+   16x1     0.0637 ms    265.9 GB/s   1.00x vs pre   per-emit   2.676 ms   max|diff|=0.0e+00 EXACT
+   16x2     0.0639 ms    265.3 GB/s   1.00x vs pre   per-emit   2.682 ms   max|diff|=0.0e+00 EXACT
+   32x1     0.0638 ms    265.4 GB/s   1.00x vs pre   per-emit   2.681 ms   max|diff|=0.0e+00 EXACT
+    6x4     0.0743 ms    228.1 GB/s   0.86x vs pre   per-emit   3.119 ms   max|diff|=0.0e+00 EXACT
+    4x6     0.0514 ms    329.7 GB/s   1.24x vs pre   per-emit   2.158 ms   max|diff|=0.0e+00 EXACT
+    6x6     0.0719 ms    235.6 GB/s   0.89x vs pre   per-emit   3.020 ms   max|diff|=0.0e+00 EXACT
+    5x5     0.0625 ms    271.0 GB/s   1.02x vs pre   per-emit   2.625 ms   max|diff|=0.0e+00 EXACT
+    4x2     0.0516 ms    328.4 GB/s   1.23x vs pre   per-emit   2.166 ms   max|diff|=0.0e+00 EXACT
+    2x4     0.0555 ms    305.4 GB/s   1.15x vs pre   per-emit   2.330 ms   max|diff|=0.0e+00 EXACT
+    4x1     0.0612 ms    277.0 GB/s   1.04x vs pre   per-emit   2.569 ms   max|diff|=0.0e+00 EXACT
+    2x2     0.0519 ms    326.7 GB/s   1.23x vs pre   per-emit   2.178 ms   max|diff|=0.0e+00 EXACT
+
+== indexer emit  idx          M=8    N=256   K=4096   (42 calls per emit step)
+    8x0 *   0.0330 ms    131.5 GB/s   1.00x vs pre   per-emit   1.384 ms   max|diff|=0.0e+00 EXACT
+    8x1     0.0206 ms    210.6 GB/s   1.60x vs pre   per-emit   0.864 ms   max|diff|=0.0e+00 EXACT
+    8x2     0.0227 ms    190.8 GB/s   1.45x vs pre   per-emit   0.954 ms   max|diff|=0.0e+00 EXACT
+    8x4     0.0185 ms    234.8 GB/s   1.79x vs pre   per-emit   0.775 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.0174 ms    248.6 GB/s   1.89x vs pre   per-emit   0.732 ms   max|diff|=0.0e+00 EXACT
+    4x8     0.0185 ms    234.8 GB/s   1.79x vs pre   per-emit   0.775 ms   max|diff|=0.0e+00 EXACT
+    2x8     0.0227 ms    190.9 GB/s   1.45x vs pre   per-emit   0.953 ms   max|diff|=0.0e+00 EXACT
+   16x1     0.0329 ms    131.7 GB/s   1.00x vs pre   per-emit   1.382 ms   max|diff|=0.0e+00 EXACT
+   16x2     0.0328 ms    132.2 GB/s   1.01x vs pre   per-emit   1.377 ms   max|diff|=0.0e+00 EXACT
+   32x1     0.0331 ms    130.9 GB/s   1.00x vs pre   per-emit   1.390 ms   max|diff|=0.0e+00 EXACT
+    6x4     0.0331 ms    130.9 GB/s   1.00x vs pre   per-emit   1.391 ms   max|diff|=0.0e+00 EXACT
+    4x6     0.0193 ms    224.1 GB/s   1.70x vs pre   per-emit   0.812 ms   max|diff|=0.0e+00 EXACT
+    6x6     0.0294 ms    147.2 GB/s   1.12x vs pre   per-emit   1.236 ms   max|diff|=0.0e+00 EXACT
+    5x5     0.0350 ms    123.9 GB/s   0.94x vs pre   per-emit   1.469 ms   max|diff|=0.0e+00 EXACT
+    4x2     0.0188 ms    229.9 GB/s   1.75x vs pre   per-emit   0.792 ms   max|diff|=0.0e+00 EXACT
+    2x4     0.0184 ms    235.0 GB/s   1.79x vs pre   per-emit   0.775 ms   max|diff|=0.0e+00 EXACT
+    4x1     0.0188 ms    230.6 GB/s   1.75x vs pre   per-emit   0.789 ms   max|diff|=0.0e+00 EXACT
+    2x2     0.0184 ms    235.5 GB/s   1.79x vs pre   per-emit   0.773 ms   max|diff|=0.0e+00 EXACT
+
+== indexer iw (K=5 verify)    M=5    N=64    K=4096   (21 calls per emit step)
+    8x0 *   0.0143 ms     79.0 GB/s   1.00x vs pre   per-emit   0.301 ms   max|diff|=0.0e+00 EXACT
+    8x1     0.0147 ms     77.2 GB/s   0.98x vs pre   per-emit   0.308 ms   max|diff|=0.0e+00 EXACT
+    8x2     0.0143 ms     79.1 GB/s   1.00x vs pre   per-emit   0.301 ms   max|diff|=0.0e+00 EXACT
+    8x4     0.0143 ms     78.9 GB/s   1.00x vs pre   per-emit   0.301 ms   max|diff|=0.0e+00 EXACT
+    4x4     0.0146 ms     77.3 GB/s   0.98x vs pre   per-emit   0.307 ms   max|diff|=0.0e+00 EXACT
+    4x8     0.0143 ms     79.3 GB/s   1.00x vs pre   per-emit   0.300 ms   max|diff|=0.0e+00 EXACT
+    2x8     0.0146 ms     77.7 GB/s   0.98x vs pre   per-emit   0.306 ms   max|diff|=0.0e+00 EXACT
+   16x1     0.0143 ms     79.1 GB/s   1.00x vs pre   per-emit   0.301 ms   max|diff|=0.0e+00 EXACT
+   16x2     0.0143 ms     79.1 GB/s   1.00x vs pre   per-emit   0.301 ms   max|diff|=0.0e+00 EXACT
+   32x1     0.0146 ms     77.4 GB/s   0.98x vs pre   per-emit   0.307 ms   max|diff|=0.0e+00 EXACT
+    6x4     0.0143 ms     79.1 GB/s   1.00x vs pre   per-emit   0.300 ms   max|diff|=0.0e+00 EXACT
+    4x6     0.0143 ms     79.2 GB/s   1.00x vs pre   per-emit   0.300 ms   max|diff|=0.0e+00 EXACT
+    6x6     0.0148 ms     76.6 GB/s   0.97x vs pre   per-emit   0.310 ms   max|diff|=0.0e+00 EXACT
+    5x5     0.0143 ms     79.2 GB/s   1.00x vs pre   per-emit   0.300 ms   max|diff|=0.0e+00 EXACT
+    4x2     0.0146 ms     77.5 GB/s   0.98x vs pre   per-emit   0.307 ms   max|diff|=0.0e+00 EXACT
+    2x4     0.0143 ms     79.1 GB/s   1.00x vs pre   per-emit   0.300 ms   max|diff|=0.0e+00 EXACT
+    4x1     0.0143 ms     79.2 GB/s   1.00x vs pre   per-emit   0.300 ms   max|diff|=0.0e+00 EXACT
+    2x2     0.0147 ms     77.0 GB/s   0.97x vs pre   per-emit   0.309 ms   max|diff|=0.0e+00 EXACT
+
+f32mk_bench: all tiles bit-identical to the M=1 path

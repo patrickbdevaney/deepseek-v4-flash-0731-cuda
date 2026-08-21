@@ -59,29 +59,52 @@ int main(){
     // and by gemm_bf16w's reference above, so a silent error here would be invisible in the
     // comparison it feeds. Chunked in 8s, so M=8 (one full chunk), M=13 (chunk + 5-row tail) and
     // M=128 (sixteen chunks, the ratio-128 layers) are the three shapes that fail differently.
+    //
+    // LADDER 1.12 widened that path to an (MM,NN) warp tile, so the claim is no longer about ONE
+    // kernel: it is that EVERY tile the dispatcher can select produces the identical bytes. The
+    // whole argument for widening the tile is that it changes which warp owns an output and how
+    // many outputs it owns, and NOT the order of any single dot product -- so max|diff| == 0 is the
+    // statement, not a tolerance. `8x0` is the pre-1.12 host-side chunk loop and is swept too, so
+    // the before-arm of 1.12's A/B is gated as well as the after-arm. N=254 and M=13 exist to hit
+    // the tile tails (N % (NN*wpb) != 0, M % MM != 0), which is where a guarded store gets it wrong.
     {
-        printf("\n-- gemm_fp32 M=K vs the warp-per-output-element path --\n");
-        const int N=1024, K=4096;
-        std::vector<float> hb((size_t)N*K); for(auto&x:hb) x=(rand()%2000-1000)/1000.f;
+        printf("\n-- gemm_fp32 M=K vs the warp-per-output-element path, every (MM,NN) tile --\n");
+        const int K_GATE = 4096;
+        const int TL[][2] = {{8,0},{8,1},{8,2},{8,4},{4,4},{4,8},{2,8},{16,1},{16,2},{32,1},
+                             {6,4},{4,6},{6,6},{5,5},{4,2},{2,4},{4,1},{2,2}};
+        const int NTL = (int)(sizeof(TL)/sizeof(TL[0]));
+        for (int N : {1024, 254}) {
+        std::vector<float> hb((size_t)N*K_GATE); for(auto&x:hb) x=(rand()%2000-1000)/1000.f;
         float* dB; CU(cudaMalloc(&dB,hb.size()*4)); CU(cudaMemcpy(dB,hb.data(),hb.size()*4,cudaMemcpyHostToDevice));
         for (int M : {1,2,5,8,13,16,128}) {
-            std::vector<float> ha((size_t)M*K); for(auto&x:ha) x=(rand()%2000-1000)/1000.f;
+            std::vector<float> ha((size_t)M*K_GATE); for(auto&x:ha) x=(rand()%2000-1000)/1000.f;
             float *dA,*C1,*C2; CU(cudaMalloc(&dA,ha.size()*4));
             CU(cudaMemcpy(dA,ha.data(),ha.size()*4,cudaMemcpyHostToDevice));
             CU(cudaMalloc(&C1,(size_t)M*N*4)); CU(cudaMalloc(&C2,(size_t)M*N*4));
-            setenv("NO_FP32MK","1",1); gemm_fp32(C1,dA,dB,M,N,K,0);
-            unsetenv("NO_FP32MK");     gemm_fp32(C2,dA,dB,M,N,K,0);
-            CU(cudaDeviceSynchronize());
+            setenv("NO_FP32MK","1",1); gemm_fp32(C1,dA,dB,M,N,K_GATE,0);
+            unsetenv("NO_FP32MK");
             std::vector<float> v1((size_t)M*N), v2((size_t)M*N);
+            CU(cudaDeviceSynchronize());
             CU(cudaMemcpy(v1.data(),C1,(size_t)M*N*4,cudaMemcpyDeviceToHost));
-            CU(cudaMemcpy(v2.data(),C2,(size_t)M*N*4,cudaMemcpyDeviceToHost));
-            double md=0; for(size_t i=0;i<v1.size();++i) md=fmax(md,fabs((double)v1[i]-v2[i]));
-            bool o = (md==0.0);   // same operation order by construction: anything but 0 is a bug
-            printf("[gemm_fp32 M=%-3d] max|diff| = %.3e -> %s\n", M, md, o?"PASS":"FAIL");
-            if(!o) ++fail;
+            double worst=0; int bad=0;
+            for (int t=0;t<NTL;++t){
+                gemm_fp32_set_tile(TL[t][0],TL[t][1]);
+                CU(cudaMemset(C2,0,(size_t)M*N*4));
+                gemm_fp32(C2,dA,dB,M,N,K_GATE,0);
+                CU(cudaDeviceSynchronize());
+                CU(cudaMemcpy(v2.data(),C2,(size_t)M*N*4,cudaMemcpyDeviceToHost));
+                double md=0; for(size_t i=0;i<v1.size();++i) md=fmax(md,fabs((double)v1[i]-v2[i]));
+                if(md!=0.0){ ++bad; printf("   tile %dx%d: max|diff| = %.3e\n", TL[t][0],TL[t][1],md); }
+                worst=fmax(worst,md);
+            }
+            gemm_fp32_set_tile(4,4);   // restore the shipped default
+            printf("[gemm_fp32 M=%-3d N=%-4d] %2d tiles, worst max|diff| = %.3e -> %s\n",
+                   M, N, NTL, worst, bad?"FAIL":"PASS");
+            if(bad) ++fail;
             cudaFree(dA); cudaFree(C1); cudaFree(C2);
         }
         cudaFree(dB);
+        }
     }
     printf("\nGate BF16W: %s\n", fail?"FAIL":"PASS");
     return fail?1:0;
