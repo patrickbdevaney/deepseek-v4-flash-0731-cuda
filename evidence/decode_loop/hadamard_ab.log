@@ -1,0 +1,72 @@
+[1.10] 2026-08-21T01:30:53-04:00 binaries: decode 2026-08-20T23:42:20-04:00, server 2026-08-20T23:45:06-04:00
+[1.10] 2026-08-21T01:30:53-04:00 === PHASE 3: tok/s sweep, CONTROL (flat kernel) ===
+[1.10] 2026-08-21T01:30:53-04:00 starting server [off] seqmax=16384 DSV4_HADAMARD_STAGE=0 -> evidence/decode_loop/server_1p10_off.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p10_off.log
+[run_server] pid=2150878 ppid=2150269 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p10_off.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.10] 2026-08-21T01:32:07-04:00 healthy [off]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=218148ms decode=22088ms tau=1.600 -> 138.05 ms/forward  (240s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21824ms tau=1.600 -> 136.40 ms/forward  (22s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=20320ms tau=1.730 -> 137.30 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=19693ms tau=1.803 -> 138.68 ms/forward  (20s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=256 prefill=0ms decode=21251ms tau=1.695 -> 140.74 ms/forward  (21s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=256 prefill=0ms decode=21842ms tau=1.631 -> 139.12 ms/forward  (22s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=21579ms tau=1.552 -> 130.78 ms/forward  (22s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=20952ms tau=1.610 -> 131.77 ms/forward  (21s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=21176ms tau=1.580 -> 130.72 ms/forward  (21s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=17748ms tau=2.000 -> 138.65 ms/forward  (18s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=21244ms tau=1.571 -> 130.33 ms/forward  (21s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=21294ms tau=1.610 -> 133.92 ms/forward  (21s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=20048ms tau=1.673 -> 131.03 ms/forward  (20s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=20469ms tau=1.610 -> 128.73 ms/forward  (20s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=20131ms tau=1.631 -> 128.23 ms/forward  (20s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=21877ms tau=1.524 -> 130.22 ms/forward  (22s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=256 prefill=0ms decode=18682ms tau=1.816 -> 132.50 ms/forward  (19s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=256 prefill=0ms decode=22188ms tau=1.480 -> 128.25 ms/forward  (22s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=106039ms decode=22857ms tau=1.471 -> 131.36 ms/forward  (129s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=21222ms tau=1.580 -> 131.00 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=18182ms tau=1.766 -> 125.39 ms/forward  (18s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=18956ms tau=1.730 -> 128.08 ms/forward  (19s)
+[probe] wrote 22 usable records -> evidence/decode_loop/fit_1p10_off/postfix.sweep.jsonl and evidence/decode_loop/fit_1p10_off/control.fresh.jsonl
+[1.10] 2026-08-21T01:45:08-04:00 control probe rc=0
+[1.10] 2026-08-21T01:45:18-04:00 server down
+[1.10] 2026-08-21T01:45:23-04:00 === PHASE 4: tok/s sweep, STAGED (1.10) ===
+[1.10] 2026-08-21T01:45:23-04:00 starting server [on] seqmax=16384 DSV4_HADAMARD_STAGE=unset -> evidence/decode_loop/server_1p10_on.log
+[run_server] [clocks] already pinned at 1386 MHz
+[run_server] starting detached, seqmax=16384 ext_chunk=64, log -> evidence/decode_loop/server_1p10_on.log
+[run_server] pid=2177404 ppid=2176798 tty=?
+[run_server] detached. Loading ~101 GiB; watch: tail -f evidence/decode_loop/server_1p10_on.log
+[run_server] verify the whole chain any time with: bash scripts/detach_audit.sh
+[1.10] 2026-08-21T01:46:36-04:00 healthy [on]: {"status":"ok","model":"deepseek-v4-flash-0731-reap","context_len":0,"seqmax":16384,"busy":true}
+[probe] server healthy: {'status': 'ok', 'model': 'deepseek-v4-flash-0731-reap', 'context_len': 0, 'seqmax': 16384, 'busy': True}
+[probe] corpus LOOP_LOG.md ac10134c87e3d0fe   control COMPRESSION_PLAYBOOK.md 79ac6563f97e53e5
+[probe] sweep-t12288-r0: pt=12282 cached=None ct=256 prefill=219885ms decode=21069ms tau=1.766 -> 145.30 ms/forward  (241s)
+[probe] sweep-t12288-r1: pt=12282 cached=None ct=256 prefill=0ms decode=21488ms tau=1.707 -> 143.25 ms/forward  (21s)
+[probe] sweep-t12288-r2: pt=12282 cached=None ct=256 prefill=0ms decode=20087ms tau=1.842 -> 144.51 ms/forward  (20s)
+[probe] sweep-t12288-r3: pt=12282 cached=None ct=256 prefill=0ms decode=23914ms tau=1.506 -> 140.67 ms/forward  (24s)
+[probe] sweep-t12288-r4: pt=12282 cached=None ct=256 prefill=0ms decode=20432ms tau=1.790 -> 142.88 ms/forward  (20s)
+[probe] sweep-t12288-r5: pt=12282 cached=None ct=256 prefill=0ms decode=22699ms tau=1.580 -> 140.12 ms/forward  (23s)
+[probe] sweep-t6144-r0: pt=6132 cached=None ct=256 prefill=0ms decode=18571ms tau=1.896 -> 137.57 ms/forward  (19s)
+[probe] sweep-t6144-r1: pt=6132 cached=None ct=256 prefill=0ms decode=20253ms tau=1.753 -> 138.72 ms/forward  (20s)
+[probe] sweep-t6144-r2: pt=6132 cached=None ct=256 prefill=0ms decode=21909ms tau=1.542 -> 131.98 ms/forward  (22s)
+[probe] sweep-t6144-r3: pt=6132 cached=None ct=256 prefill=0ms decode=20976ms tau=1.610 -> 131.92 ms/forward  (21s)
+[probe] sweep-t6144-r4: pt=6132 cached=None ct=256 prefill=0ms decode=21134ms tau=1.580 -> 130.46 ms/forward  (21s)
+[probe] sweep-t6144-r5: pt=6132 cached=None ct=256 prefill=0ms decode=20384ms tau=1.673 -> 133.23 ms/forward  (20s)
+[probe] sweep-t3072-r0: pt=3069 cached=None ct=256 prefill=0ms decode=19954ms tau=1.620 -> 126.29 ms/forward  (20s)
+[probe] sweep-t3072-r1: pt=3069 cached=None ct=256 prefill=0ms decode=21495ms tau=1.542 -> 129.49 ms/forward  (21s)
+[probe] sweep-t3072-r2: pt=3069 cached=None ct=256 prefill=0ms decode=21409ms tau=1.533 -> 128.20 ms/forward  (21s)
+[probe] sweep-t3072-r3: pt=3069 cached=None ct=256 prefill=0ms decode=22890ms tau=1.430 -> 127.88 ms/forward  (23s)
+[probe] sweep-t3072-r4: pt=3069 cached=None ct=256 prefill=0ms decode=20466ms tau=1.620 -> 129.53 ms/forward  (20s)
+[probe] sweep-t3072-r5: pt=3069 cached=None ct=256 prefill=0ms decode=21399ms tau=1.610 -> 134.58 ms/forward  (21s)
+[probe] control-t6144-r0: pt=6120 cached=None ct=256 prefill=107357ms decode=18374ms tau=1.925 -> 138.15 ms/forward  (126s)
+[probe] control-t6144-r1: pt=6120 cached=None ct=256 prefill=0ms decode=21000ms tau=1.641 -> 134.61 ms/forward  (21s)
+[probe] control-t1536-r0: pt=1528 cached=None ct=256 prefill=0ms decode=19919ms tau=1.673 -> 130.19 ms/forward  (20s)
+[probe] control-t1536-r1: pt=1528 cached=None ct=256 prefill=0ms decode=16698ms tau=2.048 -> 133.58 ms/forward  (17s)
+[probe] wrote 22 usable records -> evidence/decode_loop/fit_1p10_on/postfix.sweep.jsonl and evidence/decode_loop/fit_1p10_on/control.fresh.jsonl
+[1.10] 2026-08-21T01:59:41-04:00 staged probe rc=0
+[1.10] 2026-08-21T01:59:51-04:00 server down
+[1.10] 2026-08-21T01:59:56-04:00 done.

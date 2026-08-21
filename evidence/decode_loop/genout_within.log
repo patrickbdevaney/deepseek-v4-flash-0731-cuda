@@ -1,0 +1,45 @@
+[1.10-within] 2026-08-21T01:20:03-04:00 off try 1: launching (env 'DSV4_HADAMARD_STAGE=0', MemAvailable 101 GiB)
+[run_model] 101 GiB available, below 105 — reclaiming page cache and re-checking
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/gw_off.log
+[run_model] pid 2130254   watch: tail -f evidence/decode_loop/gw_off.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/gw_off.memguard.log
+[1.10-within] 2026-08-21T01:23:36-04:00 off try 1: 4 genout point(s)
+binary: build/decode 2026-08-20T23:42:20-04:00
+sweep:  6:1:1.50:1,6:1:1.50:1,6:1:1.50:1,6:1:1.50:1  NGEN=256
+
+ARM off  env='DSV4_HADAMARD_STAGE=0'  (pre-1.10 aliased hadamard -- MUST diverge)
+evidence/decode_loop/gw_genout_off.txt: 4 point(s) in 1 repeat group(s)
+  prompt of 1024 ids, 4 repeats, [256, 257, 260] generated: 6/6 pairs differ -- first divergence at generated position(s) [26, 42, 45]
+VERDICT: the process DOES NOT reproduce itself
+
+[1.10-within] 2026-08-21T01:23:36-04:00 on try 1: launching (env '', MemAvailable 111 GiB)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 111 GiB available; launching detached -> evidence/decode_loop/gw_on.log
+[run_model] pid 2137202   watch: tail -f evidence/decode_loop/gw_on.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/gw_on.memguard.log
+[1.10-within] 2026-08-21T01:26:57-04:00 on try 1: 4 genout point(s)
+  prompt of 1024 ids, 4 repeats, [256, 257, 260] generated: 6/6 pairs differ -- first divergence at generated position(s) [26, 42, 45]
+VERDICT: the process DOES NOT reproduce itself
+
+ARM on  env='unset'  (shipped staged hadamard -- must be clean)
+evidence/decode_loop/gw_genout_on.txt: 4 point(s) in 1 repeat group(s)
+  prompt of 1024 ids, 4 repeats, [256] generated: 0/6 pairs differ -- identical at every position
+VERDICT: every repeat of every point is byte-identical
+
+[1.10-within] 2026-08-21T01:26:57-04:00 === VERDICT ===
+genout_within -- ladder 1.10, 2026-08-21T01:20:03-04:00
+binary: build/decode 2026-08-20T23:42:20-04:00
+sweep:  6:1:1.50:1,6:1:1.50:1,6:1:1.50:1,6:1:1.50:1  NGEN=256
+
+ARM off  env='DSV4_HADAMARD_STAGE=0'  (pre-1.10 aliased hadamard -- MUST diverge)
+evidence/decode_loop/gw_genout_off.txt: 4 point(s) in 1 repeat group(s)
+  prompt of 1024 ids, 4 repeats, [256, 257, 260] generated: 6/6 pairs differ -- first divergence at generated position(s) [26, 42, 45]
+VERDICT: the process DOES NOT reproduce itself
+
+ARM on  env='unset'  (shipped staged hadamard -- must be clean)
+evidence/decode_loop/gw_genout_on.txt: 4 point(s) in 1 repeat group(s)
+  prompt of 1024 ids, 4 repeats, [256] generated: 0/6 pairs differ -- identical at every position
+VERDICT: every repeat of every point is byte-identical
+
+[1.10-within] 2026-08-21T01:26:57-04:00 done.

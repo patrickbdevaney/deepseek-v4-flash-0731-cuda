@@ -1,0 +1,16 @@
+tau by context, both arms, both orderings (decode_fit_probe sweep legs)
+
+flat  (pair 1)   tau mean 1.6508 over 18 legs
+staged(pair 1)   tau mean 1.6445 over 18 legs
+flat  (pair 2)   tau mean 1.6413 over 18 legs
+staged(pair 2)   tau mean 1.6445 over 18 legs
+
+     ctx   flat  (pair 1)  staged(pair 1)  flat  (pair 2)  staged(pair 2)
+    3325           1.6222          1.5593          1.6452          1.5593
+    6388           1.6537          1.6759          1.6719          1.6759
+   12538           1.6764          1.6984          1.6069          1.6984
+
+pooled tau: flat 1.6461   staged 1.6445   delta -0.0015
+NOTE: the flat arm does not reproduce itself (0 of 15 load-pairs byte-identical), so its tau
+is a distribution over different generated texts, not a repeatable number. The staged arm's
+tau is repeatable: fit_1p10_on and fit_1p10_on2 are byte-identical leg for leg.

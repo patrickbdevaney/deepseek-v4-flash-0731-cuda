@@ -1,0 +1,57 @@
+lhash_ablate -- ladder 1.10, 2026-08-20T23:07:42-04:00
+binary: build/decode 2026-08-20T22:15:22-04:00
+
+ARM base  env=''
+  PSp 192: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 13, 6: 5, 8: 4, 10: 3, 18: 2, 26: 1}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+  PSp 256: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 18, 4: 10}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+VERDICT: DIVERGES
+
+ARM ixg0  env='NO_IXGEMM=1'
+  PSp 192: within-process 12/12 diverge   cross-process 15/16 diverge   (of 43 layers)
+      first-diff layer: {2: 13, 16: 5, 24: 4, 30: 5}
+      its ratio:        {4: 27}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+  PSp 256: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 25, 6: 2, 8: 1}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+VERDICT: DIVERGES
+
+ARM rdx0  env='DSV4_TOPK_RADIX=0'
+  PSp 192: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {4: 7, 6: 6, 8: 5, 10: 4, 14: 5, 20: 1}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+  PSp 256: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 18, 4: 10}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+VERDICT: DIVERGES
+
+ARM ixg0tile0  env='NO_IXGEMM=1 NO_IXTILE=1'
+  PSp 192: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 13, 4: 5, 6: 4, 16: 3, 22: 2, 28: 1}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+  PSp 256: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 22, 4: 3, 6: 3}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+VERDICT: DIVERGES
+
+ARM f32mk0  env='NO_FP32MK=1'
+  PSp 192: within-process 11/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 7, 8: 6, 18: 5, 24: 4, 26: 3, 42: 2}
+      its ratio:        {4: 27}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+  PSp 256: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 25, 4: 2, 8: 1}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+VERDICT: DIVERGES
+
+ARM sparse0  env='DSV4_SPARSE_HPB=1 DSV4_SPARSE_SMEM=0'
+  PSp 192: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 7, 4: 11, 8: 4, 10: 3, 16: 2, 24: 1}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+  PSp 256: within-process 12/12 diverge   cross-process 16/16 diverge   (of 43 layers)
+      first-diff layer: {2: 18, 4: 4, 6: 5, 8: 1}
+      its ratio:        {4: 28}   <- ratio 4 runs indexer_forward + overlap compressor; ratio 128 runs neither
+VERDICT: DIVERGES
+

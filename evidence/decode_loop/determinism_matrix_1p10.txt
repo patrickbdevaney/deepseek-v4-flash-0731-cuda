@@ -1,0 +1,36 @@
+=== STAGED hadamard: 1.10 both loads + all four 1.11 loads (1.11 predates 1.12) ===
+  1p10_on        vs 1p10_on2       18/18
+  1p10_on        vs 1p11_off       18/18
+  1p10_on        vs 1p11_on        18/18
+  1p10_on        vs 1p11_off2      18/18
+  1p10_on        vs 1p11_on2       18/18
+  1p10_on2       vs 1p11_off       18/18
+  1p10_on2       vs 1p11_on        18/18
+  1p10_on2       vs 1p11_off2      18/18
+  1p10_on2       vs 1p11_on2       18/18
+  1p11_off       vs 1p11_on        18/18
+  1p11_off       vs 1p11_off2      18/18
+  1p11_off       vs 1p11_on2       18/18
+  1p11_on        vs 1p11_off2      18/18
+  1p11_on        vs 1p11_on2       18/18
+  1p11_off2      vs 1p11_on2       18/18
+  -> 15 of 15 load-pairs fully byte-identical
+
+=== FLAT (aliased) hadamard: 1.10 both control loads + all four 1.12 loads ===
+  1p10_off       vs 1p10_off2      0/18
+  1p10_off       vs 1p12_off       0/18
+  1p10_off       vs 1p12_on        0/18
+  1p10_off       vs 1p12_off2      0/18
+  1p10_off       vs 1p12_on2       0/18
+  1p10_off2      vs 1p12_off       0/18
+  1p10_off2      vs 1p12_on        0/18
+  1p10_off2      vs 1p12_off2      0/18
+  1p10_off2      vs 1p12_on2       0/18
+  1p12_off       vs 1p12_on        0/18
+  1p12_off       vs 1p12_off2      0/18
+  1p12_off       vs 1p12_on2       0/18
+  1p12_on        vs 1p12_off2      0/18
+  1p12_on        vs 1p12_on2       0/18
+  1p12_off2      vs 1p12_on2       0/18
+  -> 0 of 15 load-pairs fully byte-identical
+

@@ -1,0 +1,12 @@
+evidence/decode_loop/stephash_fixR1.txt: 20 steps   evidence/decode_loop/stephash_fixR2.txt: 20 steps
+  NOT MEASURED in these files (zero on both sides, excluded): mkv,mx
+  -> re-run with DSV4_STEPHASH_LVL=2 before drawing any conclusion about them
+  p0: IDENTICAL over 3 verifies, every field
+  p1: IDENTICAL over 3 verifies, every field
+  p2: IDENTICAL over 3 verifies, every field
+  p3: IDENTICAL over 3 verifies, every field
+  p4: IDENTICAL over 2 verifies, every field
+  p5: IDENTICAL over 2 verifies, every field
+  p6: IDENTICAL over 2 verifies, every field
+  p7: IDENTICAL over 2 verifies, every field
+VERDICT: the two runs are IDENTICAL at every field of every verify

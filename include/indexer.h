@@ -199,6 +199,12 @@ static inline void topk_smem_launch_check(const char* what, int n, size_t bytes)
 
 // y[rows,D] = (x[rows,D] @ H_D) * D^-0.5, H_D[i,j] = (-1)^popcount(i&j). D must be a power of two.
 void hadamard(float* y, const float* x, int rows, int D, cudaStream_t stream = 0);
+// DECODE_LADDER 1.10. `hadamard(y,y)` -- three call sites do it -- was a read/write race: every
+// thread of a row reads the whole row and overwrites one element of it. The shipped kernel stages
+// the row in shared memory first and is bit-identical wherever the buffers were already distinct.
+// This flips the arm inside ONE process (0 = the pre-1.10 flat kernel); DSV4_HADAMARD_STAGE=0 is
+// the same switch from the environment. tests/gate_hadamard_alias.cu.
+void hadamard_set_stage(int on);
 
 // index_score[s,t] = Σ_h relu(Σ_d q[s,h,d]*kv[t,d]) * weights[s,h].
 // q:[S,H,d]  kv:[T,d]  weights:[S,H]  -> score:[S,T].

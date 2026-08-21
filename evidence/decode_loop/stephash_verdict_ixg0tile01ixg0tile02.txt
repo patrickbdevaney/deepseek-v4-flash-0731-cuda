@@ -1,0 +1,52 @@
+evidence/decode_loop/stephash_ixg0tile01.txt: 20 steps   evidence/decode_loop/stephash_ixg0tile02.txt: 20 steps
+  NOT MEASURED in these files (zero on both sides, excluded): mkv,mx
+  -> re-run with DSV4_STEPHASH_LVL=2 before drawing any conclusion about them
+  p0: DIVERGES at verify v0 (index 0 of 3), cpos=192 ctx=192
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=8cc591deb2a83527  B=dde1624c023c5a7e   <-- differs
+          lg     A=d8215d65ccdd3188  B=168c7078a34e8df0   <-- differs
+  p1: DIVERGES at verify v0 (index 0 of 3), cpos=192 ctx=192
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=8cd44f859eb03f46  B=4b6a86cee5d4257e   <-- differs
+          lg     A=c7c78aa9cd412b02  B=6477cb1625d776d7   <-- differs
+  p2: DIVERGES at verify v0 (index 0 of 3), cpos=192 ctx=192
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=a0fa651ce398efbe  B=0516fae9eb64c936   <-- differs
+          lg     A=7a9a54496dbaa56b  B=1c6f567b4da6d4ef   <-- differs
+  p3: DIVERGES at verify v0 (index 0 of 3), cpos=192 ctx=192
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=bb3b2b980765371f  B=a0cd6e83b6c178ef   <-- differs
+          lg     A=eef5e2821f741204  B=a583f626d06782bf   <-- differs
+  p4: DIVERGES at verify v0 (index 0 of 2), cpos=256 ctx=256
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=611abcc7a07c311b  B=b7bc048083a149fb   <-- differs
+          lg     A=a333527ca4991373  B=d70d9782fe2c66c6   <-- differs
+  p5: DIVERGES at verify v0 (index 0 of 2), cpos=256 ctx=256
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=b34ef8fed159324b  B=f3cd72e52d79be6b   <-- differs
+          lg     A=15f08dd91746cfb2  B=dfd89eccb8673030   <-- differs
+  p6: DIVERGES at verify v0 (index 0 of 2), cpos=256 ctx=256
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=72d9fab300b80c03  B=aaeaf91b329a2583   <-- differs
+          lg     A=311c9a94ff2f5fc0  B=f811266a7aa953b2   <-- differs
+  p7: DIVERGES at verify v0 (index 0 of 2), cpos=256 ctx=256
+        first differing field: draft   (all differing here: draft,lg)
+        -> mkv, main_x and the draft input all MATCH and the draft's output does not -- the DSpark draft chain (3 blocks + head) is the nondeterministic component
+        !! that reading ASSUMES mkv,mx were equal; they were NOT COMPUTED in these files. The claim is only valid at DSV4_STEPHASH_LVL=2.
+          draft  A=671807a1f35268db  B=325077273100c2df   <-- differs
+          lg     A=4b00f6f561fa02c4  B=a809f8eae8e89bd1   <-- differs
+VERDICT: the two runs DIVERGE

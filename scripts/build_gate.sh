@@ -126,6 +126,18 @@ nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
   -o build/gate_sparse_hpb
 echo "built build/gate_sparse_hpb"
 
+# Gate HADAMARD_ALIAS (DECODE_LADDER 1.10) -- the read/write race that made `build/decode`'s prefill
+# nondeterministic from 192 positions up. `hadamard_kernel` gives every thread of a row the whole row
+# and one element of it to overwrite, which is correct only while y != x, and three call sites pass
+# the same pointer twice. BOTH ARMS RUN IN ONE PROCESS via hadamard_set_stage(), and the gate returns
+# non-zero if the OFF arm ever STOPS reproducing the defect -- a gate that can no longer see its own
+# bug is not a passing gate. Sweeps rows across the 20-block boundary the defect fires at.
+nvcc -O2 -std=c++17 -gencode arch=compute_110a,code=sm_110a -I include \
+  tests/gate_hadamard_alias.cu kernels/indexer.cu kernels/compressor.cu kernels/mla_attn.cu \
+  kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/dscratch.cu kernels/nvfp4_dense.cu \
+  -o build/gate_hadamard_alias
+echo "built build/gate_hadamard_alias"
+
 # Gate KV_PACK (DECODE_LADDER 1b.2) -- the packed FP8+UE8M0 main-KV cache. TWO memcmp claims and an
 # idempotence one: unpack(pack(x)) == what act_quant_fp8sim stores, on all 512 dims and five
 # distributions; and `sparse_attn` over the packed cache == `sparse_attn` over the FP32 cache

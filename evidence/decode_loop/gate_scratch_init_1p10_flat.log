@@ -1,0 +1,7 @@
+gate_scratch_init: compressed_attn_forward, s=17, ratio=4, weight offset +4
+  control  (poison 0x00 twice)      : ok (0 diffs)
+  poison 0x00 vs 0xFF              : 0 of 69632 outputs differ  -> no dependence
+  poison 0x00 vs 0x3C              : 0 of 69632 outputs differ
+
+  Nothing in this chain reads uninitialised scratch at s=17.
+gate_scratch_init: GATE PASS (no uninitialised read here)

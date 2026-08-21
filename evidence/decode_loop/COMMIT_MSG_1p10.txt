@@ -1,0 +1,52 @@
+1.10: the racing kernel is `hadamard`, which reads the row it overwrites -- and the SERVER has been nondeterministic since 1.12 (15/15 load-pairs byte-identical after, 0/15 before)
+
+WHAT IT IS. `hadamard_kernel` gives every thread of a row the whole row to read and one element
+of it to overwrite, which is correct only while `y != x`. Three call sites pass the same pointer
+twice: `compressor.cu`'s `rotate` branch in the prefill and in the single-group emit, and
+`compressed_decode.cu`'s candidate emit. Every other call site passes distinct buffers and one of
+them carries the comment `// out!=in`. The shipped kernel gives one block one row, stages it in
+shared memory and reduces out of shared, so the read set closes before the write set opens.
+
+WHAT NAMED IT, AND IT COST NO GPU TIME. `tools/lhash_pairs.py` reads 1.9's own logs all-pairs and
+prints the compression ratio of the FIRST differing layer. Only ratio-4 layers run
+`indexer_forward`, and therefore the `rotate` compressor: 335 of 336 divergent pairs across 1.9 and
+this item's campaign had a ratio-4 first-diff layer and NOT ONE had ratio 128. The six-arm ablation
+campaign the entry ordered (`scripts/lhash_ablate.sh`) came back ALL-NEGATIVE -- index_score in all
+three implementations, the radix top-k, 1.12's gemm_fp32 tile and 1.7's sparse_attn staging are
+exonerated by measurement, and the cause was never on a list built from "which kernel is
+complicated" instead of "which kernel writes the buffer it reads".
+
+IT IS A RATE, NOT 1.9's SHARP THRESHOLD, AND THE PRE-REGISTERED PREDICTION IS FALSIFIED IN ITS OWN
+GATE. 200 repeats per row count: 0/200 while the grid fits the 20 SMs once, then 17, 28, 41, 74,
+116, 184, 200/200 with 200 distinct results. A step and a rising rate are indistinguishable at one
+sample per length, which is what a length ladder is. 21 ratio-4 layers turn a 20.5 % per-launch rate
+at prefill 192 into 99.2 % per prefill, which is why 1.9 saw 56/56.
+
+AND "SO DECODE IS SAFE" WAS FALSE. The rows=1 shape decode issues reads as 0/200 -- alone. With a
+filler kernel resident it is 65/200 differing, 28 distinct results, and the engine forks those emits
+onto `g_side` on purpose. Twelve saved server loads, same corpus, same probe: STAGED (1.10's two +
+1.11's four) 15 of 15 load-pairs byte-identical; FLAT (1.10's two controls + 1.12's four) 0 of 15.
+The split is by DATE, not by arm: 1.12 changed `gemm_fp32`, i.e. what shares the SM. Every server
+A/B through 1.11 reported byte-identical legs and stands; 1.12's is UNPROVEN, not wrong, and is
+re-run as new item 1.15. 1.12's bit-exactness is meanwhile CONFIRMED more strongly than when it
+landed: the fixed engine reproduces 1.11's four loads leg for leg.
+
+MEASURED, BOTH ARMS ON ONE BINARY (`DSV4_HADAMARD_STAGE=0` is the pre-1.10 kernel):
+  * gate_hadamard_alias: non-aliased output bit-identical to the shipped kernel 200/200 at all 21
+    row counts on BOTH arms (so the staging changed nothing where nothing was wrong); the gate
+    returns non-zero if the OFF arm ever stops reproducing the defect; --control flips one ulp and
+    requires every comparison to see it. 20 in-situ gate runs pass on both arms.
+  * engine, prefill: R protocol 0/56 pairs (was 56/56), W ladder 0/8 lengths (was 2/8).
+  * engine, token ids: 4 identical points at ctx 1,023 x 256 generated tokens in ONE process --
+    6/6 pairs diverge with the flat kernel, first at generated token 26/42/45 (1.0 recorded 43),
+    0/6 with the staged one.
+  * speed: a NULL, drift-free over two arm orders and four loads, -0.085 +/- 1.810 ms/forward,
+    10/18 legs faster; tau 1.6445 staged vs 1.6461 flat. ONE ordering said +1.731 with a drift term
+    of +1.817 -- traps §33 for the third time, here manufacturing a regression rather than hiding a
+    win. Tracked `a` and `b` are unchanged.
+
+Invariant 1's 160-position bound is lifted. wiki/kernel-optimisations.md §2.12,
+wiki/measurement-and-traps.md §36 and a correction to §35 (which blamed the identity failure on a
+code path the server does not execute), wiki/negative-results.md §4j, wiki/README.md.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

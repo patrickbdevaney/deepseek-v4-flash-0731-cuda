@@ -1,0 +1,23 @@
+lhash_verify -- ladder 1.10 AFTER arm, 2026-08-21T00:20:44-04:00
+binary: build/decode 2026-08-20T23:42:20-04:00
+
+R  -- repeats at prefill 192 / 256, one process each, two processes
+  PSp 192: within-process 0/12 diverge   cross-process 0/16 diverge   (of 43 layers)
+  PSp 256: within-process 0/12 diverge   cross-process 0/16 diverge   (of 43 layers)
+VERDICT: CLEAN -- every pair byte-identical at every layer
+
+W  -- length ladder 128,129,132,136,144,160,192,256 across two processes
+     (every PSp here is a group of ONE per process, so the numbers that matter are the
+      cross-process pairs; a within-process count of 0/0 is expected, not a pass)
+  PSp 128: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+  PSp 129: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+  PSp 132: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+  PSp 136: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+  PSp 144: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+  PSp 160: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+  PSp 192: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+  PSp 256: within-process 0/0 diverge   cross-process 0/1 diverge   (of 43 layers)
+VERDICT: CLEAN -- every pair byte-identical at every layer
+
+A  -- 1.0's divergent arm, token ids and the per-step causal chain
+

@@ -1,0 +1,14 @@
+genout_within -- ladder 1.10, 2026-08-21T01:20:03-04:00
+binary: build/decode 2026-08-20T23:42:20-04:00
+sweep:  6:1:1.50:1,6:1:1.50:1,6:1:1.50:1,6:1:1.50:1  NGEN=256
+
+ARM off  env='DSV4_HADAMARD_STAGE=0'  (pre-1.10 aliased hadamard -- MUST diverge)
+evidence/decode_loop/gw_genout_off.txt: 4 point(s) in 1 repeat group(s)
+  prompt of 1024 ids, 4 repeats, [256, 257, 260] generated: 6/6 pairs differ -- first divergence at generated position(s) [26, 42, 45]
+VERDICT: the process DOES NOT reproduce itself
+
+ARM on  env='unset'  (shipped staged hadamard -- must be clean)
+evidence/decode_loop/gw_genout_on.txt: 4 point(s) in 1 repeat group(s)
+  prompt of 1024 ids, 4 repeats, [256] generated: 0/6 pairs differ -- identical at every position
+VERDICT: every repeat of every point is byte-identical
+

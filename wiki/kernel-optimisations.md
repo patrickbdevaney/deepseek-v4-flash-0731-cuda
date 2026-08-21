@@ -568,6 +568,14 @@ swing in a GEMM, and **§33 for why one arm order could not resolve this item at
 
 ### 2.11 One warp, a 2-D tile — `gemm_fp32` at the compressor emit (ladder 1.12, 2026-08-20)
 
+> **CAVEAT ADDED 2026-08-21 (ladder 1.10/1.15).** The engine band below was measured across four
+> `dsv4-server` loads of which **no two are byte-identical** — the aliased `hadamard` race was firing
+> in every one of them, and 1.12 changing `gemm_fp32` is what started it (§36). The arms did not
+> generate the same text, so the legs were not the same work and the SIZE of this saving is
+> **unproven**, not wrong. Its BIT-EXACTNESS is now confirmed independently and more strongly than
+> when it landed: with the race fixed, the engine reproduces 1.11's four saved loads leg for leg,
+> which is only possible if this tile changed no value. Re-measured by ladder **1.15**.
+
 **Mechanism.** §1.1's "read B once" was applied to `gemm_fp32` as a 1-D tile: one warp per
 (8-row chunk of A, one row of B), with the chunk loop on the HOST. `compressor_emit_group` calls it
 at `M = ratio = 128, N = d = 512, K = DIM = 4096` on the twenty ratio-128 layers, so `B =
@@ -648,6 +656,79 @@ the guarded store, not in the middle. Negative control: perturb the epilogue by 
 **What it leaves.** `cattn:compress` on an emit step is still **14.50 ms against a 335 MB / 1.40 ms
 byte floor — 4.3 % of roofline**. The next factor is not a bigger tile (`(6,6)` is slower); it is
 tensor cores or a shared-memory B stage, and it is a new item.
+
+### 2.12 The kernel that read the buffer it was writing — `hadamard`, staged through shared memory (ladder 1.10, 2026-08-21)
+
+**The measured gain is not speed — it is that `dsv4-server` reproduces itself again, and the number
+is 15 of 15 load-pairs byte-identical against 0 of 15.** The speed effect is a drift-free null,
+**−0.085 ± 1.810 ms/forward over 18 paired legs**, and is stated as one. This entry is on the wins
+page anyway, because the staging is load-bearing and looks like an optimisation somebody could
+helpfully remove.
+
+**Mechanism.** `hadamard_kernel` computed `y[r,j] = D^-0.5 * Σ_i x[r,i] * (-1)^popcount(i&j)` with
+one thread per `(r, j)`:
+
+```c
+for (int i = 0; i < D; ++i) acc += (__popc(i & j) & 1) ? -xr[i] : xr[i];   // reads the WHOLE row
+y[idx] = acc * scale;                                                      // writes ONE of it
+```
+
+Every thread of a row reads all `D` elements and overwrites one. Correct exactly while `y != x` —
+and three call sites pass the same pointer twice, including `kernels/compressor.cu`'s `rotate`
+branch. There is no in-place form of this transform: the direct `O(D²)` evaluation needs the whole
+input row after part of it has been overwritten. The fix gives **one block one row**, stages the row
+into shared memory, `__syncthreads()`, and reduces out of shared — the read set closes before the
+write set opens.
+
+**A race that needs a neighbour, which is why it hid for so long.** Four warps of a lone 128-thread
+block issue in lockstep, so the isolated kernel only fights itself once the grid exceeds the 20 SMs
+(0/200 differing to 20 blocks, then 17, 28, 41, 74, 116, 184, 200 of 200 as it grows). **Under
+concurrency it needs no grid at all**: `compressed_verify_step_indexer` forks the compressor emits
+onto `g_side`, and with a filler kernel resident the `rows = 1` emit goes from 0/200 to **65/200
+differing, 28 distinct results**. That is the decode path, and it had been reading as exonerated.
+
+**Why it is bit-identical wherever it was already correct.** The sum is still serial in
+`i = 0..D-1` over the same values; only where the values come from changed. Measured, not argued:
+with `y != x` the staged kernel reproduces the flat kernel bit for bit, **200/200 repeats at all 21
+row counts on both arms**, `gate_units` still passes the hadamard golden, and — the strongest form —
+**the fixed server reproduces 1.11's four saved loads leg for leg**, which also confirms 1.12's
+`gemm_fp32` change was bit-exact as it claimed.
+
+**Measured gain, kernel level** (`gate_hadamard_alias --bench`, 200 iterations, D = 128):
+
+| rows | 1 | 64 | 256 | 384 | 768 |
+|---|---|---|---|---|---|
+| where | both aliased emit sites | q-side, per verify | prefill s=1,024 | q-side at K=6 | prefill s=3,072 |
+| flat / staged | **1.49×** | 1.06× | 1.14× | 0.99× | 0.99× |
+
+D global loads per thread become D shared loads per thread plus D/blockDim global loads per *block*,
+which is why the small shapes gain and the large ones — already L1-resident — do not.
+
+**Measured gain, engine level: a NULL, and it was pre-registered as one.** Drift-free over two arm
+orderings and four checkpoint loads: **−0.085 ms/forward, 2 SE [−1.895, +1.724], 10/18 legs faster**;
+`tau` 1.6445 staged against 1.6461 flat. Note what one ordering said on its own: **+1.731 ms/forward**
+with a drift term of **+1.817** — traps §33's lesson arriving for the third time, and here it would
+have manufactured a regression instead of hiding a win. `hadamard` runs ~63 times per forward at
+rows ∈ {1, 64, ≤384}; the kernel-level table bounds the whole effect at ~0.1 ms of a ~130 ms forward,
+an order of magnitude under the 3.5 % run-to-run spread.
+
+**And the before-arm is a moving target, which is the honest caveat on that band.** The flat arm
+does not reproduce itself — 0 of 15 load-pairs — so the paired legs compare a fixed engine against a
+distribution. It is the only before-arm there is, the null is consistent with the microbenchmark
+bound, and the alternative reading (that the change costs several ms) is excluded by both.
+
+**The gates.** `tests/gate_hadamard_alias.cu` runs both arms in ONE process via
+`hadamard_set_stage()` — same binary, same input, one dispatch different — and **returns non-zero if
+the OFF arm ever stops reproducing the defect**, because a gate that can no longer see its own bug is
+not a passing gate. `--control` flips one ulp in the reference and requires every comparison to see
+it; `--concurrent` is the co-resident probe above. Then the engine: `scripts/lhash_verify.sh`
+re-runs 1.9's R and W protocols (0/56 pairs and 0/8 lengths, against 56/56 and 2/8 before), and
+`scripts/genout_within_run.sh` runs four identical points at ctx 1,023 × 256 generated tokens inside
+one process on both arms — **6/6 pairs diverge with `DSV4_HADAMARD_STAGE=0`, first at generated
+token 26/42/45; 0/6 with it unset.**
+
+[`measurement-and-traps.md` §36](measurement-and-traps.md),
+[`negative-results.md` §4j](negative-results.md).
 
 ## 3. Precision and layout
 

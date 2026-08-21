@@ -1,0 +1,127 @@
+gate_hadamard_alias: D=128  SMs=20  pre-1.10 blockDim=256 -> 2 rows/block
+PREDICTION for the OFF arm: aliased == reference while blocks <= 20 SMs, i.e. rows <= 40 (prefill s <= 163 at ratio 4); broken from rows 41 (s >= 164).
+The ON arm must be clean at EVERY row count.
+
+--- CONCURRENT: aliased hadamard(y,y) at rows=1, with a filler kernel on a second stream (20 SMs x 4 blocks) ---
+arm                                differ           distinct results
+OFF = pre-1.10 flat kernel          78/200          28
+ON  = shipped staged kernel          0/200          1
+-> rows=1 DOES race once something else is resident. The row sweep's "decode cannot race" reading was an artefact of measuring the kernel ALONE.
+
+--- BENCH: hadamard(y, x) with y != x, D=128, 200 iters after 20 warm-up ---
+    rows     blocks      flat ms    staged ms    ratio   where the engine issues it
+       1          1      0.00618      0.00411    1.50x   decode: both aliased emit call sites
+      64         32      0.00874      0.00821    1.06x   
+     256        128      0.01843      0.01691    1.09x   
+     384        192      0.02458      0.02487    0.99x   
+     768        384      0.04325      0.04330    1.00x   
+
+--- ARM OFF = pre-1.10 flat kernel (hadamard_set_stage(0)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     2       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     4       2   0/200 differ,  1 distinct result    0/200 differ  OK        
+     8       4   0/200 differ,  1 distinct result    0/200 differ  OK        
+    16       8   0/200 differ,  1 distinct result    0/200 differ  OK        
+    24      12   0/200 differ,  1 distinct result    0/200 differ  OK        
+    32      16   0/200 differ,  1 distinct result    0/200 differ  OK        
+    36      18   0/200 differ,  1 distinct result    0/200 differ  OK        
+    38      19   0/200 differ,  1 distinct result    0/200 differ  OK        
+    39      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    40      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    41      21   0/200 differ,  1 distinct result    0/200 differ  OK           <- PREDICTION MISSED
+    42      21  14/200 differ, 12 distinct results   0/200 differ  ALIAS RACE
+    44      22  27/200 differ, 24 distinct results   0/200 differ  ALIAS RACE
+    48      24  31/200 differ, 30 distinct results   0/200 differ  ALIAS RACE
+    56      28  77/200 differ, 68 distinct results   0/200 differ  ALIAS RACE
+    64      32  91/200 differ, 90 distinct results   0/200 differ  ALIAS RACE
+    96      48  177/200 differ, 177 distinct results   0/200 differ  ALIAS RACE
+   128      64  194/200 differ, 195 distinct results   0/200 differ  ALIAS RACE
+   256     128  200/200 differ, 200 distinct results   0/200 differ  ALIAS RACE
+   768     384  200/200 differ, 200 distinct results   0/200 differ  ALIAS RACE
+
+--- ARM ON  = shipped staged kernel (hadamard_set_stage(1)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     2       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     4       2   0/200 differ,  1 distinct result    0/200 differ  OK        
+     8       4   0/200 differ,  1 distinct result    0/200 differ  OK        
+    16       8   0/200 differ,  1 distinct result    0/200 differ  OK        
+    24      12   0/200 differ,  1 distinct result    0/200 differ  OK        
+    32      16   0/200 differ,  1 distinct result    0/200 differ  OK        
+    36      18   0/200 differ,  1 distinct result    0/200 differ  OK        
+    38      19   0/200 differ,  1 distinct result    0/200 differ  OK        
+    39      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    40      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    41      21   0/200 differ,  1 distinct result    0/200 differ  OK        
+    42      21   0/200 differ,  1 distinct result    0/200 differ  OK        
+    44      22   0/200 differ,  1 distinct result    0/200 differ  OK        
+    48      24   0/200 differ,  1 distinct result    0/200 differ  OK        
+    56      28   0/200 differ,  1 distinct result    0/200 differ  OK        
+    64      32   0/200 differ,  1 distinct result    0/200 differ  OK        
+    96      48   0/200 differ,  1 distinct result    0/200 differ  OK        
+   128      64   0/200 differ,  1 distinct result    0/200 differ  OK        
+   256     128   0/200 differ,  1 distinct result    0/200 differ  OK        
+   768     384   0/200 differ,  1 distinct result    0/200 differ  OK        
+
+negative control: hadamard(y,x) with y != x reproduced the shipped kernel bit for bit, 200/200 repeats, at every row count, on BOTH arms -- so the staging changed nothing where the buffers were already distinct, and every difference below is aliasing.
+
+OFF arm: 9 of 21 row counts race, first at rows=42 (blocks=21, SMs=20).
+ON  arm: 0 of 21 row counts race.
+
+PASS: the pre-1.10 kernel races and the shipped one does not -- hadamard(y,y) == hadamard(y,x) at every row count, 200 repeats each.
+gate_hadamard_alias: D=128  SMs=20  pre-1.10 blockDim=256 -> 2 rows/block
+PREDICTION for the OFF arm: aliased == reference while blocks <= 20 SMs, i.e. rows <= 40 (prefill s <= 163 at ratio 4); broken from rows 41 (s >= 164).
+The ON arm must be clean at EVERY row count.
+
+--control: one reference element is bumped by one ulp; EVERY row must FAIL.
+
+--- ARM OFF = pre-1.10 flat kernel (hadamard_set_stage(0)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     2       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     4       2   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     8       4   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    16       8   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    24      12   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    32      16   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    36      18   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    38      19   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    39      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    40      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    41      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    42      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    44      22   4/4 differ,  2 distinct results   4/4 differ  SEES THE ULP
+    48      24   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    56      28   4/4 differ,  2 distinct results   4/4 differ  SEES THE ULP
+    64      32   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+    96      48   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+   128      64   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+   256     128   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+   768     384   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+
+--- ARM ON  = shipped staged kernel (hadamard_set_stage(1)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     2       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     4       2   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     8       4   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    16       8   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    24      12   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    32      16   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    36      18   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    38      19   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    39      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    40      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    41      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    42      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    44      22   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    48      24   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    56      28   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    64      32   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    96      48   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+   128      64   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+   256     128   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+   768     384   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+
+CONTROL PASS: with one ulp flipped in the reference, every comparison on both arms differed at all 21 row counts. The memcmp is live.

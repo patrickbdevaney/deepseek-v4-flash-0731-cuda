@@ -113,6 +113,26 @@ if `g_side` comes back null -- and its NULL control immediately found a pre-exis
 arena read in the M=1 step (item **1.14**), which had been silently corrupting the first run of every
 bit-exactness gate in this repo.
 
+**1.10 GAVE THE LADDER ITS PRIMARY CORRECTNESS INVARIANT BACK, 2026-08-21, and the cause was not
+in any of the three kernels the item nominated.** `hadamard_kernel` gives every thread of a row the
+whole row to read and one element of it to overwrite -- correct only while `y != x`, and three call
+sites pass the same pointer twice. Only `indexer_forward`'s compressor sets `rotate`, and only
+ratio-4 layers run `indexer_forward`, which is why **335 of 336 divergent pairs across 1.9's logs and
+1.10's six-arm ablation campaign had a ratio-4 first differing layer and not one had ratio 128**.
+The shipped kernel stages the row in shared memory; it is bit-identical wherever the buffers were
+already distinct (200/200 repeats at 21 row counts, both arms). `build/decode`'s prefill now
+reproduces itself at every length -- **R 0/56 pairs, W 0/8 lengths, and at ctx 1,023 with 256
+generated tokens, 6/6 pairs of identical points that DIVERGED on the same binary with
+`DSV4_HADAMARD_STAGE=0` are 0/6 with it unset.** **AND THE SERVER HAS BEEN NONDETERMINISTIC SINCE
+1.12**: across twelve saved server loads, the staged kernel gives **15 of 15 load-pairs
+byte-identical** and the flat kernel **0 of 15** -- the `rows = 1` emit races 65/200 once anything
+else is resident on the SM, and 1.12 changed what that is. Every server A/B through 1.11 reported
+byte-identical legs and stands; **1.12's is the one measured against a control that does not
+reproduce itself**, which is UNPROVEN rather than wrong and is re-run as item **1.15**. Invariant 1's
+160-position bound is lifted. Speed is a drift-free NULL: **-0.085 +/- 1.810 ms/forward**, `tau`
+1.6445 vs 1.6461. See item 1.10, `wiki/measurement-and-traps.md` §35-§36,
+`wiki/negative-results.md` §4j.
+
 **Rule 5 is clear: 1b.2 and 1.11 both shipped kernels.** 1.8's remaining follow-up (1.12) is
 honestly small — a 0.53 ms/forward ceiling — and is ranked accordingly; do not take it just because
 it is fresh. 1.11 is the evidence for the ranking cutting the other way too: its ceiling was 1.29
@@ -235,6 +255,19 @@ So, in order:
    function and does not reach the threshold at all, which is why 1.5's 16-leg server A/B was
    byte-identical at ctx 12,410; a bit-exactness result on one binary's prefill does not transfer to
    the other. `wiki/measurement-and-traps.md` §25-§27.
+
+   **LIFTED 2026-08-21 by 1.10 — the bound is gone because the defect is fixed, and the reason it
+   existed is worth keeping.** It was `hadamard(y, y)`: every thread of a row read the whole row and
+   overwrote one element of it. It is a RATE and not the sharp threshold the paragraph above
+   records -- 0 of 200 launches differ while the grid fits the 20 SMs once, then 17, 28, 41, 74,
+   116, 184 and 200 of 200 as it grows -- and 21 ratio-4 layers per prefill turn a 20.5 % per-launch
+   rate at prefill 192 into a 99.2 % per-prefill one, which is why one sample per length looked like
+   a step. **Token ids are a valid gate at every prefill length again**, proven by re-running 1.9's
+   own protocols: R 0/56, W 0/8, and 4 identical points at ctx 1,023 x 256 generated tokens
+   byte-identical 6/6 where the same binary with `DSV4_HADAMARD_STAGE=0` diverges 6/6 at generated
+   token 26/42/45. Buffer memcmp remains the STRONGER instrument and stays the default for a kernel
+   change; what is restored is the end-to-end check, not a licence to stop memcmping.
+   `wiki/measurement-and-traps.md` §36, item 1.10.
 2. **tau is reported in every A/B.** A byte-identical token sequence can still collapse acceptance
    3.12 -> 1.00 (`LOOP_LOG`), because acceptance is an exact draft/target comparison. Throughput
    without tau is not a measurement.
@@ -1149,7 +1182,183 @@ So, in order:
       `tools/stephash_compare.py`, `tools/lhash_compare.py`, `scripts/stephash_run.sh`,
       `scripts/detach_audit.sh`.
 
-- [ ] **1.10** **Name the kernel inside `compressed_attn_forward` that is racing.** Opened by 1.9,
+- [x] **1.10 DONE 2026-08-21 — IT IS `hadamard`, AND IT IS NOT A REDUCTION ORDER, IT IS A BUFFER
+      ALIAS.** `hadamard_kernel` gives every thread of a row the whole row to read and one element
+      of it to overwrite, which is correct only while `y != x`, and three call sites pass the same
+      pointer twice. The shipped kernel stages the row in shared memory first. **`build/decode`'s
+      prefill reproduces itself at every length again: 56 of 56 pairs byte-identical at all 43
+      layers at prefill 192 and 256, where the identical protocol on the identical binary minus this
+      change gave 56 of 56 DIVERGENT.**
+
+      ```c
+      // kernels/indexer.cu, as it stood since the indexer was written
+      for (int i = 0; i < D; ++i) acc += (__popc(i & j) & 1) ? -xr[i] : xr[i];   // reads the WHOLE row
+      y[idx] = acc * scale;                                                      // writes ONE of it
+      ```
+
+      | call site | shape | aliased? |
+      |---|---|---|
+      | `kernels/compressor.cu:665` `hadamard(out, out, groups, d)` | **prefill, rows = s/ratio** | **yes** |
+      | `kernels/compressor.cu:713` `hadamard(dst, dst, 1, d)` | decode single-group emit | yes, rows = 1 |
+      | `kernels/compressed_decode.cu:633` `hadamard(cand, cand, 1, d)` | decode candidate emit | yes, rows = 1 |
+      | `kernels/indexer.cu:417`, `compressed_decode.cu:322/552/724` | q-side | no — one even says `// out!=in` |
+
+      **WHY IT IS THE RATIO-4 LAYERS AND ONLY THEM, WHICH IS WHAT NAMED IT.** `compressor_forward`'s
+      `rotate` branch is set only by `indexer_forward`, and `compressed_attn_forward` calls
+      `indexer_forward` only when `compress_ratio == 4`. Layers alternate 4 / 128 from layer 2, so a
+      ratio-128 layer runs the main compressor and `sparse_attn` and never touches an aliased
+      `hadamard`. `tools/lhash_pairs.py` — written for this item because `lhash_compare --within`
+      compared point 0 against every later point only, and point 0 is the one that allocates at a
+      different address — reads 1.9's OWN LOGS all-pairs and prints the compression ratio of the
+      first differing layer: **335 of 336 pairs across 1.9 and this item's six-arm campaign diverged,
+      and every single first-differing layer was ratio 4. Not one was ratio 128 or ratio 0.** That
+      excluded, at zero GPU cost, every kernel a ratio-128 layer also executes.
+
+      **THE SIX-ARM ABLATION CAMPAIGN THIS ENTRY ORDERED CAME BACK ALL-NEGATIVE, AND SAYING SO IS
+      THE POINT.** The entry's own "cheapest first step" was `DSV4_TOPK_RADIX=0` then `NO_IXGEMM=1`,
+      *"either one coming back clean names the kernel outright"*. Neither did, nor did four more
+      (`scripts/lhash_ablate.sh`, `evidence/decode_loop/lhash_ablate_verdict.txt`):
+
+      | arm | swaps | pairs diverging |
+      |---|---|---|
+      | `base` | nothing (control on today's binary) | 56/56 |
+      | `NO_IXGEMM=1` | `index_score` GEMM -> tiled | 55/56 |
+      | `NO_IXGEMM=1 NO_IXTILE=1` | `index_score` -> warp | 56/56 |
+      | `DSV4_TOPK_RADIX=0` | radix select -> warp selection sort | 56/56 |
+      | `NO_FP32MK=1` | 1.12's `gemm_fp32` warp tile -> legacy | 55/56 |
+      | `DSV4_SPARSE_HPB=1 DSV4_SPARSE_SMEM=0` | 1.7's `sparse_attn` staging -> pre-1.7 | 56/56 |
+
+      Five kernels are now excluded by measurement rather than argument, and the exclusions held
+      when the cause was found — but the cause was never on the list, because the list was built
+      from "which kernel is complicated" and the answer was "which kernel writes the buffer it
+      reads". `wiki/negative-results.md` §4j.
+
+      **IT IS A RATE, NOT THE SHARP THRESHOLD 1.9 REPORTED — AND THIS ITEM'S OWN PRE-REGISTERED
+      PREDICTION IS FALSIFIED IN ITS OWN GATE.** `tests/gate_hadamard_alias` drives the kernel
+      directly, both arms in one process via `hadamard_set_stage()`, 200 repeats per row count:
+
+      ```
+      rows (= s/4)      1    2   ..40   41   42   44   48   56   64   96  128  256  768
+      blocks            1    1    <=20  21   21   22   24   28   32   48   64  128  384
+      differ /200       0    0      0    0   17   28   41   74  116  184  200  200  200
+      distinct results  1    1      1    1   15   28   38   64  111  179  200  200  200
+      ```
+
+      Zero at every row count whose grid fits the 20 SMs once, first firing at **rows 42 — the first
+      count at which 21 FULL blocks exist** — then rising monotonically to every run distinct. The
+      prediction was a STEP at rows 40; at 8 repeats the gate printed `PREDICTION MISSED` four
+      times. **A step and a rising rate are indistinguishable at one sample per length, which is
+      exactly what 1.9's length ladder was**, and that is where its word "sharp" came from.
+
+      **AND THE RATE RECONCILES 1.9's OBSERVATION.** At prefill 192, `rows = 48` and the per-launch
+      rate is 41/200 = 20.5 % — but a prefill runs **21 ratio-4 layers**, so `1 - 0.795^21 = 99.2 %`
+      of prefills differ. That is why 1.9 saw 56/56 from a kernel that is deterministic four launches
+      in five.
+
+      **BUT "SO DECODE IS SAFE" IS FALSE, AND THAT IS THE BIGGEST THING THIS ITEM FOUND.** The two
+      aliased sites decode reaches are `rows = 1` and the sweep above calls them **0 of 200** — which
+      reads as an exoneration and is an artefact of running the kernel ALONE. Four warps of a lone
+      block on an idle GPU do stay in lockstep. `compressed_verify_step_indexer` forks the compressor
+      emits onto `g_side` *on purpose*, so in the engine they share an SM with whatever else is
+      resident. `gate_hadamard_alias --concurrent` puts a filler kernel on 80 blocks and re-runs the
+      identical `rows = 1` call:
+
+      | arm | differ | distinct results |
+      |---|---|---|
+      | flat, alone | 0/200 | 1 |
+      | **flat, anything else resident** | **65/200** | **28** |
+      | staged, anything else resident | **0/200** | 1 |
+
+      **AND THE SERVER HAS BEEN NONDETERMINISTIC SINCE 1.12.** Twelve `dsv4-server` loads are on disk
+      with the same corpus and the same probe (`evidence/decode_loop/determinism_matrix_1p10.txt`):
+
+      | | load-pairs fully byte-identical |
+      |---|---|
+      | **staged** — 1.10's two loads + all four of 1.11's | **15 of 15** |
+      | **flat** — 1.10's two control loads + all four of 1.12's | **0 of 15** |
+
+      1.11 ran the flat kernel and reproduced itself perfectly; 1.12 ran the flat kernel and no two
+      of its four loads agree; **1.12 changed `gemm_fp32` and nothing in `indexer.cu`.** That is the
+      co-residency mechanism seen from the engine — 1.12 changed what shares the SM with the emit and
+      a latent race started firing. **1.10's staged arm does not merely reproduce itself, it
+      reproduces 1.11's four loads leg for leg**, which independently confirms 1.12's arithmetic was
+      bit-exact exactly as its entry claimed. `tau` says it without hashing: staged gives **1.6445**
+      on both loads, flat gives **1.6508** and **1.6413**.
+
+      **WHAT THIS COSTS, PRECISELY.** Every server A/B through 1.11 reported byte-identical legs and
+      stands: 1.5 (16/16), 1.7 (16/16), 1b.2 (16/16), 1.11 (44/44). **1.12's is the one measured
+      against a control that does not reproduce itself**, and it is the item that moved tracked Term
+      A to 123.15 ms. It is not retracted — a band measured against a moving target is UNPROVEN, not
+      wrong — and re-running it on a now-deterministic engine is ladder item **1.15**. 1.12 itself
+      saw the 0/18 and explained it with 1.9's `build/decode` prefill race, a code path the server
+      does not execute; `wiki/measurement-and-traps.md` §35 is corrected in this commit.
+
+      **THE FIX IS BIT-IDENTICAL WHERE IT WAS ALREADY CORRECT, BY CONSTRUCTION.** One block owns one
+      row, stages it in shared memory, and reduces out of shared: the sum order is still
+      `i = 0..D-1` and the values are still the input. `gate_hadamard_alias`'s negative control is
+      that every NON-aliased call reproduces the shipped kernel bit for bit, 200/200 repeats, at all
+      21 row counts on BOTH arms — so the staging changed nothing where nothing was wrong. The gate
+      also returns non-zero if the OFF arm ever stops reproducing the defect, and `--control` flips
+      one ulp in the reference and requires every comparison to see it.
+
+      **THE ENGINE-LEVEL AFTER ARM — three protocols, all of which 1.9 ran and all of which failed**
+      (`scripts/lhash_verify.sh`, `scripts/genout_within_run.sh`):
+
+      | protocol | before | after |
+      |---|---|---|
+      | **R** 8 identical points at prefill 192 and 256, 43 layer hashes each, 2 processes | 56/56 pairs diverge | **0/56 — CLEAN** |
+      | **W** length ladder 128,129,132,136,144,160,192,256, cross-process | 192 and 256 diverge | **0/8 — CLEAN** |
+      | **G** 4 identical points at ctx 1,023, NGEN 256, in ONE process | **6/6 pairs diverge, first at generated token 26 / 42 / 45** | **0/6 — all four byte-identical at every one of 1,280 positions** |
+
+      **G IS THE ONE THAT SAYS THE INVARIANT IS BACK, AND BOTH ITS ARMS ARE THE SAME BINARY.**
+      `DSV4_HADAMARD_STAGE=0` is the pre-1.10 aliased kernel, so the before-arm is the real prior
+      code rather than a memory of it, and the divergence it reproduces is 1.0's original
+      observation in 1.0's own units: identical sweep points emitting different token ids at ctx
+      1,023, **first at generated token 26/42/45 against the 43 that 1.0 recorded**.
+
+      G asks the question in ONE checkpoint load rather than two, and that is not a convenience.
+      `compressed_attn_forward` allocates its scratch with raw `cudaMalloc` sized in `s`, ~400 MB
+      each for `q` and `o` at s = 3,071; with 100.40 GiB of weights already resident in a 122.8 GiB
+      pool, the burst drives `MemAvailable` to ~1 GB and the memguard's SLOPE rule fires. **Five
+      separate two-process attempts died at exactly that point** (three of them retries), which is a
+      pre-existing property of the prefill allocator and not of anything 1.10 changed. The response
+      was to ask the question at a length that fits and inside one process — which is also the
+      stronger form, because two loads differ in allocator state and one does not.
+      `tools/genout_within.py` groups repeats by their exact prompt taken from the run log rather
+      than by a prefix or a length, because either of those can silently merge two prompts or split
+      a genuine pair whose divergence ended generation early.
+
+      **WHAT THIS GIVES THE LADDER BACK.** Token-id bit-exactness on `build/decode` was valid only
+      for prefills of 160 positions or fewer (1.9), and every item since has had to use buffer memcmp
+      as the substitute. That restriction is lifted, and so is the one 1.12 imposed on the server
+      sweep's identity column.
+
+      **THE SPEED RESULT IS A NULL AND WAS PRE-REGISTERED AS ONE.** Drift-free over two arm orderings
+      and four checkpoint loads: **-0.085 ms/forward, 2 SE [-1.895, +1.724], 10/18 legs faster**;
+      `tau` 1.6445 staged against 1.6461 flat pooled. Tracked `a` and `b` are unchanged. Note what
+      ONE ordering said: **+1.731 ms/forward with a drift term of +1.817** -- traps §33 for the third
+      time, and here it would have manufactured a REGRESSION rather than hidden a win. The kernel
+      itself is 1.49x at rows = 1 and 0.99-1.14x above, on a kernel that runs ~63 times per forward
+      at rows in {1, 64, <=384} and totals ~0.1 ms of a ~130 ms forward -- an order of magnitude
+      under the 3.5 % spread, so a null is the only answer the instrument can give. **The honest
+      caveat is that the before-arm is a moving target**: the flat arm does not reproduce itself, so
+      the paired legs compare a fixed engine against a distribution. The null is what the
+      microbenchmark bound predicts and the alternative reading is excluded by both.
+
+      Evidence: `evidence/decode_loop/{gate_hadamard_alias_1p10.log, lhash_ablate_verdict.txt,
+      lhash_verify_verdict.txt, hadamard_ab.log, pair_1p10*.txt, tau_1p10.txt}`.
+      Code: `kernels/indexer.cu` (`hadamard_stage_kernel`, `hadamard_set_stage`),
+      `include/indexer.h`, `tests/gate_hadamard_alias.cu`, `tools/lhash_pairs.py`,
+      `scripts/lhash_ablate.sh`, `scripts/lhash_verify.sh`, `scripts/hadamard_ab_run.sh`.
+      `wiki/measurement-and-traps.md` §36, `wiki/negative-results.md` §4j.
+
+      *(The original TODO is preserved below, because its ranking call -- "rank it below 1.7
+      unless the fix is also a speed-up" -- was right, and because its named instrument (a
+      sub-layer hash) turned out not to be needed: an all-pairs read of logs that already
+      existed named the subsystem, and the answer was found by asking which kernel writes the
+      buffer it reads rather than by bisecting the call graph.)*
+
+      > **1.10 (original)** **Name the kernel inside `compressed_attn_forward` that is racing.** Opened by 1.9,
       2026-08-20, and it is the only unfinished half of it. 1.9 bounded the fault to one function
       and proved it is a race rather than state, but it did not say whether it is
       `compressor_forward`, `indexer_forward` or `sparse_attn`.
@@ -1170,6 +1379,32 @@ So, in order:
       Cheapest first step, no new code: re-run 1.9's R protocol with `DSV4_TOPK_RADIX=0`, then with
       `NO_IXGEMM=1`. Each is one existing env flag and one pair of ~3-minute runs, and either one
       coming back clean names the kernel outright.
+
+- [ ] **1.15** **Re-run 1.12's A/B on a deterministic engine.** Opened by 1.10, 2026-08-21.
+      1.12's paired band -- **-1.963 +/- 1.504 ms/forward drift-free**, the number that moved tracked
+      `a` from 125.11 to **123.15 ms** -- was measured across four server loads of which **no two are
+      byte-identical** (`evidence/decode_loop/determinism_matrix_1p10.txt`). The arms did not generate
+      the same text, so the legs were not the same work, and 1.12 saw this as `0/18` in its own
+      identity column and explained it with 1.9's `build/decode` prefill race -- a code path
+      `dsv4-server` does not execute. `wiki/measurement-and-traps.md` §35.
+
+      **THIS IS NOT A RETRACTION AND MUST NOT BE WRITTEN UP AS ONE.** A band measured against a
+      moving target is UNPROVEN. 1.12's bit-exactness claim is now independently CONFIRMED from the
+      other direction: with 1.10's fix in, the engine reproduces 1.11's four saved loads leg for leg,
+      which is only possible if 1.12's `gemm_fp32` tile changed no value. What is unproven is the
+      SIZE of its saving, not its correctness.
+
+      **THE RE-RUN IS CHEAP AND THE PROTOCOL ALREADY EXISTS.** `scripts/f32mkn_ab_run.sh` with
+      `DSV4_F32MK_TILE=8x0` as the control, four loads, both arm orders, exactly as 1.12 ran it --
+      the only change is that the identity column is now a live gate rather than a coin flip, so the
+      run either comes back 18/18 per pair or something else is still wrong. Pre-register: if the
+      re-measured band covers zero, `a` goes back to 125.11 ms and 1.12 becomes a null with a
+      mechanism, which is a perfectly good result and is what `wiki/negative-results.md` is for.
+
+      **RANK IT ABOVE 1.13.** 1.13 asks the same question about 1.11's term, and 1.11's loads are the
+      ones that ARE byte-identical -- so 1.13 is about attributing a real number and this is about
+      whether a tracked one exists. A stop condition quoted against `a = 123.15` when the measurement
+      behind it is unproven is the failure mode this ladder exists to prevent.
 
 - [x] **1.7** **DONE 2026-08-20. `sparse_attn` stages the gathered KV row in shared memory: paired
       saving 4.227 +/- 0.121 ms per forward over 16 legs, every leg faster, all 16 byte-identical.**
@@ -1483,6 +1718,15 @@ So, in order:
       (`2.82x`, 69 samples over four loads, the two populations DISJOINT), and the drift-free paired
       throughput is `-1.963 +/- 1.504 ms/forward`, 14/18 legs, band EXCLUDING zero, entirely in
       TERM A.** `a` **125.11 -> 123.15 ms** (1.522x -> **1.499x** the 82.18 ms floor); `b` unchanged.
+
+      > **CAVEAT 2026-08-21 (item 1.10, re-measured by item 1.15).** The paired engine band below
+      > was taken across four server loads of which **no two are byte-identical**: the aliased
+      > `hadamard` race was firing in all four, and THIS ITEM starting it is the best explanation
+      > (1.11's four loads are 15/15 identical, 1.12's are 0/15, and only `gemm_fp32` changed).
+      > So the SIZE of the saving is UNPROVEN. The bit-exactness claim is CONFIRMED and more
+      > strongly than when it landed -- with the race fixed the engine reproduces 1.11's loads leg
+      > for leg, which is only possible if the (4,4) tile changed no value. The `0/18` identity this
+      > entry recorded and attributed to 1.9's prefill race is that; traps §35 is corrected.
 
       **The item's own premise was wrong in three places and the mechanism survived all three.**
       (i) the strided path passes `overlap=false`, so `ntok = ratio = 128`, not `2*ratio = 256`;

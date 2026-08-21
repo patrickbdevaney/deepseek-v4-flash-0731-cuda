@@ -6,10 +6,10 @@ here is `LOOP_LOG.md` (88 findings, chronological); these pages organise it by t
 | page | what it holds |
 |---|---|
 | [`kernel-optimisations.md`](kernel-optimisations.md) | every **adopted** AR/spec-decode optimisation, by mechanism: mechanism → measured gain → the gate that proved it — **and §2.11, the 2-D tile that all five "read B once" call sites were missing (1.12)** |
-| [`negative-results.md`](negative-results.md) | levers built and **retired**, with the number that killed each. Longer than the wins list and more useful. |
+| [`negative-results.md`](negative-results.md) | levers built and **retired**, with the number that killed each. Longer than the wins list and more useful — **and §4j, a six-arm ablation campaign that returned six negatives and a boundary prediction falsified in its own gate (1.10)** |
 | [`prefill-optimisation.md`](prefill-optimisation.md) | B9 — why prefill ran decode-shaped kernels, and the four fixes (+30.3 %) — **and §7: one of the four had gone 0.80x and 1.7 took it back** |
 | [`draft-head-finetuning.md`](draft-head-finetuning.md) | S5 — the ML: architecture, loss, data, hyperparameters, feasibility arithmetic, corpus saturation, **and §8: how a promoted head finally got served (2.2)** |
-| [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to |
+| [`measurement-and-traps.md`](measurement-and-traps.md) | how a number becomes trustworthy here, and the ways one has failed to — **and §36, the kernel that read the buffer it was writing, which every instrument on this page pointed away from for two iterations (1.10)** |
 | [`hardware-sm110a.md`](hardware-sm110a.md) | Thor: measured bandwidth **and compute** peaks, ISA facts, operating rules |
 | [`context-scaling.md`](context-scaling.md) | **the term nobody measured** — why every profile was taken at context 9, the attribution, the adoptions (1.0, 1.2, 1.5) that took `b` down 74 %, **1.7, the item that moved Term A instead**, and **1b.2, which moves `b` another 26 % and charges Term A for it**, and **1.11, a Term-A change that only resolved at long context**, and **1.12, the first clean "no, it is not the context term"** |
 | [`context-ceiling-is-not-the-kv-cache.md`](context-ceiling-is-not-the-kv-cache.md) | why `seqmax` is an engine artefact, **and the second ceiling at context 49,140 that is not memory at all** (1.4) |
@@ -27,7 +27,8 @@ historical measurement; the second is where agentic work actually runs.
 | base AR decode | **13.83 tok/s** *(pinned; 11.3 governed — see below)* | 14.33–15.98 | 97 % |
 | acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
-| `build/decode` prefill reproducibility | **byte-identical to 160 positions; racing at 192+** | byte-identical at every length | ladder 1.9; server path unaffected |
+| `build/decode` prefill reproducibility | **byte-identical at EVERY length (1.10)** | byte-identical at every length | **met** — it was `hadamard(y, y)` |
+| `dsv4-server` run-to-run reproducibility | **15/15 load-pairs byte-identical (1.10)**, from **0/15** | every load-pair identical | **met** — it had been silently broken since 1.12 |
 
 | the frozen 8-prompt suite | shipped head | `s3` (live since 2.2) | |
 |---|---|---|---|
@@ -35,6 +36,25 @@ historical measurement; the second is where agentic work actually runs.
 | suite mean tok/s | 22.1425 | **24.2512** | **+9.52 %** (drift-controlled +10.30 %) |
 | worst prompt `tau` | 1.75 | **2.49** | no suite prompt below 2 any more; spread −32.8 % |
 | base AR (drift control) | 11.41 tok/s | 11.33 tok/s | −0.70 % between the two loads |
+
+> **Those two rows were red and the cause was four lines of CUDA.** `hadamard_kernel` gave every
+> thread of a row the whole row to read and one element of it to overwrite — correct only while
+> `y != x`, and three call sites passed the same pointer twice. Only the indexer's compressor sets
+> `rotate` and only `compress_ratio == 4` layers run the indexer, so **335 of 336 divergent pairs
+> had a ratio-4 first differing layer and not one had ratio 128**: a histogram over logs that
+> already existed named the subsystem before any ablation ran, and a six-arm ablation campaign then
+> returned six negatives.
+>
+> **The second row is the one nobody knew about.** Alone, the kernel only fights itself once its
+> grid exceeds the 20 SMs — which is why the `rows = 1` shape decode issues read as exonerated at
+> 0/200. **With any other kernel resident it goes to 65/200 differing, 28 distinct results**, and
+> the engine forks those emits onto a side stream on purpose. Across twelve saved server loads the
+> staged kernel gives **15/15 load-pairs byte-identical** and the flat kernel **0/15** — and the
+> split is not by arm but by DATE: 1.11's four loads are identical, 1.12's four are not, and **1.12
+> changed `gemm_fp32`, i.e. what shares the SM**. Every server A/B through 1.11 stands (all reported
+> byte-identical legs); **1.12's is unproven and is re-run as ladder 1.15**. The fixed engine
+> reproduces 1.11's four loads leg for leg, which independently confirms 1.12's arithmetic was
+> bit-exact. [`measurement-and-traps.md` §35–§36](measurement-and-traps.md).
 
 > **Those two base-AR rows differ by 21 % and neither is wrong — they were taken in different clock
 > states, and until 3.1 nothing recorded which.** `WARM decode` is a 7-step average taken
@@ -56,7 +76,7 @@ hardcoded the base checkpoint. [`kernel-optimisations.md` §2.8](kernel-optimisa
 | spec decode @ ctx ~9.3k | 9.69 tok/s | 11.79 tok/s | **12.60 tok/s** | *unchanged* | not swept | not swept | not swept | not swept | not swept |  +21.7 % then +6.7 % |
 | spec decode @ ctx ~6.2k | 9.59 tok/s | 11.10 tok/s | 11.77 tok/s | *unchanged* | **+2.24 % paired** (11.87 → 12.15 in-session) | **+3.32 % paired** (11.74 → 12.13 in-session) | *no kernel change* | −0.252 ± 0.606 ms/forward — **band covers zero** | **flat, so it lands here too** (the split is −2.348 ± 3.302 flat vs +0.0533 ± 0.4038 per 1000, R² 0.004) |  +15.8 %, +5.8 %, nothing, +2.2 %, **+3.3 %**, nothing, unresolved |
 | spec decode @ ctx ~1.7k | not swept | not swept | not swept | not swept | not swept | **+2.44 % paired** (13.93 → 14.27 in-session) | not swept | not swept | not swept |  the pre-knee leg |
-| **forward term `a`** | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | **125.11 ms** — 1.11's saving is real but its term is not resolved | **123.15 ms** (−1.963 ± 1.504 paired, drift-free over 4 loads) |  1.571× → **1.522×** its 82.18 ms floor |
+| **forward term `a`** *(1.12's value is UNPROVEN — ladder 1.15)* | 136.44 ms | *untouched* | 129.11 ms | *untouched* | *untouched* | **125.11 ms** (−3.996 ± 0.080 paired) | **125.11 ms**, −4.4 ms of *phantom* headroom | **125.11 ms** — 1.11's saving is real but its term is not resolved | **123.15 ms** (−1.963 ± 1.504 paired, drift-free over 4 loads) |  1.571× → **1.522×** its 82.18 ms floor |
 | context term `b` | 7.220 ms/1000 | 4.006 ms/1000 | 2.514 ms/1000 | 3.008 → 3.036, its own arms | 1.942 ms/1000 (−0.572 ± 0.018 paired) | **1.887 ms/1000** (−0.0552 ± 0.0102 paired) | *untouched* (the swing is flat in context) | **1.887 ms/1000** — see `a` | **1.887 ms/1000** — untouched; 1.12 is Term A |  **−74 % cumulative** |
 
 | the one switchable row — `DSV4_KV_PACK` (1b.2, default **OFF**) | default | packed | |

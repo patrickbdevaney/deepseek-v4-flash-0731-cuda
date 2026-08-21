@@ -2,8 +2,56 @@
 #include "indexer.h"
 #include "topk_radix.h"
 #include "dscratch.h"
+#include <cstdlib>   // getenv/atoi for the 1.10 A/B arm
 
-// Hadamard: y[r,j] = D^-0.5 * Σ_i x[r,i] * (-1)^popcount(i&j). One thread per (row, j).
+// Hadamard: y[r,j] = D^-0.5 * Σ_i x[r,i] * (-1)^popcount(i&j).
+//
+// DECODE_LADDER 1.10 -- THIS WAS THE RACE, and the flat kernel below is kept only as its A/B arm.
+// Every thread of a row reads ALL D elements of that row and writes ONE of them, which is correct
+// exactly while `y != x`. Three call sites pass the same pointer twice -- compressor.cu's `rotate`
+// branch (both the prefill `hadamard(out,out,groups,d)` and the single-group emit) and
+// compressed_decode.cu's candidate emit -- so a reading thread could see a neighbour's ALREADY
+// TRANSFORMED value instead of the input, and which it saw was a scheduling outcome. Only the
+// indexer's compressor sets `rotate`, and `indexer_forward` runs only on compress_ratio == 4
+// layers, which is why all 56 of 1.9's first-differing prefill layers were ratio 4 and not one was
+// ratio 128 (tools/lhash_pairs.py, DECODE_LADDER 1.10).
+//
+// THE STAGED KERNEL IS BIT-IDENTICAL WHERE IT WAS ALREADY CORRECT. One block owns one row, stages
+// it in shared memory, and reduces out of shared -- so the k-order of the sum is still i = 0..D-1
+// and every non-aliased caller gets the same float it got before. What changes is that the input a
+// thread reduces can no longer be another thread's output.
+//
+// The old mapping raced at every length in principle and fired only past 20 blocks, because
+// blockDim 256 / D 128 puts two rows in a block and while blocks <= SM count each block has an SM
+// to itself and its warps stay in lockstep. That is the whole reason a defect this crude survived:
+// tests/gate_scratch_init exercised prefills 1..29 (<= 4 blocks) and 1.9's ladder stopped at 160
+// (exactly 20 blocks on this 20-SM box). tests/gate_hadamard_alias sweeps across the boundary.
+// DSV4_HADAMARD_STAGE=0 restores the pre-1.10 flat kernel on the same binary. `hadamard_set_stage`
+// exists next to it for the same reason `gemm_fp32_set_tile` and `index_score_impl` do: the env is
+// read through a function-local static, so a process that only had the variable could not flip arms,
+// and a gate that has to fork per arm is a gate that ends up comparing two different builds.
+static int g_hadamard_stage = -1;
+void hadamard_set_stage(int on){ g_hadamard_stage = on ? 1 : 0; }
+static bool hadamard_stage_on(){
+    if (g_hadamard_stage >= 0) return g_hadamard_stage != 0;
+    static const int env = [](){ const char* e = getenv("DSV4_HADAMARD_STAGE"); return (!e || atoi(e) != 0) ? 1 : 0; }();
+    return env != 0;
+}
+// NO `__restrict__` on y and x: they legitimately alias here, and telling the compiler otherwise is
+// how a correct kernel becomes an incorrect one at -O3.
+__global__ void hadamard_stage_kernel(float* y, const float* x, int rows, int D, float scale) {
+    extern __shared__ float sx[];
+    const int r = blockIdx.x; if (r >= rows) return;
+    const float* xr = x + (size_t)r * D;
+    for (int i = threadIdx.x; i < D; i += blockDim.x) sx[i] = xr[i];
+    __syncthreads();                                   // every read of x is now behind this barrier
+    float* yr = y + (size_t)r * D;
+    for (int j = threadIdx.x; j < D; j += blockDim.x) {
+        float acc = 0.f;
+        for (int i = 0; i < D; ++i) acc += (__popc(i & j) & 1) ? -sx[i] : sx[i];
+        yr[j] = acc * scale;
+    }
+}
 __global__ void hadamard_kernel(float* __restrict__ y, const float* __restrict__ x, int rows, int D, float scale) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x; if (idx >= rows * D) return;
     int r = idx / D, j = idx % D;
@@ -13,7 +61,21 @@ __global__ void hadamard_kernel(float* __restrict__ y, const float* __restrict__
     y[idx] = acc * scale;
 }
 void hadamard(float* y, const float* x, int rows, int D, cudaStream_t stream) {
+    // LOOP_LOG Finding 53's failure mode, avoided rather than reproduced: rows == 0 would launch
+    // with gridDim 0, which fails and leaves cudaErrorInvalidValue in the thread's last-error slot
+    // for the next unrelated check to find. There is nothing to transform.
+    if (rows <= 0 || D <= 0) return;
     float scale = rsqrtf((float)D);
+    const size_t smem = (size_t)D * sizeof(float);
+    // 48 KiB is the launch default; D would have to exceed 12,288 to miss it and the largest D any
+    // caller passes is INDEX_HEAD_DIM = 128. Falling back rather than requesting an opt-in carveout
+    // keeps this off the CUDA-graph capture paths (item 1.4's reason), and the fallback is only
+    // reachable at a D no call site has.
+    if (hadamard_stage_on() && smem <= 48u * 1024u) {
+        const int threads = D < 32 ? 32 : (D > 256 ? 256 : D);
+        hadamard_stage_kernel<<<rows, threads, smem, stream>>>(y, x, rows, D, scale);
+        return;
+    }
     hadamard_kernel<<<(rows * D + 255) / 256, 256, 0, stream>>>(y, x, rows, D, scale);
 }
 

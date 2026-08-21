@@ -1,0 +1,11 @@
+evidence/decode_loop/genout_1p9_ixg0tile01.txt: 8 point(s)   evidence/decode_loop/genout_1p9_ixg0tile02.txt: 8 point(s)
+  point 0: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 1: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 2: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 3: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 4: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 5: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 6: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 7: IDENTICAL — 263 ids (prompt+generated) match at every position
+
+token-id identity: 8/8 points byte-identical, 0 differ

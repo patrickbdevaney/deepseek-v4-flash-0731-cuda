@@ -1,0 +1,6 @@
+[parse] DSV4_PROMPTS_FILE evidence/decode_loop/mainkv_prompts.txt -> 2 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=16 seqmax=3343
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] KV layout: fp32, 2048 B/row, 0.274 GiB for 3343 rows x 43 layers
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 112.8/122.8 GiB

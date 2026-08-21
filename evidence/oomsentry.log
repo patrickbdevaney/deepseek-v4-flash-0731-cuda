@@ -3,3 +3,21 @@
 [oomsentry 2026-08-20T08:53:56-04:00] started: floor=1200MB slope=<-400MB/s below 1800MB poll=0.2s allow='dsv4-server decode decode_probe decode_prechange decode_pre1p4_ref forward load_device'
 [oomsentry 2026-08-20T11:58:02-04:00] !!! MemAvailable 1100 MB falling 2145 MB/s — KILLING decode pid 596925
 [oomsentry 2026-08-20T11:58:07-04:00] killed. MemAvailable now 42155 MB
+[oomsentry 2026-08-21T00:33:05-04:00] !!! MemAvailable 1233 MB falling 2485 MB/s — KILLING decode pid 2045826
+[oomsentry 2026-08-21T00:33:10-04:00] killed. MemAvailable now 6091 MB
+[oomsentry 2026-08-21T00:46:36-04:00] !!! MemAvailable 569 MB falling 2535 MB/s — KILLING decode pid 2064205
+[oomsentry 2026-08-21T00:46:41-04:00] killed. MemAvailable now 16394 MB
+[oomsentry 2026-08-21T01:01:17-04:00] !!! MemAvailable 662 MB falling 625 MB/s — KILLING decode pid 2089736
+[oomsentry 2026-08-21T01:01:22-04:00] killed. MemAvailable now 15006 MB
+[oomsentry 2026-08-21T01:12:03-04:00] !!! MemAvailable 814 MB falling 685 MB/s — KILLING decode pid 2109256
+[oomsentry 2026-08-21T01:12:08-04:00] killed. MemAvailable now 6799 MB
+[oomsentry 2026-08-21T01:13:41-04:00] !!! MemAvailable 922 MB < floor 1200 MB x3 — KILLING decode pid 2112721
+[oomsentry 2026-08-21T01:13:46-04:00] killed. MemAvailable now 46330 MB
+[oomsentry 2026-08-21T01:15:08-04:00] !!! MemAvailable 427 MB falling 2310 MB/s — KILLING decode pid 2116223
+[oomsentry 2026-08-21T01:15:13-04:00] killed. MemAvailable now 31972 MB
+[oomsentry 2026-08-21T01:16:29-04:00] !!! MemAvailable 514 MB < floor 1200 MB x3 — KILLING decode pid 2119420
+[oomsentry 2026-08-21T01:16:34-04:00] killed. MemAvailable now 35738 MB
+[oomsentry 2026-08-21T01:17:50-04:00] !!! MemAvailable 632 MB falling 1045 MB/s — KILLING decode pid 2122605
+[oomsentry 2026-08-21T01:17:55-04:00] killed. MemAvailable now 13755 MB
+[oomsentry 2026-08-21T01:19:14-04:00] !!! MemAvailable 1242 MB falling 915 MB/s — KILLING decode pid 2125818
+[oomsentry 2026-08-21T01:19:19-04:00] killed. MemAvailable now 28637 MB

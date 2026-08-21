@@ -385,6 +385,59 @@ bit-exact, and it is the thing to reach for when `seqmax` is the binding constra
 `EVALS.md` records that it is for GPQA-Diamond. It is not the thing to reach for to make decode
 faster at the contexts this ladder measures.
 
+## 4j. Six ablation arms, six divergences — and a boundary prediction that was falsified in its own gate (ladder 1.10, 2026-08-21)
+
+Two negatives from the iteration that finally named `compressed_attn_forward`'s race, both worth
+keeping because both were *the plan* and neither worked.
+
+**THE ABLATION CAMPAIGN NAMED NOTHING.** 1.10's own entry proposed the cheapest first step: re-run
+1.9's repeat protocol under `DSV4_TOPK_RADIX=0`, then `NO_IXGEMM=1`, on the grounds that *"either
+one coming back clean names the kernel outright"*. `scripts/lhash_ablate.sh` ran that and four more
+arms — one env flag per candidate, each swapping one kernel for a different implementation of the
+same maths on the shipped binary, 56 pairs of 43 layer-hashes per arm:
+
+| arm | swaps | pairs diverging |
+|---|---|---|
+| `base` | nothing (control on today's binary) | 56/56 |
+| `NO_IXGEMM=1` | `index_score` GEMM → tiled | 55/56 |
+| `NO_IXGEMM=1 NO_IXTILE=1` | `index_score` → warp | 56/56 |
+| `DSV4_TOPK_RADIX=0` | radix select → warp selection sort | 56/56 |
+| `NO_FP32MK=1` | 1.12's `gemm_fp32` warp tile → legacy | 55/56 |
+| `DSV4_SPARSE_HPB=1 DSV4_SPARSE_SMEM=0` | 1.7's `sparse_attn` staging → pre-1.7 | 56/56 |
+
+**335 of 336 pairs diverged.** The culprit was an *aliased buffer* in `hadamard`, which has no env
+flag and is not a "candidate kernel" in the sense the arm list was built on. The list came from
+"which kernel is complicated" — split reductions, top-k, a new GEMM tile — and the answer came from
+"which kernel writes the buffer it is reading". **An ablation sweep can only test hypotheses that
+are already on the list, and the cost of the wrong list is the whole sweep.** What the campaign
+*did* buy is real and is why it is recorded rather than deleted: five kernels are now excluded by
+measurement instead of by argument, and the exclusions held when the true cause was found.
+
+The thing that actually named it cost no GPU time at all: `tools/lhash_pairs.py` reading 1.9's
+existing logs all-pairs and printing **the compression ratio of the first differing layer**. Every
+one of 335 was ratio 4, none ratio 128 — and only ratio-4 layers run `indexer_forward` and the
+`rotate` compressor. See [`measurement-and-traps.md` §36](measurement-and-traps.md).
+
+**AND THE GATE'S OWN "DECODE IS SAFE" READING WAS A THIRD NEGATIVE, CAUGHT ONLY BY THE ENGINE.**
+The row sweep found the two aliased call sites decode reaches — both `rows = 1` — clean at 200
+repeats, and that was written down as an exoneration. It is an artefact of benchmarking the kernel
+ALONE: put a filler kernel on the other 20 SMs and the same `rows = 1` call goes to **65/200
+differing, 28 distinct results**. The engine forks those emits onto `g_side` deliberately. **Every
+microbenchmark in this repo runs its kernel alone, so none of them can see a race that needs a
+neighbour** — and the thing that did see it was a cross-run identity matrix over saved server logs
+that cost nothing to compute. [`measurement-and-traps.md` §36](measurement-and-traps.md).
+
+**THE BOUNDARY PREDICTION WAS WRONG IN THE SHAPE THAT MATTERED.** `tests/gate_hadamard_alias` was
+written around a pre-registered claim: threads of a row race only when they are not co-scheduled,
+one 256-thread block owns two rows, so while `blocks <= 20 SMs` every block has an SM to itself and
+the defect cannot fire — a **step** at rows 40, i.e. prefill `s = 163/164`. At 8 repeats per row
+count the gate printed `PREDICTION MISSED` four times: rows 41, 42, 48 and 56 clean, rows 44 racing.
+At 200 repeats it is a **rate**, 0/200 up to 20 blocks and then 17, 28, 41, 74, 116, 184, 200/200 as
+the grid grows. The direction and the scale survived; the word *sharp* did not, and it had been
+inherited from 1.9, which had one sample per length and could not have seen the difference.
+**A threshold measured at one sample per point is a lower bound on where the defect starts, never
+the boundary itself.**
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

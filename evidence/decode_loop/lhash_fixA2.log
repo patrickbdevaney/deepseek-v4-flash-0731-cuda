@@ -1,0 +1,16 @@
+[1.9] 2026-08-21T00:45:17-04:00 binary: decode 2026-08-20T23:42:20-04:00  sweep=6:1:1.50:0,6:1:1.50:1,6:1:1.50:2 NGEN=256 level=2
+[run_model] 103 GiB available, below 105 — reclaiming page cache and re-checking
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> evidence/decode_loop/stephash_fixA2.log
+[run_model] pid 2064205   watch: tail -f evidence/decode_loop/stephash_fixA2.log
+[run_model] memguard armed on 'decode' -> evidence/decode_loop/stephash_fixA2.memguard.log
+scripts/stephash_run.sh: line 60: evidence/decode_loop/stephash_fixA2.txt: No such file or directory
+scripts/stephash_run.sh: line 61: evidence/decode_loop/genout_1p9_fixA2.txt: No such file or directory
+[1.9] 2026-08-21T00:46:50-04:00 fixA2: 0 stephash lines, 0 genout lines
+[1.9] 2026-08-21T00:46:50-04:00 FATAL: no stephash lines from fixA2
+[parse] DSV4_PROMPTS_FILE evidence/decode_loop/mainkv_prompts.txt -> 2 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=16 seqmax=3343
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] KV layout: fp32, 2048 B/row, 0.274 GiB for 3343 rows x 43 layers
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 111.8/122.8 GiB

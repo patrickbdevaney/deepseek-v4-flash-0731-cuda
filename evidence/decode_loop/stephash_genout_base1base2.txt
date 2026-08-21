@@ -1,0 +1,11 @@
+evidence/decode_loop/genout_1p9_base1.txt: 8 point(s)   evidence/decode_loop/genout_1p9_base2.txt: 8 point(s)
+  point 0: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 1: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 2: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 3: IDENTICAL — 197 ids (prompt+generated) match at every position
+  point 4: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 5: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 6: IDENTICAL — 263 ids (prompt+generated) match at every position
+  point 7: LENGTH MISMATCH — 263 vs 262 ids, common prefix of 262 identical
+
+token-id identity: 7/8 points byte-identical, 1 differ

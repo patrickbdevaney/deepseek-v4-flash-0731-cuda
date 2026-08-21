@@ -1,0 +1,169 @@
+[1.10] 2026-08-21T01:29:13-04:00 binaries: decode 2026-08-20T23:42:20-04:00, server 2026-08-20T23:45:06-04:00
+[1.10] 2026-08-21T01:29:13-04:00 === PHASE 0: in-situ gates, BOTH arms (no checkpoint) ===
+[1.10] 2026-08-21T01:29:14-04:00 gate_hadamard_alias --control PASS (the memcmp sees a one-ulp change)
+gate_hadamard_alias: D=128  SMs=20  pre-1.10 blockDim=256 -> 2 rows/block
+PREDICTION for the OFF arm: aliased == reference while blocks <= 20 SMs, i.e. rows <= 40 (prefill s <= 163 at ratio 4); broken from rows 41 (s >= 164).
+The ON arm must be clean at EVERY row count.
+
+--- ARM OFF = pre-1.10 flat kernel (hadamard_set_stage(0)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     2       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     4       2   0/200 differ,  1 distinct result    0/200 differ  OK        
+     8       4   0/200 differ,  1 distinct result    0/200 differ  OK        
+    16       8   0/200 differ,  1 distinct result    0/200 differ  OK        
+    24      12   0/200 differ,  1 distinct result    0/200 differ  OK        
+    32      16   0/200 differ,  1 distinct result    0/200 differ  OK        
+    36      18   0/200 differ,  1 distinct result    0/200 differ  OK        
+    38      19   0/200 differ,  1 distinct result    0/200 differ  OK        
+    39      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    40      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    41      21   0/200 differ,  1 distinct result    0/200 differ  OK           <- PREDICTION MISSED
+    42      21   3/200 differ,  4 distinct results   0/200 differ  ALIAS RACE
+    44      22  34/200 differ, 25 distinct results   0/200 differ  ALIAS RACE
+    48      24  35/200 differ, 34 distinct results   0/200 differ  ALIAS RACE
+    56      28  75/200 differ, 70 distinct results   0/200 differ  ALIAS RACE
+    64      32  101/200 differ, 95 distinct results   0/200 differ  ALIAS RACE
+    96      48  179/200 differ, 180 distinct results   0/200 differ  ALIAS RACE
+   128      64  196/200 differ, 197 distinct results   0/200 differ  ALIAS RACE
+   256     128  200/200 differ, 200 distinct results   0/200 differ  ALIAS RACE
+   768     384  200/200 differ, 200 distinct results   0/200 differ  ALIAS RACE
+
+--- ARM ON  = shipped staged kernel (hadamard_set_stage(1)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     2       1   0/200 differ,  1 distinct result    0/200 differ  OK        
+     4       2   0/200 differ,  1 distinct result    0/200 differ  OK        
+     8       4   0/200 differ,  1 distinct result    0/200 differ  OK        
+    16       8   0/200 differ,  1 distinct result    0/200 differ  OK        
+    24      12   0/200 differ,  1 distinct result    0/200 differ  OK        
+    32      16   0/200 differ,  1 distinct result    0/200 differ  OK        
+    36      18   0/200 differ,  1 distinct result    0/200 differ  OK        
+    38      19   0/200 differ,  1 distinct result    0/200 differ  OK        
+    39      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    40      20   0/200 differ,  1 distinct result    0/200 differ  OK        
+    41      21   0/200 differ,  1 distinct result    0/200 differ  OK        
+    42      21   0/200 differ,  1 distinct result    0/200 differ  OK        
+    44      22   0/200 differ,  1 distinct result    0/200 differ  OK        
+    48      24   0/200 differ,  1 distinct result    0/200 differ  OK        
+    56      28   0/200 differ,  1 distinct result    0/200 differ  OK        
+    64      32   0/200 differ,  1 distinct result    0/200 differ  OK        
+    96      48   0/200 differ,  1 distinct result    0/200 differ  OK        
+   128      64   0/200 differ,  1 distinct result    0/200 differ  OK        
+   256     128   0/200 differ,  1 distinct result    0/200 differ  OK        
+   768     384   0/200 differ,  1 distinct result    0/200 differ  OK        
+
+negative control: hadamard(y,x) with y != x reproduced the shipped kernel bit for bit, 200/200 repeats, at every row count, on BOTH arms -- so the staging changed nothing where the buffers were already distinct, and every difference below is aliasing.
+
+OFF arm: 9 of 21 row counts race, first at rows=42 (blocks=21, SMs=20).
+ON  arm: 0 of 21 row counts race.
+
+PASS: the pre-1.10 kernel races and the shipped one does not -- hadamard(y,y) == hadamard(y,x) at every row count, 200 repeats each.
+gate_hadamard_alias: D=128  SMs=20  pre-1.10 blockDim=256 -> 2 rows/block
+PREDICTION for the OFF arm: aliased == reference while blocks <= 20 SMs, i.e. rows <= 40 (prefill s <= 163 at ratio 4); broken from rows 41 (s >= 164).
+The ON arm must be clean at EVERY row count.
+
+--control: one reference element is bumped by one ulp; EVERY row must FAIL.
+
+--- ARM OFF = pre-1.10 flat kernel (hadamard_set_stage(0)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     2       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     4       2   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     8       4   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    16       8   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    24      12   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    32      16   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    36      18   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    38      19   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    39      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    40      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    41      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    42      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    44      22   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    48      24   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    56      28   4/4 differ,  3 distinct results   4/4 differ  SEES THE ULP
+    64      32   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+    96      48   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+   128      64   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+   256     128   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+   768     384   4/4 differ,  4 distinct results   4/4 differ  SEES THE ULP
+
+--- ARM ON  = shipped staged kernel (hadamard_set_stage(1)) ---
+  rows  blocks  aliased hadamard(y,y)              non-aliased  verdict
+     1       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     2       1   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     4       2   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+     8       4   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    16       8   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    24      12   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    32      16   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    36      18   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    38      19   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    39      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    40      20   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    41      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    42      21   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    44      22   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    48      24   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    56      28   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    64      32   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+    96      48   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+   128      64   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+   256     128   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+   768     384   4/4 differ,  1 distinct result    4/4 differ  SEES THE ULP
+
+CONTROL PASS: with one ulp flipped in the reference, every comparison on both arms differed at all 21 row counts. The memcmp is live.
+[1.10] 2026-08-21T01:29:14-04:00 arm=stage gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1.10] 2026-08-21T01:29:20-04:00 arm=stage gate_index_score rc=0
+[gate_index_score] 1130 shapes, 21773760 floats compared, 0 differing, 0 bad shapes -> PASS
+[1.10] 2026-08-21T01:29:24-04:00 arm=stage gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.10] 2026-08-21T01:29:29-04:00 arm=stage gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.10] 2026-08-21T01:29:33-04:00 arm=stage gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.10] 2026-08-21T01:29:38-04:00 arm=stage gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.10] 2026-08-21T01:29:38-04:00 arm=stage gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1.10] 2026-08-21T01:29:50-04:00 arm=stage gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1.10] 2026-08-21T01:29:50-04:00 arm=stage gate_idx_pack rc=0
+GATE: PASS — unpack(pack(x)) == x bit-for-bit on every element
+[1.10] 2026-08-21T01:29:55-04:00 arm=stage gate_scratch_init rc=0
+gate_scratch_init: GATE PASS (no uninitialised read here)
+[1.10] 2026-08-21T01:29:55-04:00 arm=flat gate_units rc=0
+[moe] n=8 dim=256 inter=128 nr=8 na=2  |y|max=9.2916 max_abs=0.00000 max_rel=0.00000 -> PASS
+[hc] bs=8 hc=4 d=64  pre=4.92e-07 post=5.96e-07 comb=1.49e-07 postout=1.43e-06 -> PASS
+Gate K (units): PASS
+[1.10] 2026-08-21T01:30:01-04:00 arm=flat gate_index_score rc=0
+[gate_index_score] 1130 shapes, 21773760 floats compared, 0 differing, 0 bad shapes -> PASS
+[1.10] 2026-08-21T01:30:05-04:00 arm=flat gate_indexer_decode rc=0
+[indexer_decode ratio=4 s=16 pos=15 T=4 topk=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.10] 2026-08-21T01:30:10-04:00 arm=flat gate_compressed_decode rc=0
+[compressed_decode strided ratio=128 s=256 pos=255 T=2] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[1.10] 2026-08-21T01:30:14-04:00 arm=flat gate_compressed_graph rc=0
+[cgraph] strided_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.10] 2026-08-21T01:30:19-04:00 arm=flat gate_indexer_graph rc=0
+[igraph] indexer_dp graph replay vs sequential: cosine=1.0000000 maxabs/|o|=0.00e+00 -> PASS (T0=2)
+[1.10] 2026-08-21T01:30:19-04:00 arm=flat gate_compressor_emit rc=0
+[compressor_emit ratio=4 overlap=1 rotate=0 d=512 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+[compressor_emit ratio=4 overlap=1 rotate=1 d=128 s=16 T=4] cosine=1.00000000 rms=0.00e+00 maxabs=0.00e+00 -> PASS
+compressor_emit equivalence: PASS
+[1.10] 2026-08-21T01:30:31-04:00 arm=flat gate_prefill_len rc=0
+  s=19 T4=4 PASS
+  s=20 T4=5 PASS
+[prefill_len] GATE PASS (0 prefix mismatches, 0 stages leaving a CUDA error)
+[1.10] 2026-08-21T01:30:31-04:00 arm=flat gate_idx_pack rc=0
+GATE: PASS — unpack(pack(x)) == x bit-for-bit on every element
+[1.10] 2026-08-21T01:30:36-04:00 arm=flat gate_scratch_init rc=0
+gate_scratch_init: GATE PASS (no uninitialised read here)
+[1.10] 2026-08-21T01:30:36-04:00 done.
