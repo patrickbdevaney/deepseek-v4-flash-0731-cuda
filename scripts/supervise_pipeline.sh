@@ -66,8 +66,12 @@ while :; do
 
     # The control is done. From here the chain owns the run; it is finished once the eval battery
     # is up, which is the last thing it starts.
+    # The chain's completion marker, NOT the eval battery. The chain used to end by starting the
+    # battery; it now stops after staging so the remaining decode levers can run first. Watching
+    # for the battery here would mean a chain that SUCCEEDED never looks done, and the supervisor
+    # would restart finished work.
     watch_unit dsv4-chain scripts/chain_after_s3recap.sh evidence/chain/chain.log \
-        'pgrep -f eval_supervise.sh >/dev/null || grep -q "eval_resume.sh returned" evidence/chain/chain.log 2>/dev/null'
-    case $? in 2) exit 1;; 0) LOG "chain reached the eval battery; supervision complete"; exit 0;; esac
+        'grep -q "chain complete:" evidence/chain/chain.log 2>/dev/null'
+    case $? in 2) exit 1;; 0) LOG "chain complete (arms measured, best head staged); supervision complete"; exit 0;; esac
     sleep 120
 done

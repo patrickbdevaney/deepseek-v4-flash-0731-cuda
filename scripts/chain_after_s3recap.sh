@@ -115,9 +115,22 @@ fi
 # across two configurations publishes as one homogeneous run. Stamp it before the battery starts.
 python3 tools/stamp_eval_provenance.py "$BEST" "$BLK" || LOG "provenance stamp failed (non-fatal)"
 
-# ---------------------------------------------------------------- 4. the eval battery
-# Authorised by the operator 2026-08-21 for exactly this point: "after you could rewire the systemd
-# evals again for another now decode optimized eval battery". The standing rule against restarting
-# it held while the GPU was needed for kernel work; that phase is over.
-LOG "resuming the eval battery on $BEST"
-bash scripts/eval_resume.sh; LOG "eval_resume.sh returned $?"
+# ---------------------------------------------------------------- 4. STOP. Evals come last.
+# CHANGED 2026-08-21 on the operator's decision, and it is the right call for two reasons beyond
+# the obvious one.
+#
+#   (a) WALL TIME. The battery is ~3.46 M tokens. At today's 26.27 tok/s that is ~37 h; every
+#       point of decode we win first comes straight off that.
+#   (b) QUOTABILITY, which is the bigger one. The completed rows were measured 2026-08-13..19 on
+#       s3 at block 6 on an older engine. Finishing the remainder now would publish a table whose
+#       accuracy pools legitimately but whose throughput column is an average over configurations.
+#       Running the battery ONCE, at the end, on the final head and width, removes the question
+#       instead of documenting it.
+#
+# So the chain now ends here, with the best head staged and ready for the next lever. The battery
+# is started deliberately, later, by scripts/eval_resume.sh -- unchanged and still idempotent.
+LOG "chain complete: arms measured, best head staged, eval battery deliberately NOT started"
+LOG "next: the remaining decode levers (P2.5 KL half, P2.6 HASS, P2.1 labeller), then ONE"
+LOG "      homogeneous eval battery at the final configuration"
+python3 tools/promote_head.py 2>/dev/null | tail -3 || true
+LOG "registry:"; grep -E '^\| `' HEAD_REGISTRY.md | tail -6
