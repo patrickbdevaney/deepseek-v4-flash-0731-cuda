@@ -154,7 +154,11 @@ def main():
                     help="confidence-BCE weight; 0 until free-running labels exist (see comment)")
     ap.add_argument("--pos-per-seq", type=int, default=8, help="training positions sampled per sequence")
     ap.add_argument("--strict", action="store_true", help="fail on any state_dict mismatch")
-    ap.add_argument("--block", type=int, default=6, help="draft block; MUST match the engine (default 6)")
+    ap.add_argument("--block", type=int, default=None,
+                    help="draft block; MUST match the engine. Default: the checkpoint's own "
+                         "dspark_block_size from config.json, which ladder 2.1 made the served "
+                         "width too. Hardcoding 6 here is what let the --gate call site run at a "
+                         "width the engine no longer writes.")
     ap.add_argument("--bisect", default=None, help="engine intermediates.bin to diff against")
     ap.add_argument("--gate", action="store_true", help="replay engine probes, report agreement")
     ap.add_argument("--smoke", action="store_true", help="load + one forward + one backward, then stop")
@@ -213,6 +217,16 @@ def main():
     # of noise tokens through a different attention length: not a subtle numerics gap, a different
     # computation. This is the same trained-width vs serving-width distinction that produced F93's
     # defect, showing up a third time.
+    # RESOLVE THE WIDTH FROM THE CHECKPOINT unless told otherwise. This used to default to 6 while
+    # config.json said 5, and every call site had to remember to pass --block. One did not: the
+    # equivalence gate in s5_session.sh, which then parsed 6 engine tokens out of probe lines the
+    # engine wrote with 5 and died on the next field ("invalid literal for int(): '0.2881'").
+    # Ladder 2.1 (2026-08-21) moved the SERVING width to 5 as well, so the trained width, the
+    # served width and the checkpoint config now finally agree -- and the default is the safe one.
+    if a.block is None:
+        a.block = int(_cfg.get("dspark_block_size", 5))
+        print(f"[train] --block not given; using the checkpoint's dspark_block_size = {a.block}",
+              flush=True)
     _cfg["dspark_block_size"] = a.block
     margs = ModelArgs(**_cfg)
     print(f"[train] ModelArgs: n_mtp={margs.n_mtp_layers} block={margs.dspark_block_size} "

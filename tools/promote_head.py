@@ -121,7 +121,11 @@ def promote(a):
     if not ev["gate"]:                fails.append("no 'GATE PASS' first-token check")
     if ev["instruments_present"]:     fails.append(f"eval was NOT clean: {ev['instruments_present']}")
     if ev["n_suite"] < 8:             fails.append(f"suite has {ev['n_suite']} real prompts, need 8")
-    if ev["blocks"] != [6]:           fails.append(f"eval blocks {ev['blocks']}, protocol is block 6")
+    # The protocol width follows the engine. Ladder 2.1 shipped 6 -> 5, and a head evaluated at a
+    # width it was not trained at rolls a step it never learned. DSV4_PROTOCOL_BLOCK keeps the two
+    # in step; it is NOT a licence to compare tau across widths -- see --incumbent-tau.
+    _pb = int(os.environ.get("DSV4_PROTOCOL_BLOCK", "5"))
+    if ev["blocks"] != [_pb]:         fails.append(f"eval blocks {ev['blocks']}, protocol is block {_pb}")
     if ev["suite_tok_s"] is None:     fails.append("no suite points parsed")
     # LADDER 2.4 -- THE RULER. This compared `suite_tok_s`, against a row read out of
     # HEAD_REGISTRY.md: a number recorded on whatever engine revision was current when THAT head

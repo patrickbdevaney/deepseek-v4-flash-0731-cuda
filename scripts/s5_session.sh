@@ -31,7 +31,16 @@ GEN="${S5_GEN:-$WORK/gen.txt}"
 LOG(){ printf '[s5:%s %s] %s\n' "$NAME" "$(date -Is)" "$*"; }
 DIE(){ LOG "HALT: $*"; exit 1; }
 
-SW=$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$N+1)))")
+# THE BLOCK WIDTH, IN ONE PLACE. Ladder 2.1 shipped 6 -> 5 on 2026-08-21 (+3.91 +/- 1.65 % at
+# equal tau, ids bit-identical). It was hardcoded as `6` in seven sweep strings here and gated as
+# `[6]` in promote_head.py. It has to move together everywhere or the session trains a head for one
+# width, evaluates it at another, and grades it against archived numbers taken at a third.
+#
+# tau IS NOT COMPARABLE ACROSS WIDTHS -- its ceiling is the width. Every tau in HEAD_REGISTRY.md was
+# taken at block 6 and a block-5 tau cannot be measured against it. That is what --incumbent-tau on
+# promote_head.py is for, and S5_INCUMBENT_TAU below carries a value re-measured at THIS width.
+BLK="${S5_BLOCK:-5}"
+SW=$(python3 -c "print(','.join(f'$BLK:1:1.5:{i}' for i in range(1,$N+1)))")
 
 # ---------------------------------------------------------------- preflight: will this fit on disk?
 # Measured, not guessed: trial captures ran 6.8 MB per ~200-token sequence = ~33 KB/token, and the
@@ -117,7 +126,7 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
         mkdir -p "$CDIR/cap"
         sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
         DSV4_PROMPTS_FILE="$CDIR/gen.txt" DSV4_CAPTURE="$CDIR/cap" DSV4_NPROBE=16 \
-            DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$CN+1)))")" \
+            DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'$BLK:1:1.5:{i}' for i in range(1,$CN+1)))")" \
             scripts/run_model.sh "$ROOT/evidence/${NAME}_c${ci}_cap.log" ./build/decode \
             "$CKPT" "0,671,6102,294,8760,344" 8 "" 8
         while pgrep -x decode >/dev/null; do sleep 60; done
@@ -133,7 +142,7 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
     if [ "$ci" -eq 0 ]; then
         LOG "equivalence gate: port vs engine drafts"
         "${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/c0/cap" --ckpt /ckpt \
-            --out "/cap/$NAME/x" --gate 2>&1 | tee "$ROOT/evidence/${NAME}_gate.log" | tail -2
+            --out "/cap/$NAME/x" --block "$BLK" --gate 2>&1 | tee "$ROOT/evidence/${NAME}_gate.log" | tail -2
         AGREE=$(grep -oE 'agreement: [0-9]+/[0-9]+ = [0-9.]+%' "$ROOT/evidence/${NAME}_gate.log" |
                 tail -1 | grep -oE '[0-9.]+%$' | tr -d '%')
         python3 -c "import sys; sys.exit(0 if float('${AGREE:-0}') >= 90 else 1)" \
@@ -159,7 +168,7 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
 train a chunk as if it were a fresh session (that would silently discard every earlier chunk)"
     fi
     "${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/c$ci/cap" --ckpt /ckpt \
-        --out "/cap/$NAME/c$ci/trained" --pos-per-seq 16 "${RES[@]}" "${LOSSW[@]}" \
+        --out "/cap/$NAME/c$ci/trained" --pos-per-seq 16 --block "$BLK" "${RES[@]}" "${LOSSW[@]}" \
         --total-steps "$NTRAIN" --step-offset "$OFF" \
         --metrics-out "/cap/$NAME/c$ci/train_metrics.json" \
         2>&1 | tee "$ROOT/evidence/${NAME}_c${ci}_train.log" | tail -4
@@ -205,7 +214,7 @@ BEST=1.5; BESTR=0
 for THR in 0.0 0.5 1.0 1.5 2.0; do
     sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
     DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
-        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:$THR:{i}' for i in range(1,9)))")" \
+        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'$BLK:1:$THR:{i}' for i in range(1,9)))")" \
         scripts/run_model.sh "$ROOT/evidence/${NAME}_adaptk_${THR}.log" ./build/decode \
         "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 220
     while pgrep -x decode >/dev/null; do sleep 30; done
@@ -233,10 +242,10 @@ echo "{\"adaptk\": $BEST, \"holdout_tok_s\": $BESTR, \"criterion\": \"pooled tok
     > "$WORK/adaptk.json"
 
 # ---------------------------------------------------------------- eval on the FROZEN protocol
-LOG "eval: 8-prompt suite, NGEN0=200, block 6, clean"
+LOG "eval: 8-prompt suite, NGEN0=200, block $BLK, clean"
 SUITE=$(cat "$ROOT/protocol/suite_prompts.txt")   # frozen in-repo; a temp-dir protocol is not a protocol
 sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
-DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="6:1:1.5:0,6:1:1.5:1,6:1:1.5:2,6:1:1.5:3,6:1:1.5:4,6:1:1.5:5,6:1:1.5:6,6:1:1.5:7,6:1:1.5:8" \
+DSV4_PROMPTS="$SUITE" DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'$BLK:1:1.5:{i}' for i in range(0,9)))")" \
     scripts/run_model.sh "$ROOT/evidence/${NAME}_eval.log" ./build/decode \
     "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 200
 while pgrep -x decode >/dev/null; do sleep 60; done
@@ -252,7 +261,7 @@ if [ "$BEST" != "1.5" ]; then
     LOG "second eval at the re-fitted adaptK $BEST (reported separately; NOT the registry number)"
     sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
     DSV4_PROMPTS="$SUITE" \
-        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:$BEST:{i}' for i in range(0,9)))")" \
+        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'$BLK:1:$BEST:{i}' for i in range(0,9)))")" \
         scripts/run_model.sh "$ROOT/evidence/${NAME}_eval_adaptk${BEST}.log" ./build/decode \
         "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 200
     while pgrep -x decode >/dev/null; do sleep 30; done
@@ -269,7 +278,7 @@ fi
 LOG "secondary gate: $HOLD-prompt reasoning hold-out, trained head"
 sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
 DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
-    DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$HOLD+1)))")" \
+    DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'$BLK:1:1.5:{i}' for i in range(1,$HOLD+1)))")" \
     scripts/run_model.sh "$ROOT/evidence/${NAME}_holdout.log" ./build/decode \
     "$CKPT" "0,671,6102,294,8760,344" 8 "$WORK/head" 220
 while pgrep -x decode >/dev/null; do sleep 60; done
@@ -287,7 +296,7 @@ if [ ! -s "$WORK/holdout_control.json" ]; then
     LOG "paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)"
     sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
     DSV4_PROMPTS_FILE="$WORK/holdout.txt" \
-        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'6:1:1.5:{i}' for i in range(1,$HOLD+1)))")" \
+        DSV4_BLKSWEEP="$(python3 -c "print(','.join(f'$BLK:1:1.5:{i}' for i in range(1,$HOLD+1)))")" \
         scripts/run_model.sh "$ROOT/evidence/${NAME}_holdout_control.log" ./build/decode \
         "$CKPT" "0,671,6102,294,8760,344" 8 "" 220
     while pgrep -x decode >/dev/null; do sleep 30; done
@@ -316,7 +325,8 @@ python3 tools/promote_head.py archive --head "$WORK/head" --eval "$ROOT/evidence
     --name "$NAME" --metrics "$WORK/train_metrics.json" --notes "auto: $N samples, ngen $NGEN"
 
 # ---------------------------------------------------------------- promote (may fail; not the chain rule)
-python3 tools/promote_head.py promote --head "$WORK/head" --eval "$ROOT/evidence/${NAME}_eval.log" \
+INC=(); [ -n "${S5_INCUMBENT_TAU:-}" ] && INC=(--incumbent-tau "$S5_INCUMBENT_TAU")
+python3 tools/promote_head.py promote "${INC[@]}" --head "$WORK/head" --eval "$ROOT/evidence/${NAME}_eval.log" \
     --name "$NAME" --metrics "$WORK/train_metrics.json" && LOG "PROMOTED" || LOG "not promoted (archived)"
 
 # ---------------------------------------------------------------- the SESSION decision

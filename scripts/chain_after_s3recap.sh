@@ -60,7 +60,10 @@ run_arm(){
         # into /home/patrickd/s5-capture does not resolve as /cap inside it.
         ln -sfn ../../s3recap/c$ci/cap "$S5/$name/c$ci/cap"
     done
+    # Same width and same-width incumbent as the control, or the arms are graded on a different
+    # ruler than the head they are trying to beat.
     S5_GEN="$S5/s3recap/gen.txt" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 \
+    S5_BLOCK="${S5_BLOCK:-5}" S5_INCUMBENT_TAU="$(cat evidence/baseline_tau.value 2>/dev/null)" \
     S5_ACE="$ace" S5_ATV="$atv" \
         bash scripts/s5_session.sh "$name" "$S5/mixed_prompts_s3.txt" 1536 512 \
         || LOG "arm $name failed (rc=$?), continuing"

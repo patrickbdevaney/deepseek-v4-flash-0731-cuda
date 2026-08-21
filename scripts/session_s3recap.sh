@@ -35,17 +35,27 @@ while ! grep -q '^- \[x\] \*\*2\.1' DECODE_LADDER.md; do
 done
 LOG "2.1 is closed"
 
-# ---- gate 2: HALT if 2.1 moved the width off 6 ----
-# s5_session.sh hardcodes `6:1:1.5:i` in the capture sweep and --block 6 in the trainer. If 2.1
-# adopted a different width, capturing at 6 would silently produce a head tuned for a block the
-# engine no longer runs. A false halt costs one look; a false proceed costs a ~6 h capture.
-entry(){ awk '/^- \[x\] \*\*2\.1/{f=1;print;next} f&&/^- \[/{exit} f{print}' DECODE_LADDER.md; }
-if ! entry | grep -qi 'block 6'; then
-    entry
-    DIE "2.1's write-up does not clearly retain block 6. Capturing at 6 may now be wrong -- \
-s5_session.sh hardcodes 6 in the capture sweep AND the trainer. Resolve by hand, then rerun."
+# ---- gate 2: the width we capture at must be the width the engine serves ----
+# 2.1 shipped 6 -> 5 and this gate used to grep 2.1's write-up for "block 6". That was right for
+# one day. The durable check reads the engine's own default and refuses to capture at anything
+# else, because the width is baked into DSV4_BLKSWEEP at capture time, into --block at train time,
+# and into tau's ceiling at eval time.
+BLK="${S5_BLOCK:-5}"
+ENGBLK=$(grep -oP 'int\s+blk\s*=\s*\K[0-9]+' include/dsv4_engine.h | head -1)
+[ -n "$ENGBLK" ] || DIE "could not read the engine's default block from include/dsv4_engine.h"
+[ "$BLK" = "$ENGBLK" ] || DIE "S5_BLOCK=$BLK but the engine serves $ENGBLK -- capturing at a width \
+the engine does not run produces a head tuned for nothing"
+LOG "capturing and training at block $BLK, which is what the engine serves"
+
+# ---- gate 2b: a same-width incumbent, because tau's ceiling IS the width ----
+# Every tau in HEAD_REGISTRY.md was taken at block 6. Comparing a block-5 candidate against one
+# would be comparing a 5-ceilinged number with a 6-ceilinged one.
+if [ ! -s evidence/baseline_tau.value ]; then
+    LOG "no block-$BLK baseline yet; measuring the deployed head"
+    bash scripts/baseline_tau.sh || DIE "baseline measurement failed"
 fi
-LOG "2.1 retains block 6; the hardcoded capture sweep is still correct"
+export S5_INCUMBENT_TAU=$(cat evidence/baseline_tau.value)
+LOG "incumbent tau at block $BLK: $S5_INCUMBENT_TAU (deployed head, re-measured)"
 
 # ---- gate 3: the GPU must be free ----
 LOG "waiting for the GPU (one model at a time: 100.4 GiB of weights in a 122 GiB pool)"
@@ -57,7 +67,7 @@ LOG "GPU is free; starting the session"
 # 3 chunks, matching s3's own session shape (1536 corpus, 64 hold-out, 1472 training steps).
 # S5_KEEP_CAP: 279 GB free against a 28 GB capture. Retaining it makes every later recipe arm
 # cost training only. The capture is the artifact this session exists to produce correctly.
-export S5_GEN="$GEN" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1
+export S5_GEN="$GEN" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 S5_BLOCK="$BLK"
 LOG "s5_session.sh $NAME $PROMPTS $N 512   (S5_GEN set: pass 1 is SKIPPED)"
 bash scripts/s5_session.sh "$NAME" "$PROMPTS" "$N" 512
 rc=$?
