@@ -31,58 +31,42 @@
         # not speed": it is the gate on the whole eval programme. Accuracy is invariant under every
         # other item here (spec decode is exact, the kernels are bit-exact), so the battery could
         # otherwise run at any time -- a non-deterministic forward is the ONLY reason it cannot.
-1.14    # the first arena pass reads scratch it never wrote. Same family as 1.10: the arena slab is
-        # cudaMalloc'd and never zeroed, so the first indexer step in a process differs from every
-        # later one on identical inputs. Both must close before P2 measures anything.
-2.1     # re-tune block width now that 1.1/1.2 changed the shape
-2.3     # confidence head at verify time
-1.13    # resolve whether 1.11's saving is flat or grows with context. Bookkeeping on a shipped win,
-        # so it sorts below the two items that still buy something.
-3.2     # final PERF.md re-run, both coefficients -- then CONTINUE into P2, per the amended entry
-
 # ============================================================================================
-# P2 -- THE ACCEPTANCE PROGRAMME. Authorised by the operator 2026-08-20. The kernel path is at
-# the bandwidth floor; tau is the only multiplier left. Reasoning and arithmetic: PHASE2_PLAN.md.
-# Today 24.7 tok/s at suite tau 3.84; block-6 perfect is 40.6; defensible target 30-33.
+# RE-SEQUENCED 2026-08-21 on the operator's instruction. The kernel phase is winding down to
+# conserve Claude tokens; what remains should be LONG POLES ON THOR, not agentic iterations.
 #
-# The numbering in DECODE_LADDER.md is by topic. THIS is the execution order, and it differs on
-# purpose: the two items that cost nothing and protect everything downstream go first, and the
-# prefill profile is pulled forward because it is one checkpoint load and it decides whether the
-# thing is usable as a daily driver at all -- a question no amount of tau answers.
+# One question was applied to every kernel item: does leaving it undone force a RETRAIN later?
+# Only 2.1 does. Everything else defers to after the heads and the eval battery.
+#
+# The loop STOPS after 2.1 (`touch DECODE_LOOP_STOP`). What follows is driven by hand as detached
+# jobs, because scripts/s5_session.sh already IS the pipeline and needs no agent to run it.
 # ============================================================================================
-P2.0    # verify + baseline the head archive. Nothing trains on top of an archive nobody proved.
-        # The quick pass already passes (10 dirs, 46 files, 0 problems); the --full sha256 pass has
-        # never run and must, ONCE THE LOOP IS IDLE -- it reads ~30 GB and would contend.
-P2.4    # fix promote_head.py (= ladder 2.4) and re-adjudicate the 4 refused heads. OFFLINE, no
-        # model load. It compares suite_tok_s against a row from another engine revision; base AR
-        # moved -17.4 % across the drift while tau reproduced to 4 d.p. Measuring P2 heads on the
-        # current rule grades the programme with a broken ruler, so this precedes every head.
-2.4     # the SAME item as P2.4 above, under its topic number. Listed so that if the P2.4
-        # iteration closes only one of the two checkboxes, the next iteration closes the other
-        # instead of leaving an orphan that sorts behind "then stop".
-2.5     # base AR fell 72.5 -> 87.7/88.2 ms/tok on the identical WARM decode, -17.4 %, twice, in
-        # two independent loads -- while speculative throughput on the same runs stayed flat.
-        # A real 17 % forward regression cannot leave spec unchanged, so the likeliest reading is
-        # that a 7-step warm average is too short for a path 1.0 put a main-KV cache on. It sorts
-        # HERE, with the other ruler fix and ahead of every head, because it is the DENOMINATOR of
-        # every "N.NNx vs base AR" figure this project reports -- including the ones P2.9 writes
-        # into the release bundle. Unlisted it sorted behind P2.10, i.e. it would never have run.
-P2.7    # DSV4_DPROF on a PS=1023 prefill. One load, never taken. 12,282 prompt tokens = 227.6 s
-        # = 3.8 min TTFT, and prefill DECLINES with prompt size. Pre-registered target: TTFT < 30 s
-        # at 12 k uncached, i.e. >= 410 tok/s, a 7.6x. If the cost is diffuse, say so and stop.
-P2.1    # the pattern labeller, as an extension of DSV4_SUFFIXPROBE. Same function offline (labels
-        # the corpus) and online (drives block width) -- two implementations would silently diverge.
-P2.2    # falsify H1 on 40 tasks x 2 harnesses. Also prices S6 for free via SUFFIXPROBE, on exactly
-        # the long-repeated-context workload F80 named as its own reopening condition.
-P2.3    # harvest (h_40/41/42, p_target) from live verify forwards. Zero marginal compute. Ships a
-        # SAMPLING POLICY, not a capture schedule -- the battery alone is 3.46 M tokens / 114 GB.
-P2.5    # the beta sweep {0, 0.1, 0.5} + deficit weighting. The one recipe change, aimed at F117.
-        # beta=0 reproduces the current recipe exactly, so the sweep contains its own control.
-P2.6    # HASS on steps 2-3, then per-bucket block width. Sequenced after P2.5: both act on the
-        # same positions and would confound it. Re-price m16 if the width moves (F129).
-P2.8    # prefix caching under a real 20-turn agentic session, incl. a mid-context compression
-        # event. Also re-decides 1b.2's default against the PRODUCTION context distribution.
-P2.9    # name and package the best head. The promotion rule is written BEFORE the candidates
-        # exist: highest suite mean tau that also holds both per-category floors.
-P2.10   # final PERF.md / HEAD_REGISTRY / PHASE2_PLAN reconciliation, and grade the pre-registered
-        # bands against what happened -- including the ones that were wrong. Then stop.
+2.1     # THE ONLY REMAINING KERNEL PREREQUISITE. train_head.py --block MUST match the engine, and
+        # the loss weights positions w_k = exp(-(k-1)/gamma) with gamma = block_size -- the block is
+        # baked into what the head is trained to be GOOD AT, not merely how often it is rolled. A
+        # head trained at 6 has never seen steps 7-8, so if 2.1 moves the width UP, every head
+        # trained before it is retrained. F93/F94 measured tau rising 5->6 and falling 6->8 on
+        # three of four realistic prompts, so 6 may well survive -- but "may well" is not a basis
+        # for spending a training session. Fix the width, THEN train. It is also a decode win in
+        # its own right and needs no new kernel, which is why it is the one item that survives.
+# --------------------------------------------------------------------------------------------
+# DEFERRED PAST THE HEADS AND THE EVALS. None of these changes what a head is trained to be, and
+# none blocks the server: 1.10's race was in build/decode, NOT the server, which prefills in
+# EXT_CHUNK=64 chunks and never issues a compressed call wide enough to reach the threshold.
+#
+# 2.3 carries the one real retrain hazard and is deferred ANYWAY, because its fix is not a flag.
+# a_conf=0 is a MEASURED decision: wired and measured at ce=10.43, tv=0.93, conf=10034 -- ~1000x --
+# because the head reads un-normalised x (captured taps std ~190) and predicts acceptance under
+# FREE-RUNNING drafting while teacher forcing marks almost every position accepted. Turning it on
+# now trains a confidently-wrong head. The insurance is CAPTURE-SIDE: record free-running
+# acceptance labels beside the teacher-forced targets, so enabling 2.3 later fine-tunes the small
+# conf projection instead of retraining the whole head.
+# --------------------------------------------------------------------------------------------
+1.14    # first arena pass reads scratch it never wrote. One token per process.
+1.13    # bookkeeping on 1.11's shipped win; its own entry says take it only if an item needs it.
+2.3     # confidence head at verify time. Blocked on free-running labels, not on a knob.
+2.4     # = P2.4. The promoter ruler. Done OFFLINE by hand before the first head is graded.
+2.5     # base AR denominator, -17.4 %. A REPORTING fix -- it belongs with the eval write-up.
+3.2     # final PERF.md, both coefficients.
+P2.7    # prefill / TTFT profile. Wanted, but a profiling campaign, and not a gate on anything.
+P2.0 P2.1 P2.2 P2.3 P2.5 P2.6 P2.8 P2.9 P2.10   # driven by hand, not by the loop.
