@@ -68,13 +68,26 @@ def parse_eval(log):
 
 
 def incumbent():
+    """Best PROMOTED head AT THE CURRENT PROTOCOL WIDTH.
+
+    tau's ceiling IS the draft width, so a block-5 tau and a block-6 tau are not on the same
+    scale and `max()` over both silently prefers the wider one. Every row written before
+    2026-08-21 was block 6; ladder 2.1 then shipped block 5, which is why the `blk` column
+    exists and why this filters on it rather than ranking the whole table.
+    """
     if not os.path.exists(REGISTRY):
         return None
+    want = int(os.environ.get("DSV4_PROTOCOL_BLOCK", "5"))
     best = None
     for line in open(REGISTRY):
-        m = re.match(r"\|\s*`([^`]+)`\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|.*\|\s*(PROMOTED|baseline)\s*\|", line)
-        if m and (best is None or float(m.group(2)) > best["suite_tau"]):
-            best = {"name": m.group(1), "suite_tau": float(m.group(2)), "suite_tok_s": float(m.group(3))}
+        m = re.match(r"\|\s*`([^`]+)`\s*\|\s*([\d.]+)\s*\|\s*(\d+)\s*\|\s*([\d.]+)\s*\|"
+                     r".*\|\s*(PROMOTED|baseline)\s*\|", line)
+        if not m or int(m.group(3)) != want:
+            continue
+        tau = float(m.group(2))
+        if best is None or tau > best["suite_tau"]:
+            best = {"name": m.group(1), "suite_tau": tau, "suite_tok_s": float(m.group(4)),
+                    "block": int(m.group(3))}
     return best
 
 
@@ -142,6 +155,12 @@ def promote(a):
     inc_tau = getattr(a, "incumbent_tau", None) or (inc["suite_tau"] if inc else None)
     inc_src = ("re-measured this session" if getattr(a, "incumbent_tau", None)
                else "HEAD_REGISTRY.md -- NOT this session")
+    # FAIL CLOSED. With the registry width-filtered, a brand-new width legitimately has no
+    # incumbent row -- and if --incumbent-tau is also absent the comparison silently vanishes and
+    # EVERY head promotes. Refuse instead: an ungraded head is not a promoted head.
+    if inc_tau is None:
+        fails.append("no incumbent at this width and no --incumbent-tau given; refusing to promote "
+                     "a head that was never compared to anything (run scripts/baseline_tau.sh)")
     if inc_tau is not None and ev["suite_tau"] is not None:
         need = inc_tau * (1 + NOISE)
         print(f"  incumbent tau {inc_tau:.4f} [{inc_src}] -> needs > {need:.4f}; "
@@ -159,7 +178,7 @@ def promote(a):
         if os.path.exists(REGISTRY) and ev.get("suite_tok_s"):
             rev = subprocess.run(["git","rev-parse","HEAD"],capture_output=True,text=True).stdout.strip()
             with open(REGISTRY, "a") as f:
-                f.write(f"| `{a.name}` | {ev['suite_tau']} | {ev['suite_tok_s']} | "
+                f.write(f"| `{a.name}` | {ev['suite_tau']} | {ev['blocks'][0] if ev['blocks'] else '?'} | {ev['suite_tok_s']} | "
                         f"{ev['base_ar_tok_s']} | `{rev[:9]}` | not promoted: {fails[0][:60]} |\n")
         return 1
 
@@ -218,7 +237,7 @@ def promote(a):
                     "head that cannot pass the gates in its docstring.\n\n"
                     "| name | suite tau | suite tok/s | base AR | engine rev | status |\n"
                     "|---|---|---|---|---|---|\n")
-        f.write(f"| `{a.name}` | {ev['suite_tau']} | {ev['suite_tok_s']} | "
+        f.write(f"| `{a.name}` | {ev['suite_tau']} | {ev['blocks'][0] if ev['blocks'] else '?'} | {ev['suite_tok_s']} | "
                 f"{ev['base_ar_tok_s']} | `{rev[:9]}` | PROMOTED |\n")
     print(f"PROMOTED {a.name}")
     print(f"  suite mean: tau {ev['suite_tau']}  {ev['suite_tok_s']} tok/s  (base AR {ev['base_ar_tok_s']})")

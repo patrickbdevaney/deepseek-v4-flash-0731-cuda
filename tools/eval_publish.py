@@ -163,6 +163,48 @@ def is_forced(r):
     return str(r.get('effort', '')).endswith(FORCED_SUFFIX)
 
 
+
+def engine_provenance_block():
+    """The configurations that produced these rows, and what may be pooled across them.
+
+    The protocol block above answers LiveCodeBench's comparability condition -- release, window,
+    scenario, metric, sampling count, temperature, execution policy. None of those name the
+    SPECULATOR, the engine revision or the draft width, so a battery suspended under one
+    configuration and finished under another publishes as one homogeneous run unless this says
+    otherwise. evidence/evals/RUN_PROVENANCE.jsonl is stamped whenever the battery is (re)started.
+    """
+    p = 'evidence/evals/RUN_PROVENANCE.jsonl'
+    if not os.path.exists(p):
+        return []
+    recs = []
+    for line in open(p):
+        line = line.strip()
+        if line:
+            try:
+                recs.append(json.loads(line))
+            except ValueError:
+                pass
+    if not recs:
+        return []
+    out = ['', '### Engine configuration', '',
+           'Accuracy columns pool across these configurations and throughput columns do not. The '
+           'engine\'s speculative acceptance rule draws every emitted token from the **target** '
+           'model\'s distribution, so which draft head is loaded does not bias the output -- items '
+           'scored under different heads are independent draws from the same distribution. `tok/s` '
+           'is a joint property of engine, head and draft width: on one frozen protocol, across '
+           'five decode-kernel rewrites, suite `tau` reproduced to four decimal places while suite '
+           'tok/s moved -2.3 % and -5.0 % and base AR moved -17.4 %.', '',
+           '| stamped | draft head | block | engine rev |', '|---|---|---|---|']
+    for r in recs:
+        out.append('| %s | `%s` | %s | `%s`%s |'
+                   % (str(r.get('stamped', '?'))[:19], r.get('head', '?'), r.get('block', '?'),
+                      r.get('engine_rev', '?'), ' (dirty)' if r.get('engine_dirty') else ''))
+    if len(recs) > 1:
+        out += ['', 'More than one row above means the battery spanned a configuration change. '
+                    'Rows completed before a stamp were produced by the configuration above it.']
+    return out
+
+
 def main():
     if not os.path.exists(SUMMARY):
         sys.exit('no summary.json — run tools/eval_suite.py --report first')
@@ -234,7 +276,7 @@ def main():
                 'because the traces finished. It is not comparable with an unforced reference — '
                 'see the protocol block below.']
 
-    proto = protocol_block(rows)
+    proto = protocol_block(rows) + engine_provenance_block()
 
     doc = open(DOC).read()
     a, b = doc.index('<!-- RESULTS -->'), doc.index('<!-- /RESULTS -->')

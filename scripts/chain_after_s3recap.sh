@@ -72,19 +72,35 @@ run_arm s3recap-ce1.0 1.0 0.0
 run_arm s3recap-ce0.5 0.5 0.5
 
 # ---------------------------------------------------------------- 3. stage the best PROMOTED head
-BEST=$(python3 - <<'PY'
-import re
-best=None
-for line in open('HEAD_REGISTRY.md'):
-    m=re.match(r"\|\s*`([^`]+)`\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|.*\|\s*(PROMOTED|baseline)\s*\|", line)
-    if m and (best is None or float(m.group(2))>best[1]): best=(m.group(1), float(m.group(2)))
-print(best[0] if best else "")
-PY
-)
-[ -n "$BEST" ] || DIE "no PROMOTED head in HEAD_REGISTRY.md"
-LOG "best promoted head by suite tau: $BEST"
-bash scripts/stage_head.sh "$BEST" --activate || DIE "staging $BEST failed"
-LOG "staged $BEST"
+# THE BEST HEAD, AT THE WIDTH WE SERVE. This ranked every PROMOTED row by tau, which is wrong
+# across widths: tau's ceiling IS the width, so s3's block-6 3.8438 would beat any block-5 head
+# however good, and the chain would "upgrade" to the head that does not match the engine.
+BLK=$(grep -oP 'int\s+blk\s*=\s*\K[0-9]+' include/dsv4_engine.h | head -1)
+BEST=$(DSV4_PROTOCOL_BLOCK="$BLK" python3 -c "
+import sys; sys.path.insert(0,'tools')
+from promote_head import incumbent
+b = incumbent(); print(b['name'] if b else '')")
+LIVE=$(basename "$(cat config/live_ckpt)" | sed 's/^ckpt-head-//')
+if [ -z "$BEST" ]; then
+    # Not a failure. It means no candidate beat the deployed head at this width -- a real
+    # outcome, and the one the promotion rule exists to produce. Keep serving what is staged and
+    # measure THAT; halting here would trade a whole eval battery for a null result.
+    BEST="$LIVE"
+    LOG "no PROMOTED head at block $BLK; keeping the deployed head ($BEST) and evaluating it"
+else
+    LOG "best promoted head at block $BLK: $BEST"
+fi
+if [ "$BEST" != "$LIVE" ]; then
+    bash scripts/stage_head.sh "$BEST" --activate || DIE "staging $BEST failed"
+    LOG "staged $BEST"
+else
+    LOG "$BEST is already the live head; no restage needed"
+fi
+
+# PROVENANCE FOR THE EVAL TABLE. eval_publish.py records the protocol and the sampling parameters
+# but NOT which speculator, engine revision or draft width produced a row -- so a battery finished
+# across two configurations publishes as one homogeneous run. Stamp it before the battery starts.
+python3 tools/stamp_eval_provenance.py "$BEST" "$BLK" || LOG "provenance stamp failed (non-fatal)"
 
 # ---------------------------------------------------------------- 4. the eval battery
 # Authorised by the operator 2026-08-21 for exactly this point: "after you could rewire the systemd
