@@ -22,7 +22,7 @@ LOSS (DSpark paper == NVIDIA NeMo AutoModel defaults):
 
   usage:  python3 train/train_head.py --capture <dir> --ckpt <ckpt> --out <headdir> [--steps N]
 """
-import argparse, json, math, os, sys, time
+import argparse, copy, json, math, os, sys, time
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -164,6 +164,22 @@ def main():
     # tau/6 at a position is exactly the accepted FRACTION there, so w = (1-r)/mean(1-r) is the
     # same formula. The prior below is the measured suite value: mean tau 3.5362/6 = 0.5894,
     # so mean(1-r) = 0.4106 -- which reproduces P2.5's own quoted weights to two decimals.
+    # ---- LADDER P2.5, the anchor half -------------------------------------------------------
+    # beta * KL(q_new || q_frozen) over R-high spans. q_frozen is a deepcopy of the ENTIRE block
+    # stack taken before the first optimizer step, with its own KV prefill per sequence -- not a
+    # frozen final layer, because `hb` flows through every block and all of them train, so a
+    # partial freeze would anchor against a hidden state that has itself drifted.
+    #
+    # GATED BY r, the accepted fraction at the position, which is what "R-high span" means
+    # operationally. It is the exact complement of the deficit weight: task gradient is spent
+    # where acceptance is LOW, anchoring where acceptance is HIGH. One measured quantity, both
+    # halves of P2.5, no extra bookkeeping.
+    #
+    # COST: one extra phase-A prefill per sequence and one extra forward per position, under
+    # no_grad. Expect training time to roughly double (~19 -> ~40 min per chunk). beta=0 skips
+    # the deepcopy entirely, so the control arms pay nothing and stay bit-identical.
+    ap.add_argument("--beta", type=float, default=0.0,
+                    help="P2.5 anchor: weight on r*KL(q_new || q_frozen). 0 disables it entirely.")
     ap.add_argument("--deficit", action="store_true",
                     help="P2.5 deficit weighting: scale each position's loss by (1-r)/mean(1-r), "
                          "r = accepted fraction there. OFF by default; ON changes the recipe.")
@@ -388,7 +404,18 @@ def main():
                   f"This is NOT equivalent to one continuous run.", flush=True)
 
     _dbg = {"agree":0,"hit":0,"n":0,"tgt_top1_p":0.0,"drf_top1_p":0.0,"m":0}
-    _dw = {"sum": 0.0, "n": 0, "wsum": 0.0}
+    _dw = {"sum": 0.0, "n": 0, "wsum": 0.0, "kl": 0.0, "kln": 0}
+    # P2.5 anchor: snapshot BEFORE any optimizer step, so this is the incumbent head exactly as
+    # HEAD_REGISTRY.md recorded it. Built only when it will be used.
+    frozen_blocks = None
+    if a.beta > 0:
+        frozen_blocks = copy.deepcopy(blocks)
+        for _fb in frozen_blocks:
+            _fb.eval()
+            for _fp in _fb.parameters():
+                _fp.requires_grad_(False)
+        print(f"[train] P2.5 anchor: frozen copy of {len(frozen_blocks)} block(s), beta={a.beta}",
+              flush=True)
     _hist = []   # per-step loss record, written out by --metrics-out
     gamma = float(margs.dspark_block_size)
     BS = margs.dspark_block_size
@@ -683,6 +710,13 @@ def main():
             hh = h0
             for blk in blocks:                               # phase A: fill the cache, O(T)
                 hh = blk(hh, 0, ids[:1].clone(), main_x)
+            if frozen_blocks is not None:
+                # The frozen stack needs its OWN phase A: its KV cache is a separate buffer and an
+                # unfilled one would make q_frozen a draft with no context.
+                h0f, main_xf = frozen_blocks[0].forward_embed(main_hidden, ids[:1].clone())
+                hhf = h0f
+                for blk in frozen_blocks:
+                    hhf = blk(hhf, 0, ids[:1].clone(), main_xf)
         tot_loss, nparts, nb = 0.0, {"ce": 0.0, "tv": 0.0, "conf": 0.0}, 0
         for t in sel:                                        # phase B: draft from each position
             # SEVER THE CACHE HISTORY BEFORE EACH POSITION. Phase B also writes kv_cache
@@ -705,6 +739,15 @@ def main():
             tgt = ids[t + 1:t + 1 + BS]
             logits, conf = forward_head_tf(blocks[-1], hb, seed, tgt)
             lg = logits[0]                                   # (BS, V)
+            flg = None
+            if frozen_blocks is not None:
+                with torch.no_grad():
+                    seed_f = ids[t:t + 1].clone()
+                    hbf, mxf = frozen_blocks[0].forward_embed(main_hidden[:, t:t + 1], seed_f)
+                    for blk in frozen_blocks:
+                        hbf = blk(hbf, int(t), seed_f, mxf)
+                    flogits, _fc = forward_head_tf(frozen_blocks[-1], hbf, seed_f, tgt)
+                    flg = flogits[0]
             # TARGET DISTRIBUTION for the TV term, from the CAPTURED lm_head input.
             # It is NOT reconstructible from the taps: those are h.mean(dim=hc) while this is the
             # learned Sinkhorn hc_head combination. Passing lg.detach() (what stage 0 did) makes
@@ -742,13 +785,21 @@ def main():
             # P2.5 deficit weighting. `accepted` is already computed above under no_grad, so this
             # costs one scalar and no extra forward. Placed BEFORE backward so the weight is in
             # the graph's scale rather than applied to an already-reduced number.
-            if a.deficit:
+            if a.deficit or flg is not None:
                 r = float(accepted.float().mean())
+            if a.deficit:
                 _dw["sum"] += (1.0 - r); _dw["n"] += 1
                 mean_1mr = (_dw["sum"] / _dw["n"]) if _dw["n"] >= 32 else a.deficit_prior
                 w_def = min((1.0 - r) / max(mean_1mr, 1e-6), a.deficit_clamp)
                 _dw["wsum"] += w_def
                 l = l * w_def
+            if flg is not None:
+                # KL(q_new || q_frozen), gated by r so it binds on spans the head ALREADY handles.
+                lpn = F.log_softmax(lg.float(), dim=-1)
+                lpf = F.log_softmax(flg.float(), dim=-1)
+                kl = (lpn.exp() * (lpn - lpf)).sum(-1).mean()
+                _dw["kl"] += float(kl.detach()); _dw["kln"] += 1
+                l = l + a.beta * r * kl
             # PHASE A IS SHARED. The KV-cache fill runs once per sequence, outside this loop, and
             # every position's graph traces back through it -- so the first backward frees it and
             # the second raises "Trying to backward through the graph a second time". retain_graph

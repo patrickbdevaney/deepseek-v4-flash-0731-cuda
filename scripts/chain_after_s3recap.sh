@@ -64,7 +64,7 @@ run_arm(){
     # ruler than the head they are trying to beat.
     S5_GEN="$S5/s3recap/gen.txt" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 \
     S5_BLOCK="${S5_BLOCK:-5}" S5_INCUMBENT_TAU="$(cat evidence/baseline_tau.value 2>/dev/null)" \
-    S5_ACE="$ace" S5_ATV="$atv" S5_DEFICIT="${4:-0}" \
+    S5_ACE="$ace" S5_ATV="$atv" S5_DEFICIT="${4:-0}" S5_BETA="${6:-}" \
         bash "${5:-scripts/s5_session.sh}" "$name" "$S5/mixed_prompts_s3.txt" 1536 512 \
         || LOG "arm $name failed (rc=$?), continuing"
 }
@@ -82,7 +82,14 @@ run_arm s3recap-ce0.5 0.5 0.5
 # comparison. P2.5's gate: hold long_context within -0.2 of run-0 WHILE lifting the constructive
 # mean (reasoning, code_gen, explanation). The KL-to-frozen-head half of P2.5 is NOT implemented
 # -- it needs a frozen-head pass this run cannot afford -- so this tests the deficit half alone.
-run_arm s3recap-deficit 0.1 0.9 1 scripts/s5_session_p25.sh
+# P2.5's sweep is beta in {0, 0.1, 0.5} with the deficit weighting on throughout. beta=0 is the
+# sweep's own control, which is why it runs first and why it is worth a slot of its own: it
+# separates "the deficit weighting did it" from "the anchor did it". The gate is per-CATEGORY and
+# can fail: hold long_context within -0.2 of run-0 WHILE lifting the constructive mean
+# (reasoning, code_gen, explanation). If no beta>0 arm does both, F117 is deeper than the loss.
+run_arm s3recap-deficit    0.1 0.9 1 scripts/s5_session_p25.sh
+run_arm s3recap-p25-b0.1   0.1 0.9 1 scripts/s5_session_p25.sh 0.1
+run_arm s3recap-p25-b0.5   0.1 0.9 1 scripts/s5_session_p25.sh 0.5
 
 # ---------------------------------------------------------------- 3. stage the best PROMOTED head
 # THE BEST HEAD, AT THE WIDTH WE SERVE. This ranked every PROMOTED row by tau, which is wrong

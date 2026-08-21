@@ -175,6 +175,9 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
     # there. Aimed at F117 -- every session so far drifted off the categories it already handled,
     # because nothing in the loss spent less on them.
     [ "${S5_DEFICIT:-0}" = "1" ] && LOSSW+=(--deficit)
+    # P2.5, the anchor half: beta * r * KL(q_new || q_frozen), q_frozen a frozen copy of the whole
+    # block stack snapshotted before the first optimizer step.
+    [ -n "${S5_BETA:-}" ] && LOSSW+=(--beta "$S5_BETA")
     if [ -n "$PREV" ] && [ ! -s "$WORK/$PREV/mtp_trained.safetensors" ]; then
         DIE "chunk $ci: --resume target $WORK/$PREV/mtp_trained.safetensors is missing; refusing to \
 train a chunk as if it were a fresh session (that would silently discard every earlier chunk)"
