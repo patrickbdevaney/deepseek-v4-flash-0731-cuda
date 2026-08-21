@@ -148,6 +148,29 @@ def main():
     # the whole distribution decides acceptance. TV still earns its place -- it is what keeps the
     # draft's MARGIN calibrated, and the margin is what the adaptK gate reads -- so this is an
     # ablation to run, not a knob to turn to 1.0.
+    # ---- LADDER P2.5, the deficit half -----------------------------------------------------
+    # F117: every session so far traded the strong categories for the weak ones -- s1 lost
+    # long_context -1.01, s2 -1.19 -- and F119 falsified the CE/TV explanation. The loss has no
+    # term that spends less on inputs the head ALREADY handles, so gradient keeps flowing into
+    # positions that are already at 90 % acceptance and the head drifts off them.
+    #
+    # P2.5 specifies w(s) = (1 - tau_bucket/6) / mean(1 - tau/6), quoted at long_context 0.19
+    # through explanation 1.72. That is stated per CATEGORY, and this implements it per POSITION
+    # instead, deliberately: make_corpus.py shuffles the training order and writes no label
+    # sidecar, so category is not recoverable for the existing corpus -- and acceptance measured
+    # at the position IS the quantity the category was standing in for. It also transfers to a
+    # corpus with no categories at all, which is what an agentic trace corpus will be.
+    #
+    # tau/6 at a position is exactly the accepted FRACTION there, so w = (1-r)/mean(1-r) is the
+    # same formula. The prior below is the measured suite value: mean tau 3.5362/6 = 0.5894,
+    # so mean(1-r) = 0.4106 -- which reproduces P2.5's own quoted weights to two decimals.
+    ap.add_argument("--deficit", action="store_true",
+                    help="P2.5 deficit weighting: scale each position's loss by (1-r)/mean(1-r), "
+                         "r = accepted fraction there. OFF by default; ON changes the recipe.")
+    ap.add_argument("--deficit-prior", type=float, default=0.4106, dest="deficit_prior",
+                    help="initial mean(1-r); the measured suite value, refined online")
+    ap.add_argument("--deficit-clamp", type=float, default=3.0, dest="deficit_clamp",
+                    help="max weight; unbounded weights let one hard position own the step")
     ap.add_argument("--a-ce", type=float, default=0.1, dest="a_ce")
     ap.add_argument("--a-tv", type=float, default=0.9, dest="a_tv")
     ap.add_argument("--a-conf", type=float, default=0.0, dest="a_conf",
@@ -365,6 +388,7 @@ def main():
                   f"This is NOT equivalent to one continuous run.", flush=True)
 
     _dbg = {"agree":0,"hit":0,"n":0,"tgt_top1_p":0.0,"drf_top1_p":0.0,"m":0}
+    _dw = {"sum": 0.0, "n": 0, "wsum": 0.0}
     _hist = []   # per-step loss record, written out by --metrics-out
     gamma = float(margs.dspark_block_size)
     BS = margs.dspark_block_size
@@ -715,6 +739,16 @@ def main():
             cvec = conf.reshape(-1)[:BS] if conf is not None else None
             l, parts = dspark_loss(lg, tgt, tgt_lg, cvec, accepted, gamma,
                                    a_ce=a.a_ce, a_tv=a.a_tv, a_conf=a.a_conf)
+            # P2.5 deficit weighting. `accepted` is already computed above under no_grad, so this
+            # costs one scalar and no extra forward. Placed BEFORE backward so the weight is in
+            # the graph's scale rather than applied to an already-reduced number.
+            if a.deficit:
+                r = float(accepted.float().mean())
+                _dw["sum"] += (1.0 - r); _dw["n"] += 1
+                mean_1mr = (_dw["sum"] / _dw["n"]) if _dw["n"] >= 32 else a.deficit_prior
+                w_def = min((1.0 - r) / max(mean_1mr, 1e-6), a.deficit_clamp)
+                _dw["wsum"] += w_def
+                l = l * w_def
             # PHASE A IS SHARED. The KV-cache fill runs once per sequence, outside this loop, and
             # every position's graph traces back through it -- so the first backward frees it and
             # the second raises "Trying to backward through the graph a second time". retain_graph

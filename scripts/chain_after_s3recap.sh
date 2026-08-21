@@ -64,12 +64,25 @@ run_arm(){
     # ruler than the head they are trying to beat.
     S5_GEN="$S5/s3recap/gen.txt" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 \
     S5_BLOCK="${S5_BLOCK:-5}" S5_INCUMBENT_TAU="$(cat evidence/baseline_tau.value 2>/dev/null)" \
-    S5_ACE="$ace" S5_ATV="$atv" \
-        bash scripts/s5_session.sh "$name" "$S5/mixed_prompts_s3.txt" 1536 512 \
+    S5_ACE="$ace" S5_ATV="$atv" S5_DEFICIT="${4:-0}" \
+        bash "${5:-scripts/s5_session.sh}" "$name" "$S5/mixed_prompts_s3.txt" 1536 512 \
         || LOG "arm $name failed (rc=$?), continuing"
 }
+# The loss-mix arms. Cheap, and the first has a prior: s2-abl-ce1.0_tv0.0 was refused against an
+# incumbent the corrected ruler says should never have been promoted. But F119 already falsified
+# the CE/TV explanation for F117, so neither of these can fix the CATEGORY trade -- they are an
+# opportunistic re-test, not the lever.
 run_arm s3recap-ce1.0 1.0 0.0
 run_arm s3recap-ce0.5 0.5 0.5
+
+# LADDER P2.5, the deficit half -- THIS is the lever. Every session so far traded the strong
+# categories for the weak ones (s1 lost long_context -1.01, s2 -1.19) because the loss has no term
+# that spends less on inputs the head already handles. --deficit scales each position's loss by
+# (1-r)/mean(1-r). Defaults are unchanged, so the ce/tv arms above and the control remain the
+# comparison. P2.5's gate: hold long_context within -0.2 of run-0 WHILE lifting the constructive
+# mean (reasoning, code_gen, explanation). The KL-to-frozen-head half of P2.5 is NOT implemented
+# -- it needs a frozen-head pass this run cannot afford -- so this tests the deficit half alone.
+run_arm s3recap-deficit 0.1 0.9 1 scripts/s5_session_p25.sh
 
 # ---------------------------------------------------------------- 3. stage the best PROMOTED head
 # THE BEST HEAD, AT THE WIDTH WE SERVE. This ranked every PROMOTED row by tau, which is wrong
