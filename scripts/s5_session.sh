@@ -148,12 +148,18 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
     # this line never fired), which is how a broken resume survived two sessions unexercised and then
     # killed s3 four hours in, after chunk 0 had trained fine and chunk 1 had captured and validated.
     RES=(); [ -n "$PREV" ] && RES=(--resume "/cap/$NAME/$PREV")
+    # S5_ACE/S5_ATV expose the loss mix so a recipe sweep can reuse a RETAINED capture instead of
+    # re-capturing per arm. Unset leaves train_head.py's own defaults (0.1 / 0.9) untouched, so the
+    # sessions already recorded in HEAD_REGISTRY.md remain exactly reproducible by omitting them.
+    LOSSW=()
+    [ -n "${S5_ACE:-}" ] && LOSSW+=(--a-ce "$S5_ACE")
+    [ -n "${S5_ATV:-}" ] && LOSSW+=(--a-tv "$S5_ATV")
     if [ -n "$PREV" ] && [ ! -s "$WORK/$PREV/mtp_trained.safetensors" ]; then
         DIE "chunk $ci: --resume target $WORK/$PREV/mtp_trained.safetensors is missing; refusing to \
 train a chunk as if it were a fresh session (that would silently discard every earlier chunk)"
     fi
     "${DOCK[@]}" python3 -u train/train_head.py --capture "/cap/$NAME/c$ci/cap" --ckpt /ckpt \
-        --out "/cap/$NAME/c$ci/trained" --pos-per-seq 16 "${RES[@]}" \
+        --out "/cap/$NAME/c$ci/trained" --pos-per-seq 16 "${RES[@]}" "${LOSSW[@]}" \
         --total-steps "$NTRAIN" --step-offset "$OFF" \
         --metrics-out "/cap/$NAME/c$ci/train_metrics.json" \
         2>&1 | tee "$ROOT/evidence/${NAME}_c${ci}_train.log" | tail -4
@@ -162,7 +168,12 @@ train a chunk as if it were a fresh session (that would silently discard every e
 
     # Delete the consumed capture -- the point of chunking. gen.txt is kept, so a re-capture costs
     # only the prefill (~0.4 h per 500), never the generate pass that dominates the session.
-    if [ "$NCHUNK" -gt 1 ]; then
+    # S5_KEEP_CAP=1 retains the capture. Deleting it is right when disk is the binding constraint
+    # (5 000 samples is ~123 GB against 120 GB free, which is why chunking exists at all). It is
+    # WRONG when it is not: a retained capture makes every later RECIPE variant -- a_ce/a_tv, lr,
+    # pos-per-seq -- cost training only, and re-capturing is ~0.4 h per 500 sequences that need not
+    # be spent. Check the actual headroom rather than assuming the 2026-08 corpus sizes.
+    if [ "$NCHUNK" -gt 1 ] && [ "${S5_KEEP_CAP:-0}" != "1" ]; then
         rm -rf "$CDIR/cap"
         LOG "chunk $ci: capture deleted, $(df -BG --output=avail /home/patrickd | tail -1 | tr -d ' ') free"
     fi

@@ -55,7 +55,9 @@ sleep 30
 LOG "GPU is free; starting the session"
 
 # 3 chunks, matching s3's own session shape (1536 corpus, 64 hold-out, 1472 training steps).
-export S5_GEN="$GEN" S5_HOLDOUT=64 S5_CHUNK=491
+# S5_KEEP_CAP: 279 GB free against a 28 GB capture. Retaining it makes every later recipe arm
+# cost training only. The capture is the artifact this session exists to produce correctly.
+export S5_GEN="$GEN" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1
 LOG "s5_session.sh $NAME $PROMPTS $N 512   (S5_GEN set: pass 1 is SKIPPED)"
 bash scripts/s5_session.sh "$NAME" "$PROMPTS" "$N" 512
 rc=$?
