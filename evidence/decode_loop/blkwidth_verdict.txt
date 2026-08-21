@@ -1,0 +1,62 @@
+blkwidth sweep -- DECODE_LADDER 2.1
+  log            : evidence/decode_loop/blkwidth_sweep.log
+  points          : 144 completed (+1 warm-up discarded)
+  base AR (M=1)   : 13.87 tok/s
+  LOSSLESS gate   : 17/17 PASS
+  within-window drift (2nd occurrence - 1st, n=72): +0.241 +/- 0.288 tok/s -- cancelled by averaging the pair
+
+| BLK | ceiling | suite tau | suite tok/s | vs BLK=6 | p0 tau | p0 tok/s | tau/ceiling |
+|---|---|---|---|---|---|---|---|
+| 4 | 5 | 3.4830 | 27.4144 | +3.19 % | 3.0000 | 23.8350 | 0.697 |
+| 5 | 6 | 3.6882 | 27.1562 | +2.22 % | 3.0923 | 23.0300 | 0.615 |
+| 6 | 7 | 3.8453 | 26.5663 | +0.00 % | 2.8714 | 22.2450 | 0.549 |
+| 7 | 8 | 3.9386 | 26.0888 | -1.80 % | 2.9559 | 21.4650 | 0.492 |
+| 8 | 9 | 4.0697 | 25.8125 | -2.84 % | 2.8714 | 21.1400 | 0.452 |
+| 9 | 10 | 4.1629 | 24.8925 | -6.30 % | 2.8714 | 20.4350 | 0.416 |
+| 10 | 11 | 4.1935 | 24.0987 | -9.29 % | 2.9130 | 20.4500 | 0.381 |
+| 12 | 13 | 4.3619 | 23.7719 | -10.52 % | 2.8714 | 19.6800 | 0.336 |
+
+PAIRED vs BLK=6, over the 8 suite prompts (prompt 0 excluded, F96); bands are 2 SE of the per-prompt differences
+| BLK | d tok/s | d % | legs + | d tau |
+|---|---|---|---|---|
+| 4 | +0.848 +/- 1.776 | +3.89 +/- 6.46 % | 5/8 | -0.3623 +/- 0.4045 |
+| 5 | +0.590 +/- 1.016 | +2.79 +/- 3.83 % | 5/8 | -0.1571 +/- 0.2338 |
+| 7 | -0.478 +/- 1.052 | -1.70 +/- 3.90 % | 3/8 | +0.0933 +/- 0.1629 |
+| 8 | -0.754 +/- 1.729 | -2.93 +/- 6.63 % | 2/8 | +0.2244 +/- 0.4003 |
+| 9 | -1.674 +/- 1.757 | -6.30 +/- 6.56 % | 1/8 | +0.3176 +/- 0.4048 |
+| 10 | -2.468 +/- 2.587 | -9.36 +/- 9.45 % | 2/8 | +0.3482 +/- 0.5227 |
+| 12 | -2.794 +/- 1.843 | -10.86 +/- 6.80 % | 2/8 | +0.5166 +/- 0.7771 |
+
+Per-prompt optimum (mirrored-averaged tok/s):
+| prompt | best BLK | best tok/s | BLK=6 tok/s | gain | tau at best | tau at 6 |
+|---|---|---|---|---|---|---|
+| 0 *(control)* | 4 | 23.84 | 22.24 | +7.15 % | 3.000 | 2.871 |
+| 1 | 8 | 30.06 | 25.52 | +17.81 % | 4.902 | 3.643 |
+| 2 | 6 | 28.23 | 28.23 | +0.00 % | 4.204 | 4.204 |
+| 3 | 5 | 21.07 | 19.56 | +7.72 % | 2.557 | 2.494 |
+| 4 | 6 | 23.66 | 23.66 | +0.00 % | 3.061 | 3.061 |
+| 5 | 4 | 30.47 | 25.73 | +18.40 % | 4.122 | 3.941 |
+| 6 | 8 | 36.85 | 36.53 | +0.89 % | 7.034 | 6.091 |
+| 7 | 4 | 28.23 | 27.81 | +1.49 % | 3.509 | 3.846 |
+| 8 | 5 | 27.10 | 25.49 | +6.32 % | 3.509 | 3.483 |
+
+ROUND COST MODEL  ms_round ~ c0 + cB*BLK + cK*K   (7860 rounds, 9 prompts fitted separately, first 2 rounds of each point dropped)
+  cB  (one more DRAFTED position, verified or not) : +3.1280 +/- 0.6841 ms
+  cK  (one more VERIFIED position)                 : +16.0834 +/- 0.5474 ms
+  break-even: a wider block pays only if the extra acceptance it buys exceeds its own
+  draft cost -- at cB above, one extra block position costs 3.1280 ms/round.
+
+Emitted ids across widths (DSV4_GENOUT, 145 sequences).  Changing BLK changes M in the verify
+forward and therefore MoE atomic reduction order, so identity is NOT guaranteed by construction --
+this MEASURES the divergence instead of assuming it.
+| prompt | sequences | identical to the BLK=6 reference | first divergence |
+|---|---|---|---|
+| 0 | 17 | 17 | - |
+| 1 | 16 | 2 | BLK 4@235, BLK 4@235, BLK 5@237, BLK 5@237, BLK 7@239, BLK 7@239, BLK 8@236, BLK 8@236, BLK 9@239, BLK 9@239, BLK 10@239, BLK 10@239, BLK 12@239, BLK 12@239 |
+| 2 | 16 | 2 | BLK 4@242, BLK 4@242, BLK 5@246, BLK 5@246, BLK 7@248, BLK 7@248, BLK 8@244, BLK 8@244, BLK 9@244, BLK 9@244, BLK 10@244, BLK 10@244, BLK 12@244, BLK 12@244 |
+| 3 | 16 | 14 | BLK 4@229, BLK 4@229 |
+| 4 | 16 | 4 | BLK 4@217, BLK 4@217, BLK 5@215, BLK 5@215, BLK 8@217, BLK 8@217, BLK 9@217, BLK 9@217, BLK 10@217, BLK 10@217, BLK 12@217, BLK 12@217 |
+| 5 | 16 | 2 | BLK 4@284, BLK 4@284, BLK 5@284, BLK 5@284, BLK 7@284, BLK 7@284, BLK 8@284, BLK 8@284, BLK 9@284, BLK 9@284, BLK 10@284, BLK 10@284, BLK 12@284, BLK 12@284 |
+| 6 | 16 | 4 | BLK 4@216, BLK 4@216, BLK 5@216, BLK 5@216, BLK 7@216, BLK 7@216, BLK 8@216, BLK 8@216, BLK 9@216, BLK 9@216, BLK 12@216, BLK 12@216 |
+| 7 | 16 | 16 | - |
+| 8 | 16 | 4 | BLK 4@215, BLK 4@215, BLK 5@213, BLK 5@213, BLK 7@215, BLK 7@215, BLK 9@215, BLK 9@215, BLK 10@215, BLK 10@215, BLK 12@215, BLK 12@215 |
