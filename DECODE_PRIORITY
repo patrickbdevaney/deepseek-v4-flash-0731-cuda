@@ -62,7 +62,13 @@
 # acceptance labels beside the teacher-forced targets, so enabling 2.3 later fine-tunes the small
 # conf projection instead of retraining the whole head.
 # --------------------------------------------------------------------------------------------
-1.14    # first arena pass reads scratch it never wrote. One token per process.
+1.14    # first arena pass reads scratch it never wrote. DEFERRED PAST THE EVALS, deliberately,
+        # 2026-08-21: the blast radius is ONE TOKEN PER PROCESS and the battery is a single
+        # long-lived server -- one token in ~3.46 M, inside temperature-1.0 sampling noise.
+        # Fixing it means rebuilding build/decode, which the running session actively invokes
+        # at capture and eval time, and there is no idle GPU window before the battery. It
+        # would cost a real corruption risk to buy nothing measurable. Take it when the GPU
+        # is idle after the evals, alongside P2.0's --full archive pass.
 1.13    # bookkeeping on 1.11's shipped win; its own entry says take it only if an item needs it.
 2.3     # confidence head at verify time. Blocked on free-running labels, not on a knob.
 2.4     # = P2.4. The promoter ruler. Done OFFLINE by hand before the first head is graded.
