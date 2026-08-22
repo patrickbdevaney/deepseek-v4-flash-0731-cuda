@@ -196,6 +196,13 @@ def main():
                     help="max weight; unbounded weights let one hard position own the step")
     ap.add_argument("--a-ce", type=float, default=0.1, dest="a_ce")
     ap.add_argument("--a-tv", type=float, default=0.9, dest="a_tv")
+    ap.add_argument("--calib-out", default=None, dest="calib_out",
+                    help="append (k, conf_logit, accepted) for every drafted position to this "
+                         "JSONL. LADDER 2.3's ACTUAL GATE. Strict no-op when unset. One epoch means "
+                         "every sequence is seen exactly once, so a pair logged here is a "
+                         "first-encounter sample -- held out at the moment it is measured, without "
+                         "a second forward or a separate hold-out capture. Costs one .tolist() per "
+                         "step, under no_grad, off the loss path entirely.")
     ap.add_argument("--a-conf", type=float, default=0.0, dest="a_conf",
                     help="confidence-BCE weight; 0 until free-running labels exist (see comment)")
     ap.add_argument("--pos-per-seq", type=int, default=8, help="training positions sampled per sequence")
@@ -424,6 +431,7 @@ def main():
         print(f"[train] P2.5 anchor: frozen copy of {len(frozen_blocks)} block(s), beta={a.beta}",
               flush=True)
     _hist = []   # per-step loss record, written out by --metrics-out
+    _calib_f = open(a.calib_out, "a", buffering=1 << 20) if a.calib_out else None
     gamma = float(margs.dspark_block_size)
     BS = margs.dspark_block_size
 
@@ -809,6 +817,17 @@ def main():
                 _dbg["drf_top1_p"] += float(F.softmax(lg.float(), -1).max(-1).values.mean())
                 _dbg["m"] += 1
             cvec = conf.reshape(-1)[:BS] if conf is not None else None
+            # LADDER 2.3 GATE. The frozen 8-prompt protocol holds the draft width FIXED, and the
+            # confidence head exists to let the engine VARY it -- so that protocol cannot see this
+            # lever's win by construction, and its refusal of these arms is expected rather than
+            # informative. What decides 2.3 is whether the head PREDICTS ACCEPTANCE at all, which is
+            # answerable here for free: `accepted` is already computed under no_grad above and
+            # `cvec` is the head's prediction of it.
+            if a.calib_out and cvec is not None:
+                with torch.no_grad():
+                    _cl = cvec.float().tolist(); _al = accepted.int().tolist()
+                _calib_f.write("".join("{\"k\":%d,\"c\":%.6f,\"a\":%d}\n" % (_k, _cl[_k], _al[_k])
+                                       for _k in range(len(_cl))))
             l, parts = dspark_loss(lg, tgt, tgt_lg, cvec, accepted, gamma,
                                    a_ce=a.a_ce, a_tv=a.a_tv, a_conf=a.a_conf)
             # P2.5 deficit weighting. `accepted` is already computed above under no_grad, so this
