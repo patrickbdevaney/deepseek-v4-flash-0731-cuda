@@ -178,6 +178,11 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
     # P2.5, the anchor half: beta * r * KL(q_new || q_frozen), q_frozen a frozen copy of the whole
     # block stack snapshotted before the first optimizer step.
     [ -n "${S5_BETA:-}" ] && LOSSW+=(--beta "$S5_BETA")
+    # P2.6 HASS: free-run the draft from step N. P2.6 scopes it to steps 2-3 => S5_HASS=1.
+    [ -n "${S5_HASS:-}" ] && LOSSW+=(--hass-from "$S5_HASS")
+    # LADDER 2.3: the confidence head is only trainable once the acceptance labels are FREE-RUNNING,
+    # which is what HASS provides. a_conf stays 0 without it -- F100's reasoning is unchanged.
+    [ -n "${S5_ACONF:-}" ] && LOSSW+=(--a-conf "$S5_ACONF")
     if [ -n "$PREV" ] && [ ! -s "$WORK/$PREV/mtp_trained.safetensors" ]; then
         DIE "chunk $ci: --resume target $WORK/$PREV/mtp_trained.safetensors is missing; refusing to \
 train a chunk as if it were a fresh session (that would silently discard every earlier chunk)"

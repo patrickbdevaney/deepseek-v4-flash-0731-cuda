@@ -178,6 +178,13 @@ def main():
     # COST: one extra phase-A prefill per sequence and one extra forward per position, under
     # no_grad. Expect training time to roughly double (~19 -> ~40 min per chunk). beta=0 skips
     # the deepcopy entirely, so the control arms pay nothing and stay bit-identical.
+    # ---- LADDER P2.6, HASS ------------------------------------------------------------------
+    # Free-run the Markov head from step N onward instead of teacher-forcing it. 0 = OFF, which is
+    # teacher forcing and reproduces every session in HEAD_REGISTRY.md exactly. P2.6 scopes it to
+    # steps 2-3, i.e. --hass-from 1 (0-indexed): step 0 always takes the real seed, because at
+    # inference the engine has the real token there too.
+    ap.add_argument("--hass-from", type=int, default=0, dest="hass_from",
+                    help="free-run the draft from this 0-indexed step (P2.6). 0 disables HASS.")
     ap.add_argument("--beta", type=float, default=0.0,
                     help="P2.5 anchor: weight on r*KL(q_new || q_frozen). 0 disables it entirely.")
     ap.add_argument("--deficit", action="store_true",
@@ -420,7 +427,7 @@ def main():
     gamma = float(margs.dspark_block_size)
     BS = margs.dspark_block_size
 
-    def forward_head_tf(blk, x, seed, target_ids):
+    def forward_head_tf(blk, x, seed, target_ids, hass_from=0):
         """TEACHER-FORCED forward_head. The checkpoint's forward_head is an inference loop:
 
             output_ids[:, 0] = input_ids
@@ -442,10 +449,32 @@ def main():
         logits = blk.head(blk.norm(x), full_logits=True)          # (B, BS, V)
         ids_in = torch.cat([seed, target_ids[:-1]], dim=0).view(1, -1)   # ground-truth prefix
         out_logits, embeds = [], []
+        prev = None
         for i in range(blk.block_size):
-            bias, emb = blk.markov_head(ids_in[:, i])
-            out_logits.append(logits[:, i] + bias)                # NOT add_
+            # LADDER P2.6 -- HASS. Teacher forcing feeds the GROUND TRUTH into the Markov head at
+            # every step; the engine feeds the head's OWN previous token, because at inference
+            # there is nothing else to feed. Step 1 is identical either way (both take `seed`), so
+            # the mismatch is entirely in steps 2..K -- exactly where P2.6 scopes it, and exactly
+            # where acceptance decays.
+            #
+            # This is cheap here for a structural reason: `logits` above does NOT depend on ids_in
+            # at all. Only markov_head's bias does. So free-running changes ONE input per step and
+            # costs nothing extra, while gradient still flows through `logits` and through every
+            # bias -- only the token CHOICE is detached, which is what HASS prescribes.
+            #
+            # It also produces the label F100 said did not exist: with hass_from > 0, `accepted`
+            # downstream is measured under free-running drafting, which is the condition the
+            # confidence head of ladder 2.3 must be trained against. a_conf was pinned at 0 because
+            # teacher forcing marks almost every position accepted; that reason ends here.
+            if hass_from and prev is not None and i >= hass_from:
+                tok_in = prev
+            else:
+                tok_in = ids_in[:, i]
+            bias, emb = blk.markov_head(tok_in)
+            li = logits[:, i] + bias                              # NOT add_
+            out_logits.append(li)
             embeds.append(emb)
+            prev = li.argmax(dim=-1).detach()                     # the choice is hard; the graph is not
         conf = blk.confidence_head(x, torch.stack(embeds, dim=1))
         return torch.stack(out_logits, dim=1), conf
 
@@ -737,7 +766,7 @@ def main():
             for blk in blocks:
                 hb = blk(hb, int(t), seed, mx)
             tgt = ids[t + 1:t + 1 + BS]
-            logits, conf = forward_head_tf(blocks[-1], hb, seed, tgt)
+            logits, conf = forward_head_tf(blocks[-1], hb, seed, tgt, a.hass_from)
             lg = logits[0]                                   # (BS, V)
             flg = None
             if frozen_blocks is not None:
@@ -746,7 +775,7 @@ def main():
                     hbf, mxf = frozen_blocks[0].forward_embed(main_hidden[:, t:t + 1], seed_f)
                     for blk in frozen_blocks:
                         hbf = blk(hbf, int(t), seed_f, mxf)
-                    flogits, _fc = forward_head_tf(frozen_blocks[-1], hbf, seed_f, tgt)
+                    flogits, _fc = forward_head_tf(frozen_blocks[-1], hbf, seed_f, tgt, a.hass_from)
                     flg = flogits[0]
             # TARGET DISTRIBUTION for the TV term, from the CAPTURED lm_head input.
             # It is NOT reconstructible from the taps: those are h.mean(dim=hc) while this is the
