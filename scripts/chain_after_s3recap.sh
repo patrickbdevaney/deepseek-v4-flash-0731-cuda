@@ -53,16 +53,28 @@ run_arm(){
     if [ -d "$HOME/model-backups/heads/$name" ]; then LOG "$name already archived, skipping"; return 0; fi
     LOG "arm $name: a_ce=$ace a_tv=$atv (reusing s3recap's capture, no generation, no capture)"
     mkdir -p "$S5/$name"
-    ln -sfn ../s3recap/gen.txt "$S5/$name/gen.txt"
+    # THE CORPUS IS s3's, NOT s3recap's. session_s3recap.sh runs with S5_GEN=$S5/s3/gen.txt -- the
+    # whole point of the control was to reuse s3's generation -- so $S5/s3recap/gen.txt never
+    # existed. Pointing S5_GEN there made `[ ! -s "$GEN" ]` true and pass 1 REGENERATED all 1536
+    # responses through ./build/decode at decode speed: ~8 h per arm, five arms, for a file that
+    # was already on disk.
+    ln -sfn ../s3/gen.txt "$S5/$name/gen.txt"
     for ci in 0 1 2; do
         mkdir -p "$S5/$name/c$ci"
         # RELATIVE, because the trainer runs in a container with -v $S5:/cap. An absolute symlink
         # into /home/patrickd/s5-capture does not resolve as /cap inside it.
         ln -sfn ../../s3recap/c$ci/cap "$S5/$name/c$ci/cap"
+        # THE PER-CHUNK SLICE, which the capture-skip path never writes. s5_session.sh line 176 is
+        # `OFF=$(( OFF + $(wc -l < "$CDIR/gen.txt") ))` with NO fallback -- unlike line 118, which
+        # has one -- so a chunk whose capture is reused but whose slice is absent kills the session
+        # AFTER training it. Same arithmetic s5_session.sh uses: NTRAIN 1472, CHUNK 491.
+        lo=$(( ci * 491 + 1 )); hi=$(( ci * 491 + 491 )); [ "$hi" -gt 1472 ] && hi=1472
+        sed -n "${lo},${hi}p" "$S5/s3/gen.txt" > "$S5/$name/c$ci/gen.txt"
+        [ -s "$S5/$name/c$ci/gen.txt" ] || { LOG "arm $name: chunk $ci slice is empty"; return 1; }
     done
     # Same width and same-width incumbent as the control, or the arms are graded on a different
     # ruler than the head they are trying to beat.
-    S5_GEN="$S5/s3recap/gen.txt" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 \
+    S5_GEN="$S5/s3/gen.txt" S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 \
     S5_BLOCK="${S5_BLOCK:-5}" S5_INCUMBENT_TAU="$(cat evidence/baseline_tau.value 2>/dev/null)" \
     S5_ACE="$ace" S5_ATV="$atv" S5_DEFICIT="${4:-0}" S5_BETA="${6:-}" \
         bash "${5:-scripts/s5_session.sh}" "$name" "$S5/mixed_prompts_s3.txt" 1536 512 \
