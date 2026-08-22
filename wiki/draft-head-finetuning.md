@@ -380,3 +380,127 @@ gain there. Prompt 7 went from 14.39 to 26.33 tok/s — **+83 %** — which no s
 loading `/home/patrickd/models/ckpt-head-s3` with the three shards' sha256 matching s3's promotion
 record. Every future server start — including the boot-time `dsv4-evals.service` and its watchdog —
 picks it up with no further action.
+
+---
+
+## 9. The block-5 programme (2026-08-21/22) — what finally moved the head
+
+Everything in §8 was measured at **draft block width 6**. Ladder 2.1 changed the served width to
+**5**, which is what `config.json`'s own `dspark_block_size` says the head was trained for, and the
+change was worth **+3.91 ± 1.65 %** on 32 prompts at equal `tau` with the emitted ids bit-identical.
+It also invalidated every `tau` in §8 as a *comparison target*, because:
+
+> **`tau` is not comparable across block widths.** `tau` counts tokens committed per target forward,
+> and its ceiling **is** the draft width. A head scoring 3.84/6 and a head scoring 3.84/5 are not
+> the same head measured twice; the second is better. `s3` itself re-measures at **3.6888** at width
+> 5 versus 3.8438 at width 6 — the *same weights*, 4 % apart, purely from the denominator.
+
+So the programme opened with `scripts/baseline_tau.sh`, which re-measures the incumbent at the
+served width on the frozen 8-prompt suite and writes `evidence/baseline_tau.value`. **`s3` @ block 5
+= `tau` 3.6888, 26.2725 tok/s, base AR 13.91.** That is the bar every arm below was graded against.
+
+### 9.1 The control: the racing capture cost nothing
+
+Every head before this point was trained on taps captured through `./build/decode`, whose prefill
+was non-deterministic above ~192 positions until ladder **1.10** (an aliased `hadamard`; three call
+sites passed the same pointer twice). Both training corpora sit entirely inside that regime —
+1536/1536 and 500/500 sequences above 192 tokens — so the obvious worry was that every head in the
+registry had been trained on partly-garbage features.
+
+`s3recap` re-captures **the exact same corpus** post-fix and retrains with identical
+hyperparameters. It is a control against an archived number, not a new experiment.
+
+| | `tau` @ blk 5 | tok/s |
+|---|---|---|
+| `s3` (pre-1.10 capture) | 3.6888 | 26.2725 |
+| `s3recap` (post-1.10 capture) | **3.6250** | 26.8487 |
+
+**Clean negative: the racing forward was not costing measurable `tau`.** The recapture is if
+anything slightly *worse*, well inside the 3.5 % spread. This retires the concern for every row in
+`HEAD_REGISTRY.md` — the pre-1.10 heads are not compromised — and it is the reason the rest of the
+programme could build on the existing corpus instead of regenerating 1536 sequences.
+
+### 9.2 The six arms
+
+All six trained on the same post-1.10 capture, one epoch, same schedule; only the loss changed.
+
+| arm | loss | `tau` @ blk 5 | tok/s | verdict |
+|---|---|---:|---:|---|
+| `s3recap` | ce 0.1 / tv 0.9 (control) | 3.6250 | 26.8487 | refused |
+| `s3recap-ce1.0` | ce 1.0 / tv 0.0 | 3.7325 | 27.6913 | refused |
+| `s3recap-ce0.5` | ce 0.5 / tv 0.5 | 3.6950 | 27.5113 | refused |
+| `s3recap-deficit` | + deficit weighting, β=0 | 3.7975 | 27.8712 | refused |
+| **`s3recap-p25-b0.1`** | **+ deficit, β=0.1 anchor** | **3.8413** | **28.3825** | **PROMOTED** |
+| `s3recap-p25-b0.5` | + deficit, β=0.5 anchor | 3.6738 | 27.0825 | refused |
+| `s3recap-hass1` | HASS, `hass_from=1` | 3.6225 | 26.7563 | refused |
+
+### 9.3 P2.5 — the two halves, and why only the pair works
+
+**Deficit weighting** re-weights each block's loss by how badly the head did on it:
+
+    r      = mean(accepted) over the block, under no_grad
+    w_def  = min( (1 - r) / mean(1 - r), 3.0 )        # running mean, prior 0.4106 for the first 32
+    loss  *= w_def
+
+The motivation is §8.3's finding restated as an objective: **the value of a draft head is dominated
+by its worst prompts**, so spend gradient there. On its own it is worth +2.9 % over the incumbent —
+real, but short of the 3.5 % promotion bar.
+
+**The β anchor** adds a KL pull back toward the head as it was *before the first optimizer step*:
+
+    loss += β · r · KL( p_new ‖ p_frozen )
+
+`frozen_blocks = deepcopy(blocks)` is taken before training starts and gets its own phase-A KV
+prefill per sequence, so the anchor is a true frozen forward and not a stale cache. The `· r` factor
+is the point: the anchor is strong exactly where the head is **already accepting well** (high `r`)
+and nearly absent where it is failing (low `r`). Deficit weighting pushes on the weak positions;
+the anchor holds the strong ones still. They are the two sides of **F117** — *training helps where
+the head is weak and hurts where it is strong* — and F117 is why neither half alone was enough.
+
+**β=0.1 is a bracketed optimum, not an endpoint.** β=0 (deficit alone) is short at +2.9 %; β=0.5
+over-constrains and falls back to 3.6738, *below the incumbent*. The sweep contains the maximum on
+both sides, which is the difference between a tuned hyperparameter and a lucky one.
+
+Result: **`tau` 3.8413, +4.13 % over the incumbent, 28.3825 tok/s.** End to end against the stock
+shipped head that started this project, **22.66 → 28.38 tok/s, +25.3 %**, every token still
+bit-identical to base AR.
+
+### 9.4 P2.6 — HASS did not work here
+
+HASS trains the head on **its own previous prediction** rather than the ground-truth token, closing
+the train/serve mismatch (`hass_from=1` feeds `prev = argmax(logits)` from position 1 onward). It is
+structurally cheap in this architecture — the base `logits` do not depend on `ids_in` at all, only
+`markov_head`'s bias does — which is why it was worth trying at all.
+
+It measured **3.6225**, below the control and far below the promotion bar of 3.9757. Its own
+session gate reached the same conclusion independently and by a different route:
+
+    VERDICT: STOP
+      - suite mean tau 3.5238 DROPPED below the 3.5362 baseline -- single-domain overfit
+
+Two instruments, one answer. The plausible reading is that free-running rollout on a corpus this
+size compounds the head's own errors into the training signal faster than it teaches robustness —
+the mismatch HASS closes is real, but it is not this head's binding constraint. `hass1-p25` (HASS
+composed with the winning β=0.1 anchor) is the last arm; if it shows the same signature, HASS is
+retired to `negative-results.md` rather than swept over `hass_from`.
+
+### 9.5 The rule that nearly promoted the wrong head
+
+`promote_head.py` takes `--incumbent-tau` so that an incumbent re-measured **in the same session**
+can be used instead of a registry row from another engine revision (§ladder 2.4). It **overrode**
+the registry. That was correct exactly once — when block 5 had no registry row at all and the chain
+passed `evidence/baseline_tau.value`.
+
+`baseline_tau.value` is a **snapshot**. The moment `p25-b0.1` promoted at 3.8413, the registry moved
+ahead of the file, and every subsequent arm was being graded against a **stale 3.6888** — a bar
+0.15 `tau` too low. A HASS arm scoring 3.79 would have promoted, and `stage_head.sh --activate`
+would have repointed the live server onto weights that lose to what was already serving.
+
+Fixed: the bar is the **max** of the two sources, both printed.
+
+    incumbent tau 3.8413 [max of 3.6888 re-measured, 3.8413 registry] -> needs > 3.9757
+
+Max can only ever refuse a promotion, never grant a false one, which is the property you want in a
+ruler. The general lesson is in `measurement-and-traps.md`: **a measurement that is passed forward
+by value goes stale the instant the thing it measured changes.** The registry does not, because it
+is re-read; the file did, because it was written once.

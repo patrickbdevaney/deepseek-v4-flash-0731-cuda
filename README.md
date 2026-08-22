@@ -25,23 +25,29 @@ No Python on the hot path. Every kernel gated against a PyTorch oracle before it
 
 ---
 
-## ⏸️ The eval battery is SUSPENDED mid-flight (2026-08-19)
+## Where the programme is (2026-08-22)
 
-**Deliberately paused to free the GPU for decode-kernel work**, not stalled. Resume with
-`bash scripts/eval_resume.sh` — every stage continues from exactly where it stopped. Full state in
-[`evidence/evals/SUSPENDED.md`](evidence/evals/SUSPENDED.md); re-enable the units too:
+The work runs as **four phases**, in this order, on one box that can hold **one model at a time**.
+Full text and per-phase gates: [`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md).
 
-```bash
-systemctl --user enable --now dsv4-evals-watchdog.timer   # disarmed at suspend, or it resurrects
-systemctl --user enable dsv4-evals.service
-```
+| phase | what it is | state |
+|---|---|---|
+| **1. draft head + spec decode** | exhaust every acceptance lever before measuring anything | **in flight** — P2.5 landed (+4.13 %), P2.6 running, 2.3 not started |
+| **2. prefill to the roofline** | 62.4 tok/s and ~3.3 min TTFT at 12 k is the largest remaining gap in the system | not started |
+| **3. prefix caching** | prove the OpenAI-compatible server is usable by a real agentic harness | not started |
+| **4. the eval battery** | run **once**, at the final configuration | armed, deliberately not started |
 
-**Why.** `tools/decode_model.py` fits decode at `136.44 + 30.053 × (context/1000)` ms per target
-forward (R² 0.965, n=2156). The context-linear half is **389× off its own roofline** and turned out
-to be a **one-thread selection sort** (`FINDING_TOPK_SELECTION_SORT.md`). Finishing the battery on
-the current engine means ~3 more days of extension plus forcing plus multi-turn, all at roughly half
-the decode speed the box can reach. The battery is idempotent and resumptive; the kernel work is not
-getting cheaper by waiting. Plan: [`DECODE_ZENITH_FINDINGS.md`](DECODE_ZENITH_FINDINGS.md).
+**The eval battery is suspended mid-flight and stays that way until phase 3 closes.** That is a
+decision, not a stall: the battery is idempotent and resumptive, it costs ~3 days of GPU, and every
+day of phase 1–3 makes those 3 days cheaper and the resulting numbers more representative of what
+actually ships. Resume with `bash scripts/eval_resume.sh`; full state in
+[`evidence/evals/SUSPENDED.md`](evidence/evals/SUSPENDED.md). `dsv4-evalstage.service` exists and is
+**deliberately disarmed** so nothing starts it by accident.
+
+**One rule the battery inherits from this suspension:** accuracy rows pool across engine revisions,
+throughput rows do not. `tools/stamp_eval_provenance.py` records head, block width and engine rev at
+every battery start, and `tools/eval_publish.py` prints that block next to the results, so a reader
+can see which rows are poolable.
 
 ### Where each row actually stands
 
@@ -74,31 +80,35 @@ scicode and lcb, then forcing, then BFCL multi-turn. Nothing needs to be re-done
 
 | | measured | ceiling | |
 |---|---|---|---|
-| **speculative decode**, 8-prompt suite mean | **24.52 tok/s** (`s1`, shipped) | — | best category **32.42** |
-| acceptance τ, suite mean | **3.58 / 7** | 7 at block 6 | the remaining headroom lives here |
-| **base AR decode** | **13.76 tok/s** | 14.33–15.98 | **97 %** of the realistic floor |
-| **prefill (PS=1022)** | **62.4 tok/s** | — | +30.3 % (F85/F86/F88) |
+| **speculative decode**, 8-prompt suite mean | **28.38 tok/s** (`s3recap-p25-b0.1`, live) | — | +25.3 % over the stock head this project started from |
+| acceptance τ, suite mean | **3.84 / 5** | 5 at block 5 | **77 %** of the width ceiling |
+| **base AR decode** | **14.61 tok/s** | 14.33–15.98 | at the realistic floor |
+| **prefill (PS=1022)** | **62.4 tok/s** | ≥ 410 target | **the largest gap in the system** — phase 2 |
 
-The shipped speculator is the **`s1` fine-tuned draft head**, promoted over the stock one at
-**22.66 → 24.52 tok/s (+8.2 %)**. `s2` measures higher still (24.76) and is **not** shipped: the win
-is inside the measured 3.5 % run-to-run spread and ties go to the incumbent. Every candidate,
-rejects included, is in [`HEAD_REGISTRY.md`](HEAD_REGISTRY.md) with its weights archived.
+The shipped speculator is **`s3recap-p25-b0.1`**, promoted at `tau` 3.8413 against a same-width
+incumbent of 3.6888. Every candidate, rejects included, is in
+[`HEAD_REGISTRY.md`](HEAD_REGISTRY.md) with its weights archived under `~/model-backups/heads/`; the
+programme that produced it is [`wiki/draft-head-finetuning.md` §9](wiki/draft-head-finetuning.md).
+**Nothing is ever deleted from the archive** — a refused head is still a measured point on the
+acceptance curve, and two of this project's rulers turned out to be wrong after the fact.
 
-From `evidence/s1_eval.log` (stock baseline: `evidence/baseline_blk6_suite.log`): clean run, clocks
-pinned, caches dropped, `GATE PASS`, `LOSSLESS GATE PASS`, block 6, no profiling instruments in the
-binary.
+**τ is not comparable across block widths.** τ counts tokens committed per target forward and its
+ceiling *is* the draft width, so 3.84/5 and 3.84/6 are not the same measurement. Ladder 2.1 moved
+the served width from 6 to 5 — which is what `config.json`'s own `dspark_block_size` always said —
+and that alone re-prices every τ recorded before 2026-08-21. `s3` reads 3.8438 at width 6 and
+**3.6888 at width 5, same weights.**
 
-**One caveat that belongs next to the headline.** The trained heads win the frozen suite and *lose*
-to the stock head on held-out continuation drafting — measured against a true paired control, `s1`
-is −0.404 τ and `s2` −0.648 (F116). Training helps where the head is weak and hurts where it is
-strong (F117). The suite number is the honest promotion criterion because the suite is the
-representative mixed workload, but it is not the whole picture.
+**One caveat that belongs next to the headline.** Trained heads win the frozen suite and can *lose*
+on held-out continuation drafting against a true paired control (F116/F117: training helps where the
+head is weak and hurts where it is strong). P2.5's β anchor is the first lever that addressed this
+mechanically rather than by choosing a corpus — it pulls the head back toward its pre-training self
+in proportion to how well it is *already* accepting — and it is why that arm promoted when the four
+loss-reweighting arms before it did not.
 
 **The measurement protocol is part of the number.** τ is quoted as an **8-prompt suite mean at
 NGEN0 ≥ 200** — past the drafter's 128-token sliding window. F92 measured τ at **1.39 over the first
 32 generated tokens**, rising to ~3.2 only after ~128, so a short-generation acceptance figure is a
-transient and is not comparable to anything, including this project's own earlier numbers. The
-canonical 6-token prompt is retained as a **control only**; it is the worst case.
+transient and is not comparable to anything, including this project's own earlier numbers.
 
 **The single most important correction this project has made to its own model of itself:** the
 long-quoted "19.0 tok/s AR roofline" is a *normalisation constant, not a target*. It assumes every
@@ -120,6 +130,12 @@ not 233. See `wiki/measurement-and-traps.md`.
 | **[`wiki/cross-model-decode-comparison.md`](wiki/cross-model-decode-comparison.md)** | why this checkpoint decodes at half Qwen's rate on the same box — and why that is a quantisation ranking, not an engine ranking |
 | **[`wiki/nvfp4-migration.md`](wiki/nvfp4-migration.md)** | if an NVFP4 REAP existed: what transfers, why the kernel work is a translation not a rewrite, and why requant must come BEFORE the dense GEMV work |
 | **[`wiki/dense-mla-gemv.md`](wiki/dense-mla-gemv.md)** | the real lever — dense MLA GEMVs at 115–195 GB/s against a peer's 228–236 — and the bit-exactness invariant it collides with |
+| **[`wiki/context-scaling.md`](wiki/context-scaling.md)** | how the forward grows with context, the fit that predicts it, and which items pay only at long context |
+| **[`wiki/context-ceiling-is-not-the-kv-cache.md`](wiki/context-ceiling-is-not-the-kv-cache.md)** | what actually bounds usable context here, and why the obvious answer is wrong |
+| **[`wiki/moe-gemv-ceiling.md`](wiki/moe-gemv-ceiling.md)** | the MoE GEMV bandwidth ceiling and the repack that needs rows-per-expert the decode shape cannot supply |
+| **[`wiki/roofline-why-the-needle-wont-move.md`](wiki/roofline-why-the-needle-wont-move.md)** | why base AR decode is at its realistic floor, and what the roofline number is and is not |
+| **[`wiki/oom-and-memory-safety.md`](wiki/oom-and-memory-safety.md)** | 100.4 GiB of weights in a 122 GiB pool: single-tenancy, the memguard, and how runs are launched |
+| **[`wiki/README.md`](wiki/README.md)** | **the wiki's own index and the state-in-one-table** — start here if you are new |
 
 ## Reference documents
 
@@ -142,6 +158,9 @@ not 233. See `wiki/measurement-and-traps.md`.
 | `COMPRESSION_PLAYBOOK.md` | how to get a frontier MoE *resident*: the prune/quant/distill method space, which corners are arithmetically reachable, and the cheap KL-sweep protocol |
 | `HARDWARE_ENSEMBLE.md` | **which of the three boxes runs what** — the 3090/Thor/Orin regime boundaries, Orin as an async trace generator, and pipeline-parallel Thor+desktop for 269 GB |
 | `EVAL_BUDGET_PROTOCOL.md` | how to choose `max_tokens` — the needed budget is not identifiable from a run at a budget that is too small |
+| `PRODUCTION_PLAN.md` | **the four-phase programme and its per-phase gates** — the document that sequences everything above |
+| `PHASE2_PLAN.md` | prefill to the roofline: the measured gap, the candidate items, and what each would have to be worth |
+| `EVALS.md` / `WHY_THESE_EVALS.md` | the battery, and the argument for why these tasks and not others |
 | `CLAUDE.md` | operating rules: **detachment** for unattended work, and why a stage that "completes" against a dead engine is worse than one that dies |
 
 ## The model

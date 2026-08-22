@@ -1293,3 +1293,49 @@ regime it is in. Widen the corpus for any effect near the 3.5 % run-to-run sprea
 prompts were the `s3` hold-out truncated to 192 ids each, which cost ~4 s of prefill per point and
 took a straddling band to a decisive one in a single load.
 
+
+## 38. A bar passed forward by value, which went stale the instant the thing it measured changed (ladder P2.5, 2026-08-22)
+
+`promote_head.py` grades a candidate against the incumbent's suite mean `tau`. It reads the
+incumbent from `HEAD_REGISTRY.md`, **filtered to the served block width** — because §37's programme
+had just established that `tau` is not comparable across widths, its ceiling being the width itself.
+
+Moving to width 5 therefore left the registry with **no incumbent row at all**, and a gate with no
+incumbent silently promotes everything. Two things were built for that: the promoter **fails closed**
+when it can find no bar, and `scripts/baseline_tau.sh` re-measures the incumbent at the served width
+and writes the answer to `evidence/baseline_tau.value` (`s3` @ blk 5 = 3.6888). The chain passes
+that file through as `--incumbent-tau`, which **overrode** the registry — deliberately, since a
+same-session re-measurement is the strictly correct comparison and a registry row is not.
+
+That was right exactly once. `evidence/baseline_tau.value` is a **snapshot written once**; the
+registry is **re-read every run**. The moment `s3recap-p25-b0.1` promoted at `tau` 3.8413, the two
+sources disagreed by 0.15 `tau`, and the override meant the *stale* one won. Every subsequent arm
+was being graded against a bar **4 % too low**. Nothing errored, nothing looked wrong, and the
+promoter printed a confident, internally consistent verdict against the wrong number.
+
+The failure it was one arm away from: a head measuring 3.79 clears a 3.6888 bar and loses to a
+3.8413 incumbent. Promotion is not inert — the chain calls `stage_head.sh --activate` on the best
+promoted head — so the consequence is the **live server repointed onto weights that lose to what was
+already serving**, discovered later as an unexplained throughput regression with a clean audit trail
+pointing the wrong way.
+
+**Fix: the bar is the `max` of the two sources, and both are printed.**
+
+    incumbent tau 3.8413 [max of 3.6888 re-measured, 3.8413 registry] -> needs > 3.9757
+
+Max is the right operator rather than "prefer the fresher one" because the two failure modes are not
+symmetric: taking the max can only ever **refuse** a promotion, never grant a false one. A refused
+head stays archived and re-measurable; a falsely promoted head is already serving.
+
+**The general trap.** A derived measurement handed forward *by value* — in a file, an environment
+variable, a constant in a script — is correct only at the instant it is written, and carries no
+mechanism to notice that its subject has moved. A source that is *re-read* cannot go stale that way.
+When both exist, do not let the snapshot override the live source; combine them with an operator
+whose error direction is safe. The tell that this class of bug is present at all: the same quantity
+is available from two places and the code picks one **unconditionally**.
+
+This is also the second time in this project that the **ruler** was the defect rather than the
+measurement (§ladder 2.4 was the first, where the docstring said `tau` and the code compared
+`tok/s`). Both were found by reading the promoter rather than by any result looking wrong, and
+neither would have been caught by a test of the engine. **Gate code deserves the same adversarial
+reading as kernel code, and gets it far less often.**

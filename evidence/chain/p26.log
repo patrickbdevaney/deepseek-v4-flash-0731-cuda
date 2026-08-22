@@ -206,3 +206,40 @@ fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anythin
 [run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-hass1-p25_holdout_control.log
 [run_model] pid 1089537   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-hass1-p25_holdout_control.log
 [run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-hass1-p25_holdout_control.memguard.log
+[s5:s3recap-hass1-p25 2026-08-22T15:39:11-04:00] hold-out untrained baseline (paired, from pass 1): 5.6528
+hold-out tau at budget 200 tokens: n=64
+  median 4.963   mean 4.609   p25 3.636   p75 5.639   min 1.869   max 6.000
+  baseline (untrained) 5.653   delta -0.689 tau  (-5.28 tok/s, -23.3%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+ARCHIVED s3recap-hass1-p25 -> /home/patrickd/model-backups/heads/s3recap-hass1-p25 (5 files, sha256 recorded)
+  suite mean: tau 3.795  27.8562 tok/s
+  incumbent tau 3.8413 [HEAD_REGISTRY.md -- NOT this session (max of 3.6888 re-measured, 3.8413 registry)] -> needs > 3.9757; candidate 3.7950
+REFUSED to promote:
+  - suite tau 3.7950 does not beat incumbent 3.8413 by the 3.5% run-to-run spread (needs > 3.9757); ties go to the incumbent
+[s5:s3recap-hass1-p25 2026-08-22T15:39:21-04:00] not promoted (archived)
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-hass1-p25_eval.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  5.15    35.40 tok/s
+    long_context     tau  4.34    29.23 tok/s
+    agentic_format   tau  4.00    28.92 tok/s
+    code_edit        tau  3.92    27.41 tok/s
+    short_factual    tau  3.73    28.04 tok/s
+    reasoning        tau  3.70    28.41 tok/s
+    explanation      tau  3.00    24.23 tok/s
+    code_gen         tau  2.52    21.21 tok/s
+  suite mean tau 3.795  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.70 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3recap-hass1-p25/session_verdict.json
+[s5:s3recap-hass1-p25 2026-08-22T15:39:21-04:00] GO (primary); secondary exit 3
+[s5:s3recap-hass1-p25 2026-08-22T15:39:21-04:00] no next session configured; stopping here
+[p26 2026-08-22T15:39:21-04:00] HASS arms done. Free-running confidence magnitude, from the arm logs:
+conf=0.4196
+conf=0.8377
+conf=1.4622
+conf=0.6955
+conf=0.0359
+[p26 2026-08-22T15:39:21-04:00] 2.3's a_conf is NOT set blind -- read the magnitude above, then run:
+[p26 2026-08-22T15:39:21-04:00]   S5_ACONF=<value> scripts/chain_p26.sh   (or add an arm here)
+[p26 2026-08-22T15:39:21-04:00] p26 complete:
