@@ -23,19 +23,38 @@ historical measurement; the second is where agentic work actually runs.
 
 | at context ~9 | measured | ceiling | |
 |---|---|---|---|
-| speculative decode | **22.15 tok/s** | 23.2–25.9 | 96 % |
-| base AR decode | **13.83 tok/s** *(pinned; 11.3 governed — see below)* | 14.33–15.98 | 97 % |
-| acceptance | 2.89 / 5 | — | **the remaining 1.4× lives here** |
+| speculative decode | **28.38 tok/s** (8-prompt suite mean, live head) | — | +25.3 % over the stock head |
+| base AR decode | **14.61 tok/s** | 14.33–15.98 | at the realistic floor |
+| acceptance `tau` | **3.84 / 5** | 5 at block 5 | 77 % of the width ceiling |
 | prefill (PS=1022) | **62.4 tok/s** | ~94 with tensor cores | +30.3 % this session |
 | `build/decode` prefill reproducibility | **byte-identical at EVERY length (1.10)** | byte-identical at every length | **met** — it was `hadamard(y, y)` |
 | `dsv4-server` run-to-run reproducibility | **15/15 load-pairs byte-identical (1.10)**, from **0/15** | every load-pair identical | **met** — it had been silently broken since 1.12 |
 
-| the frozen 8-prompt suite | shipped head | `s3` (live since 2.2) | |
+| the frozen 8-prompt suite | shipped head | `s3` (block 6) | `s3recap-p25-b0.1` (live) |
 |---|---|---|---|
-| suite mean `tau` | 3.5362 | **3.8438** | **+8.70 %**, and both reproduced their archived value to 4 d.p. |
-| suite mean tok/s | 22.1425 | **24.2512** | **+9.52 %** (drift-controlled +10.30 %) |
-| worst prompt `tau` | 1.75 | **2.49** | no suite prompt below 2 any more; spread −32.8 % |
-| base AR (drift control) | 11.41 tok/s | 11.33 tok/s | −0.70 % between the two loads |
+| suite mean `tau` | 3.5362 / 6 | 3.8438 / 6 | **3.8413 / 5** — 77 % of the width ceiling |
+| suite mean tok/s | 22.1425 | 24.2512 | **28.3825** — **+25.3 %** end to end |
+| base AR | 13.76 | 13.80 | **14.61** |
+| block width | 6 | 6 | **5** (2.1: `config.json`'s own `dspark_block_size`) |
+
+> **The three columns are NOT one series — the width changed between the second and the third.**
+> `tau` counts tokens committed per target forward and its ceiling **is** the draft width, so
+> 3.8438/6 and 3.8413/5 are not a flat result: the same `s3` weights re-measure at **3.6888** at
+> width 5. Only the **tok/s** row is comparable straight across, and it is the row that moved 25 %.
+> Every promotion after 2026-08-21 is graded against a same-width incumbent produced by
+> `scripts/baseline_tau.sh`, and `promote_head.py` **fails closed** if it cannot find one.
+
+**The block-5 programme, in one line each** (full write-up: [`draft-head-finetuning.md`
+§9](draft-head-finetuning.md)):
+
+| arm | `tau` @ blk 5 | what it tested |
+|---|---:|---|
+| `s3recap` | 3.6250 | control — **the pre-1.10 racing capture cost nothing**, retiring the worry over every earlier head |
+| `s3recap-ce1.0` / `ce0.5` | 3.7325 / 3.6950 | loss reweighting; both short of the bar |
+| `s3recap-deficit` | 3.7975 | P2.5 deficit weighting alone (β=0) — +2.9 %, still short |
+| **`s3recap-p25-b0.1`** | **3.8413** | **+ the β anchor. PROMOTED, +4.13 %** |
+| `s3recap-p25-b0.5` | 3.6738 | β=0.5 over-constrains — **below** the incumbent, so the optimum is bracketed |
+| `s3recap-hass1` / `-p25` | 3.6225 / 3.7950 | P2.6 HASS, alone and composed. Monotone wrong; **retired** (`negative-results.md` §4l) |
 
 > **Those two rows were red and the cause was four lines of CUDA.** `hadamard_kernel` gave every
 > thread of a row the whole row to read and one element of it to overwrite — correct only while

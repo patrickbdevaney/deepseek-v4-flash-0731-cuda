@@ -478,11 +478,42 @@ session gate reached the same conclusion independently and by a different route:
     VERDICT: STOP
       - suite mean tau 3.5238 DROPPED below the 3.5362 baseline -- single-domain overfit
 
-Two instruments, one answer. The plausible reading is that free-running rollout on a corpus this
-size compounds the head's own errors into the training signal faster than it teaches robustness —
-the mismatch HASS closes is real, but it is not this head's binding constraint. `hass1-p25` (HASS
-composed with the winning β=0.1 anchor) is the last arm; if it shows the same signature, HASS is
-retired to `negative-results.md` rather than swept over `hass_from`.
+Two instruments, one answer. The composed arm settles it:
+
+| arm | `tau` @ blk 5 | tok/s |
+|---|---:|---:|
+| `s3recap-p25-b0.1` (P2.5 alone) | **3.8413** | 28.3825 |
+| `s3recap-hass1-p25` (P2.5 + HASS) | 3.7950 | 27.8562 |
+| `s3recap-hass1` (HASS alone) | 3.6225 | 26.7563 |
+
+HASS does not merely fail to help — **it costs 0.046 `tau` on top of the winning recipe**, and it is
+monotone: the more HASS, the worse. That is a clean retirement, not an under-tuned `hass_from`.
+The plausible reading is that free-running rollout on a corpus this size compounds the head's own
+errors into the training signal faster than it teaches robustness — the mismatch HASS closes is
+real, but it is not this head's binding constraint, and on a 1536-sequence corpus the extra variance
+costs more than the mismatch does. Retired to `negative-results.md`. **P2.6 is closed.**
+
+### 9.4.1 What HASS *did* produce: the number 2.3 was blocked on
+
+**F100** measured the confidence head's loss term at **`conf` ≈ 10034** against `ce` 10.43 and
+`tv` 0.93 — roughly **1000×** — and concluded `a_conf = 0` was a *measured* decision rather than an
+oversight. Two causes were proposed: the head reads un-normalised `x` (captured taps std ~190), and
+it predicts acceptance under **free-running** drafting while **teacher forcing marks almost every
+position accepted**, so the target is nearly constant and the head cannot learn anything but a bias.
+
+HASS supplies exactly the missing thing — free-running labels — so its training logs contain the
+first honest measurement of that magnitude. Across the HASS arms' chunks:
+
+    conf = 0.4196, 0.8377, 1.4622, 0.6955, 0.0359
+
+**O(1), not O(10⁴).** The second of F100's two proposed causes was the dominant one, and it is now
+quantified rather than argued. With `ce` ≈ 10.43, an `a_conf` near **0.1–1.0** puts the confidence
+term at roughly 1–10 % of the total loss, which is the range a regulariser should occupy. That is
+the sweep 2.3 runs, and it is set from a measurement rather than from a guess — which was the whole
+reason P2.6 ran before 2.3 rather than after it.
+
+Note what this does *not* establish: F100's **first** cause, the un-normalised input, is untouched by
+HASS and remains a live hypothesis if the 2.3 arms disappoint.
 
 ### 9.5 The rule that nearly promoted the wrong head
 

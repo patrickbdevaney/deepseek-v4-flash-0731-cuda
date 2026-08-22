@@ -460,6 +460,56 @@ mechanism in the prediction was right (a verified position stopped being free, s
 be re-decided); the arithmetic was a guess dressed as a prior. See
 [`kernel-optimisations.md` §2.13](kernel-optimisations.md).
 
+## 4l. HASS — training the draft head on its own predictions (P2.6, 2026-08-22)
+
+**The idea, and why it was worth trying.** The draft head is trained by teacher forcing: at every
+position it is fed the *ground-truth* previous token. At serve time it is fed **its own previous
+prediction**. HASS closes that mismatch by feeding `prev = argmax(logits)` from position
+`hass_from` onward during training.
+
+It is unusually cheap in this architecture, which is the specific reason it looked attractive here:
+the base `logits` do **not** depend on `ids_in` at all — only `markov_head`'s bias does — so
+free-running costs one extra `argmax` per position and no second forward.
+
+**What it measured.** Two arms, both at block width 5 against an incumbent of `tau` 3.8413:
+
+| arm | `tau` | tok/s | vs the winning recipe |
+|---|---:|---:|---|
+| `s3recap-p25-b0.1` — the recipe, no HASS | **3.8413** | 28.3825 | — |
+| `s3recap-hass1-p25` — recipe + HASS | 3.7950 | 27.8562 | **−0.046** |
+| `s3recap-hass1` — HASS alone | 3.6225 | 26.7563 | −0.219 |
+
+**Monotone in the wrong direction.** More HASS, worse head — alone it is worse than the plain
+control (3.6250), and composed with the winning recipe it still subtracts. A lever that is
+under-tuned produces a *non-monotone* sweep with a hidden optimum; a lever that is wrong produces
+this. That is why P2.6 is retired rather than swept over `hass_from`.
+
+The hold-out gate reached the same verdict independently, by a different instrument and a different
+threshold:
+
+    VERDICT: STOP
+      - suite mean tau 3.5238 DROPPED below the 3.5362 baseline -- single-domain overfit
+
+**The reading.** The train/serve mismatch HASS closes is real; it is simply not this head's binding
+constraint. On a 1536-sequence corpus, free-running rollout compounds the head's own errors into the
+training signal faster than it teaches robustness — the added variance costs more than the mismatch
+does. This is consistent with the corpus-saturation arithmetic in `draft-head-finetuning.md` §5: at
+this scale the recipe is data-limited, and HASS spends data to buy robustness.
+
+**What it is worth keeping.** HASS was not a wasted arm — it is the only configuration that produces
+**free-running acceptance labels**, and those gave the first honest measurement of the confidence
+head's loss magnitude: **O(1)**, against the **10034** F100 measured under teacher forcing. That
+number unblocks ladder 2.3, which had been deliberately stalled rather than run with a guessed
+`a_conf`. See `draft-head-finetuning.md` §9.4.1.
+
+**The general shape.** A lever borrowed from the literature can be correctly implemented, cheap, and
+still wrong for the regime you are in — and the way to find out is to compose it with the recipe
+that already works, not only to run it alone. Alone, `hass1` is 0.219 below the incumbent and could
+be dismissed as a bad interaction with the control's loss weights. Composed, it still subtracts,
+which is what makes the retirement safe.
+
+---
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).
