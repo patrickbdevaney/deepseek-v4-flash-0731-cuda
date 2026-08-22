@@ -1,85 +1,90 @@
-# Handoff — 2026-08-19 23:10, decode-optimisation programme running unattended
+# Handoff — 2026-08-22, phase 1 running unattended
 
 Written to survive a session ending mid-flight. Everything below is either running detached or is a
-one-command resume. Nothing here needs a human before morning.
+one-command resume. Nothing here needs a human.
+
+Supersedes the 2026-08-19 handoff (the autonomous decode loop). **The kernel loop is finished and
+deliberately stopped** — its remaining items are worth single digits and are listed at the bottom of
+`DECODE_PRIORITY`. What runs now is the draft-head programme, which spends Thor time rather than
+agent turns.
 
 ## What is running right now
 
-| what | pid/unit | state |
+| what | unit | state |
 |---|---|---|
-| `scripts/decode_loop.sh` | detached, ppid 1972 (`systemd --user`), tty `?` | iteration 2, ladder item **0.4** |
-| the eval battery | **suspended on purpose** | `evidence/evals/SUSPENDED.md` |
-| `dsv4-evals-watchdog.timer` / `.service` | **disabled on purpose** | re-enabling races the GPU |
+| the P2.6 HASS arms | `dsv4-p26` | arm 1 refused; arm 2 (`hass1-p25`) in its final measurement |
+| the P2.5 sweep chain | `dsv4-chain`, `dsv4-supervise` | **complete** — inactive because they finished, not because they failed |
+| the eval battery | `dsv4-evalstage` | **armed and deliberately disarmed**. Phase 4. Do not start it. |
 
-**Watch it:** `tail -f evidence/decode_loop/live.log` — one line per tool call, with a `DONE` line
-carrying turns, duration and cost. Coarse per-iteration record: `evidence/decode_loop/driver.log`.
-Machine-readable: `evidence/decode_loop.jsonl`.
+**Watch it:** `tail -f evidence/chain/p26.log`. Per-arm detail lands in
+`evidence/<arm>_{eval,holdout,gate}.log`. The registry row is the verdict:
+`tail -5 HEAD_REGISTRY.md`.
 
-**Stop it:** `touch DECODE_LOOP_STOP` — it exits after the current iteration, cleanly.
+## Where things actually stand
 
-## Where decode actually stands — the only scoreboard that matters
+**Served head: `s3recap-p25-b0.1`, block width 5, τ 3.8413, 28.38 tok/s** — the first promotion of
+the programme and +25.3 % over the stock head this project started from. `config/live_ckpt` is
+tracked in git, so which head is in production is reviewable in a diff.
 
-**One kernel change has shipped.** The warp-parallel top-k (`1a33cfe`), bit-identical, verified in
-situ by the LOSSLESS gate on four independent runs.
+| | measured |
+|---|---|
+| speculative decode, 8-prompt suite mean | **28.38 tok/s** |
+| acceptance τ | **3.84 / 5** (77 % of the width ceiling) |
+| base AR decode | **14.61 tok/s** — at its realistic floor |
+| prefill (PS=1022) | **62.4 tok/s**, ~3.3 min TTFT at 12 k — **the largest gap in the system** |
 
-```
-                      pre-fix                     post-fix (n 48, R^2 0.971)
-  ms/forward     136.44 + 30.053 x ctx/1000   130.98 + 7.362 x ctx/1000
-  ctx  6,000          316.8 ms                     175.2 ms      1.81x
-  ctx 12,000          497.1 ms                     219.3 ms      2.27x
-  context range    71 - 6,592                   249 - 12,410
-```
+## The four phases, and what "done" means for each
 
-**Neither stop condition is met.** `a` is 1.59x its 82.18 ms byte floor (target 1.25x);
-`b x 6592` is 48.53 ms against a 5.0 ms threshold. The loop continues.
+Full text and gates: `PRODUCTION_PLAN.md`.
 
-Everything since the top-k has been measurement. That is the standing critique and it is written
-into `DECODE_LADDER.md` as a rule the loop must read before picking an item: prefer a kernel change
-over an instrument, and justify any instrument by naming the optimisation it unblocks.
+1. **Draft head + spec decode** *(in flight)*. Done when every acceptance lever is measured, not
+   when one wins. Remaining: `hass1-p25`, then **2.3** (confidence head — needs a training arm
+   *and* an engine change at verify time), **P2.1** (labeller → pattern-gated width), adaptK re-tune.
+2. **Prefill to the roofline.** Target **TTFT < 30 s at 12 k uncached ⇒ ≥ 410 tok/s, a 6.6×**.
+   First action is `DSV4_DPROF` on a PS=1023 prefill, which **has never been run**. See
+   `PHASE2_PLAN.md`.
+3. **Prefix caching.** A 20-turn agentic session with a growing prefix, tool-call turns and
+   mid-context compression at turn 10; report p50/p90 TTFT cached vs `set_prefix_cache(false)`.
+4. **The eval battery, once, at the final configuration.**
 
-## If the loop is dead when you return
-
-```bash
-cd ~/deepseek-v4-flash-0731-cuda
-rm -f DECODE_LOOP_STOP
-setsid nohup bash scripts/decode_loop.sh > evidence/decode_loop/driver.log 2>&1 < /dev/null &
-```
-It is idempotent: it re-reads `DECODE_LADDER.md`, takes the topmost unchecked item, and its preflight
-refuses to start while a model is resident or memory is short.
-
-## The three things a fresh session must not get wrong
+## The five things a fresh session must not get wrong
 
 1. **ONE MODEL AT A TIME.** 100.4 GiB of weights in a 122 GiB pool; this box does not OOM
    gracefully (two whole-machine takedowns on 2026-08-12, no oom-kill line either time). Full-model
-   runs go through `scripts/run_model.sh`, which enforces single-tenancy and now arms a memguard on
-   whatever it launches.
-2. **`pgrep -f` MATCHES CLAUDE CODE'S OWN SHELLS.** The harness embeds the command text into the
-   shell's command line, so `pgrep -f decode` matches the shell that is checking. This has cost two
-   `pkill` self-kills, one misread runtime, and a memguard that adopted a shell as its victim. Match
-   on `comm`.
-3. **NEVER EDIT A RUNNING BASH SCRIPT IN PLACE.** Write a new file and `mv` it over: the running
-   shell keeps its fd on the old inode. Truncating in place corrupts it mid-execution.
+   runs go through `scripts/run_model.sh`, which enforces single-tenancy and arms a memguard.
+2. **NEVER send a generation request to the engine while a benchmark is scoring.** `GET /metrics`
+   is safe; nothing else is.
+3. **`pgrep -f` MATCHES CLAUDE CODE'S OWN SHELLS.** The harness embeds the command text into the
+   shell's command line, so `pgrep -f decode` matches the shell that is checking. Two `pkill`
+   self-kills, one misread runtime, one memguard that adopted a shell as its victim. Match on `comm`.
+4. **NEVER EDIT A RUNNING BASH SCRIPT IN PLACE.** Bash reads scripts by **byte offset**, so an edit
+   to a running script executes garbage from the offset onward. Write a new file and `mv` it over,
+   or fork it — this is why `scripts/s5_session_p25.sh` exists as a fork rather than an edit, and
+   why the 2026-08-22 promoter fix went into the Python rather than into `chain_p26.sh`.
+5. **DETACH UNATTENDED WORK VIA SYSTEMD, NOT `&`.** `setsid nohup … &` from a tool call is reaped
+   when the call ends — it reports a live pid and then vanishes. Use `systemd-run --user`. Also:
+   **journald has no journal files on this box**, so unit output must go to a file via
+   `StandardOutput=append:`.
 
-## Open items, in the order the ladder has them
+## τ, and the one way to misread it
 
-- **0.4** (in flight) — attribute the residual 7.362 ms/1000 at ctx 12k. Decides between 1.2 and 1.5.
-- **1.2 / 1.5** — REOPENED. Their retirement rested on 0.2, which 0.3 superseded. Whether the
-  residual is those kernels is 0.4's job; do not assume it.
-- **1.3 / 1.4** — correctness items. 1.4 removes a silent garbage-return above ~49k context
-  (`topk_scan_smem` requests > 48 KiB dynamic shared memory with no `cudaFuncSetAttribute` opt-in).
-- **1.6** — a pre-existing `invalid argument` launch fault inside `ogroup_gemm_fp8`, proven
-  pre-existing by a control build from `1a33cfe^`. Latent: output correct, LOSSLESS passes, tau
-  normal. Worth asking whether the failing launch is a dead branch.
-- **1b.1** — MXFP4 index-cache packing. Primitives done and gated bit-exact
-  (`tests/gate_idx_pack.cu`, 0 mismatches on 524,288 elements); the wiring is not done.
+**τ is not comparable across block widths.** It counts tokens committed per target forward and its
+ceiling *is* the draft width. `s3` reads 3.8438 at width 6 and **3.6888 at width 5 — same weights.**
+Any comparison must be at one width, against an incumbent measured at that width
+(`scripts/baseline_tau.sh` produces one). `promote_head.py` enforces this: it filters the registry
+by `DSV4_PROTOCOL_BLOCK` and **fails closed** if it can find no bar.
+
+Also: the hold-out sweep prints a suite mean at **adaptK 2.0**; the registry number is the frozen
+8-prompt protocol at **adaptK 1.50**. They are different instruments and the session log says so.
+Do not read a promotion out of a sweep line.
 
 ## Safety state, deliberately set
 
-- The checkpoint is `chmod -R a-w`. The loop runs with `--dangerously-skip-permissions`, and while
-  that does NOT override an explicit deny rule, the filesystem bit holds regardless. Revert with
-  `chmod -R u+w ~/models/DeepSeek-V4-Flash-0731-REAP`.
-- The live draft head is backed up at `~/model-backups/heads/shipped-dspark-0731reap/`, verified
-  byte-exact. It is the head the server actually runs, and it was the ONE head not previously
-  archived -- `promote_head.py` archives candidates and never writes the live checkpoint.
-- `s3` (tau 3.8438 vs the shipped 3.5362) is archived and **has never been served**. Deploying it is
-  ladder item 2.2 and is worth ~13 % on the bench suite.
+- The checkpoint is `chmod -R a-w`. Revert with `chmod -R u+w ~/models/DeepSeek-V4-Flash-0731-REAP`.
+- **Nothing is ever deleted from `~/model-backups/heads/`** — every arm of every sweep is archived
+  whether or not it promoted. A refused head is still a measured point on the acceptance curve, and
+  this project has twice discovered its **ruler** was wrong after the fact (ladder 2.4; traps §38).
+  `python3 tools/verify_head_archive.py` proves the archive is intact; `--full` hashes ~30 GB and
+  needs an idle box.
+- `dsv4-evalstage.service` is armed and disarmed. It starts the battery. Leave it alone until
+  phase 3 closes.

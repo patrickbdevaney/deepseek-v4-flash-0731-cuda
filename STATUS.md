@@ -1,6 +1,52 @@
-# STATUS.md
+# STATUS
 
-**Phase 0 + Phase 1 complete. Gates H1 and R1 PASS. No kernel written yet — per the directive's
+**Current state, 2026-08-22.** Everything below the divider is a **historical snapshot from
+2026-08-06** kept for the record; its numbers were superseded many times over and must not be
+quoted. The live scoreboard is [`README.md`](README.md); the sequencing is
+[`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md).
+
+## The four phases
+
+| phase | state |
+|---|---|
+| 1. draft head + spec decode | **in flight** |
+| 2. prefill to the roofline | not started |
+| 3. prefix caching for agentic harnesses | not started |
+| 4. the eval battery, once, at the final configuration | armed, deliberately not started |
+
+## The scoreboard
+
+| | 2026-08-06 (below) | today | |
+|---|---:|---:|---|
+| base AR decode | 9.51 tok/s | **14.61** | +53.6 % |
+| speculative decode, suite mean | 9.48 (1.00× of base) | **28.38** | **1.94× of base** |
+| acceptance τ | 3.12 / 5 | **3.84 / 5** | 77 % of the width ceiling |
+| prefill (PS=1022) | not measured | **62.4 tok/s** | phase 2's target is ≥ 410 |
+| `B_tok` | 11.202 GB/token | **12.26** | the early figure omitted terms |
+
+Served head: **`s3recap-p25-b0.1`** at block width 5, `config/live_ckpt` →
+`~/models/ckpt-head-s3recap-p25-b0.1`. Every emitted token is bit-identical to base AR, checked on
+every run — the LOSSLESS gate has never been loosened.
+
+## What the gate ledger below got right, and what it did not
+
+The 2026-08-06 ledger's *gates* all still hold and several have been re-proven many times since.
+What went stale is every **number**, and one framing: the AR wall of 21.42 tok/s was quoted as a
+target. It is a **normalisation constant**, and treating it as reachable cost this project real
+time. See `wiki/roofline-why-the-needle-wont-move.md` and `wiki/measurement-and-traps.md`.
+
+Two of the five "not yet measured" items below are now answered: DSpark acceptance α (item 5) is the
+subject of the entire draft-head programme and reads τ 3.84/5 today, and the `c_v(5) = 2.6×` verify
+cost (item 4) is why the served block width moved from 6 to 5 — verify is expensive, so the optimum
+width moves **down**, not up.
+
+---
+
+# Historical snapshot — 2026-08-06
+
+*Preserved verbatim. Do not quote these numbers.*
+
+**[2026-08-06] Phase 0 + Phase 1 complete. Gates H1 and R1 PASS. No kernel written yet — per the directive's
 "report back before writing a single kernel".**
 
 Last updated: 2026-08-06.
