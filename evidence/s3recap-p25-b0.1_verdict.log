@@ -1,0 +1,19 @@
+hold-out tau at budget 200 tokens: n=64
+  median 4.976   mean 4.706   p25 3.673   p75 5.912   min 1.802   max 6.000
+  baseline (untrained) 5.653   delta -0.677 tau  (-5.19 tok/s, -22.9%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-p25-b0.1_eval.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  4.83    34.05 tok/s
+    long_context     tau  4.53    31.17 tok/s
+    code_edit        tau  4.18    29.80 tok/s
+    agentic_format   tau  4.16    29.87 tok/s
+    short_factual    tau  3.87    28.83 tok/s
+    reasoning        tau  3.57    28.12 tok/s
+    explanation      tau  3.00    24.14 tok/s
+    code_gen         tau  2.59    21.08 tok/s
+  suite mean tau 3.8413  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.57 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3recap-p25-b0.1/session_verdict.json

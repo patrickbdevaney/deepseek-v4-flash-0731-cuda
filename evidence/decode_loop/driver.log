@@ -2969,3 +2969,7 @@
 04:08:12  DONE    subtype=success turns=98 tools=97 dur=3583s cost=$9.34 err=False
 [loop 2026-08-21T04:08:12-04:00] claude exited rc=0
 [loop 2026-08-21T04:08:23-04:00] committing iteration 12 using COMMIT_MSG_2p1.txt
+[loop 2026-08-21T04:08:25-04:00] pushed c3e90a8
+[loop 2026-08-21T04:08:25-04:00] DECODE_LOOP_STOP present — stopping
+[loop 2026-08-21T04:08:25-04:00] loop finished after 13 iteration(s). Journal: evidence/decode_loop.jsonl
+[loop 2026-08-21T04:08:25-04:00] live feed was: evidence/decode_loop/live.log

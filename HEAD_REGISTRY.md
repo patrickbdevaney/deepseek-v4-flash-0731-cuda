@@ -140,3 +140,10 @@ shipped `tau` 3.5362 / 22.1425 tok/s, `s3` `tau` 3.8438 / 24.2512 tok/s — **+8
 rows above **exactly**, which is the evidence the re-measurement was faithful; the tok/s columns did
 not, and [`wiki/measurement-and-traps.md` §22](wiki/measurement-and-traps.md) is why criterion 4
 above should not be read off two different engine revisions.
+| `s3recap` | 3.625 | 5 | 26.8487 | 14.59 | `92c761d7e` | not promoted: suite tau 3.6250 does not beat incumbent 3.6888 by the 3.5%  |
+| `s3recap-ce1.0` | 3.7325 | 5 | 27.6913 | 14.53 | `a608d52d7` | not promoted: suite tau 3.7325 does not beat incumbent 3.6888 by the 3.5%  |
+| `s3recap-ce0.5` | 3.695 | 5 | 27.5113 | 14.61 | `a608d52d7` | not promoted: suite tau 3.6950 does not beat incumbent 3.6888 by the 3.5%  |
+| `s3recap-deficit` | 3.7975 | 5 | 27.8712 | 14.59 | `a608d52d7` | not promoted: suite tau 3.7975 does not beat incumbent 3.6888 by the 3.5%  |
+| `s3recap-p25-b0.1` | 3.8413 | 5 | 28.3825 | 14.61 | `a608d52d7` | PROMOTED |
+| `s3recap-p25-b0.5` | 3.6738 | 5 | 27.0825 | 14.56 | `a608d52d7` | not promoted: suite tau 3.6738 does not beat incumbent 3.6888 by the 3.5%  |
+| `s3recap-hass1` | 3.6225 | 5 | 26.7563 | 14.52 | `a608d52d7` | not promoted: suite tau 3.6225 does not beat incumbent 3.8413 by the 3.5%  |

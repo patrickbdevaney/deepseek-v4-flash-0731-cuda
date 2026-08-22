@@ -149,12 +149,25 @@ def promote(a):
     # this comparison. tok/s is an ENGINE measurement; `tau` is a HEAD measurement, and the head is
     # what is being graded.
     #
-    # --incumbent-tau overrides the registry with a value re-measured in THIS session, which is the
-    # strictly correct comparison. The registry `tau` stays admissible because it demonstrably does
-    # not drift, but the source is printed either way so the reader knows which one was used.
-    inc_tau = getattr(a, "incumbent_tau", None) or (inc["suite_tau"] if inc else None)
-    inc_src = ("re-measured this session" if getattr(a, "incumbent_tau", None)
-               else "HEAD_REGISTRY.md -- NOT this session")
+    # --incumbent-tau supplies a value re-measured in THIS session, which is the strictly correct
+    # comparison (ladder 2.4). It does NOT override the registry: the bar is the MAX of the two.
+    #
+    # WHY MAX AND NOT OVERRIDE. The override was added when block 5 had no registry row at all, so
+    # the caller passed `evidence/baseline_tau.value`. That file is a snapshot: once a head promotes
+    # at this width the registry moves ahead of it and a stale override silently LOWERS the bar,
+    # promoting a head that loses to what is already live and restaging the server onto it. Taking
+    # the max can only ever refuse a promotion, never grant a false one, so it is the safe rule.
+    # Both sources are printed so the reader knows which one bound.
+    _ov = getattr(a, "incumbent_tau", None)
+    _reg = inc["suite_tau"] if inc else None
+    cands = [(v, s) for v, s in ((_ov, "re-measured this session"),
+                                 (_reg, "HEAD_REGISTRY.md -- NOT this session")) if v is not None]
+    if cands:
+        inc_tau, inc_src = max(cands, key=lambda t: t[0])
+        if len(cands) == 2:
+            inc_src += " (max of %.4f re-measured, %.4f registry)" % (_ov, _reg)
+    else:
+        inc_tau, inc_src = None, "none"
     # FAIL CLOSED. With the registry width-filtered, a brand-new width legitimately has no
     # incumbent row -- and if --incumbent-tau is also absent the comparison silently vanishes and
     # EVERY head promotes. Refuse instead: an ungraded head is not a promoted head.

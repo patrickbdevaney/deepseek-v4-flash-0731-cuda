@@ -1,0 +1,7 @@
+[supervise 2026-08-21T17:14:34-04:00] supervising dsv4-s3recap then dsv4-chain (max 3 attempts each)
+[supervise 2026-08-21T19:12:19-04:00] supervising dsv4-s3recap then dsv4-chain (max 3 attempts each)
+[supervise 2026-08-21T19:24:24-04:00] supervising dsv4-s3recap then dsv4-chain (max 3 attempts each)
+[supervise 2026-08-21T19:24:51-04:00] supervising dsv4-s3recap then dsv4-chain (max 3 attempts each)
+[supervise 2026-08-21T19:41:47-04:00] supervising dsv4-s3recap then dsv4-chain (max 3 attempts each)
+[supervise 2026-08-21T23:03:07-04:00] supervising dsv4-s3recap then dsv4-chain (max 3 attempts each)
+[supervise 2026-08-22T10:49:10-04:00] chain complete (arms measured, best head staged); supervision complete
