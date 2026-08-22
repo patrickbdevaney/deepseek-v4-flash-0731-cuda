@@ -229,15 +229,24 @@ def promote(a):
         "base_source_revision": "9e165c30e2704aec5d9d593cce3eebd58bbef1cb",
         "reap": {"original_experts_per_layer": 256, "kept_experts_per_layer": 160},
         "measurement": {
+            # BLOCK WIDTH IS READ, NOT HARDCODED. This string said "block 6" for every card
+            # written after ladder 2.1 shipped block 5 -- including the live head's, whose own
+            # per_prompt rows all say block 5. A provenance record that contradicts itself is
+            # worse than one that omits the field, because it travels with the bundle.
             "protocol": "8-prompt suite (scripts/prompt_suite.json, one per category), NGEN0>=200 "
-                        "so tau is past the drafter's 128-token sliding window (F92); block 6, "
+                        "so tau is past the drafter's 128-token sliding window (F92); block %d, "
                         "adaptK 1.50; clean run; canonical 6-token prompt is a CONTROL, excluded "
-                        "from the mean (F96).",
+                        "from the mean (F96)." % _pb,
             "suite_mean_tau": ev["suite_tau"], "suite_mean_tok_s": ev["suite_tok_s"],
             "base_ar_tok_s": ev["base_ar_tok_s"], "n_suite_prompts": ev["n_suite"],
             "per_prompt": ev["points"], "lossless_gate": "PASS",
         },
-        "incumbent_at_promotion": inc, "notes": a.notes or "",
+        # Record the bar that actually BOUND, not just the registry row -- they differ whenever
+        # --incumbent-tau is in play, and "None" in this field on a head that was in fact graded
+        # reads as "graded against nothing" to anyone auditing the bundle later.
+        "incumbent_at_promotion": inc,
+        "graded_against": {"tau": inc_tau, "source": inc_src, "block": _pb} if inc_tau else None,
+        "notes": a.notes or "",
         "files": files,
     }
     json.dump(card, open(os.path.join(dst, "head_card.json"), "w"), indent=2)

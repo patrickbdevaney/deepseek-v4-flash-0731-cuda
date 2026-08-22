@@ -141,14 +141,32 @@ def check_release(d, full):
 
 
 def registry_names():
-    """Head names the registry claims exist, from the first column of its table."""
+    """Head names the registry claims exist, from the first column of its RESULTS table.
+
+    NOT every backticked first cell. `HEAD_REGISTRY.md` also carries prose tables -- the corpus
+    inventory (`s3/gen.txt`, `s1_gen.txt`) and the release pointer (`CURRENT_BEST`) -- whose first
+    cells look identical to a head row. Reporting those as missing directories produced three
+    permanent false alarms, and a checker that always cries wolf is a checker nobody reads.
+
+    A results row is identified structurally, by the shape only it has: >= 7 pipe-delimited cells
+    with a parseable `tau` in the second. That survives new columns being appended (the `blk`
+    column was added on 2026-08-21) without needing to be told about them.
+    """
     if not os.path.exists(REGISTRY):
         return None
     names = []
     for line in open(REGISTRY):
-        m = re.match(r"\|\s*`([^`]+)`\s*\|", line)
-        if m:
-            names.append(m.group(1))
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 7:
+            continue
+        m = re.match(r"^`([^`]+)`$", cells[0])
+        if not m:
+            continue
+        try:
+            float(cells[1])
+        except ValueError:
+            continue
+        names.append(m.group(1))
     return names
 
 
