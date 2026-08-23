@@ -1339,3 +1339,32 @@ measurement (§ladder 2.4 was the first, where the docstring said `tau` and the 
 `tok/s`). Both were found by reading the promoter rather than by any result looking wrong, and
 neither would have been caught by a test of the engine. **Gate code deserves the same adversarial
 reading as kernel code, and gets it far less often.**
+
+## 39. A mutual-exclusion guard added on both sides is a deadlock (2026-08-23)
+
+Single tenancy on this box is enforced by units waiting on each other: each chain refuses to take the
+GPU while another chain's unit is active. When `dsv4-resume` was added to run the interrupted corpus
+generation, it was given the same guard as everything else — *wait for `dsv4-ck`, `dsv4-p25b` and
+`dsv4-autopilot`* — and `dsv4-resume` was simultaneously added to the autopilot's `other_chain()`.
+
+Both edits were individually correct. Together they were a cycle:
+
+```
+[resume 11:12:46] waiting for dsv4-ck
+[resume 11:14:46] waiting for dsv4-autopilot     <- and the autopilot waits for dsv4-resume
+[auto   11:14:xx] GPU busy (another chain); waiting
+```
+
+Both units `active`, both in a sleep loop, **the GPU idle** — the precise failure an unattended queue
+exists to prevent, and one that looks *healthy* to every status check: `systemctl list-units` shows
+two running services, and both logs show recent, sensible-looking lines.
+
+**The rule: mutual exclusion between two chains must be one-directional.** Decide which outranks the
+other and encode the precedence *once*. Here the corpus outranks the arms, so the autopilot yields to
+`dsv4-resume` and `dsv4-resume` never yields to the autopilot. Symmetric guards are how you get a
+cycle; asymmetric precedence plus a GPU check is how you get mutual exclusion.
+
+**How it was caught:** by reading the log line after the fix, not by a check. `waiting for
+dsv4-autopilot` was only suspicious because the autopilot had just been observed waiting for the
+resume. Nothing in the system would have reported it — the next signal would have been a corpus that
+had not advanced in the morning.

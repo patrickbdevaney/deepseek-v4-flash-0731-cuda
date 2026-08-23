@@ -7,3 +7,8 @@
 [resume 2026-08-23T11:10:46-04:00] waiting for dsv4-ck
 [resume 2026-08-23T11:12:46-04:00] waiting for dsv4-ck
 [resume 2026-08-23T11:14:46-04:00] waiting for dsv4-autopilot
+[resume 2026-08-23T11:15:35-04:00] attempt 1: 384/3071 done, generating the remaining 2687
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1_resume1.log
+[run_model] pid 2837368   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1_resume1.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1_resume1.memguard.log

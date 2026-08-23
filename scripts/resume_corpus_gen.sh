@@ -45,12 +45,19 @@ Resuming with a different checkpoint than generated the first half would make th
 # ---------------------------------------------------------------- wait for the box to be ours
 # Single tenancy: 100.4 GiB of weights in a 122 GiB pool. Two models is an OOM, and an OOM in the
 # middle of generation costs the whole remainder.
-for u in dsv4-ck dsv4-p25b dsv4-autopilot; do
+# DEADLOCK, found and fixed 2026-08-23 11:14. This list must NOT contain dsv4-autopilot. The
+# autopilot's other_chain() guard waits on dsv4-resume, so a resume that waits on the autopilot and
+# an autopilot that waits on the resume each sit in the other's sleep loop forever, both "active",
+# both doing nothing, with the GPU idle -- the exact failure an unattended queue is supposed to
+# prevent. Precedence is one-directional: the CORPUS outranks the arms, so the autopilot yields to
+# this script and this script never yields to the autopilot. Mutual exclusion still holds, from the
+# autopilot's guard plus the GPU check below.
+for u in dsv4-ck dsv4-p25b; do
     while systemctl --user is-active --quiet "$u"; do
         LOG "waiting for $u"; sleep 120
     done
 done
-while pgrep -x decode >/dev/null || pgrep -x main >/dev/null; do LOG "waiting for the GPU"; sleep 120; done
+while pgrep -x decode >/dev/null || pgrep -x dsv4-server >/dev/null; do LOG "waiting for the GPU"; sleep 120; done
 
 # ---------------------------------------------------------------- generate the remainder, in a loop
 for attempt in 1 2 3; do
