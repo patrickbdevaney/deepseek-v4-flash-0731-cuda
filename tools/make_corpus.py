@@ -219,6 +219,18 @@ def main():
     ap.add_argument("--max-tokens", type=int, default=160,
                     help="cap for ordinary prompts; long_context is allowed 8x this")
     ap.add_argument("--min-tokens", type=int, default=12)
+    ap.add_argument("--recon-weight", type=float, default=0.5, dest="recon_weight",
+                    help="fraction of the corpus given to the reconstructive categories "
+                         "(long_context, agentic_format, code_edit, multi_turn). 0.5 = the "
+                         "balanced corpus, bit for bit. 0.70 approximates an agentic coding trace.")
+    ap.add_argument("--cat-weights", default=None, dest="cat_weights",
+                    help="explicit per-category shares, e.g. "
+                         "'long_context=0.29,agentic_format=0.23,...'. Must sum to 1.0. "
+                         "Overrides --recon-weight.")
+    ap.add_argument("--long-recon", action="store_true", dest="long_recon",
+                    help="raise the prompt-length cap on agentic_format/code_edit/multi_turn to 4x "
+                         "(long_context stays 8x). Without this they are capped at --max-tokens, "
+                         "which is not the shape they take in deployment.")
     ap.add_argument("--seed", type=int, default=20260810)
     a = ap.parse_args()
 
@@ -240,15 +252,56 @@ def main():
         sys.exit(f"[corpus] no prompts for {empty} -- fix the source before building a corpus that "
                  f"silently omits a category the frozen suite measures")
 
-    per_hold = a.holdout // len(CATS)
-    per_train = (a.n - a.holdout) // len(CATS)
-    need = per_train + per_hold
-    short = [c for c in CATS if len(pools[c]) < need]
+    # MIX. Balanced 8-way was the right answer to session 1's single-domain corpus (see the
+    # docstring) and it is NOT the deployment distribution. An agentic coding harness is
+    # reconstructive-heavy: long context, tool/JSON format, file edits, multi-turn. --recon-weight
+    # w gives that half of the corpus weight w and the constructive half (1-w); w=0.5 reproduces
+    # the balanced corpus exactly, so this is a strict no-op by default.
+    RECON = ["long_context", "agentic_format", "code_edit", "multi_turn"]
+    w = a.recon_weight
+    # --cat-weights overrides the recon/constructive split with an explicit per-category share,
+    # because equal weighting WITHIN the reconstructive half is wrong twice over. The pools are not
+    # equal -- code_edit has 249 usable prompts against multi_turn's 23,107, so equal shares let the
+    # smallest pool cap the whole corpus -- and neither is the deficit: the release rule put the
+    # give-back on long_context (-0.47) and agentic_format (-0.25) while code_edit PASSED its floor.
+    # Weight belongs where the measured deficit is and where the data exists to spend it.
+    explicit = {}
+    if a.cat_weights:
+        for kv in a.cat_weights.split(","):
+            k, v = kv.split("="); k = k.strip()
+            if k not in CATS:
+                sys.exit(f"[corpus] --cat-weights: unknown category {k!r}")
+            explicit[k] = float(v)
+        tot = sum(explicit.values())
+        if abs(tot - 1.0) > 1e-6:
+            sys.exit(f"[corpus] --cat-weights must sum to 1.0, got {tot:.4f}")
+    def quota(total):
+        per = {}
+        for c in CATS:
+            if explicit:
+                share = explicit.get(c, 0.0)
+            else:
+                share = (w / len(RECON)) if c in RECON else ((1.0 - w) / (len(CATS) - len(RECON)))
+            per[c] = max(1, int(round(total * share)))
+        return per
+    q_hold, q_train = quota(a.holdout), quota(a.n - a.holdout)
+    need_by = {c: q_train[c] + q_hold[c] for c in CATS}
+    short = [c for c in CATS if len(pools[c]) < need_by[c]]
     if short:
-        sys.exit(f"[corpus] need {need}/category, short on {[(c, len(pools[c])) for c in short]}")
+        sys.exit(f"[corpus] short on {[(c, len(pools[c]), need_by[c]) for c in short]}")
 
+    # PER-CATEGORY PROMPT LENGTH. long_context always got 8x; the other RECONSTRUCTIVE categories
+    # -- agentic_format, code_edit, multi_turn -- were capped at 160 tokens, which is not the shape
+    # they take in deployment. A tool-calling turn carries a schema plus history and runs to
+    # thousands of tokens; a file edit carries the file. The head was therefore trained to
+    # reconstruct from a context far shorter than the one it must reconstruct from at serve time,
+    # in exactly the categories an agentic harness lives in and exactly the categories where
+    # fine-tuning was measured GIVING GROUND BACK (release rule, 2026-08-23: long_context 5.00 ->
+    # 4.53, agentic_format 4.41 -> 4.16 against the stock head).
+    LONGMULT = {"long_context": 8, "agentic_format": 4, "code_edit": 4, "multi_turn": 4}
     def enc(text, cat):
-        cap = a.max_tokens * 8 if cat == "long_context" else a.max_tokens
+        cap = a.max_tokens * (LONGMULT.get(cat, 1) if a.long_recon else
+                              (8 if cat == "long_context" else 1))
         ids = tok.encode(text, add_special_tokens=False).ids[:cap]
         return [BOS] + ids if len(ids) >= a.min_tokens else None
 
@@ -259,13 +312,13 @@ def main():
             e = enc(text, c)
             if e:
                 taken.append(e)
-            if len(taken) >= need:
+            if len(taken) >= need_by[c]:
                 break
-        if len(taken) < need:
-            sys.exit(f"[corpus] {c}: only {len(taken)}/{need} survived length filtering")
-        train += taken[:per_train]
-        hold += taken[per_train:need]
-        counts[c] = len(taken[:need])
+        if len(taken) < need_by[c]:
+            sys.exit(f"[corpus] {c}: only {len(taken)}/{need_by[c]} survived length filtering")
+        train += taken[:q_train[c]]
+        hold += taken[q_train[c]:need_by[c]]
+        counts[c] = len(taken[:need_by[c]])
 
     rnd.shuffle(train)
     rnd.shuffle(hold)          # hold-out balanced by construction, order randomised
@@ -276,8 +329,8 @@ def main():
             f.write(",".join(str(i) for i in ids) + "\n")
     lens = [len(x) for x in allp]
     print(f"[corpus] wrote {len(allp)} prompts -> {a.out}")
-    print(f"[corpus]   train {len(train)} ({per_train}/category), hold-out {len(hold)} "
-          f"({per_hold}/category, balanced -- session 1's was reasoning-only)")
+    print(f"[corpus]   train {len(train)}, hold-out {len(hold)}  (recon weight {a.recon_weight})")
+    print("[corpus]   per category: " + "  ".join(f"{c}={counts[c]}" for c in CATS))
     print(f"[corpus]   prompt tokens: min {min(lens)} median {sorted(lens)[len(lens)//2]} "
           f"max {max(lens)}")
 

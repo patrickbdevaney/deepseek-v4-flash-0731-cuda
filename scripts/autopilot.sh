@@ -27,13 +27,14 @@ S5=/home/patrickd/s5-capture
 STATE=evidence/autopilot/arms.jsonl
 QUEUE=evidence/autopilot/queue.tsv
 DEC=evidence/autopilot/decisions.log
-MAXARMS="${AUTOPILOT_MAX_ARMS:-24}"        # backstop against a runaway search, not a target
+MAXARMS="${AUTOPILOT_MAX_ARMS:-4}"         # 24 arms buys ~+1.5 tok/s at best; the corpus is the
+                                           # binding constraint. See scripts/chain_corpus.sh.
 MINFREE_GB=40
 mkdir -p evidence/autopilot; touch "$QUEUE"
 LOG(){ printf '[auto %s] %s\n' "$(date -Is)" "$*" | tee -a "$DEC"; }
 
 gpu_busy(){ pgrep -x decode >/dev/null || pgrep -x dsv4-server >/dev/null; }
-other_chain(){ systemctl --user is-active --quiet dsv4-p25b dsv4-c23 dsv4-p26 dsv4-chain 2>/dev/null; }
+other_chain(){ systemctl --user is-active --quiet dsv4-p25b dsv4-c23 dsv4-p26 dsv4-chain dsv4-corpus 2>/dev/null; }
 free_gb(){ df --output=avail -BG / | tail -1 | tr -dc '0-9'; }
 
 reclaim(){
