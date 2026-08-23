@@ -3,3 +3,5 @@
 [run_model] 118 GiB available; launching detached -> evidence/run0_tau_blk5.log
 [run_model] pid 2018974   watch: tail -f evidence/run0_tau_blk5.log
 [run_model] memguard armed on 'decode' -> evidence/run0_tau_blk5.memguard.log
+[baseline] blocks=[5]  n_suite=8  suite_tau=3.255  suite_tok_s=23.2538  base_ar=13.86
+[baseline] BASELINE_CKPT set -> this is NOT the incumbent; baseline_tau.value untouched

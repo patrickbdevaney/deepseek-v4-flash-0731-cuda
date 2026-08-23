@@ -83,7 +83,8 @@ justifies 2.3's serving-side work, and it needs no training arm at all.
 | artifact | where | recoverable if the disk dies? |
 |---|---|---|
 | engine + every document | git, pushed to `origin/main` | **yes** |
-| head weights (source) | `~/model-backups/heads/<name>/mtp_trained.safetensors`, 1 GB each | **only if uploaded** |
+| head weights (source), **live head** | `~/model-backups/heads/s3recap-p25-b0.1/` **and [huggingface.co/patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1](https://huggingface.co/patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1)** | **yes** — uploaded 2026-08-23, remote LFS sha256 verified equal to the local archive |
+| head weights (source), the other 10 | `~/model-backups/heads/<name>/mtp_trained.safetensors`, 1 GB each | **no — single copy.** HF private quota is full (185.6 GB over 26 repos), so only the live head is offsite. |
 | head weights (loadable shards) | same directory, ~7 GB each | regenerate from the source |
 | training corpus | `/home/patrickd/s5-capture/s3/gen.txt` | regenerable, but the generate pass is the expensive one |
 | the recipe | **this file**, in git | yes |
