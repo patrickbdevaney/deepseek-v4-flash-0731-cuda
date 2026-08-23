@@ -92,6 +92,49 @@ A P2 bundle's `README.md` must carry **the per-category `tau` table, not just th
 mean is what promotion is decided on; the table is what a downstream user needs to predict their own
 workload, and it is the number this project learned the hard way is not interchangeable with it.
 
+
+## The release rule, evaluated for the first time at block 5 (2026-08-23)
+
+The rule above floors the reconstructive categories at **run-0 minus 0.2** and the constructive ones
+at **the incumbent**. It had been **unevaluable since ladder 2.1**: run-0 existed only at block 6,
+every candidate is block 5, and `tau` is not comparable across widths. `BASELINE_CKPT=<base ckpt>
+scripts/baseline_tau.sh` now measures run-0 at the served width without staging anything —
+**run-0 @ blk 5 = suite tau 3.2550, 23.2538 tok/s, base AR 13.86** (`evidence/run0_tau_blk5.log`).
+
+| category | run-0 | `s3` (incumbent) | `s3recap-p25-b0.1` | floor | |
+|---|---:|---:|---:|---:|---|
+| long_context | **5.00** | 4.00 | 4.53 | >= 4.80 | **FAIL** −0.27 |
+| agentic_format | **4.41** | 3.74 | 4.16 | >= 4.21 | **FAIL** −0.05 |
+| code_edit | 4.08 | 3.85 | **4.18** | >= 3.88 | pass |
+| reasoning | 1.82 | **3.70** | 3.57 | >= 3.70 | **FAIL** −0.13 |
+| explanation | 1.70 | 2.94 | **3.00** | >= 2.94 | pass |
+| code_gen | 1.86 | 2.56 | **2.59** | >= 2.56 | pass |
+| multi_turn | 4.06 | **5.21** | 4.83 | — | not floored |
+| short_factual | 3.11 | 3.51 | **3.87** | — | not floored |
+| **suite mean** | 3.2550 | 3.6888 | **3.8413** | | |
+
+**`s3recap-p25-b0.1` fails 3 of the 6 floors, so `CURRENT_BEST` is NOT repointed at it.** Promotion
+and release are different gates and this is the case that separates them: the head wins the mean by
+**+18.0 % over run-0** and is correctly promoted and correctly deployed, and it still gives back
+ground on the two categories the stock head was best at. That is F117 stated in the released
+artifact instead of in a wiki page.
+
+`CURRENT_BEST` therefore still points at `dspark-mtp-draft-head-v1.0-s3`, which was released under
+block-6 measurements and has not been re-adjudicated at block 5 either. **Neither pointer is
+currently backed by a rule-passing block-5 measurement**, and saying so is more useful than moving
+the symlink to whichever head is newest.
+
+**What would pass.** The failures are small and one-directional: long_context −0.27 is the only one
+outside noise. The deficit weighting that won P2.5 spends gradient on the head's *worst* positions,
+which is why the constructive categories roughly doubled; the reconstructive give-back is the same
+mechanism seen from the other side. A corpus reweighted toward long-context reconstruction, or a
+deficit clamp that stops re-weighting once a category is already strong, is the obvious next arm —
+and it is now measurable against a real run-0 rather than against a block-6 ghost.
+
+**The published head states this itself.** `evidence/hf_model_card_s3recap-p25-b0.1.md` is the model
+card as uploaded; it carries the per-category table and says in as many words that the head does not
+pass the release rule and should be chosen by workload rather than by the mean.
+
 ## Keeping the archive real
 
 The weights are not in git, so nothing about them is recoverable from a clone.
