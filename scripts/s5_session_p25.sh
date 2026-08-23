@@ -183,6 +183,9 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
     # LADDER 2.3: the confidence head is only trainable once the acceptance labels are FREE-RUNNING,
     # which is what HASS provides. a_conf stays 0 without it -- F100's reasoning is unchanged.
     [ -n "${S5_ACONF:-}" ] && LOSSW+=(--a-conf "$S5_ACONF")
+    # P2.5b: the anchor's SHAPE. beta*r**p*KL -- p>1 concentrates the anchor on the positions that
+    # already accept well, which is where the release rule showed fine-tuning gives ground away.
+    [ -n "${S5_ANCHOR_POW:-}" ] && LOSSW+=(--anchor-pow "$S5_ANCHOR_POW")
     if [ -n "$PREV" ] && [ ! -s "$WORK/$PREV/mtp_trained.safetensors" ]; then
         DIE "chunk $ci: --resume target $WORK/$PREV/mtp_trained.safetensors is missing; refusing to \
 train a chunk as if it were a fresh session (that would silently discard every earlier chunk)"

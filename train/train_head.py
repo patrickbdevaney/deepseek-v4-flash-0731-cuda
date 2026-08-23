@@ -185,6 +185,11 @@ def main():
     # inference the engine has the real token there too.
     ap.add_argument("--hass-from", type=int, default=0, dest="hass_from",
                     help="free-run the draft from this 0-indexed step (P2.6). 0 disables HASS.")
+    ap.add_argument("--anchor-pow", type=float, default=1.0, dest="anchor_pow",
+                    help="exponent p in the anchor term beta * r**p * KL. p=1.0 (default) is the "
+                         "P2.5 winning recipe exactly. p>1 CONCENTRATES the anchor on positions "
+                         "that already accept well, which is where fine-tuning gives ground away, "
+                         "without raising it on the weak positions where the gain comes from.")
     ap.add_argument("--beta", type=float, default=0.0,
                     help="P2.5 anchor: weight on r*KL(q_new || q_frozen). 0 disables it entirely.")
     ap.add_argument("--deficit", action="store_true",
@@ -853,7 +858,23 @@ def main():
                 lpf = F.log_softmax(flg.float(), dim=-1)
                 kl = (lpn.exp() * (lpn - lpf)).sum(-1).mean()
                 _dw["kl"] += float(kl.detach()); _dw["kln"] += 1
-                l = l + a.beta * r * kl
+                # ANCHOR SHAPE, not anchor magnitude. `r` is the block's accepted fraction, so
+                # beta*r holds the head still exactly where it is already accepting well and lets
+                # it move where it is not -- the two sides of F117. It won P2.5 at beta=0.1.
+                #
+                # WHY A POWER. The release rule evaluated at block 5 on 2026-08-23 showed that
+                # ALL training costs long_context acceptance: run-0 5.00 -> s3 4.00 (no anchor)
+                # -> p25-b0.1 4.53 (beta=0.1). The anchor recovered half the loss, so it is the
+                # right mechanism -- but raising it uniformly is not the fix, because beta=0.5
+                # collapsed the suite mean to 3.6738, BELOW the incumbent. The anchor needs to be
+                # RESHAPED rather than scaled: concentrated on the high-r positions that are being
+                # given away, and relaxed on the low-r positions that P2.5's whole gain came from.
+                #
+                # r**p does exactly that. At p=2, beta=0.3: an r=0.9 position sees 0.243 (2.7x the
+                # winning recipe's 0.09) while an r=0.3 position sees 0.027 (LESS than its 0.03).
+                # Same knob, opposite effects at the two ends. p=1.0 is the default and reproduces
+                # the winning recipe bit for bit.
+                l = l + a.beta * (r ** a.anchor_pow) * kl
             # PHASE A IS SHARED. The KV-cache fill runs once per sequence, outside this loop, and
             # every position's graph traces back through it -- so the first backward frees it and
             # the second raises "Trying to backward through the graph a second time". retain_graph

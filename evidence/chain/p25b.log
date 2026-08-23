@@ -1,0 +1,9 @@
+[p25b 2026-08-23T01:26:58-04:00] arm s3recap-p25b-p2-b0.3: deficit=1 beta=0.3 anchor_pow=2
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:26:58-04:00] preflight: need ~28 GB (peak = one chunk of 491), have 106 GB free
+  round-trip: 1536/1536 lines start with their exact seed
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:26:58-04:00] pass 1 OK (1536 sequences)
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:26:58-04:00] hold-out: 64 sequence(s) reserved, 1472 for training
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:26:58-04:00] training in 3 chunk(s) of up to 491 sequence(s); peak capture on disk is one chunk
+total: 315315 tokens, 9854.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:27:26-04:00] equivalence gate: port vs engine drafts
