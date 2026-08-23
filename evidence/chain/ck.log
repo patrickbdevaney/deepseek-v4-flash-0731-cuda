@@ -1,2 +1,73 @@
 [ck 2026-08-23T02:04:56-04:00] waiting for the corpus and arm chains
 [ck 2026-08-23T02:10:44-04:00] waiting for the corpus and arm chains
+[ck 2026-08-23T11:00:46-04:00] sweeping widths 4-12 x 9 prompts on /home/patrickd/models/ckpt-head-s3recap-p25-b0.1
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> evidence/ck_sweep.log
+[run_model] pid 2810410   watch: tail -f evidence/ck_sweep.log
+[run_model] memguard armed on 'decode' -> evidence/ck_sweep.memguard.log
+[ck 2026-08-23T11:12:50-04:00] per-prompt optimum:
+tok/s by prompt x width
+
+prompt                  4       5       6       7       8       9      10      12
+control             26.41   25.31   23.95   22.81   22.60   22.40   21.83   21.59
+agentic_format      29.73   29.81   28.29   29.83   31.09   29.54   28.81   26.80
+code_edit           28.13   29.72   28.67   27.87   25.71   25.35   25.41   23.14
+code_gen            21.75   21.06   20.07   19.64   19.26   19.61   19.02   18.33
+explanation         24.31   24.07   22.88   21.34   21.05   20.19   19.91   18.93
+long_context        30.52   31.07   28.77   26.63   25.70   24.99   24.18   22.76
+multi_turn          32.99   33.98   34.19   35.14   34.77   33.53   34.39   33.96
+reasoning           27.53   28.04   27.32   26.00   25.14   23.96   23.91   22.20
+short_factual       28.36   28.78   27.71   26.63   25.97   25.02   25.12   23.58
+
+per-prompt optimum vs the served width of 5
+
+prompt               k*  tok/s@k*   tok/s@5     gain
+control               4     26.41     25.31    +4.3%
+agentic_format        8     31.09     29.81    +4.3%
+code_edit             5     29.72     29.72    +0.0%
+code_gen              4     21.75     21.06    +3.3%
+explanation           4     24.31     24.07    +1.0%
+long_context          5     31.07     31.07    +0.0%
+multi_turn            7     35.14     33.98    +3.4%
+reasoning             5     28.04     28.04    +0.0%
+short_factual         5     28.78     28.78    +0.0%
+
+==============================================================
+VERDICT: k* varies -- [4, 5, 7, 8] across the suite.
+  An engine that picked each prompt's own width would gain +1.8% on the suite mean.
+  That is the MEASURED upper bound for lever 1, replacing the +20-25%% estimate.
+  It is an upper bound because a real engine must PREDICT k* per position from the
+  confidence head (AUC 0.88), not read it off a table computed with hindsight.
+tok/s by prompt x width
+
+prompt                  4       5       6       7       8       9      10      12
+control             26.41   25.31   23.95   22.81   22.60   22.40   21.83   21.59
+agentic_format      29.73   29.81   28.29   29.83   31.09   29.54   28.81   26.80
+code_edit           28.13   29.72   28.67   27.87   25.71   25.35   25.41   23.14
+code_gen            21.75   21.06   20.07   19.64   19.26   19.61   19.02   18.33
+explanation         24.31   24.07   22.88   21.34   21.05   20.19   19.91   18.93
+long_context        30.52   31.07   28.77   26.63   25.70   24.99   24.18   22.76
+multi_turn          32.99   33.98   34.19   35.14   34.77   33.53   34.39   33.96
+reasoning           27.53   28.04   27.32   26.00   25.14   23.96   23.91   22.20
+short_factual       28.36   28.78   27.71   26.63   25.97   25.02   25.12   23.58
+
+per-prompt optimum vs the served width of 5
+
+prompt               k*  tok/s@k*   tok/s@5     gain
+control               4     26.41     25.31    +4.3%
+agentic_format        8     31.09     29.81    +4.3%
+code_edit             5     29.72     29.72    +0.0%
+code_gen              4     21.75     21.06    +3.3%
+explanation           4     24.31     24.07    +1.0%
+long_context          5     31.07     31.07    +0.0%
+multi_turn            7     35.14     33.98    +3.4%
+reasoning             5     28.04     28.04    +0.0%
+short_factual         5     28.78     28.78    +0.0%
+
+==============================================================
+VERDICT: k* varies -- [4, 5, 7, 8] across the suite.
+  An engine that picked each prompt's own width would gain +1.8% on the suite mean.
+  That is the MEASURED upper bound for lever 1, replacing the +20-25%% estimate.
+  It is an upper bound because a real engine must PREDICT k* per position from the
+  confidence head (AUC 0.88), not read it off a table computed with hindsight.
+[ck 2026-08-23T11:12:50-04:00] ck complete:

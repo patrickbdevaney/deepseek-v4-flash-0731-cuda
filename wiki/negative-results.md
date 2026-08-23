@@ -510,6 +510,52 @@ which is what makes the retirement safe.
 
 ---
 
+### 4m. Adaptive block width: real, but worth +1.8 % not +20–25 % (2026-08-23)
+
+**Claim tested.** The served draft width is a single constant (5). If the best width differed by
+task shape, an engine that varied it per prompt would beat any fixed width. `ROADMAP.md` priced this
+at **+20–25 %** and it was the largest rung on the decode ladder — large enough that the whole CUDA
+programme was sequenced behind it.
+
+**Measurement.** `scripts/measure_ck.sh`: widths {4,5,6,7,8,9,10,12} × 9 suite prompts × 200 tokens,
+one checkpoint load, on the champion head `ckpt-head-s3recap-p25-b0.1`.
+
+| | suite mean tok/s |
+|---|---|
+| best fixed width (5) | 27.982 |
+| width 4 | 27.748 |
+| width 6 | 26.872 |
+| **oracle, per-prompt k\*** | **28.479** |
+
+**Verdict: +1.77 %, and that is a ceiling nothing can reach.** The oracle picks each prompt's best
+width *with hindsight*, from a table computed after the fact. A live engine must predict k\* per
+position from the confidence head (AUC 0.88) and necessarily realises less. k\* does vary —
+{4, 5, 7, 8} — so the mechanism is real; it is the magnitude that was wrong, by an order of
+magnitude.
+
+**Why the estimate was so far off.** It assumed the widths were far apart in value. They are not:
+four of nine prompts are already at their optimum at 5, and the two directions of deviation cancel.
+The agentic categories want **wider** (multi_turn 7 at 35.14, agentic_format 8 at 31.09); control,
+code_gen and explanation want **narrower** (4). Averaging a +4.3 % and a +4.3 % that point opposite
+ways across a nine-prompt suite leaves +1.8 %.
+
+**What it cost to find out: 12 minutes.** This is the argument for measuring a lever before building
+it. The alternative was a kernel rewrite of the draft loop to support a variable width, sequenced
+ahead of the AR-kernel work, to buy under two percent.
+
+**Two things it bought.**
+
+1. **Width 5 re-confirmed as the best fixed width** on a fresh measurement, independently of ladder
+   2.1 — 27.98 against 27.75 at 4, and monotone decay above 5.
+2. **The remaining headroom is in the kernels, not the speculator.** `tau`'s ceiling *is* the draft
+   width, so a fixed 5 caps even a perfect head at 1.30×. Varying the width was the one lever that
+   removed that cap, and it has now been measured as nearly flat — meaning the width the target's
+   *entropy* supports is close to 5 almost everywhere. AR kernel headroom (+5–10 % est.) is now the
+   largest remaining decode lever, and prefill (6.6× TTFT) the largest practical one.
+
+**Headline consequence.** The decode target dropped from **35–42 tok/s to 31–35 tok/s**. Recorded in
+`README.md`, `DECODE_ENDGAME.md` and `ROADMAP.md` rather than quietly left standing.
+
 ## 5. What the negatives taught
 
 1. **A gate that passes is not a result that is true** (F68).

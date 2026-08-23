@@ -76,37 +76,51 @@ scicode and lcb, then forcing, then BFCL multi-turn. Nothing needs to be re-done
 
 ---
 
-## The target: 35–42 tok/s
+## The target: 31–35 tok/s
 
-**22.66 → 28.38 tok/s is banked (+25.3 %). The ladder to 35–42 is written down**, rung by rung,
+**22.66 → 28.38 tok/s is banked (+25.3 %).** The remaining ladder is written down rung by rung,
 with what each is worth and what it costs: [`DECODE_ENDGAME.md`](DECODE_ENDGAME.md), full
 mechanisms in [`ROADMAP.md`](ROADMAP.md).
+
+> **This headline was 35–42 until 2026-08-23.** The C(k) sweep measured its largest rung — adaptive
+> block width, estimated at +20–25 % — at an oracle upper bound of **+1.8 %**. The estimate was
+> wrong by an order of magnitude, so the target came down with it. See
+> [`wiki/negative-results.md` §4m](wiki/negative-results.md).
 
 | # | rung | worth | cost | state |
 |---|---|---|---|---|
 | — | **banked**: width 5 + fine-tuned head | 22.66 → **28.38** | done | ✅ |
-| 1 | corpus — agentic-weighted, 2× size and depth | +4–9 % est. | wall clock | **running** |
-| 2 | remaining arms — anchor shape | +0–2 % | wall clock | capped at 4 |
-| 3 | **C(k) sweep**, widths 4–12 | *prices rung 4* | wall clock | **queued** |
-| 4 | **adaptive block width** | **+20–25 % est.** | CUDA | gated on rung 3 |
-| 5 | AR kernel headroom | +5–10 % est. | CUDA, hard | deferred |
+| 1 | corpus — agentic-weighted, 2× size and depth | +4–9 % est. | wall clock | **running** |
+| 2 | remaining arms — anchor shape | +0–2 % | wall clock | **spent** — all below incumbent |
+| 3 | C(k) sweep, widths 4–12 | *priced rung 4* | wall clock | ✅ **done** |
+| 4 | adaptive block width | **+1.8 % measured ceiling** | CUDA | ⚠️ not worth the rewrite |
+| 5 | **AR kernel headroom** | +5–10 % est. | CUDA, hard | **now the largest lever** |
 | — | **prefill to the roofline** | **6.6× TTFT** | CUDA | practicality, not throughput |
 
-**The levers already used do not repeat.** Ten draft-head arms at block 5 put their top five within
-**1.3 %** of each other against a 3.5 % promotion bar — ce/tv swept three ways, β bracketed on both
-sides, HASS and the confidence loss term both retired. At **~13.8 tok/s per unit `tau`**, an
-excellent further arm is worth +1.5 tok/s. That is why rung 1 is *data* and rung 4 is
-*architecture*.
+**The levers already used do not repeat.** Twelve draft-head arms at block 5 put their top five
+within **1.3 %** of each other against a 3.5 % promotion bar — ce/tv swept three ways, β bracketed on
+both sides, anchor shape bracketed at pow 1 and 2, HASS and the confidence loss term both retired.
+At **~13.8 tok/s per unit `tau`**, an excellent further arm is worth +1.5 tok/s. That is why rung 1
+is *data* rather than another hyperparameter.
 
-**Rung 3 is the highest-leverage hour on this machine.** `tau`'s ceiling **is** the draft width, so
-at a fixed 5 even a perfect head is worth 1.30× — and perfect is impossible, because acceptance is
-bounded by the target's *entropy*, not by our ignorance. Varying the width removes the bound, but
-only if the best width differs by task shape, which has never been tested. It needs no kernel. If
-k\* varies, rung 4's estimate becomes a measurement; if k\* = 5 everywhere, rung 4 is refuted for
-the price of one overnight run instead of a CUDA rewrite.
+**What C(k) actually found.** k\* does vary — {4, 5, 7, 8} across the suite — so the lever is real,
+just small. An engine that read each prompt's best width off the table *with hindsight* would gain
+**+1.8 %** on the suite mean; a live engine must **predict** k\* per position from the confidence
+head (AUC 0.88) and would realise a fraction of that. Four of nine prompts already sit at their
+optimum, and the two directions cancel: the agentic categories want **wider** (multi_turn 7,
+agentic_format 8) while control, code_gen and explanation want **narrower** (4). The sweep also
+re-confirmed, on a fresh measurement, that **5 is the best fixed width** (27.98 tok/s suite mean,
+against 27.75 at width 4 and monotone decay above 5).
+
+**Why the ceiling is low, and it is not the head's fault.** `tau`'s ceiling **is** the draft width,
+so at a fixed 5 even a perfect head is worth 1.30× — and perfect is impossible, because acceptance
+is bounded by the target's *entropy*, not by our ignorance. Varying the width was the one lever that
+removes that bound. It has now been measured, and it does not remove much: the width the target's
+entropy supports is close to 5 almost everywhere. **The remaining headroom is in the kernels, not in
+the speculator.**
 
 **Prefill is not on the ladder and may matter more than all of it.** 62.4 tok/s and **~3.3 min TTFT
-at 12 k** contribute nothing to tok/s, and a three-minute time-to-first-token makes throughput
+at 12 k** contribute nothing to tok/s, and a three-minute time-to-first-token makes throughput
 academic for an agentic harness.
 
 ## Where the numbers are today

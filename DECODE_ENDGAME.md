@@ -1,6 +1,6 @@
-# DECODE_ENDGAME.md — the ladder from 28.38 to 35–42 tok/s
+# DECODE_ENDGAME.md — the ladder from 28.38 to 31–35 tok/s
 
-The target is **35–42 tok/s** speculative decode for `DeepSeek-V4-Flash-0731-REAP` on Jetson AGX
+The target is **31–35 tok/s** speculative decode for `DeepSeek-V4-Flash-0731-REAP` on Jetson AGX
 Thor, against **22.66** at the start of this project and **28.38** today. Every number is measured
 unless marked **est.** The full ranking with mechanisms is [`ROADMAP.md`](ROADMAP.md).
 
@@ -63,7 +63,7 @@ because it **ships in the base checkpoint**. What remains is the verify-time eng
 | base AR | 14.61 | **~16** (rung 5) |
 | effective `tau` | 3.84 / 5, fixed | **5.0–5.5** (rung 4) |
 | speculation multiplier | 1.94× | **~2.4–2.7×** |
-| **speculative decode** | **28.38 tok/s** | **35–42 tok/s** |
+| **speculative decode** | **28.38 tok/s** | **31–35 tok/s** |
 | TTFT at 12 k | ~3.3 min | **< 30 s** (prefill) |
 
 ## What bounds it, and none of these are effort
@@ -135,3 +135,57 @@ halves of the corpus inhomogeneous — an arm whose result would mean nothing.
 `dsv4-resume` was added to the autopilot's `other_chain()` guard so the arms and the eval battery
 wait on the corpus finishing. `systemctl --user is-active --quiet A B` returns 0 if *any* unit is
 active — verified on this box, not assumed from the man page.
+
+---
+
+## Result: 2026-08-23 11:12 — C(k) measured, rung 4 repriced, target lowered to 31–35
+
+The sweep that this document sequenced everything behind has run. **It refuted its own biggest rung.**
+
+```
+prompt               k*  tok/s@k*   tok/s@5     gain
+control               4     26.41     25.31    +4.3%
+agentic_format        8     31.09     29.81    +4.3%
+code_edit             5     29.72     29.72    +0.0%
+code_gen              4     21.75     21.06    +3.3%
+explanation           4     24.31     24.07    +1.0%
+long_context          5     31.07     31.07    +0.0%
+multi_turn            7     35.14     33.98    +3.4%
+reasoning             5     28.04     28.04    +0.0%
+short_factual         5     28.78     28.78    +0.0%
+```
+
+| | suite mean tok/s |
+|---|---|
+| best fixed width (**5**) | **27.982** |
+| width 4 | 27.748 |
+| oracle, per-prompt k\* | 28.479 |
+
+**+1.77 %, against an estimate of +20–25 %.** And that is an oracle — it reads each prompt's best
+width off the table with hindsight. A live engine must predict k\* per position from the confidence
+head and realises a fraction of it. Adaptive block width is therefore **not worth the kernel
+rewrite**, and is struck from the ladder as a major rung.
+
+**Revised endgame arithmetic**, from 28.38 banked:
+
+| | low | high |
+|---|---|---|
+| corpus (rung 1, running) | ×1.04 | ×1.09 |
+| adaptive width (rung 4, measured) | ×1.00 | ×1.018 |
+| AR kernel headroom (rung 5, est.) | ×1.05 | ×1.10 |
+| **endgame** | **31.0** | **34.6** |
+
+→ **31–35 tok/s**, and the top of that band requires *every* remaining estimate to land at its
+ceiling. Note that both surviving multipliers are still **estimates**; the one number in this table
+that has been measured is the one that came in at a fifteenth of its estimate. Treat the other two
+with the suspicion that earns.
+
+**What this changes about the programme.**
+
+- **AR kernel headroom is now the largest remaining decode lever**, and it is the hard one.
+- **`tau` is close to done as a lever.** Its ceiling is the draft width; varying the width was the
+  one way to lift that ceiling, and the ceiling turns out to sit where the target's entropy puts it,
+  not where our head's quality puts it. Better speculation cannot buy much more here.
+- **Prefill rises in relative importance.** It was already the largest practical win (6.6× TTFT) and
+  it is untouched.
+- **The corpus arm is now the only wall-clock rung left.** It runs to ~2026-08-24 17:30.

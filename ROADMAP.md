@@ -105,10 +105,10 @@ Composing the three, with base AR and the speculation multiplier treated separat
 | base AR | 14.61 | **~16** (lever 3, +5–10 %) |
 | effective `tau` | 3.84 / 5 fixed | **5.0–5.5** (lever 1, width varies) |
 | speculation multiplier | 1.94× | **~2.4–2.7×** |
-| **speculative decode** | **28.38 tok/s** | **35–42 tok/s** |
+| **speculative decode** | **28.38 tok/s** | **31–35 tok/s** |
 | TTFT at 12 k | ~3.3 min | **< 30 s** (lever 2) |
 
-**35–42 tok/s is the realistic endgame for this model on this box**, against 22.66 at the start —
+**31–35 tok/s is the realistic endgame for this model on this box**, against 22.66 at the start —
 a **1.5–1.9× total programme gain**, of which +25.3 % is already banked.
 
 Three things bound it and none of them are effort:
