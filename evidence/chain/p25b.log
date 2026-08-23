@@ -7,3 +7,7 @@
 total: 315315 tokens, 9854.8 MB (32.0 KB/token)
 VALIDATE: PASS
 [s5:s3recap-p25b-p2-b0.3 2026-08-23T01:27:26-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p491_s000525.txt: running agreement 94.1%
+[gate] PORT vs ENGINE draft agreement: 36949/39280 = 94.1%  (need >= 90% before any session runs)
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:33:56-04:00] gate OK (94.1%)
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:33:56-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)

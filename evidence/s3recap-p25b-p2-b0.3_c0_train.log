@@ -1,0 +1,23 @@
+[train] device=cuda torch=2.10.0
+  loading model-00046-of-00048.safetensors ...
+  loading model-00047-of-00048.safetensors ...
+  loading model-00048-of-00048.safetensors ...
+  dequantised 1512 tensors, 12.60 B params, 23.5 GiB bf16
+[train] weights ready in 8.9s
+[train] trainable 517.3 M in 72 tensors | frozen experts 12.08 B
+[train] capture: 491 sample(s)
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[train] ModelArgs: n_mtp=3 block=5 taps=[40, 41, 42] markov_rank=256
+[train] built 3 DSparkBlock(s) on meta
+[train] re-materialised freqs_cis on 3 attention module(s) (persistent=False buffers are NOT in state_dict and to_empty() zapped them)
+[train] load_state_dict: 0 missing, 0 unexpected
+[train] GATE1 model construction OK
+[train] aux: embed.weight(129280, 4096), head.weight(129280, 4096)
+[train] trainable tensors in graph: 72 / 517.3 M
+[train] P2.5 anchor: frozen copy of 3 block(s), beta=0.3
+[train] lr schedule: linear warmup 73 step(s) -> cosine over 1472 session step(s), peak 5e-05; this chunk is steps 0..490
+/work/train/train_head.py:115: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /opt/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  parts = {"ce": float((w * ce).sum()), "tv": float((w * tv).sum()), "conf": 0.0}
+[train] step 0: T=541 positions=16 loss=1.6274 ce=3.7850 tv=0.5689 conf=0.8762 grad_norm=10.2535 tensors_with_grad=69/72
+[train] step 1: T=645 positions=16 loss=2.2238 ce=4.7431 tv=0.7353 conf=0.5140 grad_norm=12.1170 tensors_with_grad=69/72

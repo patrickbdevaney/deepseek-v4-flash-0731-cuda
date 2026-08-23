@@ -82,6 +82,47 @@ off-machine backup, not as a head certified for every workload.
 do better with the stock head; a mixed or reasoning-heavy one does substantially better with this
 one. The table above is the number to predict from.
 
+
+## `arms/` — the fifteen heads that did not win
+
+The root of this repo is the head you want. `arms/` is **how it was found**: every other candidate
+ever measured, with its weights, its `head_card.json`, its full training history and its unedited
+promotion log.
+
+These are published deliberately. A refusal with its weights is a reproducible data point; a
+refusal recorded only as a number in a table is a claim — and this project has **twice** had to
+re-adjudicate its own refusals after discovering the ruler was wrong, which was only possible
+because nothing had been thrown away.
+
+**Block 6 era** (`tau` out of 6 — *not* comparable with the block-5 numbers below):
+
+| arm | `tau` | what it tested |
+|---|---:|---|
+| `s1` | 3.5762 | first fine-tune; promoted at the time, later shown to be inside the noise band |
+| `s2` | 3.6275 | 8-way balanced corpus |
+| `s2-abl-ce0.5_tv0.5`, `-ce0.9_tv0.1`, `-ce1.0_tv0.0` | 3.64–3.67 | the CE/TV loss-weight ablation |
+| `s3` | 3.8438 | balanced 1536-prompt corpus; served for 8 days |
+
+**Block 5 era** (`tau` out of 5, all against a same-width incumbent):
+
+| arm | `tau` | what it tested |
+|---|---:|---|
+| `s3recap` | 3.6250 | control — re-capture of the identical corpus after a race was fixed in the engine. **Clean negative: the race had cost nothing**, which retired the worry hanging over every earlier head |
+| `s3recap-ce1.0` / `-ce0.5` | 3.7325 / 3.6950 | loss reweighting again at the new width; both short |
+| `s3recap-deficit` | 3.7975 | deficit weighting alone (β=0) — real, +2.9 %, still short of the bar |
+| **root** (`s3recap-p25-b0.1`) | **3.8413** | **+ the β anchor. The winner.** |
+| `s3recap-p25-b0.5` | 3.6738 | β=0.5 over-constrains and lands *below* the incumbent — which is what makes β=0.1 a bracketed optimum rather than an endpoint |
+| `s3recap-hass1` / `-hass1-p25` | 3.6225 / 3.7950 | HASS, alone and composed with the winner. **Monotone in the wrong direction; retired** |
+| `s3recap-conf1.0` / `-conf0.1` | 3.8025 / 3.7925 | the confidence-head loss term. Refused — and the measurement showed the confidence head that **ships in the base checkpoint** already predicts acceptance at **AUC 0.88** without any fine-tuning |
+
+Two of these are worth more than their rank suggests. `s3recap` is the control that made every
+earlier head trustworthy. `s3recap-p25-b0.5` is the arm that proves the winner sits at an optimum
+rather than at the edge of a sweep.
+
+`shipped-dspark-0731reap` is absent because it has no separate source: it is the base checkpoint's
+own head and lives in
+[`0xSero/DeepSeek-V4-Flash-0731-REAP`](https://huggingface.co/0xSero/DeepSeek-V4-Flash-0731-REAP).
+
 ## `tau` is not comparable across block widths
 
 `tau` counts tokens committed per target forward, and its **ceiling is the draft width**. A head
