@@ -28,7 +28,11 @@ LOG(){ printf '[ck %s] %s\n' "$(date -Is)" "$*"; }
 OUT=evidence/ck_sweep.log
 
 LOG "waiting for the corpus and arm chains"
-while systemctl --user is-active --quiet dsv4-corpus dsv4-p25b dsv4-autopilot; do sleep 300; done
+# Waits for the CORPUS and ARM chains only -- deliberately NOT for the autopilot, which this now
+# runs AHEAD of. The autopilot's finalize() launches the eval battery and then exits, so waiting on
+# it would have put this sweep on the GPU at the same time as the battery. Ordering is
+# p25b -> corpus -> ck -> arms -> evals, and it is enforced from both sides.
+while systemctl --user is-active --quiet dsv4-corpus dsv4-p25b; do sleep 300; done
 
 CKPT=$(cat config/live_ckpt)
 SUITE=$(cat protocol/suite_prompts.txt)

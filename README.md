@@ -76,6 +76,39 @@ scicode and lcb, then forcing, then BFCL multi-turn. Nothing needs to be re-done
 
 ---
 
+## The target: 35–42 tok/s
+
+**22.66 → 28.38 tok/s is banked (+25.3 %). The ladder to 35–42 is written down**, rung by rung,
+with what each is worth and what it costs: [`DECODE_ENDGAME.md`](DECODE_ENDGAME.md), full
+mechanisms in [`ROADMAP.md`](ROADMAP.md).
+
+| # | rung | worth | cost | state |
+|---|---|---|---|---|
+| — | **banked**: width 5 + fine-tuned head | 22.66 → **28.38** | done | ✅ |
+| 1 | corpus — agentic-weighted, 2× size and depth | +4–9 % est. | wall clock | **running** |
+| 2 | remaining arms — anchor shape | +0–2 % | wall clock | capped at 4 |
+| 3 | **C(k) sweep**, widths 4–12 | *prices rung 4* | wall clock | **queued** |
+| 4 | **adaptive block width** | **+20–25 % est.** | CUDA | gated on rung 3 |
+| 5 | AR kernel headroom | +5–10 % est. | CUDA, hard | deferred |
+| — | **prefill to the roofline** | **6.6× TTFT** | CUDA | practicality, not throughput |
+
+**The levers already used do not repeat.** Ten draft-head arms at block 5 put their top five within
+**1.3 %** of each other against a 3.5 % promotion bar — ce/tv swept three ways, β bracketed on both
+sides, HASS and the confidence loss term both retired. At **~13.8 tok/s per unit `tau`**, an
+excellent further arm is worth +1.5 tok/s. That is why rung 1 is *data* and rung 4 is
+*architecture*.
+
+**Rung 3 is the highest-leverage hour on this machine.** `tau`'s ceiling **is** the draft width, so
+at a fixed 5 even a perfect head is worth 1.30× — and perfect is impossible, because acceptance is
+bounded by the target's *entropy*, not by our ignorance. Varying the width removes the bound, but
+only if the best width differs by task shape, which has never been tested. It needs no kernel. If
+k\* varies, rung 4's estimate becomes a measurement; if k\* = 5 everywhere, rung 4 is refuted for
+the price of one overnight run instead of a CUDA rewrite.
+
+**Prefill is not on the ladder and may matter more than all of it.** 62.4 tok/s and **~3.3 min TTFT
+at 12 k** contribute nothing to tok/s, and a three-minute time-to-first-token makes throughput
+academic for an agentic harness.
+
 ## Where the numbers are today
 
 | | measured | ceiling | |
