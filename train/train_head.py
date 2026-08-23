@@ -933,7 +933,17 @@ def main():
         met = {
             "capture": a.capture, "n_sequences": len(rows), "steps": len(_hist),
             "block": a.block, "lr_peak": a.lr, "warmup_steps": _nwarm,
-            "pos_per_seq": a.pos_per_seq, "a_conf": a.a_conf,
+            "pos_per_seq": a.pos_per_seq,
+            # THE FULL LOSS CONFIGURATION, not just a_conf. Until 2026-08-23 this file recorded
+            # a_conf alone, so the winning head's own artifact did not state beta=0.1 or that
+            # deficit weighting was on -- the two knobs that made it win. The recipe had to be
+            # reconstructed from the chain script that launched it, which is provenance by
+            # adjacency: it survives only as long as nobody edits that script. An artifact should
+            # state the configuration that produced it.
+            "a_ce": a.a_ce, "a_tv": a.a_tv, "a_conf": a.a_conf,
+            "deficit": bool(a.deficit), "deficit_prior": a.deficit_prior,
+            "deficit_clamp": a.deficit_clamp,
+            "beta": a.beta, "anchor_pow": a.anchor_pow, "hass_from": a.hass_from,
             "trainable_params": int(n_train), "n_tensors": len(save),
             "loss_first": first.get("loss"), "loss_last": last.get("loss"),
             "loss_tail_mean": (sum(h["loss"] for h in tail) / len(tail)) if tail else None,

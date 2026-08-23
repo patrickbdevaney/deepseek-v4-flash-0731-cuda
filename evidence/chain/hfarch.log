@@ -11,3 +11,22 @@
 [hfarch 2026-08-23T01:26:48-04:00] uploading arms/s3
 [hfarch 2026-08-23T01:26:57-04:00]   done s3
 [hfarch 2026-08-23T01:26:57-04:00] uploading arms/s3recap
+[hfarch 2026-08-23T01:29:13-04:00]   done s3recap
+[hfarch 2026-08-23T01:29:13-04:00] uploading arms/s3recap-ce0.5
+[hfarch 2026-08-23T01:29:29-04:00]   done s3recap-ce0.5
+[hfarch 2026-08-23T01:29:29-04:00] uploading arms/s3recap-ce1.0
+[hfarch 2026-08-23T01:29:46-04:00]   done s3recap-ce1.0
+[hfarch 2026-08-23T01:29:46-04:00] uploading arms/s3recap-conf0.1
+[hfarch 2026-08-23T01:30:03-04:00]   done s3recap-conf0.1
+[hfarch 2026-08-23T01:30:03-04:00] uploading arms/s3recap-conf1.0
+[hfarch 2026-08-23T01:30:20-04:00]   done s3recap-conf1.0
+[hfarch 2026-08-23T01:30:20-04:00] uploading arms/s3recap-deficit
+[hfarch 2026-08-23T01:30:37-04:00]   done s3recap-deficit
+[hfarch 2026-08-23T01:30:37-04:00] uploading arms/s3recap-hass1
+[hfarch 2026-08-23T01:30:55-04:00]   done s3recap-hass1
+[hfarch 2026-08-23T01:30:55-04:00] uploading arms/s3recap-hass1-p25
+[hfarch 2026-08-23T01:31:11-04:00]   done s3recap-hass1-p25
+[hfarch 2026-08-23T01:31:11-04:00] uploading arms/s3recap-p25-b0.5
+[hfarch 2026-08-23T01:31:28-04:00]   done s3recap-p25-b0.5
+[hfarch 2026-08-23T01:31:28-04:00] shipped-dspark-0731reap: no source, skip
+[hfarch 2026-08-23T01:31:28-04:00] archive upload complete:
