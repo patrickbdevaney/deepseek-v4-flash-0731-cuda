@@ -11,3 +11,10 @@ VALIDATE: PASS
 [gate] PORT vs ENGINE draft agreement: 36949/39280 = 94.1%  (need >= 90% before any session runs)
 [s5:s3recap-p25b-p2-b0.3 2026-08-23T01:33:56-04:00] gate OK (94.1%)
 [s5:s3recap-p25b-p2-b0.3 2026-08-23T01:33:56-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3recap-p25b-p2-b0.3/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3recap-p25b-p2-b0.3/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3recap-p25b-p2-b0.3/c0/train_metrics.json  (loss 1.6274 -> 1.0580, tail mean 0.9240)
+[train] TRAIN OK
+total: 321075 tokens, 10034.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3recap-p25b-p2-b0.3 2026-08-23T01:58:50-04:00] chunk 1: training (ce+tv; a_conf 0 until free-running labels exist -- F100)

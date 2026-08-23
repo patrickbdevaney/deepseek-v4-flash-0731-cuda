@@ -20,9 +20,17 @@
 # (-0.47 against the stock head) and agentic_format (-0.25) -- and NOT on code_edit, which passed
 # its floor and whose pool of 249 usable prompts would otherwise cap the whole corpus.
 #
-# HONEST LIMIT: --long-recon raises the prompt cap on agentic_format/code_edit/multi_turn to 4x,
-# but a cap is a ceiling and not a floor. Median prompt is 85 tokens and only long_context reaches
-# 1281. This corpus is bigger and reweighted; it is not yet long in the agentic categories.
+# SEQUENCE LENGTH IS PROMPT + NGEN, AND THE PROMPT HALF IS AT ITS SOURCE CEILING. Measured on
+# dolly.jsonl, the long_context source: context fields run p50 130 words, p90 365, p99 1277,
+# max 3796. The 1280-token cap binds only on the top ~10 %, so no reweighting extracts 4-12k
+# prompts from this dataset -- genuinely long PROMPTS need a different source, and that is a
+# roadmap item (ROADMAP.md), not a knob.
+#
+# The GENERATED half has no such ceiling, and it is the better half to lengthen. NGEN 512 -> 1024
+# doubles the context depth every sampled position sees, and the context it adds is the model's OWN
+# OUTPUT -- which is precisely what an agentic harness reconstructs from: its prior turns and tool
+# results, not a pasted document. Cost is wall clock only: ~32 h of generation instead of ~16, and
+# peak capture per 491-sequence chunk goes 8.6 -> 17.2 GB against ~106 GB free.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 LOG(){ printf '[corpus %s] %s\n' "$(date -Is)" "$*"; }
@@ -38,11 +46,11 @@ LOG "p25b done; anchor-shape results:"; tail -3 HEAD_REGISTRY.md
 # The WINNING recipe, unchanged, so the corpus is the only variable. That is the whole point:
 # one change per measurement, and here the change is the data.
 LOG "arm $NAME: winning recipe (deficit, beta 0.1, anchor_pow 1) on the agentic corpus"
-LOG "pass 1 generates 3071 sequences on-box -- this is the long pole, ~16 h, and costs no tokens"
+LOG "pass 1 generates 3071 sequences x 1024 tokens on-box -- the long pole, ~32 h, no tokens"
 S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 S5_BLOCK=5 \
 S5_INCUMBENT_TAU="$(cat evidence/baseline_tau.value 2>/dev/null)" \
 S5_ACE=0.1 S5_ATV=0.9 S5_DEFICIT=1 S5_BETA=0.1 S5_ANCHOR_POW=1.0 \
-    bash scripts/s5_session_auto.sh "$NAME" "$S5/mixed_prompts_agentic.txt" 3071 512 \
+    bash scripts/s5_session_auto.sh "$NAME" "$S5/mixed_prompts_agentic.txt" 3071 1024 \
     || LOG "corpus arm failed (rc=$?)"
 
 LOG "release rule for $NAME:"
