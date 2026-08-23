@@ -90,3 +90,48 @@ Two specific things have never been tried: `DSV4_DPROF` has **never been run on 
 on this engine, and the m16 B-repack was rejected for decode because it needs 5.05 rows/expert
 where decode presents 1.67 — **at prefill M≈1022 each of 160 experts sees ~50 rows, ten times the
 threshold, and it has never been tested at prefill shapes.**
+
+---
+
+## Log: 2026-08-23 — C(k) swapped ahead of the corpus
+
+**What changed.** The C(k) sweep (rung 3) now runs *before* the agentic corpus (rung 1), not after.
+
+**Why.** C(k) is a ~30 minute measurement that *prices* rung 4, adaptive block width, at an estimated
++20–25 %. The corpus is a 31 hour generation worth an estimated +4–9 %. Running the cheap decisive
+measurement behind the expensive incremental one meant the single most valuable question this
+project still has — *is 5 the best width for every prompt, or only on average?* — would not be
+answered until Monday evening, and every CUDA decision downstream of it was blocked on that.
+
+Ordering is now **p25b → ck → corpus → arms → evals**.
+
+**Why it cost nothing.** `decode` opens `DSV4_GENOUT` with `"a"` and `fclose()`s after *every*
+sequence (`src/decode.cu:1457`), so `gen.txt` only ever holds whole lines. The interruption landed
+between sequences: all **384** generated responses survived, each with its full 1024 tokens, zero
+alignment mismatches. The earlier claim that pass 1 had a chunk seam every 491 prompts was **wrong**
+— `S5_CHUNK` chunks *pass 2* (capture + train), not generation. It did not matter, because the
+append-per-sequence behaviour makes any interruption point a safe one.
+
+**How the splice is verified.** `scripts/resume_corpus_gen.sh` generates prompts `L+1..N` into the
+same `gen.txt` and then checks *both* hypotheses:
+
+| check | requirement |
+|---|---|
+| aligned at offset 0 | **0** mismatches |
+| aligned at offset 1 | **large** — if this is 0 the splice is shifted |
+| short sequences | 0 with fewer than `NGEN` generated tokens |
+| trailing newline | present |
+
+Checking offset 1 is the point. A splice silently shifted by one produces a corpus in which every
+response answers the previous prompt — it trains without error and measures as noise. Before the
+swap this was tested against the live file: **0 mismatches at offset 0, 383/383 at offset 1.** The
+off-by-one hypothesis is refuted, not assumed away.
+
+The resume also asserts its checkpoint equals `s5_session_auto.sh`'s, because pass 1 generates with
+the **base** checkpoint (the S5 "target"), and resuming under the live head would make the two
+halves of the corpus inhomogeneous — an arm whose result would mean nothing.
+
+**Ordering is enforced from both sides**, as before: `dsv4-resume` waits on `dsv4-ck`, and
+`dsv4-resume` was added to the autopilot's `other_chain()` guard so the arms and the eval battery
+wait on the corpus finishing. `systemctl --user is-active --quiet A B` returns 0 if *any* unit is
+active — verified on this box, not assumed from the man page.

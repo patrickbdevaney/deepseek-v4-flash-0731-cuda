@@ -37,7 +37,7 @@ gpu_busy(){ pgrep -x decode >/dev/null || pgrep -x dsv4-server >/dev/null; }
 # dsv4-ck is in this list because the C(k) sweep PRICES the biggest remaining lever and must not
 # queue behind four low-value arms -- and because this loop ends by starting the eval battery, so
 # anything it does not wait for would contend with the battery instead.
-other_chain(){ systemctl --user is-active --quiet dsv4-p25b dsv4-c23 dsv4-p26 dsv4-chain dsv4-corpus dsv4-ck 2>/dev/null; }
+other_chain(){ systemctl --user is-active --quiet dsv4-p25b dsv4-c23 dsv4-p26 dsv4-chain dsv4-corpus dsv4-ck dsv4-resume 2>/dev/null; }
 free_gb(){ df --output=avail -BG / | tail -1 | tr -dc '0-9'; }
 
 reclaim(){
