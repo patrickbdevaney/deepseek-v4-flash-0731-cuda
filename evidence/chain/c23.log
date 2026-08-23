@@ -7,3 +7,256 @@
 total: 315315 tokens, 9854.8 MB (32.0 KB/token)
 VALIDATE: PASS
 [s5:s3recap-conf1.0 2026-08-22T15:45:20-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p491_s000525.txt: running agreement 94.1%
+[gate] PORT vs ENGINE draft agreement: 36949/39280 = 94.1%  (need >= 90% before any session runs)
+[s5:s3recap-conf1.0 2026-08-22T15:51:26-04:00] gate OK (94.1%)
+[s5:s3recap-conf1.0 2026-08-22T15:51:26-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3recap-conf1.0/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3recap-conf1.0/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3recap-conf1.0/c0/train_metrics.json  (loss 3.6429 -> 1.7134, tail mean 1.6877)
+[train] TRAIN OK
+total: 321075 tokens, 10034.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3recap-conf1.0 2026-08-22T16:16:05-04:00] chunk 1: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3recap-conf1.0/c1/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3recap-conf1.0/c1/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3recap-conf1.0/c1/train_metrics.json  (loss 2.2933 -> 1.0088, tail mean 1.9117)
+[train] TRAIN OK
+total: 324707 tokens, 10148.3 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3recap-conf1.0 2026-08-22T16:40:37-04:00] chunk 2: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3recap-conf1.0/c2/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3recap-conf1.0/c2/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3recap-conf1.0/c2/train_metrics.json  (loss 1.6047 -> 0.1759, tail mean 1.4325)
+[train] TRAIN OK
+merged 3 chunk(s), 1472 sequences, 1472 steps: loss 3.64287269115448 -> 0.17591314999258856 (tail mean 1.4997949355805837) -> /home/patrickd/s5-capture/s3recap-conf1.0/train_metrics.json
+[s5:s3recap-conf1.0 2026-08-22T17:04:30-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+  wrote model-00048-of-00048.safetensors
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /cap/s3recap-conf1.0/head  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[s5:s3recap-conf1.0 2026-08-22T17:04:42-04:00] re-fitting adaptK on the trained head (F111: the optimum moves with drafter quality)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_0.0.log
+[run_model] pid 1272021   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_0.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_0.0.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T17:09:51-04:00]   adaptK 0.0 -> hold-out 26.86 tok/s pooled (median tau 4.3282)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_0.5.log
+[run_model] pid 1281610   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_0.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_0.5.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T17:14:54-04:00]   adaptK 0.5 -> hold-out 26.309 tok/s pooled (median tau 4.3692)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_1.0.log
+[run_model] pid 1291353   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_1.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_1.0.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T17:19:57-04:00]   adaptK 1.0 -> hold-out 26.742 tok/s pooled (median tau 4.3282)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_1.5.log
+[run_model] pid 1300987   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_1.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_1.5.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T17:25:01-04:00]   adaptK 1.5 -> hold-out 26.978 tok/s pooled (median tau 4.3282)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_2.0.log
+[run_model] pid 1310606   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_adaptk_2.0.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T17:30:04-04:00]   adaptK 2.0 -> hold-out 27.153 tok/s pooled (median tau 4.3821)
+[s5:s3recap-conf1.0 2026-08-22T17:30:04-04:00] adaptK re-fit: 2.0 (27.153 tok/s pooled on the hold-out); shipped default was 1.5
+[s5:s3recap-conf1.0 2026-08-22T17:30:04-04:00] eval: 8-prompt suite, NGEN0=200, block 5, clean
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval.log
+[run_model] pid 1320183   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T17:33:07-04:00] second eval at the re-fitted adaptK 2.0 (reported separately; NOT the registry number)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval_adaptk2.0.log
+[run_model] pid 1326276   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval_adaptk2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval_adaptk2.0.memguard.log
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval_adaptk2.0.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  4.83    34.18 tok/s
+    long_context     tau  4.16    28.83 tok/s
+    agentic_format   tau  4.00    29.42 tok/s
+    code_edit        tau  3.92    28.22 tok/s
+    reasoning        tau  3.64    28.68 tok/s
+    short_factual    tau  3.47    27.05 tok/s
+    explanation      tau  2.91    24.30 tok/s
+    code_gen         tau  2.43    21.14 tok/s
+  suite mean tau 3.67  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.64 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3recap-conf1.0/session_verdict_adaptk2.0.json
+[s5:s3recap-conf1.0 2026-08-22T17:36:10-04:00] NOTE: promoting at adaptK 2.0 requires re-measuring the incumbent at 2.0 first.
+[s5:s3recap-conf1.0 2026-08-22T17:36:10-04:00] secondary gate: 64-prompt reasoning hold-out, trained head
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_holdout.log
+[run_model] pid 1332387   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_holdout.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_holdout.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T17:58:13-04:00] paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_holdout_control.log
+[run_model] pid 1372083   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_holdout_control.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_holdout_control.memguard.log
+[s5:s3recap-conf1.0 2026-08-22T18:18:47-04:00] hold-out untrained baseline (paired, from pass 1): 5.6528
+hold-out tau at budget 200 tokens: n=64
+  median 4.951   mean 4.601   p25 3.673   p75 5.583   min 1.835   max 6.000
+  baseline (untrained) 5.653   delta -0.702 tau  (-5.38 tok/s, -23.7%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+ARCHIVED s3recap-conf1.0 -> /home/patrickd/model-backups/heads/s3recap-conf1.0 (5 files, sha256 recorded)
+  suite mean: tau 3.8025  28.0187 tok/s
+  incumbent tau 3.8413 [HEAD_REGISTRY.md -- NOT this session (max of 3.6888 re-measured, 3.8413 registry)] -> needs > 3.9757; candidate 3.8025
+REFUSED to promote:
+  - suite tau 3.8025 does not beat incumbent 3.8413 by the 3.5% run-to-run spread (needs > 3.9757); ties go to the incumbent
+[s5:s3recap-conf1.0 2026-08-22T18:18:57-04:00] not promoted (archived)
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf1.0_eval.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  4.90    34.33 tok/s
+    long_context     tau  4.34    29.18 tok/s
+    code_edit        tau  4.04    28.45 tok/s
+    agentic_format   tau  4.00    28.72 tok/s
+    short_factual    tau  3.92    29.11 tok/s
+    reasoning        tau  3.64    28.24 tok/s
+    explanation      tau  3.06    25.04 tok/s
+    code_gen         tau  2.52    21.08 tok/s
+  suite mean tau 3.8025  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.64 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3recap-conf1.0/session_verdict.json
+[s5:s3recap-conf1.0 2026-08-22T18:18:57-04:00] GO (primary); secondary exit 3
+[s5:s3recap-conf1.0 2026-08-22T18:18:57-04:00] no next session configured; stopping here
+[c23 2026-08-22T18:18:57-04:00] arm s3recap-conf0.1: deficit=1 beta=0.1 hass_from=1 a_conf=0.1
+[s5:s3recap-conf0.1 2026-08-22T18:18:57-04:00] preflight: need ~28 GB (peak = one chunk of 491), have 39 GB free
+  round-trip: 1536/1536 lines start with their exact seed
+[s5:s3recap-conf0.1 2026-08-22T18:18:57-04:00] pass 1 OK (1536 sequences)
+[s5:s3recap-conf0.1 2026-08-22T18:18:57-04:00] hold-out: 64 sequence(s) reserved, 1472 for training
+[s5:s3recap-conf0.1 2026-08-22T18:18:57-04:00] training in 3 chunk(s) of up to 491 sequence(s); peak capture on disk is one chunk
+total: 315315 tokens, 9854.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3recap-conf0.1 2026-08-22T18:19:25-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p491_s000525.txt: running agreement 94.1%
+[gate] PORT vs ENGINE draft agreement: 36949/39280 = 94.1%  (need >= 90% before any session runs)
+[s5:s3recap-conf0.1 2026-08-22T18:25:37-04:00] gate OK (94.1%)
+[s5:s3recap-conf0.1 2026-08-22T18:25:37-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3recap-conf0.1/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3recap-conf0.1/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3recap-conf0.1/c0/train_metrics.json  (loss 2.4852 -> 1.3751, tail mean 1.3277)
+[train] TRAIN OK
+total: 321075 tokens, 10034.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3recap-conf0.1 2026-08-22T18:50:24-04:00] chunk 1: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3recap-conf0.1/c1/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3recap-conf0.1/c1/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3recap-conf0.1/c1/train_metrics.json  (loss 1.6957 -> 0.7467, tail mean 1.4705)
+[train] TRAIN OK
+total: 324707 tokens, 10148.3 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:s3recap-conf0.1 2026-08-22T19:14:58-04:00] chunk 2: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/s3recap-conf0.1/c2/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/s3recap-conf0.1/c2/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/s3recap-conf0.1/c2/train_metrics.json  (loss 1.3358 -> 0.1538, tail mean 1.0773)
+[train] TRAIN OK
+merged 3 chunk(s), 1472 sequences, 1472 steps: loss 2.485241737216711 -> 0.1538473305596746 (tail mean 1.1268975769528637) -> /home/patrickd/s5-capture/s3recap-conf0.1/train_metrics.json
+[s5:s3recap-conf0.1 2026-08-22T19:38:47-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+  wrote model-00048-of-00048.safetensors
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /cap/s3recap-conf0.1/head  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[s5:s3recap-conf0.1 2026-08-22T19:38:58-04:00] re-fitting adaptK on the trained head (F111: the optimum moves with drafter quality)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_0.0.log
+[run_model] pid 1544652   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_0.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_0.0.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T19:44:07-04:00]   adaptK 0.0 -> hold-out 27.379 tok/s pooled (median tau 4.4193)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_0.5.log
+[run_model] pid 1554314   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_0.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_0.5.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T19:49:10-04:00]   adaptK 0.5 -> hold-out 26.619 tok/s pooled (median tau 4.4193)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_1.0.log
+[run_model] pid 1563904   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_1.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_1.0.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T19:54:14-04:00]   adaptK 1.0 -> hold-out 26.885 tok/s pooled (median tau 4.4193)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_1.5.log
+[run_model] pid 1573516   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_1.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_1.5.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T19:59:17-04:00]   adaptK 1.5 -> hold-out 27.381 tok/s pooled (median tau 4.4193)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_2.0.log
+[run_model] pid 1583183   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_adaptk_2.0.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T20:04:20-04:00]   adaptK 2.0 -> hold-out 27.602 tok/s pooled (median tau 4.3665)
+[s5:s3recap-conf0.1 2026-08-22T20:04:20-04:00] adaptK re-fit: 2.0 (27.602 tok/s pooled on the hold-out); shipped default was 1.5
+[s5:s3recap-conf0.1 2026-08-22T20:04:20-04:00] eval: 8-prompt suite, NGEN0=200, block 5, clean
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval.log
+[run_model] pid 1592809   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T20:07:23-04:00] second eval at the re-fitted adaptK 2.0 (reported separately; NOT the registry number)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval_adaptk2.0.log
+[run_model] pid 1598869   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval_adaptk2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval_adaptk2.0.memguard.log
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval_adaptk2.0.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  4.90    34.37 tok/s
+    long_context     tau  4.16    29.71 tok/s
+    code_edit        tau  3.92    28.02 tok/s
+    agentic_format   tau  3.85    28.78 tok/s
+    reasoning        tau  3.64    28.17 tok/s
+    short_factual    tau  3.47    27.18 tok/s
+    explanation      tau  2.87    23.81 tok/s
+    code_gen         tau  2.27    20.27 tok/s
+  suite mean tau 3.635  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.64 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3recap-conf0.1/session_verdict_adaptk2.0.json
+[s5:s3recap-conf0.1 2026-08-22T20:10:26-04:00] NOTE: promoting at adaptK 2.0 requires re-measuring the incumbent at 2.0 first.
+[s5:s3recap-conf0.1 2026-08-22T20:10:26-04:00] secondary gate: 64-prompt reasoning hold-out, trained head
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_holdout.log
+[run_model] pid 1604954   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_holdout.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_holdout.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T20:32:29-04:00] paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_holdout_control.log
+[run_model] pid 1644649   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_holdout_control.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_holdout_control.memguard.log
+[s5:s3recap-conf0.1 2026-08-22T20:53:03-04:00] hold-out untrained baseline (paired, from pass 1): 5.6528
+hold-out tau at budget 200 tokens: n=64
+  median 5.013   mean 4.613   p25 3.571   p75 5.743   min 1.869   max 6.000
+  baseline (untrained) 5.653   delta -0.640 tau  (-4.91 tok/s, -21.7%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+ARCHIVED s3recap-conf0.1 -> /home/patrickd/model-backups/heads/s3recap-conf0.1 (5 files, sha256 recorded)
+  suite mean: tau 3.7925  28.0362 tok/s
+  incumbent tau 3.8413 [HEAD_REGISTRY.md -- NOT this session (max of 3.6888 re-measured, 3.8413 registry)] -> needs > 3.9757; candidate 3.7925
+REFUSED to promote:
+  - suite tau 3.7925 does not beat incumbent 3.8413 by the 3.5% run-to-run spread (needs > 3.9757); ties go to the incumbent
+[s5:s3recap-conf0.1 2026-08-22T20:53:13-04:00] not promoted (archived)
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/s3recap-conf0.1_eval.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  5.03    34.81 tok/s
+    long_context     tau  4.34    30.32 tok/s
+    agentic_format   tau  4.08    29.39 tok/s
+    code_edit        tau  4.00    28.20 tok/s
+    reasoning        tau  3.70    28.46 tok/s
+    short_factual    tau  3.66    27.78 tok/s
+    explanation      tau  3.04    24.40 tok/s
+    code_gen         tau  2.49    20.93 tok/s
+  suite mean tau 3.7925  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.70 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/s3recap-conf0.1/session_verdict.json
+[s5:s3recap-conf0.1 2026-08-22T20:53:13-04:00] GO (primary); secondary exit 3
+[s5:s3recap-conf0.1 2026-08-22T20:53:13-04:00] no next session configured; stopping here
+[c23 2026-08-22T20:53:13-04:00] arms done. Registry (expect REFUSALS -- see the header of this script):
+| `s3recap-hass1` | 3.6225 | 5 | 26.7563 | 14.52 | `a608d52d7` | not promoted: suite tau 3.6225 does not beat incumbent 3.8413 by the 3.5%  |
+| `s3recap-hass1-p25` | 3.795 | 5 | 27.8562 | 14.55 | `a38c6c85a` | not promoted: suite tau 3.7950 does not beat incumbent 3.8413 by the 3.5%  |
+| `s3recap-conf1.0` | 3.8025 | 5 | 28.0187 | 14.57 | `b9c320838` | not promoted: suite tau 3.8025 does not beat incumbent 3.8413 by the 3.5%  |
+| `s3recap-conf0.1` | 3.7925 | 5 | 28.0362 | 14.56 | `b9c320838` | not promoted: suite tau 3.7925 does not beat incumbent 3.8413 by the 3.5%  |
+[c23 2026-08-22T20:53:13-04:00] the gate that actually decides 2.3:
+[c23 2026-08-22T20:53:13-04:00]   python3 tools/conf_calibration.py s3recap-conf1.0 s3recap-conf0.1 --control s3recap-hass1-p25
+[c23 2026-08-22T20:53:13-04:00] c23 complete:

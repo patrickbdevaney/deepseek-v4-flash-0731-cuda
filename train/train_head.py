@@ -431,7 +431,13 @@ def main():
         print(f"[train] P2.5 anchor: frozen copy of {len(frozen_blocks)} block(s), beta={a.beta}",
               flush=True)
     _hist = []   # per-step loss record, written out by --metrics-out
+    # 1 MB buffer keeps the per-step cost to a memcpy, but that means the tail of the dump lives in
+    # userspace until the process ends -- and a dump silently missing its last rows is exactly the
+    # kind of quiet truncation that reads as a complete measurement. Close it explicitly on exit.
     _calib_f = open(a.calib_out, "a", buffering=1 << 20) if a.calib_out else None
+    if _calib_f is not None:
+        import atexit
+        atexit.register(_calib_f.close)
     gamma = float(margs.dspark_block_size)
     BS = margs.dspark_block_size
 

@@ -1,0 +1,73 @@
+[calib 2026-08-22T22:34:00-04:00] s3recap-hass1-p25: inference pass over c2, a_conf=0, lr 0
+[train] saved 72 trained tensors -> /tmp/calib_discard_s3recap-hass1-p25/mtp_trained.safetensors
+[train] saved AdamW state -> /tmp/calib_discard_s3recap-hass1-p25/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] TRAIN OK
+[calib 2026-08-22T22:58:21-04:00] s3recap-hass1-p25: 39200 rows -> evidence/calib_s3recap-hass1-p25.jsonl
+[calib 2026-08-22T22:58:21-04:00] s3recap-conf1.0: inference pass over c2, a_conf=1.0, lr 0
+[train] saved 72 trained tensors -> /tmp/calib_discard_s3recap-conf1.0/mtp_trained.safetensors
+[train] saved AdamW state -> /tmp/calib_discard_s3recap-conf1.0/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] TRAIN OK
+[calib 2026-08-22T23:22:15-04:00] s3recap-conf1.0: 39200 rows -> evidence/calib_s3recap-conf1.0.jsonl
+[calib 2026-08-22T23:22:15-04:00] s3recap-conf0.1: inference pass over c2, a_conf=0.1, lr 0
+[train] saved 72 trained tensors -> /tmp/calib_discard_s3recap-conf0.1/mtp_trained.safetensors
+[train] saved AdamW state -> /tmp/calib_discard_s3recap-conf0.1/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] TRAIN OK
+[calib 2026-08-22T23:46:16-04:00] s3recap-conf0.1: 39200 rows -> evidence/calib_s3recap-conf0.1.jsonl
+[calib 2026-08-22T23:46:16-04:00] gate:
+=================================================== s3recap-conf1.0
+
+ARM      evidence/calib_s3recap-conf1.0.jsonl
+  39,200 positions, 23,194 accepted (59.2 %)
+  AUC overall: 0.8975
+  by draft position k (acceptance decays with k; a head that only learned the PRIOR
+  will score ~0.5 within each k while looking informative pooled):
+    k=0  n=  7,840  accept  80.5%  AUC 0.8998
+    k=1  n=  7,840  accept  70.5%  AUC 0.8940
+    k=2  n=  7,840  accept  58.6%  AUC 0.8966
+    k=3  n=  7,840  accept  48.7%  AUC 0.8870
+    k=4  n=  7,840  accept  37.6%  AUC 0.8782
+
+CONTROL  evidence/calib_s3recap-hass1-p25.jsonl
+  39,200 positions, 23,565 accepted (60.1 %)
+  AUC overall: 0.8795
+  by draft position k (acceptance decays with k; a head that only learned the PRIOR
+  will score ~0.5 within each k while looking informative pooled):
+    k=0  n=  7,840  accept  80.8%  AUC 0.8372
+    k=1  n=  7,840  accept  71.0%  AUC 0.8616
+    k=2  n=  7,840  accept  59.1%  AUC 0.8693
+    k=3  n=  7,840  accept  50.0%  AUC 0.8659
+    k=4  n=  7,840  accept  39.7%  AUC 0.8650
+
+==============================================================================
+VERDICT: NEGATIVE. Arm 0.8975 vs untrained control 0.8795 (gap +0.0180).
+  Whatever separation exists is present WITHOUT training the confidence head, so
+  a_conf bought nothing. The signal is in the architecture, not in the arm.
+=================================================== s3recap-conf0.1
+
+ARM      evidence/calib_s3recap-conf0.1.jsonl
+  39,200 positions, 23,586 accepted (60.2 %)
+  AUC overall: 0.8932
+  by draft position k (acceptance decays with k; a head that only learned the PRIOR
+  will score ~0.5 within each k while looking informative pooled):
+    k=0  n=  7,840  accept  80.7%  AUC 0.8760
+    k=1  n=  7,840  accept  71.1%  AUC 0.8804
+    k=2  n=  7,840  accept  59.4%  AUC 0.8866
+    k=3  n=  7,840  accept  50.1%  AUC 0.8862
+    k=4  n=  7,840  accept  39.5%  AUC 0.8800
+
+CONTROL  evidence/calib_s3recap-hass1-p25.jsonl
+  39,200 positions, 23,565 accepted (60.1 %)
+  AUC overall: 0.8795
+  by draft position k (acceptance decays with k; a head that only learned the PRIOR
+  will score ~0.5 within each k while looking informative pooled):
+    k=0  n=  7,840  accept  80.8%  AUC 0.8372
+    k=1  n=  7,840  accept  71.0%  AUC 0.8616
+    k=2  n=  7,840  accept  59.1%  AUC 0.8693
+    k=3  n=  7,840  accept  50.0%  AUC 0.8659
+    k=4  n=  7,840  accept  39.7%  AUC 0.8650
+
+==============================================================================
+VERDICT: NEGATIVE. Arm 0.8932 vs untrained control 0.8795 (gap +0.0137).
+  Whatever separation exists is present WITHOUT training the confidence head, so
+  a_conf bought nothing. The signal is in the architecture, not in the arm.
+[calib 2026-08-22T23:46:17-04:00] calib complete:

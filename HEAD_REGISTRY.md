@@ -148,3 +148,5 @@ above should not be read off two different engine revisions.
 | `s3recap-p25-b0.5` | 3.6738 | 5 | 27.0825 | 14.56 | `a608d52d7` | not promoted: suite tau 3.6738 does not beat incumbent 3.6888 by the 3.5%  |
 | `s3recap-hass1` | 3.6225 | 5 | 26.7563 | 14.52 | `a608d52d7` | not promoted: suite tau 3.6225 does not beat incumbent 3.8413 by the 3.5%  |
 | `s3recap-hass1-p25` | 3.795 | 5 | 27.8562 | 14.55 | `a38c6c85a` | not promoted: suite tau 3.7950 does not beat incumbent 3.8413 by the 3.5%  |
+| `s3recap-conf1.0` | 3.8025 | 5 | 28.0187 | 14.57 | `b9c320838` | not promoted: suite tau 3.8025 does not beat incumbent 3.8413 by the 3.5%  |
+| `s3recap-conf0.1` | 3.7925 | 5 | 28.0362 | 14.56 | `b9c320838` | not promoted: suite tau 3.7925 does not beat incumbent 3.8413 by the 3.5%  |

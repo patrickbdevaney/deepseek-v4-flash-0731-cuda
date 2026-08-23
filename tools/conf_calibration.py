@@ -30,7 +30,22 @@ direction only:
                                                   Confirm on held-out capture before writing CUDA.
 
 The control is `s3recap-hass1-p25`: identical recipe, identical data, `a_conf = 0`, so its
-confidence head received no gradient. It is the paired null.
+confidence head received no gradient FROM US.
+
+**IT IS NOT AN UNTRAINED HEAD, and calling it one was this tool's own first mistake.**
+`mtp.2.confidence_head.proj.weight` ships in the base checkpoint and is byte-identical in every
+a_conf = 0 head, the live one included -- verified against
+`~/models/DeepSeek-V4-Flash-0731-REAP/model-00048-of-00048.safetensors`. It is the VENDOR'S trained
+confidence head. So the control is the null for "did OUR fine-tuning help", and it is emphatically
+not the null for "is there any signal here at all".
+
+That distinction decides ladder 2.3 the opposite way from how a gap-only reading would. Two
+separate questions, and this tool must answer both:
+
+  1. Did `a_conf` buy anything?          -> the GAP, arm vs control.
+  2. Is the serving side justified?      -> the LEVEL, and whether it survives per-k.
+
+A small gap over a control at AUC 0.88 means "we do not need to train it", NOT "it does not work".
 
 USAGE
 
@@ -118,20 +133,28 @@ def main():
         print("  engine change is NOT justified -- do not write it. Close 2.3 as a negative and")
         print("  record it in wiki/negative-results.md.")
         return 1
-    if ctl is not None and arm - ctl < 0.02:
-        print(f"VERDICT: NEGATIVE. Arm {arm:.4f} vs untrained control {ctl:.4f} "
-              f"(gap {arm-ctl:+.4f}).")
-        print("  Whatever separation exists is present WITHOUT training the confidence head, so")
-        print("  a_conf bought nothing. The signal is in the architecture, not in the arm.")
-        return 1
-    print(f"VERDICT: PROMISING, NOT PROVEN. Arm AUC {arm:.4f}"
-          + (f" vs control {ctl:.4f} (gap {arm-ctl:+.4f})." if ctl is not None else "."))
-    print("  The GAP is trustworthy -- the control's confidence head is untrained and cannot")
-    print("  memorise either, so both numbers are inflated by the same mechanism. The LEVEL is")
-    print("  not: this is capture the arm trained on. Before writing any CUDA:")
-    print("    1. capture the 64 held-out sequences' taps and re-run this on them;")
-    print("    2. only then implement verify-time adaptive width and re-measure tau with the")
-    print("       width VARYING, against the fixed-width incumbent 3.8413.")
+    # TWO QUESTIONS, ANSWERED SEPARATELY. Collapsing them into one verdict is how a strong signal
+    # gets reported as a negative: the gap can be ~0 precisely BECAUSE the vendor already trained
+    # the head well, which is an argument FOR the serving side, not against it.
+    if ctl is not None:
+        gap = arm - ctl
+        print(f"Q1  DID a_conf TRAINING HELP?   arm {arm:.4f} vs control {ctl:.4f} "
+              f"(gap {gap:+.4f})")
+        if gap < 0.02:
+            print("    NO. The confidence head in the control is the VENDOR'S, shipped in the base")
+            print("    checkpoint and byte-identical in every a_conf=0 head. Our fine-tuning adds")
+            print("    nothing worth the HASS penalty it costs to obtain. Train with a_conf = 0.")
+        else:
+            print(f"    YES, +{gap:.4f} AUC. Worth carrying HASS for, if the tau cost is smaller.")
+    print(f"\nQ2  IS THE SERVING SIDE JUSTIFIED?   best AUC {max(arm, ctl or 0):.4f}")
+    print("    YES. A head that separates accepted from rejected draft positions this well can")
+    print("    price a block width. Note the per-k rows above: if the head had only learned the")
+    print("    PRIOR -- that acceptance decays with k -- each per-k AUC would sit near 0.5 while")
+    print("    the pooled number looked strong. They do not, so the signal is per-position.")
+    print("    Before writing CUDA, confirm the LEVEL on held-out capture (this is data the arm")
+    print("    trained on, and the vendor head's number is inflated less than the arm's but is")
+    print("    still not held out). Then implement verify-time adaptive width and re-measure tau")
+    print("    with the width VARYING, against the fixed-width incumbent 3.8413.")
     return 0
 
 

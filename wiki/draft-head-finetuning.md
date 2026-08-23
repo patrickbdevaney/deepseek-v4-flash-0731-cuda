@@ -535,3 +535,86 @@ Max can only ever refuse a promotion, never grant a false one, which is the prop
 ruler. The general lesson is in `measurement-and-traps.md`: **a measurement that is passed forward
 by value goes stale the instant the thing it measured changes.** The registry does not, because it
 is re-read; the file did, because it was written once.
+
+
+## 10. Ladder 2.3 — the confidence head already works, and it was never ours
+
+The confidence head predicts, per draft position `k`, whether that token will be accepted. Its
+purpose is entirely on the **serving** side: with a per-position acceptance estimate the engine can
+choose the block width instead of fixing it, spending 5 drafts where acceptance is likely and 1–2
+where it is not, per `argmax_k E[A(T_k)] / C(k)`. §9 measured a **3.2× spread** in per-category τ,
+which is exactly the waste an adaptive width is aimed at.
+
+### 10.1 Why the promotion gate cannot grade this item
+
+Two independent reasons, both structural:
+
+1. **The frozen protocol holds the width FIXED at 5.** A fixed-width instrument cannot observe a
+   variable-width win. Grading 2.3 on it is `measurement-and-traps.md`'s recurring failure — using
+   the ruler that happens to be lying around.
+2. **2.3 is forced to carry HASS.** The BCE label is `accepted = (draft_argmax == target)`
+   (`train_head.py:800`), which is only a *free-running* label when the draft feeds its own previous
+   token, and `--hass-from 1` is the only way to get that. §9.4 measured HASS at **−0.046 τ**.
+
+So the arms were pre-registered as expected refusals, and they refused:
+
+| arm | τ @ blk 5 | tok/s |
+|---|---:|---:|
+| `s3recap-p25-b0.1` (incumbent, no HASS) | **3.8413** | 28.3825 |
+| `s3recap-conf1.0` | 3.8025 | 28.0187 |
+| `s3recap-conf0.1` | 3.7925 | 28.0362 |
+| `s3recap-hass1-p25` (HASS, `a_conf` 0) | 3.7950 | 27.8562 |
+
+Note `conf1.0` sits *above* the HASS-only arm it is built on. The confidence term costs nothing in
+training; the entire deficit is HASS's.
+
+### 10.2 The gate that does grade it, and the mistake it nearly caused
+
+`tools/conf_calibration.py` scores **rank AUC of predicted confidence against realised acceptance**,
+from dumps produced by `train/train_head.py --calib-out` on a pure inference pass
+(`--lr 0 --resume <arm>`). 39,200 positions per arm, same capture chunk for all three so the
+comparison is paired.
+
+| | overall AUC | k=0 | k=1 | k=2 | k=3 | k=4 |
+|---|---:|---:|---:|---:|---:|---:|
+| `s3recap-conf1.0` | **0.8975** | 0.8998 | 0.8940 | 0.8966 | 0.8870 | 0.8782 |
+| `s3recap-conf0.1` | 0.8932 | 0.8760 | 0.8804 | 0.8866 | 0.8862 | 0.8800 |
+| control, `a_conf = 0` | **0.8795** | 0.8372 | 0.8616 | 0.8693 | 0.8659 | 0.8650 |
+| acceptance rate at k | — | 80.5 % | 70.5 % | 58.6 % | 48.7 % | 37.6 % |
+
+The tool's first verdict read **NEGATIVE**: the arm beats the control by only +0.018, so `a_conf`
+bought nothing, so — it concluded — "the signal is in the architecture, not in the arm", close 2.3.
+
+**That conclusion was wrong, and the tool was wrong to call the control untrained.**
+`mtp.2.confidence_head.proj.weight` **ships in the base checkpoint** and is **byte-identical**
+in every `a_conf = 0` head — `s3recap`, `s3recap-hass1`, `s3recap-hass1-p25`, and the live
+`s3recap-p25-b0.1` — verified against
+`~/models/DeepSeek-V4-Flash-0731-REAP/model-00048-of-00048.safetensors`, sha `15c5d09c7842d0f9`.
+It is **the vendor's trained confidence head**. `a_conf = 0` never meant "untrained"; it meant
+"not fine-tuned by us", and that is a completely different null.
+
+So the small gap does not say the signal is absent. It says **the vendor already trained it well**,
+which is an argument *for* the serving side, not against it. The two questions had been collapsed
+into one verdict, and they are now answered separately:
+
+| question | instrument | answer |
+|---|---|---|
+| did `a_conf` fine-tuning help? | the **gap**, arm vs control | **No.** +0.018 is not worth HASS's −0.046 τ. Train with `a_conf = 0`. |
+| is the serving side justified? | the **level**, and per-k | **Yes.** AUC 0.88 with no fine-tuning at all. |
+
+**The per-k rows are what make the level trustworthy.** Acceptance decays hard with `k` — 80.5 % to
+37.6 % — so a head that had learned *only that prior* would score near 0.5 **within** each `k` while
+the pooled AUC still looked strong. Every per-k AUC is 0.84–0.90. The signal is per-position, which
+is the only kind an adaptive width can use.
+
+### 10.3 What this changes
+
+The lever got **cheaper**, not deader. The signal is already in the head that is already live, so
+2.3 needs **no training arm and no HASS penalty** — only the verify-time engine change, measured
+against `s3recap-p25-b0.1` exactly as it is served today.
+
+Outstanding before any CUDA is written: these numbers are on capture the arms trained on. The
+control is inflated *less* — the vendor head never saw this corpus, so its 0.8795 is close to a
+true held-out figure — but "close to" is not "is". Capture the 64 held-out sequences' taps and
+re-run the control alone; that is a one-pass confirmation, and it is the number the engine work
+should be authorised by.

@@ -3,7 +3,7 @@
   loading model-00047-of-00048.safetensors ...
   loading model-00048-of-00048.safetensors ...
   dequantised 1512 tensors, 12.60 B params, 23.5 GiB bf16
-[train] weights ready in 12.4s
+[train] weights ready in 16.8s
 [train] trainable 517.3 M in 72 tensors | frozen experts 12.08 B
 [train] capture: 491 sample(s)
 [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
