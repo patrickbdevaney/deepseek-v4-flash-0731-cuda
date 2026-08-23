@@ -12,7 +12,13 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 BLK="${S5_BLOCK:-5}"
-CKPT=$(cat config/live_ckpt)
+# DEFAULTS to the deployed head, which is the incumbent a promotion must beat. BASELINE_CKPT
+# overrides it for the one other measurement this protocol needs: RUN-0, the stock head, which the
+# release rule in HEAD_REGISTRY.md compares the reconstructive categories against. Run-0 had only
+# ever been measured at block 6, so after ladder 2.1 the release rule could not be evaluated at all
+# -- its floors were 6-ceilinged and every candidate is 5-ceilinged. The stock head IS the base
+# checkpoint's own, so measuring it needs no staging and never touches config/live_ckpt.
+CKPT="${BASELINE_CKPT:-$(cat config/live_ckpt)}"
 OUT="${1:-evidence/baseline_tau_blk${BLK}.log}"
 echo "[baseline] measuring $CKPT at block $BLK, frozen 8-prompt suite, NGEN0=200"
 SUITE=$(cat protocol/suite_prompts.txt)
@@ -30,6 +36,11 @@ print(f"[baseline] blocks={ev['blocks']}  n_suite={ev['n_suite']}  "
       f"suite_tau={ev['suite_tau']}  suite_tok_s={ev['suite_tok_s']}  base_ar={ev['base_ar_tok_s']}")
 if ev["suite_tau"] is None or ev["n_suite"] < 8:
     sys.exit("[baseline] FAILED to parse a complete suite -- not a usable incumbent")
-open("evidence/baseline_tau.value", "w").write(str(ev["suite_tau"]))
-print("[baseline] wrote evidence/baseline_tau.value")
+# Only the DEPLOYED head's number is the incumbent bar. A run-0 measurement must never overwrite
+# it -- that would silently lower the promotion bar to the stock head's tau.
+if os.environ.get("BASELINE_CKPT"):
+    print("[baseline] BASELINE_CKPT set -> this is NOT the incumbent; baseline_tau.value untouched")
+else:
+    open("evidence/baseline_tau.value", "w").write(str(ev["suite_tau"]))
+    print("[baseline] wrote evidence/baseline_tau.value")
 PY

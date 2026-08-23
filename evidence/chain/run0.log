@@ -1,0 +1,5 @@
+[baseline] measuring /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP at block 5, frozen 8-prompt suite, NGEN0=200
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> evidence/run0_tau_blk5.log
+[run_model] pid 2018974   watch: tail -f evidence/run0_tau_blk5.log
+[run_model] memguard armed on 'decode' -> evidence/run0_tau_blk5.memguard.log
