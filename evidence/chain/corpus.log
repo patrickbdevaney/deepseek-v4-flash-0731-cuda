@@ -29,3 +29,56 @@
 [run_model] 117 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c0_cap.log
 [run_model] pid 1322511   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c0_cap.log
 [run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c0_cap.memguard.log
+total: 621233 tokens, 19415.9 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:agentic-p25-b0.1 2026-08-25T03:59:26-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p491_s001219.txt: running agreement 94.8%
+[gate] PORT vs ENGINE draft agreement: 37247/39280 = 94.8%  (need >= 90% before any session runs)
+[s5:agentic-p25-b0.1 2026-08-25T04:05:22-04:00] gate OK (94.8%)
+[s5:agentic-p25-b0.1 2026-08-25T04:05:22-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c0/train_metrics.json  (loss 0.3932 -> 1.0852, tail mean 0.7595)
+[train] TRAIN OK
+[s5:agentic-p25-b0.1 2026-08-25T04:29:22-04:00] chunk 1: capturing 491 sequence(s)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c1_cap.log
+[run_model] pid 1555612   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c1_cap.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c1_cap.memguard.log
+total: 612828 tokens, 19153.2 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:agentic-p25-b0.1 2026-08-25T07:21:24-04:00] chunk 1: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c1/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c1/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c1/train_metrics.json  (loss 0.8891 -> 1.0446, tail mean 0.9123)
+[train] TRAIN OK
+[s5:agentic-p25-b0.1 2026-08-25T07:45:08-04:00] chunk 2: capturing 491 sequence(s)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c2_cap.log
+[run_model] pid 1766071   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c2_cap.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c2_cap.memguard.log
+total: 618353 tokens, 19325.9 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:agentic-p25-b0.1 2026-08-25T10:40:11-04:00] chunk 2: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c2/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c2/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c2/train_metrics.json  (loss 0.7945 -> 2.2305, tail mean 0.7656)
+[train] TRAIN OK
+mkdir: cannot create directory ‘/home/patrickd/s5-capture/agentic-p25-b0.1/c3’: No space left on device
+[corpus 2026-08-25T11:04:10-04:00] corpus arm failed (rc=1)
+[corpus 2026-08-25T11:04:10-04:00] release rule for agentic-p25-b0.1:
+Traceback (most recent call last):
+  File "/home/patrickd/deepseek-v4-flash-0731-cuda/tools/release_rule.py", line 109, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/patrickd/deepseek-v4-flash-0731-cuda/tools/release_rule.py", line 65, in main
+    cand, bc = taus(a.candidate)
+               ^^^^^^^^^^^^^^^^^
+  File "/home/patrickd/deepseek-v4-flash-0731-cuda/tools/release_rule.py", line 44, in taus
+    for line in open(path):
+                ^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'evidence/agentic-p25-b0.1_eval.log'
+[corpus 2026-08-25T11:04:10-04:00] registry:
+| `auto-ace0p3` | 3.8462 | 5 | 28.395 | 13.99 | `120485e80` | not promoted: suite tau 3.8462 does not beat incumbent 3.8413 by the 3.5%  |
+| `auto-anchorpow1p5` | 3.8112 | 5 | 28.1412 | 14.19 | `120485e80` | not promoted: suite tau 3.8112 does not beat incumbent 3.8413 by the 3.5%  |
+[corpus 2026-08-25T11:04:10-04:00] corpus chain complete:

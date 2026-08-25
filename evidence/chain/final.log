@@ -1,2 +1,41 @@
 [final 2026-08-25T01:12:30-04:00] waiting for: units, the detached eval battery, and the GPU (deadline 72 h)
 [final 2026-08-25T01:16:52-04:00] waiting for: units, the detached eval battery, and the GPU (deadline 72 h)
+[final 2026-08-25T11:21:54-04:00] box quiet on 3 consecutive checks
+[final 2026-08-25T11:21:54-04:00] eval battery, stage by stage:
+[final 2026-08-25T11:21:54-04:00]   run.log: did not run this session
+[final 2026-08-25T11:21:54-04:00]   extend.log: did not run this session
+[final 2026-08-25T11:21:54-04:00]   extend_retry.log: did not run this session
+[final 2026-08-25T11:21:54-04:00]   force.log: did not run this session
+[final 2026-08-25T11:21:54-04:00]   bfcl_mt.log: did not run this session
+[final 2026-08-25T11:22:24-04:00] GPU quiet; finalising
+[final 2026-08-25T11:22:24-04:00] archiving any head still living only as session state
+[final 2026-08-25T11:22:25-04:00]   archived agentic-p25-b0.1 (tau ?)
+[final 2026-08-25T11:22:25-04:00] verifying the archive with sha256 (the deferred --full pass; the box is idle now)
+      ! /home/patrickd/model-backups/heads/agentic-p25-b0.1 exists but no registry row names it
+    
+    26 directories, 144 files checked, 0 directories with problems, 1 completeness gaps
+    wrote evidence/archive_verify_final.json
+[final 2026-08-25T11:24:15-04:00] !! archive verify FAILED (rc=1) -- uploading anyway would publish a corrupt shard, so the upload below skips any head it flagged
+[final 2026-08-25T11:24:15-04:00] champion per config/live_ckpt: s3recap-p25-b0.1
+[final 2026-08-25T11:24:35-04:00]   uploaded arms/agentic-p25-b0.1/ agentic-p25-b0.1
+[final 2026-08-25T11:24:41-04:00]   uploaded arms/auto-ace0p3/ auto-ace0p3
+[final 2026-08-25T11:24:47-04:00]   uploaded arms/auto-anchorpow1p5/ auto-anchorpow1p5
+[final 2026-08-25T11:24:53-04:00]   uploaded arms/s1/ s1
+[final 2026-08-25T11:25:00-04:00]   uploaded arms/s2/ s2
+[final 2026-08-25T11:25:06-04:00]   uploaded arms/s2-abl-ce0.5_tv0.5/ s2-abl-ce0.5_tv0.5
+[final 2026-08-25T11:25:13-04:00]   uploaded arms/s2-abl-ce0.9_tv0.1/ s2-abl-ce0.9_tv0.1
+[final 2026-08-25T11:25:20-04:00]   uploaded arms/s2-abl-ce1.0_tv0.0/ s2-abl-ce1.0_tv0.0
+[final 2026-08-25T11:25:26-04:00]   uploaded arms/s3/ s3
+[final 2026-08-25T11:25:32-04:00]   uploaded arms/s3recap/ s3recap
+[final 2026-08-25T11:25:38-04:00]   uploaded arms/s3recap-ce0.5/ s3recap-ce0.5
+[final 2026-08-25T11:25:44-04:00]   uploaded arms/s3recap-ce1.0/ s3recap-ce1.0
+[final 2026-08-25T11:25:50-04:00]   uploaded arms/s3recap-conf0.1/ s3recap-conf0.1
+[final 2026-08-25T11:25:56-04:00]   uploaded arms/s3recap-conf1.0/ s3recap-conf1.0
+[final 2026-08-25T11:26:02-04:00]   uploaded arms/s3recap-deficit/ s3recap-deficit
+[final 2026-08-25T11:26:08-04:00]   uploaded arms/s3recap-hass1/ s3recap-hass1
+[final 2026-08-25T11:26:14-04:00]   uploaded arms/s3recap-hass1-p25/ s3recap-hass1-p25
+[final 2026-08-25T11:26:20-04:00]   uploaded <root> s3recap-p25-b0.1
+[final 2026-08-25T11:26:26-04:00]   uploaded arms/s3recap-p25-b0.5/ s3recap-p25-b0.5
+[final 2026-08-25T11:26:33-04:00]   uploaded arms/s3recap-p25b-p2-b0.2/ s3recap-p25b-p2-b0.2
+[final 2026-08-25T11:26:39-04:00]   uploaded arms/s3recap-p25b-p2-b0.3/ s3recap-p25b-p2-b0.3
+[final 2026-08-25T11:26:43-04:00] upload complete

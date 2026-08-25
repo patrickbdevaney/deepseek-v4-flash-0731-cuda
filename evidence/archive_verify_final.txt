@@ -1,0 +1,34 @@
+verify_head_archive — sha256 + size
+
+  PASS agentic-p25-b0.1                      1 files  SOURCE-ONLY
+  PASS auto-ace0p3                           8 files  FULL
+  PASS auto-anchorpow1p5                     8 files  FULL
+  PASS s1                                    6 files  FULL PROMOTED
+  PASS s2                                    6 files  FULL
+  PASS s2-abl-ce0.5_tv0.5                    2 files  SOURCE-ONLY
+  PASS s2-abl-ce0.9_tv0.1                    2 files  SOURCE-ONLY
+  PASS s2-abl-ce1.0_tv0.0                    2 files  SOURCE-ONLY
+  PASS s3                                    6 files  FULL PROMOTED
+  PASS s3recap                               6 files  FULL
+  PASS s3recap-ce0.5                         6 files  FULL
+  PASS s3recap-ce1.0                         6 files  FULL
+  PASS s3recap-conf0.1                       6 files  FULL
+  PASS s3recap-conf1.0                       6 files  FULL
+  PASS s3recap-deficit                       6 files  FULL
+  PASS s3recap-hass1                         6 files  FULL
+  PASS s3recap-hass1-p25                     6 files  FULL
+  PASS s3recap-p25-b0.1                      6 files  FULL
+  PASS s3recap-p25-b0.5                      6 files  FULL
+  PASS s3recap-p25b-p2-b0.2                  8 files  FULL
+  PASS s3recap-p25b-p2-b0.3                  8 files  FULL
+  PASS shipped-dspark-0731reap               5 files  DERIVED-ONLY
+  PASS CURRENT_BEST                          5 files  
+  PASS dspark-mtp-0731reap-bundle            8 files  
+  PASS dspark-mtp-draft-head-v0.1-interim    4 files  
+  PASS dspark-mtp-draft-head-v1.0-s3         5 files  
+
+COMPLETENESS:
+  ! /home/patrickd/model-backups/heads/agentic-p25-b0.1 exists but no registry row names it
+
+26 directories, 144 files checked, 0 directories with problems, 1 completeness gaps
+wrote evidence/archive_verify_final.json
