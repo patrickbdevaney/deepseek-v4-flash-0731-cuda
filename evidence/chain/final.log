@@ -39,3 +39,7 @@
 [final 2026-08-25T11:26:33-04:00]   uploaded arms/s3recap-p25b-p2-b0.2/ s3recap-p25b-p2-b0.2
 [final 2026-08-25T11:26:39-04:00]   uploaded arms/s3recap-p25b-p2-b0.3/ s3recap-p25b-p2-b0.3
 [final 2026-08-25T11:26:43-04:00] upload complete
+[final 2026-08-25T11:26:43-04:00] committed
+[final 2026-08-25T11:26:45-04:00] pushed
+[final 2026-08-25T11:26:45-04:00] quiescing self-starting work before sleep
+[final 2026-08-25T11:26:45-04:00]   stopped the decode-loop watchdog timer
