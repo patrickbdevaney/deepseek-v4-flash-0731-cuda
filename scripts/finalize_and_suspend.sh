@@ -247,6 +247,38 @@ if [ "$timed_out" = 1 ]; then
     LOG "NOT suspending: work was still running at the deadline. Everything complete is saved, committed and uploaded."
     exit 3
 fi
+# A CHAIN THAT DIED IS NOT A PROGRAMME THAT FINISHED, AND THE TWO ARE EQUALLY QUIET. Everything
+# above -- archive, verify, upload, commit, push -- has already run, so nothing is lost either way.
+# What must not happen is the box sleeping on top of a failure: the evidence goes cold, the GPU
+# sits idle, and the partial that was archived a step ago starts to look like a result. That is
+# precisely the 2026-08-25 cascade, where a corpus arm dead at chunk 3 read as a finished programme.
+#
+# DETECTED BY INDEPENDENT EVIDENCE, NOT A COOPERATIVE MARKER. A marker requires the dying script to
+# still be healthy enough to write one, which is exactly what cannot be assumed. These two artefacts
+# are written by the SUCCESS path only: s5_session_auto.sh sets $WORK/trained after the chunk loop
+# completes, and the arm's eval log exists only once it has been measured. Either one missing while
+# the arm's work tree exists means it started and did not finish.
+corpus_unfinished(){
+    local w=/home/patrickd/s5-capture/agentic-p25-b0.1
+    [ -d "$w" ] || return 1                                   # never started; not this run's business
+    [ -e "$w/trained" ] && [ -s "$ROOT/evidence/agentic-p25-b0.1_eval.log" ] && return 1
+    local n=0 c
+    for c in 0 1 2 3 4 5 6; do [ -s "$w/c$c/trained/mtp_trained.safetensors" ] && n=$((n+1)); done
+    echo "$n"; return 0
+}
+if [ -s "$ROOT/evidence/chain/CHAIN_FAILED" ]; then
+    LOG "NOT suspending: a chain recorded a failure --"
+    while IFS= read -r l; do LOG "    $l"; done < "$ROOT/evidence/chain/CHAIN_FAILED"
+    LOG "  Everything that completed is saved, committed and uploaded. Diagnose before re-running."
+    exit 4
+fi
+if trained_n=$(corpus_unfinished); then
+    LOG "NOT suspending: the corpus arm DIED rather than finished (${trained_n}/7 chunks trained,"
+    LOG "  no \$WORK/trained symlink and/or no eval log). Everything complete is saved, committed"
+    LOG "  and uploaded; chunks 0..$((trained_n-1)) are intact and the run resumes at chunk ${trained_n}."
+    LOG "  Diagnose the cause before re-running -- see evidence/chain/corpus.log."
+    exit 4
+fi
 if [ "$DO_SUSPEND" != "1" ]; then LOG "FINAL_SUSPEND=0, staying awake"; exit 0; fi
 # QUIESCE BEFORE SLEEP. Two things on this box start work on their own, and a "suspended" machine
 # that resumes training the moment it wakes is not what was asked for:

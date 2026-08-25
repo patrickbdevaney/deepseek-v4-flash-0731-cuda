@@ -1448,3 +1448,38 @@ check cannot distinguish "the work finished" from "the work died". It archived a
 unevaluated partial on that basis. The head is preserved as `agentic-p25-b0.1-c3of7` with a card
 that says what it is; the plain name is reserved for the complete run. A finalizer that publishes
 should read the chain's exit status, not just its silence.
+
+## 42. Editing a running script, again — and why the fix belonged in a different file (2026-08-25)
+
+Minutes after committing trap 41, I edited `chain_corpus.sh`, `autopilot.sh` and
+`finalize_and_suspend.sh` to add failure markers. All three were **running at the time**.
+
+Bash reads a script by byte offset and seeks back to just past each parsed command before executing
+it. Rewriting the file under a live shell means that when the current command returns, the shell
+resumes at an offset that now lands in the middle of different text. `chain_corpus.sh` was blocked
+inside its `s5_session_auto.sh` child with an offset pointing just past a two-line command that my
+edit had replaced with a sixteen-line `if` block: it would have resumed mid-comment, ~13 hours
+later, at the end of the corpus run.
+
+Nothing broke, and the reason is luck plus structure: all three shells were parked inside regions
+bash had already parsed in full (a blocked child, a `sleep` inside a `while` compound, a wait loop),
+and the files were restored from git within about two minutes. **`git checkout` of a running script
+is the recovery** -- it puts the original bytes back at the original offsets.
+
+**The real lesson is not "be careful", it is that the requirement was misplaced.** I wanted a failed
+chain to be distinguishable from a finished one. I reached for a marker file written by the failing
+script -- which meant editing the two scripts most likely to be running, and which depends on the
+dying process being healthy enough to write it.
+
+The same requirement, satisfied in the finalizer alone, needs no marker and no cooperation:
+
+    corpus complete  <=>  $WORK/trained resolves  AND  the arm's eval log exists
+
+Both artefacts are written by the SUCCESS path only -- `s5_session_auto.sh` creates the `trained`
+symlink after the chunk loop completes, and the eval log exists only once the arm has been measured.
+Their absence is positive evidence of an unfinished run, available to any observer at any time.
+
+**Two rules, then.** Prefer detecting a condition from artefacts the success path already leaves
+behind over signalling it from the path that is failing. And when a change must touch a running
+script, stop the unit first -- `finalize_and_suspend.sh` was stopped, edited, and relaunched, which
+cost nothing because it was only waiting.

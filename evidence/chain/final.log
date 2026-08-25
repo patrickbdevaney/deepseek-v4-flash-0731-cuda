@@ -46,3 +46,5 @@
 [final 2026-08-25T11:26:46-04:00] all work saved, committed and uploaded. Suspending in 60 s.
 [final 2026-08-25T11:26:46-04:00] to wake: press power / send WoL. See WAKE_README.md to re-arm the watchdog and flywheel.
 [final 2026-08-25T13:55:09-04:00] waiting for: units, the detached eval battery, and the GPU (deadline 72 h)
+Terminated
+[final 2026-08-25T14:04:31-04:00] waiting for: units, the detached eval battery, and the GPU (deadline 72 h)
