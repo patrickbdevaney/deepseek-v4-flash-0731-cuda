@@ -50,16 +50,75 @@ timed_out=0
 # and waiting longer will not revive it. Freshness cannot be spoofed by another process's argv.
 STALE_MIN="${FINAL_STALE_MIN:-45}"
 SUPLOG=evidence/evals/supervise.log
-# eval_resume.sh APPENDS to this log (`>>`), so it still holds the completion line from the battery
-# that finished on 2026-08-19. A plain `grep -q "ALL TASKS COMPLETE"` therefore reports "finished"
-# the instant a NEW battery starts, and the box would suspend on top of ~20 h of running evals.
-# Freshness is the primary signal; the marker only counts when it is in the last few lines, i.e.
-# when it is THIS run's completion rather than an old one further up the file.
-battery_running(){
-    [ -f "$SUPLOG" ] || return 1                                     # never started
-    [ -z "$(find "$SUPLOG" -mmin -"$STALE_MIN" 2>/dev/null)" ] && return 1   # stale: dead or long done
-    tail -3 "$SUPLOG" | grep -q "ALL TASKS COMPLETE" && return 1     # just finished
+# THE BATTERY IS FIVE DETACHED SCRIPTS, NOT ONE. eval_resume.sh launches all of them in a single
+# breath -- the suite, the extension, the extension retry, the forcing pass and BFCL multi-turn --
+# and they sequence themselves internally (forcing blocks on the retry, and so on). eval_supervise
+# only covers the FIRST of the five and exits when the suite is done, so watching it alone would
+# have declared the battery finished while the extension, forcing and multi-turn stages -- the
+# stages this run exists for -- were still going, and suspended the box on top of them.
+#
+# Each stage owns a log and prints a distinct completion marker. A stage is RUNNING when its log is
+# fresh and its marker is not yet in the tail; the battery is running while ANY stage is.
+#
+# Freshness first, marker second, and the marker only counts in the LAST FEW LINES: eval_resume.sh
+# APPENDS (`>>`), so run.log still carries "ALL TASKS COMPLETE" from the battery that finished on
+# 2026-08-19. A plain grep would report "done" the instant a new battery started.
+#
+# Liveness is deliberately NOT `pgrep -f`: while writing this, `pgrep -f eval_supervise` matched the
+# interactive shell that merely quoted the name inside a comment. A suspend gated on that either
+# sleeps through a live battery or never sleeps at all. A file's mtime cannot be spoofed by another
+# process's argv.
+STALE_MIN="${FINAL_STALE_MIN:-45}"
+EVD=evidence/evals
+STAGES="run.log:ALL TASKS COMPLETE
+extend.log:ALL EXTENSIONS COMPLETE
+extend_retry.log:ALL EXTENSION RETRIES COMPLETE
+force.log:ALL FORCING COMPLETE
+bfcl_mt.log:ALL MULTI-TURN COMPLETE"
+
+# MARKERS ARE MATCHED ONLY IN BYTES APPENDED AFTER THIS SCRIPT STARTED. `tail -N` is not good
+# enough: eval_resume.sh appends, so when a new battery begins, the PREVIOUS run's completion line
+# is still only a few lines from the end, and a tail-based check reports "complete" for a stage that
+# has just started. Simulated exactly that and watched it fire. Recording each log's size up front
+# and reading from that offset makes old content invisible, which is the property actually wanted.
+OFFDIR=$(mktemp -d /tmp/dsv4-final-off.XXXXXX)
+trap 'rm -rf "$OFFDIR"' EXIT
+while IFS= read -r line; do
+    f="$EVD/${line%%:*}"
+    [ -f "$f" ] && stat -c %s "$f" > "$OFFDIR/${line%%:*}" || echo 0 > "$OFFDIR/${line%%:*}"
+done <<< "$STAGES"
+
+# Bytes appended to a stage's log since this script started.
+new_bytes(){ tail -c "+$(( $(cat "$OFFDIR/$1") + 1 ))" "$EVD/$1" 2>/dev/null; }
+
+stage_running(){   # $1=log  $2=marker
+    local f="$EVD/$1"
+    [ -f "$f" ] || return 1                                            # never started
+    [ -z "$(find "$f" -mmin -"$STALE_MIN" 2>/dev/null)" ] && return 1  # stale: died, or long done
+    new_bytes "$1" | grep -aq "$2" && return 1                         # THIS run finished
     return 0
+}
+battery_running(){
+    local line
+    while IFS= read -r line; do
+        stage_running "${line%%:*}" "${line#*:}" && return 0
+    done <<< "$STAGES"
+    return 1
+}
+battery_report(){
+    local line f
+    while IFS= read -r line; do
+        f="$EVD/${line%%:*}"
+        if [ ! -f "$f" ] || [ "$(stat -c %s "$f" 2>/dev/null)" = "$(cat "$OFFDIR/${line%%:*}")" ]; then
+            LOG "  ${line%%:*}: did not run this session"
+        elif new_bytes "${line%%:*}" | grep -aq "${line#*:}"; then
+            LOG "  ${line%%:*}: COMPLETE"
+        elif [ -n "$(find "$f" -mmin -"$STALE_MIN" 2>/dev/null)" ]; then
+            LOG "  ${line%%:*}: still active"
+        else
+            LOG "  ${line%%:*}: ENDED WITHOUT ITS MARKER -- inspect $f"
+        fi
+    done <<< "$STAGES"
 }
 gpu_running(){ pgrep -x decode >/dev/null || pgrep -x dsv4-server >/dev/null; }
 units_running(){ systemctl --user is-active --quiet dsv4-corpus dsv4-autopilot dsv4-resume dsv4-hfpend 2>/dev/null; }
@@ -84,13 +143,8 @@ while : ; do
 done
 if [ "$timed_out" = 0 ]; then
     LOG "box quiet on 3 consecutive checks"
-    if [ -f evidence/evals/supervise.log ]; then
-        if grep -q "ALL TASKS COMPLETE" evidence/evals/supervise.log; then
-            LOG "eval battery reported ALL TASKS COMPLETE"
-        else
-            LOG "NOTE: supervise.log exists but never reported completion -- the battery ended early. Saving anyway; check evidence/evals/supervise.log after wake."
-        fi
-    fi
+    LOG "eval battery, stage by stage:"
+    battery_report
     sleep 30   # let the last writes land before hashing them
 fi
 LOG "GPU quiet; finalising"
