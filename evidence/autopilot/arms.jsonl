@@ -8,3 +8,7 @@
 {"name": "s3recap-hass1-p25", "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.1, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}, "tau": 3.795, "release_pass": false, "note": "seeded from HEAD_REGISTRY.md block-5 rows"}
 {"name": "s3recap-conf1.0", "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.1, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}, "tau": 3.8025, "release_pass": false, "note": "seeded from HEAD_REGISTRY.md block-5 rows"}
 {"name": "s3recap-conf0.1", "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.1, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}, "tau": 3.7925, "release_pass": false, "note": "seeded from HEAD_REGISTRY.md block-5 rows"}
+{"name": "s3recap-p25b-p2-b0.3", "tau": 3.77, "release_pass": false, "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.3, "anchor_pow": 2.0, "deficit_clamp": 3.0, "pos_per_seq": 16}, "note": "ingested from HEAD_REGISTRY.md"}
+{"name": "s3recap-p25b-p2-b0.2", "tau": 3.8163, "release_pass": false, "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.2, "anchor_pow": 2.0, "deficit_clamp": 3.0, "pos_per_seq": 16}, "note": "ingested from HEAD_REGISTRY.md"}
+{"name": "auto-ace0p3", "tau": 3.8462, "release_pass": false, "cfg": {"a_ce": 0.3, "a_tv": 0.7, "deficit": 1, "beta": 0.1, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}}
+{"name": "auto-anchorpow1p5", "tau": 3.8112, "release_pass": false, "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.1, "anchor_pow": 1.5, "deficit_clamp": 3.0, "pos_per_seq": 16}}

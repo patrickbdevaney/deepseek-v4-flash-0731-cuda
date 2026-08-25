@@ -1,0 +1,2 @@
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-25T01:02:28-04:00
+[memguard] watching pid 1322511 (decode)

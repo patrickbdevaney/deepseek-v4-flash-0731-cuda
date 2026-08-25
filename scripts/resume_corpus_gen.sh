@@ -110,4 +110,18 @@ PY
 
 LOG "pass 1 complete and verified ($L/$N); handing back to the corpus chain"
 LOG "the chain skips pass 1 because gen.txt is non-empty and complete, and goes straight to capture+train"
-systemctl --user start dsv4-corpus && LOG "dsv4-corpus started" || LOG "FAILED to start dsv4-corpus"
+# TRANSIENT UNITS CANNOT BE RESTARTED BY NAME (found the hard way, 2026-08-24 18:05). These chains
+# are started with `systemd-run --unit=`, which creates a TRANSIENT unit -- stopping one DELETES it,
+# so `systemctl start dsv4-corpus` fails with "Unit not found" rather than restarting anything. The
+# generation finished and verified at 18:05, this line failed, and the corpus sat done-but-unhanded
+# for seven hours. Re-create the unit instead of trying to start it.
+systemctl --user reset-failed dsv4-corpus 2>/dev/null || true
+if systemd-run --user --unit=dsv4-corpus \
+     --property=WorkingDirectory="$ROOT" \
+     --property=StandardOutput=append:"$ROOT/evidence/chain/corpus.log" \
+     --property=StandardError=append:"$ROOT/evidence/chain/corpus.log" \
+     /usr/bin/bash scripts/chain_corpus.sh >/dev/null 2>&1; then
+    LOG "dsv4-corpus started"
+else
+    LOG "FAILED to start dsv4-corpus -- run: systemd-run --user --unit=dsv4-corpus ... scripts/chain_corpus.sh"
+fi

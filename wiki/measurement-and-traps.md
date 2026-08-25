@@ -1368,3 +1368,41 @@ cycle; asymmetric precedence plus a GPU check is how you get mutual exclusion.
 dsv4-autopilot` was only suspicious because the autopilot had just been observed waiting for the
 resume. Nothing in the system would have reported it — the next signal would have been a corpus that
 had not advanced in the morning.
+
+## 40. A transient unit cannot be restarted by name, and two silent-deletion traps (2026-08-25)
+
+Three failures in one handoff, all of which *looked* like success.
+
+**(a) `systemctl start` on a transient unit fails with "Unit not found".** Every chain here is started
+with `systemd-run --unit=NAME`, which creates a **transient** unit: stopping it *deletes* it. The
+resume script ended with `systemctl --user start dsv4-corpus`, which had nothing to start. Pass 1
+finished and self-verified at 2026-08-24 18:05 — 2 687 sequences, splice sound — and then the corpus
+sat **done but unhanded for seven hours**. Re-create with `systemd-run`, never `start`, and
+`reset-failed` first. (The autopilot did keep the GPU busy with arms in that window, so the cost was
+the corpus's latency rather than the whole box's.)
+
+**(b) `find -delete` silently ignores `-prune`.** `-delete` implies `-depth`, which is incompatible
+with `-prune`, so
+
+```
+sudo find . -path ./KEEP -prune -o -name 'opt_state.pt' -print -delete
+```
+
+matched **nothing**, printed nothing, and exited 0. Build the list first, check it, then delete it:
+
+```
+find . -name 'opt_state.pt' -not -path './KEEP/*' > list.txt
+grep -c KEEP list.txt          # refuse if the protected path is in the list
+sudo xargs -a list.txt -d '\n' rm -f
+```
+
+**Always prove a reclaim with a `df` delta**, never with the tool's own report — 20 GB → 68 GB is
+proof; "removed 22 files" is not. This is the second time a deletion on this box reported success
+while freeing nothing (see §22).
+
+**(c) `awk -F'|'` is off by one on a Markdown table.** Rows start with `|`, so `$1` is the empty
+string before it: the name is `$2` and `tau` is `$3`. An earlier "block-5 arms, best first" listing
+printed *nothing at all* from this, and a batch of head cards was written with `tau=unrecorded`
+before it was caught. `tools/verify_head_archive.py` gets this right by stripping the delimiters
+first (`line.strip().strip("|").split("|")`) — do that rather than counting fields from a leading
+delimiter.

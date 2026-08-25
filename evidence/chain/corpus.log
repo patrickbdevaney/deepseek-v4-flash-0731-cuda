@@ -12,3 +12,20 @@
 [run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1.log
 [run_model] pid 2511010   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1.log
 [run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1.memguard.log
+[corpus 2026-08-25T01:02:21-04:00] waiting for the anchor-shape arms to finish
+[corpus 2026-08-25T01:02:21-04:00] p25b done; anchor-shape results:
+| `s3recap-p25b-p2-b0.2` | 3.8163 | 5 | 28.0787 | 14.57 | `9c2a5c6f2` | not promoted: suite tau 3.8163 does not beat incumbent 3.8413 by the 3.5%  |
+| `auto-ace0p3` | 3.8462 | 5 | 28.395 | 13.99 | `120485e80` | not promoted: suite tau 3.8462 does not beat incumbent 3.8413 by the 3.5%  |
+| `auto-anchorpow1p5` | 3.8112 | 5 | 28.1412 | 14.19 | `120485e80` | not promoted: suite tau 3.8112 does not beat incumbent 3.8413 by the 3.5%  |
+[corpus 2026-08-25T01:02:21-04:00] arm agentic-p25-b0.1: winning recipe (deficit, beta 0.1, anchor_pow 1) on the agentic corpus
+[corpus 2026-08-25T01:02:21-04:00] pass 1 generates 3071 sequences x 1024 tokens on-box -- the long pole, ~32 h, no tokens
+[s5:agentic-p25-b0.1 2026-08-25T01:02:21-04:00] preflight: need ~37 GB (peak = one chunk of 491), have 64 GB free
+  round-trip: 3071/3071 lines start with their exact seed
+[s5:agentic-p25-b0.1 2026-08-25T01:02:22-04:00] pass 1 OK (3071 sequences)
+[s5:agentic-p25-b0.1 2026-08-25T01:02:22-04:00] hold-out: 64 sequence(s) reserved, 3007 for training
+[s5:agentic-p25-b0.1 2026-08-25T01:02:22-04:00] training in 7 chunk(s) of up to 491 sequence(s); peak capture on disk is one chunk
+[s5:agentic-p25-b0.1 2026-08-25T01:02:22-04:00] chunk 0: capturing 491 sequence(s)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c0_cap.log
+[run_model] pid 1322511   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c0_cap.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c0_cap.memguard.log

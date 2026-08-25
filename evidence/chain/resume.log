@@ -12,3 +12,14 @@
 [run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1_resume1.log
 [run_model] pid 2837368   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1_resume1.log
 [run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_pass1_resume1.memguard.log
+[resume 2026-08-24T18:05:44-04:00] attempt 1 ended with 3071/3071
+[resume 2026-08-24T18:05:44-04:00] gen.txt already complete (3071/3071)
+  lines            : 3071 / 3071
+  aligned  offset 0: 0 mismatches   <- must be 0
+  aligned  offset 1: 3070 mismatches   <- must be LARGE; if 0 the splice is shifted
+  short sequences  : 0 (< 1024 generated tokens)
+  VERDICT: SPLICE SOUND
+[resume 2026-08-24T18:05:44-04:00] pass 1 complete and verified (3071/3071); handing back to the corpus chain
+[resume 2026-08-24T18:05:44-04:00] the chain skips pass 1 because gen.txt is non-empty and complete, and goes straight to capture+train
+Failed to start dsv4-corpus.service: Unit dsv4-corpus.service not found.
+[resume 2026-08-24T18:05:44-04:00] FAILED to start dsv4-corpus
