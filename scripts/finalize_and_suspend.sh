@@ -105,6 +105,7 @@ battery_running(){
     done <<< "$STAGES"
     return 1
 }
+BATTERY_DIED=""
 battery_report(){
     local line f
     while IFS= read -r line; do
@@ -116,7 +117,12 @@ battery_report(){
         elif [ -n "$(find "$f" -mmin -"$STALE_MIN" 2>/dev/null)" ]; then
             LOG "  ${line%%:*}: still active"
         else
+            # DETECTING THIS AND THEN SUSPENDING ANYWAY IS THE CORPUS BUG IN THE STAGE THAT MATTERS
+            # MOST. A stage that died mid-way goes stale without ever writing its marker, which is
+            # indistinguishable, to a liveness check, from one that finished long ago. Record it so
+            # the suspend guard below can act on it instead of just narrating it.
             LOG "  ${line%%:*}: ENDED WITHOUT ITS MARKER -- inspect $f"
+            BATTERY_DIED="${BATTERY_DIED}${line%%:*} "
         fi
     done <<< "$STAGES"
 }
@@ -270,6 +276,13 @@ if [ -s "$ROOT/evidence/chain/CHAIN_FAILED" ]; then
     LOG "NOT suspending: a chain recorded a failure --"
     while IFS= read -r l; do LOG "    $l"; done < "$ROOT/evidence/chain/CHAIN_FAILED"
     LOG "  Everything that completed is saved, committed and uploaded. Diagnose before re-running."
+    exit 4
+fi
+if [ -n "$BATTERY_DIED" ]; then
+    LOG "NOT suspending: eval stage(s) ended without a completion marker: $BATTERY_DIED"
+    LOG "  A stage that dies mid-way is silent in exactly the way a finished one is. Everything"
+    LOG "  complete is saved, committed and uploaded; the battery is resumable via eval_resume.sh"
+    LOG "  (idempotent, keys off ids already on disk). Diagnose before re-running."
     exit 4
 fi
 if trained_n=$(corpus_unfinished); then
