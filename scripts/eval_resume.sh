@@ -33,11 +33,42 @@ say(){ echo "[resume $(date -Is)] $*"; }
 running(){ pgrep -f "bash scripts/$1" > /dev/null; }
 done_marker(){ grep -aq "$2" "evidence/evals/$1" 2>/dev/null; }
 
+# DETACHED MUST MEAN "OUTLIVES ITS PARENT", AND nohup+setsid DOES NOT GIVE YOU THAT UNDER SYSTEMD.
+# setsid changes the SESSION; it does not change the CGROUP. When this script runs as a child of a
+# systemd unit -- which is exactly how autopilot.sh's finalize() invokes it -- every stage launched
+# here lands in that unit's cgroup, and systemd tears the cgroup down when the unit's main process
+# exits. autopilot launches the battery and then exits immediately, so the whole battery would have
+# been killed seconds after starting. That path had never been exercised end to end.
+#
+# MEASURED 2026-08-25 (and measured twice -- the first harness used `exec -a`, which renames argv[0]
+# but not comm, so `pgrep -x` reported healthy processes as dead and produced a confidently wrong
+# result): a nohup+setsid child of a transient unit IS killed when the unit's main process exits
+# under the DEFAULT KillMode=control-group, and SURVIVES under KillMode=process. dsv4-autopilot runs
+# with the default, so the battery would have died.
+#
+# KillMode=process on the launcher would therefore also work, but it is the weaker fix: it leaves
+# the stages in a dead unit's cgroup, owned by nobody, invisible to systemctl, and still coupled to
+# whoever happened to launch them. Own-unit-per-stage decouples them from that entirely.
+#
+# So each stage gets its OWN transient unit, with the stage itself as the main process. Its lifetime
+# is then its own -- independent of this script, of autopilot, of any terminal, and of every other
+# stage -- and it is inspectable with `systemctl --user status dsv4-ev-<stage>`.
+# systemd requires an ABSOLUTE path for the executable; arguments stay relative to WorkingDirectory.
+spawn(){   # $1 = unit suffix   $2 = log file, repo-relative, appended   rest = argv
+  local unit="dsv4-ev-$1" log="$2"; shift 2
+  systemctl --user reset-failed "$unit" 2>/dev/null
+  systemd-run --user --unit="$unit" \
+      --property=WorkingDirectory="$PWD" \
+      --property=StandardOutput=append:"$PWD/$log" \
+      --property=StandardError=append:"$PWD/$log" \
+      "$@" >/dev/null 2>&1
+}
+
 # Launch a stage and do not return until pgrep can see it, so the next stage's wait loop cannot
 # race past it. Ten seconds is generous for a bash exec; failing to appear is worth shouting about.
 launch(){
   local script="$1" log="$2"
-  nohup setsid bash "scripts/$script" >> "evidence/evals/$log" 2>&1 < /dev/null &
+  spawn "${script%.sh}" "evidence/evals/$log" /usr/bin/bash "scripts/$script"
   for _ in $(seq 1 20); do
     running "$script" && { say "started $script"; return 0; }
     sleep 0.5
@@ -50,7 +81,7 @@ mkdir -p evidence/evals
 
 if ! pgrep -f "bash scripts/memguard.sh" > /dev/null; then
   say "starting memguard"
-  nohup setsid bash scripts/memguard.sh > /dev/null 2>&1 < /dev/null &
+  spawn memguard evidence/evals/memguard_resume.log /usr/bin/bash scripts/memguard.sh
 fi
 
 # STAGE 1: the battery. eval_supervise starts the server itself, waits for it, and restarts it if
@@ -62,9 +93,8 @@ elif done_marker run.log "ALL TASKS COMPLETE"; then
   say "battery already complete"
   if ! curl -s -m 10 -o /dev/null http://localhost:8080/health 2>/dev/null; then
     say "server is down and later stages need it — starting under the model lock"
-    nohup setsid scripts/with_model_lock.sh \
-        env SEQMAX=$SEQMAX EXT_CHUNK=$EXT_CHUNK bash scripts/serve.sh \
-        > evidence/eval_server.log 2>&1 < /dev/null &
+    spawn server evidence/eval_server.log "$PWD/scripts/with_model_lock.sh" \
+        env SEQMAX=$SEQMAX EXT_CHUNK=$EXT_CHUNK bash scripts/serve.sh
     for _ in $(seq 1 120); do
       curl -s -m 10 -o /dev/null http://localhost:8080/health 2>/dev/null && break
       sleep 10
@@ -72,7 +102,7 @@ elif done_marker run.log "ALL TASKS COMPLETE"; then
   fi
 else
   say "battery incomplete — starting the supervisor (it brings the server up too)"
-  nohup setsid bash scripts/eval_supervise.sh >> evidence/evals/supervise.log 2>&1 < /dev/null &
+  spawn supervise evidence/evals/supervise.log /usr/bin/bash scripts/eval_supervise.sh
   for _ in $(seq 1 20); do running eval_supervise.sh && break; sleep 0.5; done
   say "started eval_supervise.sh"
 fi

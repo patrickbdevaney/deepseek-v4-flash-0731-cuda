@@ -1483,3 +1483,41 @@ Their absence is positive evidence of an unfinished run, available to any observ
 behind over signalling it from the path that is failing. And when a change must touch a running
 script, stop the unit first -- `finalize_and_suspend.sh` was stopped, edited, and relaunched, which
 cost nothing because it was only waiting.
+
+## 43. `nohup setsid` is not detachment under systemd — and two self-inflicted wounds finding that out (2026-08-25)
+
+**The bug.** `autopilot.sh`'s `finalize()` launches the eval battery with `bash scripts/eval_resume.sh`
+and then exits. `eval_resume.sh` launches every stage with `nohup setsid`. `setsid` changes the
+SESSION; it does not change the CGROUP. Under the default `KillMode=control-group`, systemd kills
+everything left in a unit's cgroup the moment that unit's main process exits — so the entire
+battery would have been SIGKILLed seconds after starting. **This path had never been exercised end
+to end**: every prior battery was launched from a shell or from `dsv4-evals.service`, never as a
+child of a unit that then exits.
+
+Measured, after a false start (below): killed under `KillMode=control-group`, survives under
+`KillMode=process`. The fix is neither — each stage now gets its **own** transient unit with the
+stage as its main process (`eval_resume.sh`'s `spawn()`), so its lifetime is independent of its
+launcher, of every other stage, and of any terminal. `KillMode=process` would also have worked, but
+leaves the stages in a dead unit's cgroup, owned by nobody and invisible to `systemctl`.
+
+**Self-inflicted wound 1: a test harness that lied.** The first two runs used
+`exec -a NAME sleep 300` and detected survival with `pgrep -x NAME`. `exec -a` sets argv[0]; it does
+not set `comm`, which `pgrep -x` matches. Every process read as dead, and the harness confidently
+reported that BOTH KillMode settings kill the child — a conclusion that would have been written into
+the repo as fact. The tell was a *contradiction the harness itself printed*: `systemctl` said the
+unit was `running` on the same line the process was called `DEAD`. **When an instrument disagrees
+with a more authoritative one, believe the instrument you did not build.**
+
+**Self-inflicted wound 2: `pkill -x sleep` on a box doing production work.** The cleanup at the end
+of that harness killed every `sleep` owned by the user — including ones inside the live corpus chain
+— which cascaded into a SIGTERM of the chunk-3 capture (`rc=143`, no memguard or oomsentry entry, so
+no guard did it). Twenty-seven minutes of capture lost, and `chain_corpus.sh` then died on a syntax
+error because its bash had buffered the edited bytes from trap 42's window. **Never run an unscoped
+`pkill`/`pgrep` pattern on a shared box.** Scope by cgroup or unit (`systemctl --user stop <unit>`),
+or by a PID recorded at launch — never by a name as generic as `sleep`.
+
+**And the recovery detail that matters:** a killed capture leaves a PARTIAL `cap/manifest.jsonl`.
+`s5_session_auto.sh` resumes a chunk only when that file is ABSENT, so a retry would have skipped the
+re-capture and failed validation on a truncated capture instead. The partial `cap/` must be deleted
+before restarting. Chunk-level `trained/` state is what makes the run resumable; a half-written
+`cap/` is what makes it look resumable when it is not.

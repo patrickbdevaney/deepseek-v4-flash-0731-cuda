@@ -103,3 +103,28 @@ FileNotFoundError: [Errno 2] No such file or directory: 'evidence/agentic-p25-b0
 [run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.log
 [run_model] pid 18601   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.log
 [run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.memguard.log
+Terminated
+[corpus 2026-08-25T14:22:36-04:00] corpus arm failed (rc=143)
+scripts/chain_corpus.sh: line 66: syntax error near unexpected token `('
+scripts/chain_corpus.sh: line 66: `    LOG "corpus arm failed (rc=$rc)"'
+[corpus 2026-08-25T14:24:47-04:00] waiting for the anchor-shape arms to finish
+[corpus 2026-08-25T14:24:47-04:00] p25b done; anchor-shape results:
+| `s3recap-p25b-p2-b0.2` | 3.8163 | 5 | 28.0787 | 14.57 | `9c2a5c6f2` | not promoted: suite tau 3.8163 does not beat incumbent 3.8413 by the 3.5%  |
+| `auto-ace0p3` | 3.8462 | 5 | 28.395 | 13.99 | `120485e80` | not promoted: suite tau 3.8462 does not beat incumbent 3.8413 by the 3.5%  |
+| `auto-anchorpow1p5` | 3.8112 | 5 | 28.1412 | 14.19 | `120485e80` | not promoted: suite tau 3.8112 does not beat incumbent 3.8413 by the 3.5%  |
+[corpus 2026-08-25T14:24:47-04:00] arm agentic-p25-b0.1: winning recipe (deficit, beta 0.1, anchor_pow 1) on the agentic corpus
+[corpus 2026-08-25T14:24:47-04:00] pass 1 generates 3071 sequences x 1024 tokens on-box -- the long pole, ~32 h, no tokens
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] preflight: need ~38 GB (chunk 491, S5_KEEP_CAP=0), have 232 GB free
+  round-trip: 3071/3071 lines start with their exact seed
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] pass 1 OK (3071 sequences)
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] hold-out: 64 sequence(s) reserved, 3007 for training
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] training in 7 chunk(s) of up to 491 sequence(s); peak capture on disk is one chunk
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] chunk 0: already trained, reusing (rm -rf /home/patrickd/s5-capture/agentic-p25-b0.1/c0/trained to force a re-run)
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] chunk 1: already trained, reusing (rm -rf /home/patrickd/s5-capture/agentic-p25-b0.1/c1/trained to force a re-run)
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] chunk 2: already trained, reusing (rm -rf /home/patrickd/s5-capture/agentic-p25-b0.1/c2/trained to force a re-run)
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] chunk 3: capturing 491 sequence(s)
+[s5:agentic-p25-b0.1 2026-08-25T14:24:47-04:00] chunk 3: disk floor OK (232 GB free, need ~22 GB)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.log
+[run_model] pid 47042   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.memguard.log

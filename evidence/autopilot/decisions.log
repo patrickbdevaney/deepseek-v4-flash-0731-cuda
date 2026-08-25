@@ -635,3 +635,5 @@ ingest s3recap-p25b-p2-b0.2: tau 3.8163 cfg {'a_ce': 0.1, 'a_tv': 0.9, 'deficit'
 [auto 2026-08-25T14:05:07-04:00] GPU busy (another chain or a model resident); waiting
 [auto 2026-08-25T14:10:07-04:00] GPU busy (another chain or a model resident); waiting
 [auto 2026-08-25T14:15:07-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:20:07-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:22:36-04:00] GPU busy (another chain or a model resident); waiting

@@ -11,8 +11,17 @@ pass, BFCL multi-turn, profiling sweeps, fine-tuning runs, agentic trace generat
 from a pattern list, so a stage absent from `PATTERNS` reports as "all detached" by never being
 looked at -- a green audit that proves nothing. Add the stage to that list in the same commit.
 
-    nohup setsid <cmd> > <log> 2>&1 < /dev/null &      # minimum
+    nohup setsid <cmd> > <log> 2>&1 < /dev/null &      # minimum -- see the caveat below
     systemd --user unit + loginctl enable-linger        # better; survives every logout
+
+**`nohup setsid` is NOT sufficient when the launcher is itself a systemd unit.** `setsid` changes
+the session; it does not change the **cgroup**. A stage launched that way inherits its launcher's
+cgroup, and under the default `KillMode=control-group` systemd kills everything left in that cgroup
+the moment the unit's main process exits. Measured 2026-08-25: killed under `control-group`,
+survives under `KillMode=process`. `autopilot.sh` launches the eval battery and then exits, so the
+whole battery would have been killed seconds after starting. **Give each unattended stage its own
+transient unit** (`scripts/eval_resume.sh`'s `spawn()`); then its lifetime is its own, and
+`systemctl --user status dsv4-ev-<stage>` can see it.
 
 Canonical entry point here is `scripts/eval_resume.sh`, which launches every stage detached and is
 idempotent. `dsv4-evals.service` runs it at boot; `dsv4-evals-watchdog.timer` re-runs it every ten

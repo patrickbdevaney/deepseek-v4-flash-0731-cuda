@@ -19,7 +19,13 @@ cd "$(dirname "$0")/.."
 # 100.4 GiB process it launches, were not in this list -- so an audit taken while one was running
 # reported "all detached" having never looked at it. It printed one row (memguard) for a
 # three-process tree. A green audit that proves nothing is worse than a red one.
-PATTERNS="${PATTERNS:-dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh|topk_ab_run.sh|topk_early_ab_run.sh|ixgemm_ab_run.sh|sparse_ab_run.sh|qproj_ab_run.sh|kvpack_ab_run.sh|kvpack_capacity_run.sh|joindefer_ab_run.sh|f32mkn_ab_run.sh|hadamard_ab_run.sh|clocks_ab_run.sh|clocks_emc_probe.sh|stephash_run.sh|lhash_ablate.sh|lhash_verify.sh|genout_within_run.sh|blkwidth_sweep_run.sh|run_model.sh|build/decode}"
+# THE CHAIN FAMILY. Absent from this list until 2026-08-25, which is the failure mode CLAUDE.md
+# warns about in the same breath as the rule: a stage the audit never looks at reports as
+# "all detached" by omission. The corpus/autopilot/finalizer trio and the session scripts they
+# drive are the longest-running unattended work in the repo -- 13 h of capture and a 20 h eval
+# battery -- and the audit was returning a clean bill of health on three processes while not
+# knowing their names.
+PATTERNS="${PATTERNS:-chain_corpus.sh|chain_p25b.sh|chain_23.sh|chain_p26.sh|chain_after_s3recap.sh|autopilot.sh|finalize_and_suspend.sh|s5_session_auto.sh|s5_session_p25.sh|s5_session.sh|session_s3recap.sh|hf_upload_pending.sh|train_head.py|resume_corpus_gen.sh|oomsentry.sh|dsv4-server --ckpt|eval_supervise.sh|eval_extend_all.sh|eval_extend_retry.sh|eval_extend.py --task|eval_force_all.sh|eval_bfcl_mt_run.sh|eval_watch.sh|run_evals.sh|eval_suite.py --task|memguard.sh|perf_sample.py|decode_fit_probe.py|dprof_ctx_run.sh|mainkv_ab_run.sh|mainkv_verify_run.sh|mainkv_decodegate_run.sh|mainkv_determinism_run.sh|topk_ab_run.sh|topk_early_ab_run.sh|ixgemm_ab_run.sh|sparse_ab_run.sh|qproj_ab_run.sh|kvpack_ab_run.sh|kvpack_capacity_run.sh|joindefer_ab_run.sh|f32mkn_ab_run.sh|hadamard_ab_run.sh|clocks_ab_run.sh|clocks_emc_probe.sh|stephash_run.sh|lhash_ablate.sh|lhash_verify.sh|genout_within_run.sh|blkwidth_sweep_run.sh|run_model.sh|build/decode}"
 
 # NEVER FLAG OUR OWN ANCESTRY. This script is itself run from a shell -- often a Claude Code Bash
 # invocation, which IS session-bound and correctly so. Its command line contains the patterns we
