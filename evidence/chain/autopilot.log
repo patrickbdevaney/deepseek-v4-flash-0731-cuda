@@ -768,3 +768,5 @@ VERDICT: GO
 [auto 2026-08-25T14:20:07-04:00] GPU busy (another chain or a model resident); waiting
 Terminated
 [auto 2026-08-25T14:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:32:36-04:00] GPU busy (another chain or a model resident); waiting

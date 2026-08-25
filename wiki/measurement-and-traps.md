@@ -1521,3 +1521,45 @@ or by a PID recorded at launch — never by a name as generic as `sleep`.
 re-capture and failed validation on a truncated capture instead. The partial `cap/` must be deleted
 before restarting. Chunk-level `trained/` state is what makes the run resumable; a half-written
 `cap/` is what makes it look resumable when it is not.
+
+## 44. Lookahead diligence: an idle server is not work, and a dead stage is not busy (2026-08-25)
+
+A pre-flight trace of the remaining unattended run, before leaving it alone for ~42 h, found one
+latent defect that no earlier failure had exposed, plus its mirror image.
+
+**Nothing stops the engine when the last eval stage finishes.** `eval_resume.sh` starts a server for
+the post-suite stages and it simply keeps serving; `memguard` keeps watching it, so it keeps running
+too. `finalize_and_suspend.sh` decides it is done by LIVENESS -- `gpu_running()` greps for
+`dsv4-server` -- so with an idle engine resident it would never see a quiet box. It would have waited
+out the entire 72 h deadline and exited WITHOUT suspending, with every piece of real work finished
+many hours earlier. Nothing would have looked broken; the log would just say it was still waiting.
+
+The mirror case is worse, because it delays the save rather than the sleep: a stage that DIES also
+leaves the server up behind it, so the same liveness check stays true, and the finalizer would sit
+there until the deadline before archiving or committing anything -- fifty-odd hours of nothing after
+the failure.
+
+Both come from the same mistake: **inferring completion from silence when a marker is available.**
+The fix is two short-circuits ahead of the liveness test, and neither adds new classification logic:
+
+    no chain running AND every stage carries its marker   -> done; finalise, then stop the server
+    no chain running AND no stage unit AND a stage is
+      stale with no marker in the bytes IT appended       -> died; archive and commit now
+
+The first matches markers ANYWHERE in the log, deliberately: the suite completed on 2026-08-19 and
+is complete regardless of who observes it. The second reuses `battery_report()`'s exact
+stale-without-marker test, so the two can never disagree.
+
+**The general rule this is the third instance of.** `quiet != finished` (trap 41), `a dead stage is
+as quiet as a finished one` (the battery guard), and now `a live server is as busy as real work`.
+Liveness answers "is something running", never "is the work done". Every place this programme asked
+a liveness check to answer the second question, it eventually got a wrong answer. Ask the artefact
+the success path writes.
+
+Also confirmed in the same pass, none of which needed changing: systemd 255 supports
+`StandardOutput=append`; the autopilot unit carries `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR`,
+so `systemd-run --user` works from inside it (verified end to end -- launcher unit dead, stage unit
+running, log redirection intact); `opt_state.pt` is present for chunks 0-2, so chunk 4's `--resume`
+is equivalent to one continuous run; the s3recap captures the autopilot arms symlink are intact;
+the trainer image is present and trained three chunks today; and peak disk for the remainder is
+~92 GB against 232 GB free.

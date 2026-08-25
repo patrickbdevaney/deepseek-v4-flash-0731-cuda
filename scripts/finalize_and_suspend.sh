@@ -127,7 +127,29 @@ battery_report(){
     done <<< "$STAGES"
 }
 gpu_running(){ pgrep -x decode >/dev/null || pgrep -x dsv4-server >/dev/null; }
-units_running(){ systemctl --user is-active --quiet dsv4-corpus dsv4-autopilot dsv4-resume dsv4-hfpend 2>/dev/null; }
+# Battery stages now run as their OWN units (eval_resume.sh's spawn()), so ask systemd directly
+# rather than inferring liveness from log freshness alone. A stage that is genuinely working but
+# quiet for longer than STALE_MIN -- a long BFCL multi-turn rollout, a slow forcing pass -- reads as
+# stale to battery_running(); if the server also happened to be down at that moment, gpu_running()
+# would be false too and the box could go quiet underneath live work. An active unit is unambiguous.
+ev_units_running(){ systemctl --user list-units --no-legend --state=active 'dsv4-ev-*' 2>/dev/null | grep -q .; }
+chain_units_running(){ systemctl --user is-active --quiet dsv4-corpus dsv4-autopilot dsv4-resume dsv4-hfpend 2>/dev/null; }
+units_running(){ chain_units_running || ev_units_running; }
+
+# AN IDLE SERVER IS NOT WORK. Nothing stops the engine when the last eval stage finishes: the
+# battery's server is started by eval_resume.sh and simply keeps serving, and memguard keeps
+# watching it, so gpu_running() and ev_units_running() both stay true FOREVER. The finalizer would
+# then never see a quiet box, burn all 72 h, and exit without suspending -- with every piece of work
+# actually finished hours earlier. Completion has to be recognised by MARKERS, not by silence.
+# Markers are matched anywhere in the log here, not just in bytes appended this session: the suite
+# legitimately completed on 2026-08-19 and is complete no matter who observes it.
+battery_all_complete(){
+    local line
+    while IFS= read -r line; do
+        grep -aq "${line#*:}" "$EVD/${line%%:*}" 2>/dev/null || return 1
+    done <<< "$STAGES"
+    return 0
+}
 past_deadline(){ [ $(( ($(date +%s) - started) / 3600 )) -ge "$DEADLINE_H" ]; }
 
 LOG "waiting for: units, the detached eval battery, and the GPU (deadline ${DEADLINE_H} h)"
@@ -136,6 +158,34 @@ while : ; do
     if past_deadline; then
         LOG "DEADLINE: work still active after ${DEADLINE_H} h -- will save and commit, but NOT suspend"
         timed_out=1; break
+    fi
+    # DEAD BEATS BUSY TOO. A stage that dies leaves the server up behind it, so gpu_running() stays
+    # true and the loop would sit here until the 72 h deadline before archiving ANYTHING -- fifty
+    # hours of doing nothing after the failure. stage_running() is the same classification
+    # battery_report() uses, so this costs no new logic: not running, started this session, and no
+    # marker in the bytes it appended => it died.
+    if ! chain_units_running && ! ev_units_running; then
+        died=""
+        while IFS= read -r l; do
+            f="$EVD/${l%%:*}"
+            [ -f "$f" ] || continue
+            [ "$(stat -c %s "$f" 2>/dev/null)" = "$(cat "$OFFDIR/${l%%:*}")" ] && continue  # never ran
+            new_bytes "${l%%:*}" | grep -aq "${l#*:}" && continue                            # finished
+            [ -n "$(find "$f" -mmin -"$STALE_MIN" 2>/dev/null)" ] && continue                # still writing
+            died="$died${l%%:*} "
+        done <<< "$STAGES"
+        if [ -n "$died" ]; then
+            LOG "eval stage(s) went stale with no completion marker and no unit running: $died"
+            LOG "  treating as died -- archiving and committing now rather than waiting out the deadline."
+            break
+        fi
+    fi
+    # Done beats busy: if no chain is running and every stage carries its marker, the only things
+    # left are the idle server and its memguard, which will never stop on their own.
+    if ! chain_units_running && battery_all_complete; then
+        LOG "every eval stage has its completion marker and no chain is running --"
+        LOG "  the engine still up is an idle server, not work. Proceeding to finalise."
+        break
     fi
     if units_running || battery_running || gpu_running; then
         quiet=0
@@ -301,6 +351,11 @@ if [ "$DO_SUSPEND" != "1" ]; then LOG "FINAL_SUSPEND=0, staying awake"; exit 0; 
 LOG "quiescing self-starting work before sleep"
 [ -f "$ROOT/FLYWHEEL_STOP" ] || { touch "$ROOT/FLYWHEEL_STOP"; LOG "  created FLYWHEEL_STOP"; }
 systemctl --user stop dsv4-decode-loop-watchdog.timer 2>/dev/null && LOG "  stopped the decode-loop watchdog timer"
+# The battery's server and memguard outlive the battery by design; stop them so the box sleeps with
+# no engine resident and no guard watching a corpse.
+for u in $(systemctl --user list-units --no-legend --state=active 'dsv4-ev-*' 2>/dev/null | awk '{print $1}'); do
+    systemctl --user stop "$u" 2>/dev/null && LOG "  stopped $u"
+done
 cat > WAKE_README.md <<'WAKE'
 # WAKE_README.md — how to bring this box back
 
