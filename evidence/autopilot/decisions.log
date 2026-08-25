@@ -507,3 +507,4 @@ ingest s3recap-p25b-p2-b0.2: tau 3.8163 cfg {'a_ce': 0.1, 'a_tv': 0.9, 'deficit'
 [auto 2026-08-24T23:09:46-04:00] FATAL: only 19 GB free after reclaim -- refusing to start an arm that will die mid-chunk
 [auto 2026-08-25T01:03:05-04:00] autopilot start: max 4 arms, then the eval battery
 [auto 2026-08-25T01:03:05-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T01:08:05-04:00] GPU busy (another chain or a model resident); waiting

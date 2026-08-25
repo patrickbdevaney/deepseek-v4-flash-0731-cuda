@@ -1,0 +1,33 @@
+[hfpend 2026-08-25T01:08:40-04:00] champion (stays at repo root): s3recap-p25-b0.1
+[hfpend 2026-08-25T01:08:41-04:00] uploading arms/auto-ace0p3/mtp_trained.safetensors (987M)
+[hfpend 2026-08-25T01:08:55-04:00]   ok
+[hfpend 2026-08-25T01:08:55-04:00] uploading arms/auto-ace0p3/train_metrics.json (356K)
+[hfpend 2026-08-25T01:08:56-04:00]   ok
+[hfpend 2026-08-25T01:08:56-04:00] uploading arms/auto-ace0p3/eval.log (68K)
+[hfpend 2026-08-25T01:08:57-04:00]   ok
+[hfpend 2026-08-25T01:08:57-04:00] uploading arms/auto-anchorpow1p5/mtp_trained.safetensors (987M)
+[hfpend 2026-08-25T01:09:11-04:00]   ok
+[hfpend 2026-08-25T01:09:11-04:00] uploading arms/auto-anchorpow1p5/head_card.json (4.0K)
+[hfpend 2026-08-25T01:09:12-04:00]   ok
+[hfpend 2026-08-25T01:09:12-04:00] uploading arms/auto-anchorpow1p5/train_metrics.json (356K)
+[hfpend 2026-08-25T01:09:14-04:00]   ok
+[hfpend 2026-08-25T01:09:14-04:00] uploading arms/auto-anchorpow1p5/eval.log (68K)
+[hfpend 2026-08-25T01:09:15-04:00]   ok
+[hfpend 2026-08-25T01:09:15-04:00] uploading arms/s3recap-p25b-p2-b0.2/mtp_trained.safetensors (987M)
+[hfpend 2026-08-25T01:09:28-04:00]   ok
+[hfpend 2026-08-25T01:09:28-04:00] uploading arms/s3recap-p25b-p2-b0.2/head_card.json (4.0K)
+[hfpend 2026-08-25T01:09:29-04:00]   ok
+[hfpend 2026-08-25T01:09:29-04:00] uploading arms/s3recap-p25b-p2-b0.2/train_metrics.json (356K)
+[hfpend 2026-08-25T01:09:30-04:00]   ok
+[hfpend 2026-08-25T01:09:30-04:00] uploading arms/s3recap-p25b-p2-b0.2/eval.log (68K)
+[hfpend 2026-08-25T01:09:32-04:00]   ok
+[hfpend 2026-08-25T01:09:32-04:00] uploading arms/s3recap-p25b-p2-b0.3/mtp_trained.safetensors (987M)
+[hfpend 2026-08-25T01:09:45-04:00]   ok
+[hfpend 2026-08-25T01:09:45-04:00] uploading arms/s3recap-p25b-p2-b0.3/head_card.json (4.0K)
+[hfpend 2026-08-25T01:09:46-04:00]   ok
+[hfpend 2026-08-25T01:09:46-04:00] uploading arms/s3recap-p25b-p2-b0.3/train_metrics.json (356K)
+[hfpend 2026-08-25T01:09:47-04:00]   ok
+[hfpend 2026-08-25T01:09:47-04:00] uploading arms/s3recap-p25b-p2-b0.3/eval.log (68K)
+[hfpend 2026-08-25T01:09:49-04:00]   ok
+[hfpend 2026-08-25T01:09:49-04:00] shipped-dspark-0731reap: no source, skip
+[hfpend 2026-08-25T01:09:49-04:00] pending upload complete
