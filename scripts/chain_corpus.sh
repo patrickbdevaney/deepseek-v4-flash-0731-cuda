@@ -30,7 +30,8 @@
 # doubles the context depth every sampled position sees, and the context it adds is the model's OWN
 # OUTPUT -- which is precisely what an agentic harness reconstructs from: its prior turns and tool
 # results, not a pasted document. Cost is wall clock only: ~32 h of generation instead of ~16, and
-# peak capture per 491-sequence chunk goes 8.6 -> 17.2 GB against ~106 GB free.
+# peak capture per 491-sequence chunk goes 8.6 -> 17.2 GB against ~106 GB free
+# -- which holds ONLY because each consumed chunk is deleted (see the S5_KEEP_CAP note below).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 LOG(){ printf '[corpus %s] %s\n' "$(date -Is)" "$*"; }
@@ -47,7 +48,14 @@ LOG "p25b done; anchor-shape results:"; tail -3 HEAD_REGISTRY.md
 # one change per measurement, and here the change is the data.
 LOG "arm $NAME: winning recipe (deficit, beta 0.1, anchor_pow 1) on the agentic corpus"
 LOG "pass 1 generates 3071 sequences x 1024 tokens on-box -- the long pole, ~32 h, no tokens"
-S5_HOLDOUT=64 S5_CHUNK=491 S5_KEEP_CAP=1 S5_BLOCK=5 \
+# S5_KEEP_CAP is DELIBERATELY UNSET HERE, unlike every s3recap-derived arm above it. Retention is
+# right when a LATER arm reuses the capture -- autopilot.sh symlinks s3recap/c$ci/cap into each new
+# arm, so those 9.7 GB chunks earn their disk many times over. NOTHING reuses this corpus: it is a
+# one-off 3,071-prompt agentic set at NGEN 1024, and its chunks are 19 GB, not 9.7. Keeping all
+# seven costs 133 GB to serve exactly one consumer. Copying the flag down from the s3 chains is what
+# killed the 2026-08-25 run at chunk 3; the header note below reasons about PER-CHUNK peak, which is
+# only true with the flag off. Peak is now one chunk, as that note assumes.
+S5_HOLDOUT=64 S5_CHUNK=491 S5_BLOCK=5 \
 S5_INCUMBENT_TAU="$(cat evidence/baseline_tau.value 2>/dev/null)" \
 S5_ACE=0.1 S5_ATV=0.9 S5_DEFICIT=1 S5_BETA=0.1 S5_ANCHOR_POW=1.0 \
     bash scripts/s5_session_auto.sh "$NAME" "$S5/mixed_prompts_agentic.txt" 3071 1024 \

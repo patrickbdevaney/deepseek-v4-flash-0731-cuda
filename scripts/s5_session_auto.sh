@@ -56,16 +56,27 @@ SW=$(python3 -c "print(','.join(f'$BLK:1:1.5:{i}' for i in range(1,$N+1)))")
 # truncated file that may still partially load -- far worse than refusing to start.
 FREE_GB=$(df -BG --output=avail /home/patrickd | tail -1 | tr -dcs '0-9' ' ' | tr -d ' ')
 CHUNK="${S5_CHUNK:-$N}"                      # default: one chunk, i.e. capture the whole corpus
+# THE GATE MUST PRICE THE CONFIGURATION IT WAS ACTUALLY GIVEN. Peak is ONE CHUNK of capture only
+# when the loop below deletes each chunk once the trainer has consumed it -- and S5_KEEP_CAP=1 turns
+# that deletion OFF, making peak the SUM over every chunk of both the capture AND its trained
+# bf16 + AdamW state. Modelling it as one chunk regardless is exactly how the agentic corpus run
+# started on 2026-08-25: 7 chunks x 19 GB = 133 GB of retention against ~60 GB free, waved through
+# on a 38 GB estimate, dead on ENOSPC at `mkdir c3` four hours and three good chunks later.
+# S5_HOLDOUT is subtracted because the chunk loop runs over NTRAIN = N - HOLDOUT, not over N.
 NEED_GB=$(python3 -c "
-# Peak is ONE CHUNK of capture, because the interleaved loop below deletes each chunk once the
-# trainer has consumed it. Plus the per-chunk trained bf16 + optimizer state, the built head, and
-# the archive copy of it.
-cap = min($CHUNK, $N) * ($NGEN + 40) * 33e3 / 1e9
-print(int(cap + 2 + 7 + 7 + 4))")
-LOG "preflight: need ~${NEED_GB} GB (peak = one chunk of ${CHUNK}), have ${FREE_GB} GB free"
+import math
+N, NGEN, HOLD = $N, $NGEN, ${S5_HOLDOUT:-0}
+CH   = min($CHUNK, N)
+keep = '${S5_KEEP_CAP:-0}' == '1'
+nc   = max(1, math.ceil((N - HOLD) / CH))
+mult = nc if (keep and nc > 1) else 1          # how many chunks coexist on disk at peak
+cap  = CH * (NGEN + 40) * 33e3 / 1e9           # one chunk of capture
+print(int(cap * mult + 3.3 * mult + 7 + 7 + 4))")
+LOG "preflight: need ~${NEED_GB} GB (chunk ${CHUNK}, S5_KEEP_CAP=${S5_KEEP_CAP:-0}), have ${FREE_GB} GB free"
 [ "$FREE_GB" -ge "$NEED_GB" ] || DIE "insufficient disk: need ~${NEED_GB} GB, have ${FREE_GB} GB. \
-Set S5_CHUNK smaller (peak scales with the chunk, not with N) -- a truncated safetensors write is \
-worse than not starting."
+If S5_KEEP_CAP=1, peak is the SUM of every chunk -- unset it and peak drops back to one chunk. \
+Otherwise set S5_CHUNK smaller (peak scales with the chunk, not with N). A truncated safetensors \
+write is worse than not starting."
 
 # ---------------------------------------------------------------- pass 1: regenerate with the target
 if [ ! -s "$GEN" ]; then
@@ -131,6 +142,16 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
         CN=$(wc -l < "$CDIR/gen.txt")
         [ "$CN" -gt 0 ] || DIE "chunk $ci is empty"
         LOG "chunk $ci: capturing $CN sequence(s)"
+        # MID-RUN FLOOR. The preflight priced the run once, at the start, but disk is shared: another
+        # arm, an archive copy, a stray eval log, or simply retention this session did not model can
+        # eat the headroom while this one is hours deep. Re-check before every chunk so a shortfall
+        # is a clean HALT with the earlier chunks banked and resumable -- not `mkdir: No space left
+        # on device` (2026-08-25, chunk 3) or, worse, a truncated safetensors write that still loads.
+        CHUNK_GB=$(python3 -c "print(int($CN * ($NGEN + 40) * 33e3 / 1e9 + 3.3 + 2))")
+        FREE_NOW=$(df -BG --output=avail /home/patrickd | tail -1 | tr -dcs '0-9' ' ' | tr -d ' ')
+        [ "$FREE_NOW" -ge "$CHUNK_GB" ] || DIE "chunk $ci needs ~${CHUNK_GB} GB, only ${FREE_NOW} GB \
+free. Chunks 0..$((ci-1)) are trained and safe; free space and re-run to resume from chunk $ci."
+        LOG "chunk $ci: disk floor OK (${FREE_NOW} GB free, need ~${CHUNK_GB} GB)"
         mkdir -p "$CDIR/cap"
         sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null; sleep 2
         DSV4_PROMPTS_FILE="$CDIR/gen.txt" DSV4_CAPTURE="$CDIR/cap" DSV4_NPROBE=16 \

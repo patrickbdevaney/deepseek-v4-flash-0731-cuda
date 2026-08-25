@@ -759,3 +759,5 @@ VERDICT: GO
 [auto 2026-08-25T11:03:06-04:00] GPU busy (another chain or a model resident); waiting
 [auto 2026-08-25T11:08:06-04:00] reclaim: removed 8 intermediate files, 6 GB free
 [auto 2026-08-25T11:08:06-04:00] FATAL: only 6 GB free after reclaim -- refusing to start an arm that will die mid-chunk
+[auto 2026-08-25T13:55:07-04:00] autopilot start: max 2 arms, then the eval battery
+[auto 2026-08-25T13:55:07-04:00] GPU busy (another chain or a model resident); waiting

@@ -43,3 +43,6 @@
 [final 2026-08-25T11:26:45-04:00] pushed
 [final 2026-08-25T11:26:45-04:00] quiescing self-starting work before sleep
 [final 2026-08-25T11:26:45-04:00]   stopped the decode-loop watchdog timer
+[final 2026-08-25T11:26:46-04:00] all work saved, committed and uploaded. Suspending in 60 s.
+[final 2026-08-25T11:26:46-04:00] to wake: press power / send WoL. See WAKE_README.md to re-arm the watchdog and flywheel.
+[final 2026-08-25T13:55:09-04:00] waiting for: units, the detached eval battery, and the GPU (deadline 72 h)

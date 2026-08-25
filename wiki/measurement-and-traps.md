@@ -1406,3 +1406,45 @@ printed *nothing at all* from this, and a batch of head cards was written with `
 before it was caught. `tools/verify_head_archive.py` gets this right by stripping the delimiters
 first (`line.strip().strip("|").split("|")`) — do that rather than counting fields from a leading
 delimiter.
+
+## 41. A resource gate that prices a configuration the run was not given (2026-08-25)
+
+`s5_session_auto.sh`'s disk preflight computed peak usage as **one chunk of capture**, with a
+comment explaining exactly why that was safe: "the interleaved loop below deletes each chunk once
+the trainer has consumed it."
+
+`S5_KEEP_CAP=1` turns that deletion off. The gate never read the flag.
+
+`chain_corpus.sh` set it. The flag was correct in every chain it was copied from — `autopilot.sh`
+symlinks `s3recap/c$ci/cap` into each new arm, so those 9.7 GB chunks are read by a dozen later
+arms and retaining them is what makes an arm training-only. It was wrong here for two reasons at
+once: nothing reuses a one-off corpus, and `NGEN` 512 → 1024 had doubled a chunk to 19 GB. Seven
+retained chunks is 133 GB. The gate said 38 and passed on ~60 GB free.
+
+The run died at **chunk 3**, four hours and three good chunks in, on `mkdir: No space left on
+device`. It then cascaded: the autopilot hit its own floor and exited `FATAL`, the finalizer saw a
+quiet box, concluded the programme was done, **archived the mid-run 3-of-7 head under the name the
+completed head would take**, uploaded it to HuggingFace, and suspended. Every component behaved as
+designed. Nothing was corrupt. The programme just quietly ended about 30 hours early.
+
+**The tell was in the source the whole time.** `chain_corpus.sh`'s own header reasons about "peak
+capture per 491-sequence chunk ... against ~106 GB free" — per-chunk peak, which is only true with
+the flag *off*, in a script that sets it *on*, eleven lines apart.
+
+Three lessons, and only the first is about disk:
+
+- **A gate must price the configuration it was actually handed, not the one its comment assumes.**
+  The preflight now reads `S5_KEEP_CAP` and multiplies by the chunk count; the same inputs that
+  passed at 38 GB now demand 161 and halt.
+- **A start-time check is not a floor.** Disk is shared and the run is hours long. There is now a
+  per-chunk floor immediately before each capture, so a shortfall is a clean `HALT` with the earlier
+  chunks banked and resumable — never a half-written safetensors that still partially loads.
+- **A flag copied between scripts carries its old justification silently.** `S5_KEEP_CAP` is now
+  commented at its *use* site in `chain_corpus.sh` with why it is absent, not merely deleted — the
+  next person to copy the launch line down from a chain above it needs to see the reason.
+
+**And a fourth, about how it ended:** *quiet is not the same as done.* The finalizer's liveness
+check cannot distinguish "the work finished" from "the work died". It archived and published an
+unevaluated partial on that basis. The head is preserved as `agentic-p25-b0.1-c3of7` with a card
+that says what it is; the plain name is reserved for the complete run. A finalizer that publishes
+should read the chain's exit status, not just its silence.
