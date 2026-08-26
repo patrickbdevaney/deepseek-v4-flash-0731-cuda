@@ -6,6 +6,65 @@ extension pass so its central prediction is falsifiable rather than fitted after
 
 ---
 
+## 0. FLAGGED, 2026-08-26: the GPQA prediction below was FALSIFIED, and the result is not committed
+
+The extension in §1 ran to completion on 2026-08-26. **It landed at 83.8%** — below the 85% line
+this document named in advance as the falsification threshold. The pre-registered band was 87–93%,
+central ~90%. It is wrong, and the way it is wrong is the finding.
+
+| | n | accuracy |
+|---|---:|---:|
+| carried (had terminated inside 8k) | 147 | **93.9%** |
+| continued (had truncated at 8k) | 51 | **54.9%** |
+| &nbsp;&nbsp;→ terminated within 24k | 32 | 78.1% |
+| &nbsp;&nbsp;→ **still truncating at 24k** | 19 | 15.8% |
+| pooled | 198 | **83.8%** |
+
+The carried rate reproduces 93.8% → 93.9%, so the harness is consistent and the miss is real.
+**Both** failure mechanisms §1 named as caveats fired, each larger than allowed for:
+
+1. **37% of the truncated set (19/51) never converges even at 3x the budget.** Tripling 8k → 24k
+   did not buy termination; it bought a longer non-terminating trace. That is not a budget effect.
+2. **Even the items that do finish score 78.1%, not 93.8%** — a 16-point gap where §1 predicted a
+   ~5-point drift across a hundredfold range of thinking length.
+
+So items needing more than 8000 tokens are *qualitatively* different, not merely longer — which is
+precisely the reading §1 said would be "a REAP-relevant finding about routing stability under long
+chains, and should be reported as one rather than buried." Recording it here so it is not buried.
+The honest comparison also moves: 83.8% sits **below** the 88.1% / 91% third-party numbers for
+unpruned 0731, so §1's "inside the unpruned model's reported range" conclusion does not survive
+either. §2's matched-harness baseline is now the load-bearing next step, not an optional refinement.
+
+**Why it is not committed.** `eval_land.sh` verified nine checks and refused on one:
+
+```
+[FAIL] gpqa_diamond   unhashed records covered by the set pin
+       40 of 198 records predate the hash and NO set-level pin exists
+```
+
+Accuracy *is* reproducible (recomputed 83.8% vs published 83.8%) and the snapshot hash matches. The
+gate is doing its job: 40 records were generated before per-record prompt hashing existed, so their
+prompts cannot be proven to be the pinned ones. **Nothing downstream fixes this.**
+`eval_ext_complete.py` reports gpqa 198/198 complete, so `--needs-retry` returns false and the retry
+pass skips it; the forcing pass and BFCL never look at landing. Verified on 2026-08-26, not assumed.
+
+**To clear it:**
+
+```
+python3 tools/eval_pin_prompts.py --task gpqa_diamond --effort low24k --since <run-start-commit>
+bash scripts/eval_land.sh gpqa_diamond low24k
+```
+
+File-only, no engine contact, safe to run at any time. `--since` must be the commit the run started
+at — pinning against a later tree would assert a prompt set that was not the one sent, which is the
+same class of unprovable claim the gate exists to stop. **Do not pin without establishing it.**
+
+**The general defect this exposes.** A stage can complete its work, produce a correct number, fail
+verification for a provenance reason, and be skipped by every downstream stage — because
+"complete" (the file has all its records) and "landed" (the number is committed) are different
+predicates and only the first is checked. Any task in the sweep can hit this. A `landed?` check
+belongs in the retry pass alongside `--needs-retry`.
+
 ## 1. A pre-registered prediction for GPQA after the 24k extension
 
 The current row reads **72.6%**, flagged NOT QUOTABLE at 25.9% truncation. That number is not a

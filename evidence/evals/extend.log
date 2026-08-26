@@ -171,3 +171,15 @@ wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/aime24.low24k.js
   [PASS] aime24         snapshot matches the published one       8d88b2876a82 vs 8d88b2876a82
 
 VERIFY: 0 failed -> PASS
+[land] aime24@low24k: 91.7% [80.0, 100.0] n=60/60 trunc=6 err=0 — verified, committed, pushed
+[extend 2026-08-26T18:04:39-04:00] aime25: 35.0% truncated over 60 records — continuing truncated traces to 24000
+[aime25@low -> low24k] 60 base records: 39 terminated (kept as-is), 21 truncated (to continue), 45 already written
+  [7/21] aime2025-0014 gold=735 got=3     +16000 tok (total 24000) TRUNC (18.0 min)
+  [8/21] aime2025-0022 gold=610 got=610 OK  +5171 tok (total 13171) stop (25.4 min)
+  [9/21] aime2025-0027 gold=248 got=248 OK  +11508 tok (total 19508) stop (38.5 min)
+  [10/21] aime2025-0028 gold=104 got=104 OK  +2427 tok (total 10427) stop (42.7 min)
+  [11/21] aime2025-0029 gold=240 got=240 OK  +3750 tok (total 11750) stop (48.6 min)
+  [12/21] aime2025-0008#r1 gold=62 got=62 OK  +4169 tok (total 12169) stop (54.5 min)
+  [13/21] aime2025-0009#r1 gold=81 got=81 OK  +3140 tok (total 11140) stop (59.9 min)
+  [14/21] aime2025-0012#r1 gold=204 got=204 OK  +6955 tok (total 14955) stop (68.6 min)
+  [15/21] aime2025-0013#r1 gold=60 got=2888     +16000 tok (total 24000) TRUNC (85.5 min)

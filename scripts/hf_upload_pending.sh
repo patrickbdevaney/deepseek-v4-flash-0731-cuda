@@ -5,11 +5,13 @@
 # disk, never the GPU, and capture is not a scored measurement.
 set -uo pipefail
 HF_FORCE_ARMS="${HF_FORCE_ARMS:-}"
+HF_SHARDS_ONLY="${HF_SHARDS_ONLY:-shipped-dspark-0731reap}"
 cd "$(dirname "$0")/.."
 REPO=patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1
 CHAMP=$(basename "$(cat config/live_ckpt)"); CHAMP=${CHAMP#ckpt-head-}
 LOG(){ printf '[hfpend %s] %s\n' "$(date -Is)" "$*"; }
 LOG "champion (stays at repo root): $CHAMP"
+BROKEN=""
 
 HAVE=$(python3 -c "
 from huggingface_hub import HfApi
@@ -18,7 +20,23 @@ print('\n'.join(HfApi().list_repo_files('$REPO')))" 2>/dev/null)
 
 for d in "$HOME"/model-backups/heads/*/; do
     a=$(basename "$d")
-    [ -s "$d/mtp_trained.safetensors" ] || { LOG "$a: no source, skip"; continue; }
+    # NOT A ROUTINE SKIP. An archived head with no BF16 master is a BROKEN ARCHIVE, not a head that
+    # happens to have nothing to upload -- promote_head.py:archive() copies whatever sits in --head, so
+    # when --head is the STAGED dir (FP8 shards) the master is never archived and this loop silently
+    # walks past it. On 2026-08-26 that had hidden the three most recent arms from HuggingFace,
+    # including `auto-ace0p5`, the highest-tau head ever measured on this box. Silence is what made it
+    # survive; say it loudly and fail the run so the exit status carries it.
+    # SHARDS_ONLY names have no BF16 master BY NATURE, not by bug: `shipped-dspark-0731reap` is the
+    # stock head as it came in the checkpoint, never fine-tuned, so no trainer ever wrote a master for
+    # it. It is also the only copy of the rollback baseline. Let it through to upload its card; only
+    # a head that SHOULD have a master and does not is a broken archive.
+    if [ ! -s "$d/mtp_trained.safetensors" ]; then
+        case " ${HF_SHARDS_ONLY} " in
+            *" $a "*) LOG "$a: shards-only baseline, no BF16 master expected" ;;
+            *) LOG "$a: !! BROKEN ARCHIVE -- no mtp_trained.safetensors. Back-fill from the arm's trained/ dir."
+               BROKEN="$BROKEN $a"; continue ;;
+        esac
+    fi
     if [ "$a" = "$CHAMP" ]; then pre=""; else pre="arms/$a/"; fi
     # HF_FORCE_ARMS: space- or comma-separated arm names whose files are re-uploaded even though the
     # path already exists on the repo. Existence is normally a sound proxy for "already uploaded",
@@ -37,4 +55,9 @@ for d in "$HOME"/model-backups/heads/*/; do
             && LOG "  ok" || LOG "  !! FAILED $pre$f"
     done
 done
+if [ -n "$BROKEN" ]; then
+    LOG "INCOMPLETE: these archives have no BF16 master and were NOT uploaded:$BROKEN"
+    LOG "pending upload finished with broken archives -- exit 3"
+    exit 3
+fi
 LOG "pending upload complete"

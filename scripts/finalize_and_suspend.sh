@@ -25,7 +25,12 @@ cd "$ROOT" || exit 1
 LOG(){ printf '[final %s] %s\n' "$(date -Is)" "$*"; }
 
 REPO=patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1
-DEADLINE_H="${FINAL_DEADLINE_H:-72}"
+# NO DEADLINE BY DEFAULT (2026-08-26). 72 h existed to stop an unattended box waiting forever on a
+# stage that would never finish. The real fix landed instead -- the wait loop now recognises "done"
+# and "died" by MARKER rather than by liveness -- so the timer only ever fired on work that was still
+# genuinely running, and cutting that work off is strictly worse than letting it run. 0 = wait as long
+# as the work actually takes. Set FINAL_DEADLINE_H to a positive number to restore a cap.
+DEADLINE_H="${FINAL_DEADLINE_H:-0}"
 DO_SUSPEND="${FINAL_SUSPEND:-1}"
 started=$(date +%s)
 timed_out=0
@@ -150,7 +155,7 @@ battery_all_complete(){
     done <<< "$STAGES"
     return 0
 }
-past_deadline(){ [ $(( ($(date +%s) - started) / 3600 )) -ge "$DEADLINE_H" ]; }
+past_deadline(){ [ "$DEADLINE_H" -gt 0 ] && [ $(( ($(date +%s) - started) / 3600 )) -ge "$DEADLINE_H" ]; }
 
 LOG "waiting for: units, the detached eval battery, and the GPU (deadline ${DEADLINE_H} h)"
 quiet=0
