@@ -1,2 +1,3 @@
 [memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-25T14:24:50-04:00
 [memguard] watching pid 47042 (decode)
+[memguard] victim gone, exiting. low-water 6677 MB, peak fall rate 30245 MB/s 2026-08-25T17:17:13-04:00

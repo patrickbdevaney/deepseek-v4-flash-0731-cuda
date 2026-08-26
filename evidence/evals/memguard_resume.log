@@ -1,0 +1,2 @@
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-26T06:50:25-04:00
+[memguard] watching pid 893419 (dsv4-server)

@@ -770,3 +770,409 @@ Terminated
 [auto 2026-08-25T14:22:36-04:00] GPU busy (another chain or a model resident); waiting
 [auto 2026-08-25T14:27:36-04:00] GPU busy (another chain or a model resident); waiting
 [auto 2026-08-25T14:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:47:37-04:00] ARM auto-beta0p05: a_ce=0.1 a_tv=0.9 deficit=1 beta=0.05 anchor_pow=1.0 dclamp=3.0 pos=16
+[s5:auto-beta0p05 2026-08-26T01:47:37-04:00] preflight: need ~54 GB (chunk 491, S5_KEEP_CAP=1), have 206 GB free
+  round-trip: 1536/1536 lines start with their exact seed
+[s5:auto-beta0p05 2026-08-26T01:47:37-04:00] pass 1 OK (1536 sequences)
+[s5:auto-beta0p05 2026-08-26T01:47:37-04:00] hold-out: 64 sequence(s) reserved, 1472 for training
+[s5:auto-beta0p05 2026-08-26T01:47:37-04:00] training in 3 chunk(s) of up to 491 sequence(s); peak capture on disk is one chunk
+total: 315315 tokens, 9854.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:auto-beta0p05 2026-08-26T01:48:04-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p491_s000525.txt: running agreement 94.1%
+[gate] PORT vs ENGINE draft agreement: 36949/39280 = 94.1%  (need >= 90% before any session runs)
+[s5:auto-beta0p05 2026-08-26T01:53:58-04:00] gate OK (94.1%)
+[s5:auto-beta0p05 2026-08-26T01:53:58-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/auto-beta0p05/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/auto-beta0p05/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/auto-beta0p05/c0/train_metrics.json  (loss 1.6274 -> 0.9796, tail mean 0.8084)
+[train] TRAIN OK
+total: 321075 tokens, 10034.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:auto-beta0p05 2026-08-26T02:18:23-04:00] chunk 1: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/auto-beta0p05/c1/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/auto-beta0p05/c1/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/auto-beta0p05/c1/train_metrics.json  (loss 0.7439 -> 0.3091, tail mean 0.9559)
+[train] TRAIN OK
+total: 324707 tokens, 10148.3 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:auto-beta0p05 2026-08-26T02:42:27-04:00] chunk 2: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/auto-beta0p05/c2/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/auto-beta0p05/c2/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/auto-beta0p05/c2/train_metrics.json  (loss 0.5732 -> 0.0362, tail mean 0.6873)
+[train] TRAIN OK
+merged 3 chunk(s), 1472 sequences, 1472 steps: loss 1.6274453653022647 -> 0.03616472117388714 (tail mean 0.7366986744667199) -> /home/patrickd/s5-capture/auto-beta0p05/train_metrics.json
+[s5:auto-beta0p05 2026-08-26T03:06:11-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+  wrote model-00048-of-00048.safetensors
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /cap/auto-beta0p05/head  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[s5:auto-beta0p05 2026-08-26T03:07:01-04:00] re-fitting adaptK on the trained head (F111: the optimum moves with drafter quality)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_0.0.log
+[run_model] pid 696530   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_0.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_0.0.memguard.log
+[s5:auto-beta0p05 2026-08-26T03:12:10-04:00]   adaptK 0.0 -> hold-out 28.061 tok/s pooled (median tau 4.503)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_0.5.log
+[run_model] pid 701429   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_0.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_0.5.memguard.log
+[s5:auto-beta0p05 2026-08-26T03:16:43-04:00]   adaptK 0.5 -> hold-out 27.523 tok/s pooled (median tau 4.765)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_1.0.log
+[run_model] pid 705958   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_1.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_1.0.memguard.log
+[s5:auto-beta0p05 2026-08-26T03:21:16-04:00]   adaptK 1.0 -> hold-out 28.02 tok/s pooled (median tau 4.6023)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_1.5.log
+[run_model] pid 710482   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_1.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_1.5.memguard.log
+[s5:auto-beta0p05 2026-08-26T03:25:49-04:00]   adaptK 1.5 -> hold-out 28.219 tok/s pooled (median tau 4.503)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_2.0.log
+[run_model] pid 714987   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_adaptk_2.0.memguard.log
+[s5:auto-beta0p05 2026-08-26T03:30:22-04:00]   adaptK 2.0 -> hold-out 28.541 tok/s pooled (median tau 4.503)
+[s5:auto-beta0p05 2026-08-26T03:30:22-04:00] adaptK re-fit: 2.0 (28.541 tok/s pooled on the hold-out); shipped default was 1.5
+[s5:auto-beta0p05 2026-08-26T03:30:22-04:00] eval: 8-prompt suite, NGEN0=200, block 5, clean
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval.log
+[run_model] pid 719557   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval.memguard.log
+[s5:auto-beta0p05 2026-08-26T03:33:25-04:00] second eval at the re-fitted adaptK 2.0 (reported separately; NOT the registry number)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval_adaptk2.0.log
+[run_model] pid 722739   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval_adaptk2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval_adaptk2.0.memguard.log
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval_adaptk2.0.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  5.08    35.05 tok/s
+    long_context     tau  4.25    29.99 tok/s
+    code_edit        tau  4.00    28.89 tok/s
+    agentic_format   tau  3.92    28.88 tok/s
+    short_factual    tau  3.67    28.46 tok/s
+    reasoning        tau  3.57    27.92 tok/s
+    explanation      tau  2.87    23.90 tok/s
+    code_gen         tau  2.35    20.79 tok/s
+  suite mean tau 3.7138  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.57 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/auto-beta0p05/session_verdict_adaptk2.0.json
+[s5:auto-beta0p05 2026-08-26T03:36:28-04:00] NOTE: promoting at adaptK 2.0 requires re-measuring the incumbent at 2.0 first.
+[s5:auto-beta0p05 2026-08-26T03:36:28-04:00] secondary gate: 64-prompt reasoning hold-out, trained head
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_holdout.log
+[run_model] pid 725917   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_holdout.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_holdout.memguard.log
+[s5:auto-beta0p05 2026-08-26T03:58:31-04:00] paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_holdout_control.log
+[run_model] pid 745455   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_holdout_control.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_holdout_control.memguard.log
+[s5:auto-beta0p05 2026-08-26T04:19:05-04:00] hold-out untrained baseline (paired, from pass 1): 5.6528
+hold-out tau at budget 200 tokens: n=64
+  median 4.927   mean 4.661   p25 3.741   p75 5.743   min 1.835   max 6.000
+  baseline (untrained) 5.653   delta -0.726 tau  (-5.56 tok/s, -24.6%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+ARCHIVED auto-beta0p05 -> /home/patrickd/model-backups/heads/auto-beta0p05 (5 files, sha256 recorded)
+  suite mean: tau 3.8425  28.3275 tok/s
+  incumbent tau 3.8413 [HEAD_REGISTRY.md -- NOT this session (max of 3.6888 re-measured, 3.8413 registry)] -> needs > 3.9757; candidate 3.8425
+REFUSED to promote:
+  - suite tau 3.8425 does not beat incumbent 3.8413 by the 3.5% run-to-run spread (needs > 3.9757); ties go to the incumbent
+[s5:auto-beta0p05 2026-08-26T04:19:15-04:00] not promoted (archived)
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-beta0p05_eval.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  5.08    34.89 tok/s
+    long_context     tau  4.34    29.94 tok/s
+    agentic_format   tau  4.25    30.20 tok/s
+    code_edit        tau  4.00    28.62 tok/s
+    short_factual    tau  3.87    28.92 tok/s
+    reasoning        tau  3.64    28.28 tok/s
+    explanation      tau  3.04    24.53 tok/s
+    code_gen         tau  2.52    21.24 tok/s
+  suite mean tau 3.8425  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.64 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/auto-beta0p05/session_verdict.json
+[s5:auto-beta0p05 2026-08-26T04:19:15-04:00] GO (primary); secondary exit 3
+[s5:auto-beta0p05 2026-08-26T04:19:15-04:00] no next session configured; stopping here
+[auto 2026-08-26T04:19:15-04:00] RESULT auto-beta0p05: tau=3.8425 release=fail
+[auto 2026-08-26T04:19:15-04:00] queue empty -- proposing the next generation
+[auto 2026-08-26T04:19:15-04:00] proposed: 3 arm(s)
+[auto 2026-08-26T04:19:15-04:00] ARM auto-ace0p5: a_ce=0.5 a_tv=0.5 deficit=1 beta=0.1 anchor_pow=1.0 dclamp=3.0 pos=16
+[s5:auto-ace0p5 2026-08-26T04:19:15-04:00] preflight: need ~54 GB (chunk 491, S5_KEEP_CAP=1), have 184 GB free
+  round-trip: 1536/1536 lines start with their exact seed
+[s5:auto-ace0p5 2026-08-26T04:19:15-04:00] pass 1 OK (1536 sequences)
+[s5:auto-ace0p5 2026-08-26T04:19:15-04:00] hold-out: 64 sequence(s) reserved, 1472 for training
+[s5:auto-ace0p5 2026-08-26T04:19:15-04:00] training in 3 chunk(s) of up to 491 sequence(s); peak capture on disk is one chunk
+total: 315315 tokens, 9854.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:auto-ace0p5 2026-08-26T04:19:42-04:00] equivalence gate: port vs engine drafts
+[gate] drafts_p491_s000525.txt: running agreement 94.1%
+[gate] PORT vs ENGINE draft agreement: 36949/39280 = 94.1%  (need >= 90% before any session runs)
+[s5:auto-ace0p5 2026-08-26T04:25:46-04:00] gate OK (94.1%)
+[s5:auto-ace0p5 2026-08-26T04:25:46-04:00] chunk 0: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/auto-ace0p5/c0/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/auto-ace0p5/c0/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/auto-ace0p5/c0/train_metrics.json  (loss 4.2347 -> 1.9398, tail mean 1.8920)
+[train] TRAIN OK
+total: 321075 tokens, 10034.8 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:auto-ace0p5 2026-08-26T04:49:56-04:00] chunk 1: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/auto-ace0p5/c1/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/auto-ace0p5/c1/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/auto-ace0p5/c1/train_metrics.json  (loss 1.3208 -> 0.6030, tail mean 2.2639)
+[train] TRAIN OK
+total: 324707 tokens, 10148.3 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:auto-ace0p5 2026-08-26T05:13:56-04:00] chunk 2: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/auto-ace0p5/c2/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/auto-ace0p5/c2/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/auto-ace0p5/c2/train_metrics.json  (loss 1.1723 -> 0.0339, tail mean 1.5819)
+[train] TRAIN OK
+merged 3 chunk(s), 1472 sequences, 1472 steps: loss 4.234716598875821 -> 0.03393275210763136 (tail mean 1.7195730620184915) -> /home/patrickd/s5-capture/auto-ace0p5/train_metrics.json
+[s5:auto-ace0p5 2026-08-26T05:37:28-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+  wrote model-00048-of-00048.safetensors
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /cap/auto-ace0p5/head  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[s5:auto-ace0p5 2026-08-26T05:38:11-04:00] re-fitting adaptK on the trained head (F111: the optimum moves with drafter quality)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_0.0.log
+[run_model] pid 824180   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_0.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_0.0.memguard.log
+[s5:auto-ace0p5 2026-08-26T05:43:20-04:00]   adaptK 0.0 -> hold-out 28.004 tok/s pooled (median tau 4.4639)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_0.5.log
+[run_model] pid 829121   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_0.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_0.5.memguard.log
+[s5:auto-ace0p5 2026-08-26T05:47:53-04:00]   adaptK 0.5 -> hold-out 27.376 tok/s pooled (median tau 4.5589)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_1.0.log
+[run_model] pid 833648   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_1.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_1.0.memguard.log
+[s5:auto-ace0p5 2026-08-26T05:52:26-04:00]   adaptK 1.0 -> hold-out 27.91 tok/s pooled (median tau 4.4639)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_1.5.log
+[run_model] pid 838320   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_1.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_1.5.memguard.log
+[s5:auto-ace0p5 2026-08-26T05:56:59-04:00]   adaptK 1.5 -> hold-out 28.103 tok/s pooled (median tau 4.4639)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_2.0.log
+[run_model] pid 842823   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_adaptk_2.0.memguard.log
+[s5:auto-ace0p5 2026-08-26T06:01:32-04:00]   adaptK 2.0 -> hold-out 28.346 tok/s pooled (median tau 4.3766)
+[s5:auto-ace0p5 2026-08-26T06:01:32-04:00] adaptK re-fit: 2.0 (28.346 tok/s pooled on the hold-out); shipped default was 1.5
+[s5:auto-ace0p5 2026-08-26T06:01:32-04:00] eval: 8-prompt suite, NGEN0=200, block 5, clean
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval.log
+[run_model] pid 847353   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval.memguard.log
+[s5:auto-ace0p5 2026-08-26T06:04:35-04:00] second eval at the re-fitted adaptK 2.0 (reported separately; NOT the registry number)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval_adaptk2.0.log
+[run_model] pid 851511   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval_adaptk2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval_adaptk2.0.memguard.log
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval_adaptk2.0.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  5.21    35.22 tok/s
+    long_context     tau  4.16    29.61 tok/s
+    agentic_format   tau  4.00    29.68 tok/s
+    short_factual    tau  3.87    29.31 tok/s
+    code_edit        tau  3.85    28.17 tok/s
+    reasoning        tau  3.51    27.57 tok/s
+    explanation      tau  2.91    24.28 tok/s
+    code_gen         tau  2.52    21.93 tok/s
+  suite mean tau 3.7538  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.51 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/auto-ace0p5/session_verdict_adaptk2.0.json
+[s5:auto-ace0p5 2026-08-26T06:07:38-04:00] NOTE: promoting at adaptK 2.0 requires re-measuring the incumbent at 2.0 first.
+[s5:auto-ace0p5 2026-08-26T06:07:38-04:00] secondary gate: 64-prompt reasoning hold-out, trained head
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_holdout.log
+[run_model] pid 855802   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_holdout.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_holdout.memguard.log
+[s5:auto-ace0p5 2026-08-26T06:29:42-04:00] paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_holdout_control.log
+[run_model] pid 875504   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_holdout_control.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_holdout_control.memguard.log
+[s5:auto-ace0p5 2026-08-26T06:50:15-04:00] hold-out untrained baseline (paired, from pass 1): 5.6528
+hold-out tau at budget 200 tokens: n=64
+  median 5.025   mean 4.697   p25 3.774   p75 5.800   min 1.852   max 6.000
+  baseline (untrained) 5.653   delta -0.628 tau  (-4.81 tok/s, -21.2%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+ARCHIVED auto-ace0p5 -> /home/patrickd/model-backups/heads/auto-ace0p5 (5 files, sha256 recorded)
+  suite mean: tau 3.8887  28.5025 tok/s
+  incumbent tau 3.8413 [HEAD_REGISTRY.md -- NOT this session (max of 3.6888 re-measured, 3.8413 registry)] -> needs > 3.9757; candidate 3.8887
+REFUSED to promote:
+  - suite tau 3.8887 does not beat incumbent 3.8413 by the 3.5% run-to-run spread (needs > 3.9757); ties go to the incumbent
+[s5:auto-ace0p5 2026-08-26T06:50:25-04:00] not promoted (archived)
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/auto-ace0p5_eval.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  5.21    34.69 tok/s
+    long_context     tau  4.53    31.26 tok/s
+    agentic_format   tau  4.16    30.08 tok/s
+    code_edit        tau  4.08    29.20 tok/s
+    short_factual    tau  3.87    29.15 tok/s
+    reasoning        tau  3.64    27.70 tok/s
+    explanation      tau  2.96    24.06 tok/s
+    code_gen         tau  2.66    21.88 tok/s
+  suite mean tau 3.8887  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.64 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/auto-ace0p5/session_verdict.json
+[s5:auto-ace0p5 2026-08-26T06:50:25-04:00] GO (primary); secondary exit 3
+[s5:auto-ace0p5 2026-08-26T06:50:25-04:00] no next session configured; stopping here
+[auto 2026-08-26T06:50:25-04:00] RESULT auto-ace0p5: tau=3.8887 release=fail
+[auto 2026-08-26T06:50:25-04:00] hit the 2-arm backstop
+[auto 2026-08-26T06:50:25-04:00] =========== SEARCH EXHAUSTED -- handing the GPU to the eval battery ===========
+[auto 2026-08-26T06:50:25-04:00] NO arm cleared both gates. Live head unchanged (/home/patrickd/models/ckpt-head-s3recap-p25-b0.1).
+[auto 2026-08-26T06:50:25-04:00]   The mean-only winner is deliberately NOT staged on that basis -- see HEAD_REGISTRY.md.
+[auto 2026-08-26T06:50:25-04:00] starting the eval battery: extend -> retry -> force -> BFCL multi-turn
+[resume 2026-08-26T06:50:25-04:00] starting memguard
+[resume 2026-08-26T06:50:25-04:00] battery already complete
+[resume 2026-08-26T06:50:25-04:00] server is down and later stages need it — starting under the model lock
+[resume 2026-08-26T06:51:56-04:00] started eval_extend_all.sh
+[resume 2026-08-26T06:51:56-04:00] started eval_extend_retry.sh
+[resume 2026-08-26T06:51:56-04:00] started eval_force_all.sh
+[resume 2026-08-26T06:51:56-04:00] started eval_bfcl_mt_run.sh
+[resume 2026-08-26T06:51:56-04:00] resume complete — stages self-order from here
+[auto 2026-08-26T06:51:56-04:00] eval battery launched; autopilot exiting. Watch: bash scripts/eval_watch.sh

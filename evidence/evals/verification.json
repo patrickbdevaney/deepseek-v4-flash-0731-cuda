@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "aime24",
+      "task": "mmlu_pro",
       "effort": "low24k",
-      "records": 60,
-      "recomputed_acc": 91.67,
-      "published_acc": 91.7,
-      "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792",
-      "source": "Maxwell-Jia/AIME_2024 (30)"
+      "records": 150,
+      "recomputed_acc": 74.67,
+      "published_acc": 74.7,
+      "snapshot": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+      "source": "TIGER-Lab/MMLU-Pro (test, 12032)"
     }
   ],
   "failed": 0

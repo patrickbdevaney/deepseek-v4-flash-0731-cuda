@@ -197,3 +197,6 @@ above should not be read off two different engine revisions.
 | `s3recap-p25b-p2-b0.2` | 3.8163 | 5 | 28.0787 | 14.57 | `9c2a5c6f2` | not promoted: suite tau 3.8163 does not beat incumbent 3.8413 by the 3.5%  |
 | `auto-ace0p3` | 3.8462 | 5 | 28.395 | 13.99 | `120485e80` | not promoted: suite tau 3.8462 does not beat incumbent 3.8413 by the 3.5%  |
 | `auto-anchorpow1p5` | 3.8112 | 5 | 28.1412 | 14.19 | `120485e80` | not promoted: suite tau 3.8112 does not beat incumbent 3.8413 by the 3.5%  |
+| `agentic-p25-b0.1` | 3.6812 | 5 | 27.3738 | 13.94 | `e645c549e` | not promoted: suite tau 3.6812 does not beat incumbent 3.8413 by the 3.5%  |
+| `auto-beta0p05` | 3.8425 | 5 | 28.3275 | 14.59 | `e645c549e` | not promoted: suite tau 3.8425 does not beat incumbent 3.8413 by the 3.5%  |
+| `auto-ace0p5` | 3.8887 | 5 | 28.5025 | 14.53 | `e645c549e` | not promoted: suite tau 3.8887 does not beat incumbent 3.8413 by the 3.5%  |

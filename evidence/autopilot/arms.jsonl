@@ -12,3 +12,6 @@
 {"name": "s3recap-p25b-p2-b0.2", "tau": 3.8163, "release_pass": false, "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.2, "anchor_pow": 2.0, "deficit_clamp": 3.0, "pos_per_seq": 16}, "note": "ingested from HEAD_REGISTRY.md"}
 {"name": "auto-ace0p3", "tau": 3.8462, "release_pass": false, "cfg": {"a_ce": 0.3, "a_tv": 0.7, "deficit": 1, "beta": 0.1, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}}
 {"name": "auto-anchorpow1p5", "tau": 3.8112, "release_pass": false, "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.1, "anchor_pow": 1.5, "deficit_clamp": 3.0, "pos_per_seq": 16}}
+{"name": "agentic-p25-b0.1", "tau": 3.6812, "release_pass": false, "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.1, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}, "note": "ingested from HEAD_REGISTRY.md"}
+{"name": "auto-beta0p05", "tau": 3.8425, "release_pass": false, "cfg": {"a_ce": 0.1, "a_tv": 0.9, "deficit": 1, "beta": 0.05, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}}
+{"name": "auto-ace0p5", "tau": 3.8887, "release_pass": false, "cfg": {"a_ce": 0.5, "a_tv": 0.5, "deficit": 1, "beta": 0.1, "anchor_pow": 1.0, "deficit_clamp": 3.0, "pos_per_seq": 16}}

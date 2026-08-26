@@ -1,0 +1,32 @@
+[parse] DSV4_PROMPTS_FILE /home/patrickd/s5-capture/agentic-p25-b0.1/holdout.txt -> 64 prompt(s)
+[decode] loading /home/patrickd/models/DeepSeek-V4-Flash-0731-REAP ... s=6 NDEC=8 seqmax=2544
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] KV layout: fp32, 2048 B/row, 0.209 GiB for 2544 rows x 43 layers
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 110.0/122.8 GiB
+[decode] prefill 5 positions...
+[f32mk] tile 4x4 (DSV4_F32MK_TILE=unset)
+[decode] PREFILL: 5 positions in 188.1 ms = 26.6 tok/s (37.615 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (67.0 ms warmup)
+  step 1 pos 6 -> token 16  (66.2 ms)
+  step 2 pos 7 -> token 455  (73.1 ms)
+  step 3 pos 8 -> token 6102  (66.2 ms)
+  step 4 pos 9 -> token 294  (66.4 ms)
+  step 5 pos 10 -> token 16603  (66.4 ms)
+  step 6 pos 11 -> token 344  (73.1 ms)
+  step 7 pos 12 -> token 29168  (66.8 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 68.3 ms/tok = 14.64 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 114.9 ms (= 23.0 ms/tok if all accepted vs 68.3 M=1 -> 2.97x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] loading EXTERNAL DSpark head /home/patrickd/s5-capture/agentic-p25-b0.1/head ...
+[spec] head loaded 6.53 GiB, 2977 mtp tensors (SEPARATE store)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5 5 5 5 5 5 5 5
+[spec] head built. mem 119.9/122.8 GiB

@@ -60,3 +60,98 @@ TypeError: '<' not supported between instances of 'NoneType' and 'float'
   [4/21] aime2025-0010 gold=259 got=259 OK  +3819 tok (total 11819) stop (57.3 min)
   [5/21] aime2025-0012 gold=204 got=204 OK  +12799 tok (total 20799) stop (104.9 min)
   [6/21] aime2025-0013 gold=60 got=24     +16000 tok (total 24000) TRUNC (161.7 min)
+[extend 2026-08-26T06:51:56-04:00] waiting for the battery to finish before extending anything
+[extend 2026-08-26T06:51:56-04:00] battery complete; deciding which rows are budget-limited
+[extend 2026-08-26T06:52:00-04:00] gpqa_diamond: 25.8% truncated over 198 records — continuing truncated traces to 24000
+[gpqa_diamond@low -> low24k] 198 base records: 147 terminated (kept as-is), 51 truncated (to continue), 147 already written
+  [1/51] gpqa-0010 gold=B got=B OK  +12779 tok (total 20779) stop (15.9 min)
+  [2/51] gpqa-0012 gold=B got=B OK  +5384 tok (total 13384) stop (23.8 min)
+  [3/51] gpqa-0018 gold=D got=D OK  +13772 tok (total 21772) stop (39.6 min)
+  [4/51] gpqa-0021 gold=A got=A OK  +2176 tok (total 10176) stop (44.1 min)
+  [5/51] gpqa-0022 gold=D got=D OK  +1190 tok (total 9190) stop (47.5 min)
+  [6/51] gpqa-0024 gold=B got=B OK  +10923 tok (total 18923) stop (60.4 min)
+  [7/51] gpqa-0028 gold=C got=A     +16000 tok (total 24000) TRUNC (77.0 min)
+  [8/51] gpqa-0030 gold=B got=B OK  +657 tok (total 8657) stop (79.9 min)
+  [9/51] gpqa-0036 gold=A got=None     +16000 tok (total 24000) TRUNC (91.9 min)
+  [10/51] gpqa-0040 gold=A got=A OK  +4482 tok (total 12482) stop (98.9 min)
+  [11/51] gpqa-0041 gold=D got=D OK  +5250 tok (total 13250) stop (105.9 min)
+  [12/51] gpqa-0060 gold=B got=C     +553 tok (total 8553) stop (108.9 min)
+  [13/51] gpqa-0063 gold=B got=B OK  +995 tok (total 8995) stop (112.3 min)
+  [14/51] gpqa-0065 gold=A got=G     +16000 tok (total 24000) TRUNC (131.9 min)
+  [15/51] gpqa-0069 gold=C got=B     +6890 tok (total 14890) stop (141.0 min)
+  [16/51] gpqa-0071 gold=B got=C     +16000 tok (total 24000) TRUNC (159.9 min)
+  [17/51] gpqa-0076 gold=A got=A OK  +2236 tok (total 10236) stop (164.4 min)
+  [18/51] gpqa-0077 gold=A got=H     +16000 tok (total 24000) TRUNC (182.8 min)
+  [19/51] gpqa-0081 gold=C got=C OK  +1119 tok (total 9119) stop (186.3 min)
+  [20/51] gpqa-0084 gold=A got=A OK  +7447 tok (total 15447) stop (195.9 min)
+  [21/51] gpqa-0085 gold=D got=B     +16000 tok (total 24000) TRUNC (214.3 min)
+  [22/51] gpqa-0087 gold=C got=A     +1642 tok (total 9642) stop (218.4 min)
+  [23/51] gpqa-0088 gold=C got=A     +16000 tok (total 24000) TRUNC (236.5 min)
+  [24/51] gpqa-0089 gold=B got=B OK  +979 tok (total 8979) stop (239.8 min)
+  [25/51] gpqa-0094 gold=A got=A OK  +4361 tok (total 12361) stop (246.7 min)
+  [26/51] gpqa-0096 gold=B got=None     +16000 tok (total 24000) TRUNC (265.5 min)
+  [27/51] gpqa-0097 gold=A got=A OK  +16000 tok (total 24000) TRUNC (284.7 min)
+  [28/51] gpqa-0101 gold=D got=E     +16000 tok (total 24000) TRUNC (301.9 min)
+  [29/51] gpqa-0102 gold=B got=I     +16000 tok (total 24000) TRUNC (320.7 min)
+  [30/51] gpqa-0103 gold=D got=B     +14864 tok (total 22864) stop (338.4 min)
+  [31/51] gpqa-0104 gold=A got=A OK  +2102 tok (total 10102) stop (342.9 min)
+  [32/51] gpqa-0106 gold=C got=B     +16000 tok (total 24000) TRUNC (361.9 min)
+  [33/51] gpqa-0108 gold=B got=H     +16000 tok (total 24000) TRUNC (381.0 min)
+  [34/51] gpqa-0109 gold=A got=A OK  +4363 tok (total 12363) stop (387.5 min)
+  [35/51] gpqa-0110 gold=D got=A     +16000 tok (total 24000) TRUNC (407.7 min)
+  [36/51] gpqa-0111 gold=D got=A     +16000 tok (total 24000) TRUNC (425.4 min)
+  [37/51] gpqa-0112 gold=C got=C OK  +12778 tok (total 20778) stop (439.3 min)
+  [38/51] gpqa-0115 gold=D got=B     +2643 tok (total 10643) stop (444.5 min)
+  [39/51] gpqa-0120 gold=D got=A     +12454 tok (total 20454) stop (458.8 min)
+  [40/51] gpqa-0124 gold=B got=B OK  +5961 tok (total 13961) stop (466.8 min)
+  [41/51] gpqa-0125 gold=A got=A OK  +16000 tok (total 24000) TRUNC (486.6 min)
+  [42/51] gpqa-0127 gold=B got=B OK  +8179 tok (total 16179) stop (496.8 min)
+  [43/51] gpqa-0129 gold=D got=D OK  +10581 tok (total 18581) stop (510.1 min)
+  [44/51] gpqa-0132 gold=B got=B OK  +3630 tok (total 11630) stop (516.3 min)
+  [45/51] gpqa-0135 gold=C got=C OK  +16000 tok (total 24000) TRUNC (534.5 min)
+  [46/51] gpqa-0140 gold=B got=B OK  +905 tok (total 8905) stop (537.8 min)
+  [47/51] gpqa-0142 gold=A got=A OK  +2547 tok (total 10547) stop (542.6 min)
+  [48/51] gpqa-0143 gold=B got=None     +16000 tok (total 24000) TRUNC (559.5 min)
+  [49/51] gpqa-0172 gold=A got=A OK  +2303 tok (total 10303) stop (563.9 min)
+  [50/51] gpqa-0178 gold=B got=A     +16000 tok (total 24000) TRUNC (582.6 min)
+  [51/51] gpqa-0196 gold=D got=A     +4133 tok (total 12133) stop (588.9 min)
+
+wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/gpqa_diamond.low24k.jsonl  (147 carried + 51 continued + 0 not continuable, 7 with prefix drift, max |drift| 2)
+[extend 2026-08-26T16:40:55-04:00] gpqa_diamond: extension finished, landing as gpqa_diamond@low24k
+  [PASS] gpqa_diamond   no duplicate records                     198 records, 198 unique
+  [PASS] gpqa_diamond   every id exists in the benchmark         0 unknown
+  [PASS] gpqa_diamond   gold matches the pinned dataset          0 mismatched
+  [PASS] gpqa_diamond   prompt matches the one that was sent     158/198 records carry a hash; 0 mismatched
+  [FAIL] gpqa_diamond   unhashed records covered by the set pin  40 of 198 records predate the hash and NO set-level pin exists; run tools/eval_pin_prompts.py --task gpqa_diamond --effort low24k --since <run-start>
+  [PASS] gpqa_diamond   no silent empty generations              0 empty
+  [PASS] gpqa_diamond   stored correct flags reproduce           0 disagree
+  [PASS] gpqa_diamond/low24k published accuracy is reproducible       recomputed 83.8 % vs published 83.8 % over 198 records
+  [PASS] gpqa_diamond   snapshot matches the published one       68be75644976 vs 68be75644976
+
+VERIFY: 1 failed -> FAIL
+[land] gpqa_diamond@low24k: VERIFICATION FAILED — refusing to commit a number that does not reproduce
+[extend 2026-08-26T16:41:00-04:00] gpqa_diamond: extension did not land (see above)
+[extend 2026-08-26T16:41:00-04:00] mmlu_pro: 12.0% truncated over 150 records — continuing truncated traces to 24000
+[mmlu_pro@low -> low24k] 150 base records: 132 terminated (kept as-is), 18 truncated (to continue), 141 already written
+  [10/18] mmlupro-6545 gold=B got=D     +11493 tok (total 19493) stop (13.4 min)
+  [11/18] mmlupro-7802 gold=A got=A OK  +508 tok (total 8508) stop (16.3 min)
+  [12/18] mmlupro-11186 gold=F got=F OK  +348 tok (total 8348) stop (19.0 min)
+  [13/18] mmlupro-11294 gold=J got=A     +6377 tok (total 14377) stop (27.6 min)
+  [14/18] mmlupro-11336 gold=D got=A     +16000 tok (total 24000) TRUNC (45.5 min)
+  [15/18] mmlupro-11497 gold=C got=F     +12595 tok (total 20595) stop (59.3 min)
+  [16/18] mmlupro-11535 gold=G got=F     +16000 tok (total 24000) TRUNC (77.2 min)
+  [17/18] mmlupro-11649 gold=D got=D OK  +38 tok (total 8038) stop (79.6 min)
+  [18/18] mmlupro-12162 gold=J got=J OK  +1400 tok (total 9400) stop (83.4 min)
+
+wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/mmlu_pro.low24k.jsonl  (132 carried + 18 continued + 0 not continuable, 1 with prefix drift, max |drift| 1)
+[extend 2026-08-26T18:04:26-04:00] mmlu_pro: extension finished, landing as mmlu_pro@low24k
+  [PASS] mmlu_pro       no duplicate records                     150 records, 150 unique
+  [PASS] mmlu_pro       every id exists in the benchmark         0 unknown
+  [PASS] mmlu_pro       gold matches the pinned dataset          0 mismatched
+  [PASS] mmlu_pro       prompt matches the one that was sent     150/150 records carry a hash; 0 mismatched
+  [PASS] mmlu_pro       no silent empty generations              0 empty
+  [PASS] mmlu_pro       stored correct flags reproduce           0 disagree
+  [PASS] mmlu_pro/low24k published accuracy is reproducible       recomputed 74.7 % vs published 74.7 % over 150 records
+  [PASS] mmlu_pro       snapshot matches the published one       b189ec765aa7 vs b189ec765aa7
+
+VERIFY: 0 failed -> PASS

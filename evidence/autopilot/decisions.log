@@ -639,3 +639,163 @@ ingest s3recap-p25b-p2-b0.2: tau 3.8163 cfg {'a_ce': 0.1, 'a_tv': 0.9, 'deficit'
 [auto 2026-08-25T14:22:36-04:00] GPU busy (another chain or a model resident); waiting
 [auto 2026-08-25T14:27:36-04:00] GPU busy (another chain or a model resident); waiting
 [auto 2026-08-25T14:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T14:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T15:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T16:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T17:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:12:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:17:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:22:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:27:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:32:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:37:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:42:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:47:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:52:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T18:57:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:02:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:07:36-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T19:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T20:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T21:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T22:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-25T23:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:42:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:47:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:52:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T00:57:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:02:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:07:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:12:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:17:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:22:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:27:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:32:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:37:37-04:00] GPU busy (another chain or a model resident); waiting
+[auto 2026-08-26T01:42:37-04:00] GPU busy (another chain or a model resident); waiting
+ingest agentic-p25-b0.1: tau 3.6812 cfg {'a_ce': 0.1, 'a_tv': 0.9, 'deficit': 1, 'beta': 0.1, 'anchor_pow': 1.0, 'deficit_clamp': 3.0, 'pos_per_seq': 16}
+
+1 ingested, 0 skipped
+[auto 2026-08-26T01:47:37-04:00] ARM auto-beta0p05: a_ce=0.1 a_tv=0.9 deficit=1 beta=0.05 anchor_pow=1.0 dclamp=3.0 pos=16
+[auto 2026-08-26T04:19:15-04:00] RESULT auto-beta0p05: tau=3.8425 release=fail
+
+0 ingested, 0 skipped
+[auto 2026-08-26T04:19:15-04:00] queue empty -- proposing the next generation
+# incumbent auto-ace0p3  tau 3.8462  release FAIL
+[auto 2026-08-26T04:19:15-04:00] proposed: 3 arm(s)
+[auto 2026-08-26T04:19:15-04:00] ARM auto-ace0p5: a_ce=0.5 a_tv=0.5 deficit=1 beta=0.1 anchor_pow=1.0 dclamp=3.0 pos=16
+[auto 2026-08-26T06:50:25-04:00] RESULT auto-ace0p5: tau=3.8887 release=fail
+[auto 2026-08-26T06:50:25-04:00] hit the 2-arm backstop
+[auto 2026-08-26T06:50:25-04:00] =========== SEARCH EXHAUSTED -- handing the GPU to the eval battery ===========
+[auto 2026-08-26T06:50:25-04:00] NO arm cleared both gates. Live head unchanged (/home/patrickd/models/ckpt-head-s3recap-p25-b0.1).
+[auto 2026-08-26T06:50:25-04:00]   The mean-only winner is deliberately NOT staged on that basis -- see HEAD_REGISTRY.md.
+[auto 2026-08-26T06:50:25-04:00] starting the eval battery: extend -> retry -> force -> BFCL multi-turn
+[resume 2026-08-26T06:50:25-04:00] starting memguard
+[resume 2026-08-26T06:50:25-04:00] battery already complete
+[resume 2026-08-26T06:50:25-04:00] server is down and later stages need it — starting under the model lock
+[resume 2026-08-26T06:51:56-04:00] started eval_extend_all.sh
+[resume 2026-08-26T06:51:56-04:00] started eval_extend_retry.sh
+[resume 2026-08-26T06:51:56-04:00] started eval_force_all.sh
+[resume 2026-08-26T06:51:56-04:00] started eval_bfcl_mt_run.sh
+[resume 2026-08-26T06:51:56-04:00] resume complete — stages self-order from here
+[auto 2026-08-26T06:51:56-04:00] eval battery launched; autopilot exiting. Watch: bash scripts/eval_watch.sh

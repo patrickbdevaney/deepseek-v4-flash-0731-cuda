@@ -201,11 +201,11 @@ so a low number cannot be dismissed as strict parsing.
 | AIME 2024 *(partial)* **— NOT QUOTABLE, 15% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 60/60 | **85.0** | [71.7, 96.7] | 9 | 0 | 3735 | 15.6 | — *(none published)* |
 | AIME 2024 *(partial)* **— NOT QUOTABLE, 10% truncated at max_tokens=24000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low24k** | 60/60 | **91.7** | [80.0, 100.0] | 6 | 0 | 5809 | 15.6 | — *(none published)* |
 | AIME 2025 *(partial)* **— NOT QUOTABLE, 35% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 60/60 | **68.3** | [51.7, 83.3] | 21 | 0 | 4742 | 14.9 | — *(none published)* |
-| AIME 2025 *(partial)* | **low24k** | 41/? | **100.0** | [100.0, 100.0] | 0 | 0 | 3470 | 16.9 | — *(none published)* |
+| AIME 2025 *(partial)* | **low24k** | 45/? | **96.2** | [88.5, 100.0] | 1 | 0 | 4695 | 16.3 | — *(none published)* |
 | GPQA-Diamond *(partial)* **— NOT QUOTABLE, 26% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 198/198 | **72.7** | [66.1, 78.5] | 51 | 0 | 3699 | 15.0 | 71.20 |
-| GPQA-Diamond *(partial)* | **low24k** | 147/? | **93.9** | [88.8, 96.7] | 0 | 0 | 2207 | 16.7 | — *(none published)* |
+| GPQA-Diamond *(partial)* **— NOT QUOTABLE, 10% truncated at max_tokens=24000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low24k** | 198/198 | **83.8** | [78.1, 88.3] | 19 | 0 | 6094 | 15.0 | — *(none published)* |
 | MMLU-Pro *(partial)* **— NOT QUOTABLE, 12% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 150/150 | **73.3** | [65.7, 79.8] | 18 | 0 | 1948 | 17.3 | 83.00 |
-| MMLU-Pro *(partial)* | **low24k** | 141/? | **76.6** | [69.0, 82.8] | 2 | 0 | 1892 | 17.8 | — *(none published)* |
+| MMLU-Pro | **low24k** | 150/150 | **74.7** | [67.2, 81.0] | 4 | 0 | 2690 | 17.3 | — *(none published)* |
 | MATH-500 | **low** | 100/100 | **95.0** | [88.8, 97.8] | 1 | 0 | 940 | 21.6 | — *(none published)* |
 | HumanEval | **low** | 164/164 | **95.1** | [90.7, 97.5] | 6 | 0 | 1438 | 20.6 | — *(none published)* |
 | BFCL v3 — 4 `exec_*` categories, AST † | **low** | 240/240 | **86.2** | [81.3, 90.0] | 3 | 0 | 216 | 22.8 | — *(none published)* |
@@ -213,9 +213,9 @@ so a low number cannot be dismissed as strict parsing.
 | LiveCodeBench — `test6` window † *(partial)* **— NOT QUOTABLE, 59% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 175/175 | **46.9** | [39.6, 54.2] | 104 | 0 | 5552 | 12.3 | — *(none published)* |
 | SciCode — subproblem pass rate *(partial)* **— NOT QUOTABLE, 19% truncated at max_tokens=8000; this measures the budget, not the model. Extend with tools/eval_extend.py** | **low** | 291/291 | **30.2** | [24.1, 36.9] | 54 | 0 | 3534 | 14.7 | — *(none published)* |
 
-2335 items scored, 5,122,375 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
+2399 items scored, 6,210,291 completion tokens generated. Sampling held at `temperature = 1.0`, `top_p = 0.95`; the reference column is the aggregator number at the SAME reasoning effort as the row.
 
-Interval method per row: AIME 2024 — cluster-bootstrap over 30 problems (avg@2), AIME 2025 — cluster-bootstrap over 23 problems (avg@2), AIME 2025 — cluster-bootstrap over 30 problems (avg@2), BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, HumanEval — wilson, LiveCodeBench — `test6` window † — wilson, MATH-500 — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
+Interval method per row: AIME 2024 — cluster-bootstrap over 30 problems (avg@2), AIME 2025 — cluster-bootstrap over 26 problems (avg@2), AIME 2025 — cluster-bootstrap over 30 problems (avg@2), BFCL v3 — 4 `exec_*` categories, AST † — wilson, BFCL v3 — `live_*` categories, AST † — wilson, GPQA-Diamond — wilson, HumanEval — wilson, LiveCodeBench — `test6` window † — wilson, MATH-500 — wilson, MMLU-Pro — wilson, SciCode — subproblem pass rate — cluster-bootstrap over 65 problems (291 sub-items). Single-sample tasks use a Wilson score interval; avg@k tasks use a nested bootstrap over PROBLEMS, because k samples of one problem are not k problems and pooling them into a Wilson interval understates the width by up to 2x — most severely when the extra samples bought the least.
 
 Per-task provenance (dataset and pinned snapshot):
 
@@ -226,9 +226,9 @@ Per-task provenance (dataset and pinned snapshot):
 | AIME 2025 | opencompass/AIME2025 (I+II, 30) | `a6ad95f611d7` | 8000 |
 | AIME 2025 | None | `` | None |
 | GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 8000 |
-| GPQA-Diamond | None | `` | None |
+| GPQA-Diamond | fingertap/GPQA-Diamond (test, 198) | `68be75644976` | 24000 |
 | MMLU-Pro | TIGER-Lab/MMLU-Pro (test, 12032) | `b189ec765aa7` | 8000 |
-| MMLU-Pro | None | `` | None |
+| MMLU-Pro | TIGER-Lab/MMLU-Pro (test, 12032) | `b189ec765aa7` | 24000 |
 | MATH-500 | HuggingFaceH4/MATH-500 (500) | `6e4ed1a2a79a` | 8000 |
 | HumanEval | openai/openai_humaneval (164) | `7dce6050a7d6` | 8000 |
 | BFCL v3 — 4 `exec_*` categories, AST † | gorilla-llm/BFCL v3 (exec subsets, AST-scored, 240) | `f087fb14f26d` | 2000 |
@@ -276,9 +276,9 @@ the protocol and not by the harness name.
 | AIME 2025 | all 30 | 0-shot generative CoT | final integer 0–999 | exact integer match | none | 8000 | 2 |
 | AIME 2025 | all 30 | 0-shot generative CoT | final integer 0–999 | exact integer match | none | None | 1 |
 | GPQA-Diamond | test, all 198 | 0-shot generative CoT | final letter A–D | exact letter match | none | 8000 | 1 |
-| GPQA-Diamond | test, all 198 | 0-shot generative CoT | final letter A–D | exact letter match | none | None | 1 |
+| GPQA-Diamond | test, all 198 | 0-shot generative CoT | final letter A–D | exact letter match | none | 24000 | 1 |
 | MMLU-Pro | test, seeded random subset of 12 032 | 0-shot generative CoT | final letter A–J | exact letter match | none | 8000 | 1 |
-| MMLU-Pro | test, seeded random subset of 12 032 | 0-shot generative CoT | final letter A–J | exact letter match | none | None | 1 |
+| MMLU-Pro | test, seeded random subset of 12 032 | 0-shot generative CoT | final letter A–J | exact letter match | none | 24000 | 1 |
 | MATH-500 | test, seeded random subset of 500 | 0-shot generative CoT | last brace-balanced \boxed{} | string → numeric → sympy equivalence | none | 8000 | 1 |
 | HumanEval | all 164 | 0-shot | first ```python block | pass@1 — the benchmark's own check(entry_point) | sandboxed subprocess, 20 s, 2 GiB address space | 8000 | 1 |
 | BFCL v3 — 4 `exec_*` categories, AST † | 4 of BFCL v3's `exec_*` categories, 240 items | prompt mode — calls emitted as text, not via a tool-call API | Python call expressions, one per line | BFCL's own AST metric: same function, argument names and values | none — AST comparison, not execution | 2000 | 1 |
@@ -311,6 +311,14 @@ the protocol and not by the harness name.
   - later steps run against the model's OWN earlier code, since no gold solutions ship — a wrong early step propagates, which is the intended behaviour and biases **down** relative to a gold-context setting
 
 **What this protocol does and does not license.** Every number here is re-derivable from the stored generations by `tools/eval_verify.py` with no GPU and no model, against a sha-pinned dataset. That makes the numbers *reproducible*. It does not make them *leaderboard-rankable*: the reference column is third-party aggregation whose harness, token budget and sampling count are not ours and are not stated, so a gap of a few points between a row and its reference is not interpretable in either direction. The comparison this evidence genuinely supports is a paired one — REAP against unpruned, same harness, same decoding, only the weights different — and that baseline has not been run here.
+
+### Engine configuration
+
+Accuracy columns pool across these configurations and throughput columns do not. The engine's speculative acceptance rule draws every emitted token from the **target** model's distribution, so which draft head is loaded does not bias the output -- items scored under different heads are independent draws from the same distribution. `tok/s` is a joint property of engine, head and draft width: on one frozen protocol, across five decode-kernel rewrites, suite `tau` reproduced to four decimal places while suite tok/s moved -2.3 % and -5.0 % and base AR moved -17.4 %.
+
+| stamped | draft head | block | engine rev |
+|---|---|---|---|
+| 2026-08-22T10:49:08 | `s3recap-p25-b0.1` | 5 | `a608d52d7` (dirty) |
 <!-- /PROTOCOL -->
 
 ## Evidence, and how to check these numbers without trusting this repo

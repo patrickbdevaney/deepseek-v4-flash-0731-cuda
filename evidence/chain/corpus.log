@@ -128,3 +128,159 @@ scripts/chain_corpus.sh: line 66: `    LOG "corpus arm failed (rc=$rc)"'
 [run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.log
 [run_model] pid 47042   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.log
 [run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c3_cap.memguard.log
+total: 611699 tokens, 19117.9 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:agentic-p25-b0.1 2026-08-25T17:18:46-04:00] chunk 3: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c3/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c3/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c3/train_metrics.json  (loss 0.2238 -> 0.0014, tail mean 0.8183)
+[train] TRAIN OK
+[s5:agentic-p25-b0.1 2026-08-25T17:42:48-04:00] chunk 3: capture deleted, 229G free
+[s5:agentic-p25-b0.1 2026-08-25T17:42:48-04:00] chunk 4: capturing 491 sequence(s)
+[s5:agentic-p25-b0.1 2026-08-25T17:42:48-04:00] chunk 4: disk floor OK (229 GB free, need ~22 GB)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 117 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c4_cap.log
+[run_model] pid 217833   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c4_cap.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c4_cap.memguard.log
+total: 606161 tokens, 18944.9 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:agentic-p25-b0.1 2026-08-25T20:34:48-04:00] chunk 4: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c4/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c4/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c4/train_metrics.json  (loss 0.0769 -> 0.5215, tail mean 0.8286)
+[train] TRAIN OK
+[s5:agentic-p25-b0.1 2026-08-25T20:58:29-04:00] chunk 4: capture deleted, 226G free
+[s5:agentic-p25-b0.1 2026-08-25T20:58:29-04:00] chunk 5: capturing 491 sequence(s)
+[s5:agentic-p25-b0.1 2026-08-25T20:58:29-04:00] chunk 5: disk floor OK (226 GB free, need ~22 GB)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c5_cap.log
+[run_model] pid 384246   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c5_cap.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c5_cap.memguard.log
+total: 614823 tokens, 19215.6 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:agentic-p25-b0.1 2026-08-25T23:53:30-04:00] chunk 5: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c5/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c5/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c5/train_metrics.json  (loss 0.8092 -> 1.2571, tail mean 0.7404)
+[train] TRAIN OK
+[s5:agentic-p25-b0.1 2026-08-26T00:17:07-04:00] chunk 5: capture deleted, 222G free
+[s5:agentic-p25-b0.1 2026-08-26T00:17:07-04:00] chunk 6: capturing 61 sequence(s)
+[s5:agentic-p25-b0.1 2026-08-26T00:17:07-04:00] chunk 6: disk floor OK (222 GB free, need ~7 GB)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c6_cap.log
+[run_model] pid 552890   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c6_cap.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_c6_cap.memguard.log
+total: 74969 tokens, 2343.1 MB (32.0 KB/token)
+VALIDATE: PASS
+[s5:agentic-p25-b0.1 2026-08-26T00:40:18-04:00] chunk 6: training (ce+tv; a_conf 0 until free-running labels exist -- F100)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c6/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c6/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c6/train_metrics.json  (loss 0.0991 -> 0.4841, tail mean 1.4605)
+[train] TRAIN OK
+[s5:agentic-p25-b0.1 2026-08-26T00:43:51-04:00] chunk 6: capture deleted, 219G free
+merged 7 chunk(s), 3007 sequences, 3007 steps: loss 0.39318334870040417 -> 0.4840806590174074 (tail mean 0.7595582736906681) -> /home/patrickd/s5-capture/agentic-p25-b0.1/train_metrics.json
+[s5:agentic-p25-b0.1 2026-08-26T00:43:51-04:00] building loadable head (re-quantising trained tensors to their ORIGINAL formats)
+  wrote model-00048-of-00048.safetensors
+re-quantised 25 fp8 (+scales), 47 bf16, copied 2905 untouched (experts byte-for-byte) -> /cap/agentic-p25-b0.1/head  (7.01 GB)
+fp8 round-trip worst relative error: 0.0014  (e4m3 half-step is ~0.0625; anything near 1.0 means the scale and the divisor disagree)
+[s5:agentic-p25-b0.1 2026-08-26T00:44:32-04:00] re-fitting adaptK on the trained head (F111: the optimum moves with drafter quality)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 118 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_0.0.log
+[run_model] pid 576835   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_0.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_0.0.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T00:48:07-04:00]   adaptK 0.0 -> hold-out 0 tok/s pooled (median tau 3.985)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_0.5.log
+[run_model] pid 580466   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_0.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_0.5.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T00:53:40-04:00]   adaptK 0.5 -> hold-out 23.066 tok/s pooled (median tau 3.6124)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_1.0.log
+[run_model] pid 586033   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_1.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_1.0.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T00:59:13-04:00]   adaptK 1.0 -> hold-out 23.767 tok/s pooled (median tau 3.5546)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_1.5.log
+[run_model] pid 591406   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_1.5.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_1.5.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T01:04:46-04:00]   adaptK 1.5 -> hold-out 24.12 tok/s pooled (median tau 3.5179)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_2.0.log
+[run_model] pid 596757   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_2.0.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_adaptk_2.0.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T01:06:19-04:00]   adaptK 2.0 -> hold-out 0 tok/s pooled (median tau 0)
+[s5:agentic-p25-b0.1 2026-08-26T01:06:19-04:00] adaptK re-fit: 1.5 (24.12 tok/s pooled on the hold-out); shipped default was 1.5
+[s5:agentic-p25-b0.1 2026-08-26T01:06:19-04:00] eval: 8-prompt suite, NGEN0=200, block 5, clean
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_eval.log
+[run_model] pid 598693   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_eval.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_eval.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T01:09:22-04:00] secondary gate: 64-prompt reasoning hold-out, trained head
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_holdout.log
+[run_model] pid 601885   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_holdout.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_holdout.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T01:15:25-04:00] paired control: UNTRAINED head over the same hold-out (once per corpus, then cached)
+[run_model] [clocks] already pinned at 1386 MHz
+[run_model] 119 GiB available; launching detached -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_holdout_control.log
+[run_model] pid 607589   watch: tail -f /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_holdout_control.log
+[run_model] memguard armed on 'decode' -> /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_holdout_control.memguard.log
+[s5:agentic-p25-b0.1 2026-08-26T01:46:29-04:00] hold-out untrained baseline (paired, from pass 1): 5.9412
+hold-out tau at budget 200 tokens: n=8
+  median 3.518   mean 3.547   p25 2.928   p75 4.229   min 2.072   max 6.000
+  baseline (untrained) 5.941   delta -2.423 tau  (-18.57 tok/s, -82.0%)
+  VERDICT (secondary): SATURATED   [GO >= +0.35, saturated < +0.15]
+ARCHIVED agentic-p25-b0.1 -> /home/patrickd/model-backups/heads/agentic-p25-b0.1 (5 files, sha256 recorded)
+  suite mean: tau 3.6812  27.3738 tok/s
+  incumbent tau 3.8413 [HEAD_REGISTRY.md -- NOT this session (max of 3.6888 re-measured, 3.8413 registry)] -> needs > 3.9757; candidate 3.6812
+REFUSED to promote:
+  - suite tau 3.6812 does not beat incumbent 3.8413 by the 3.5% run-to-run spread (needs > 3.9757); ties go to the incumbent
+[s5:agentic-p25-b0.1 2026-08-26T01:46:38-04:00] not promoted (archived)
+eval: /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/agentic-p25-b0.1_eval.log
+  lossless=True  gate=True  blocks=[5]  instruments=none
+    multi_turn       tau  5.08    34.74 tok/s
+    agentic_format   tau  4.04    29.47 tok/s
+    long_context     tau  3.92    27.58 tok/s
+    code_edit        tau  3.85    27.44 tok/s
+    reasoning        tau  3.57    27.22 tok/s
+    short_factual    tau  3.53    27.49 tok/s
+    explanation      tau  2.90    23.73 tok/s
+    code_gen         tau  2.56    21.32 tok/s
+  suite mean tau 3.6812  (8 prompts, prompt 0 excluded)
+
+VERDICT: GO
+  - reasoning tau 3.57 >= 2.6 (baseline 1.85)
+  -> /home/patrickd/s5-capture/agentic-p25-b0.1/session_verdict.json
+[s5:agentic-p25-b0.1 2026-08-26T01:46:39-04:00] GO (primary); secondary exit 3
+[s5:agentic-p25-b0.1 2026-08-26T01:46:39-04:00] no next session configured; stopping here
+[corpus 2026-08-26T01:46:39-04:00] release rule for agentic-p25-b0.1:
+release rule at block 5
+
+category           run-0  incumb    cand | floor
+agentic_format      4.41    3.74    4.04 | recon  >= 4.21  FAIL
+code_edit           4.08    3.85    3.85 | recon  >= 3.88  FAIL
+code_gen            1.86    2.56    2.56 | constr >= 2.56  PASS
+explanation         1.70    2.94    2.90 | constr >= 2.94  FAIL
+long_context        5.00    4.00    3.92 | recon  >= 4.80  FAIL
+multi_turn          4.06    5.21    5.08 | not floored
+reasoning           1.82    3.70    3.57 | constr >= 3.70  FAIL
+short_factual       3.11    3.51    3.53 | not floored
+
+suite mean        3.2550  3.6888  3.6812  (8 categories; prompt 0 is the control and is excluded)
+
+==========================================================================
+RELEASE: REFUSED -- 5 floor(s) failed
+   agentic_format   4.04 < 4.21   short by 0.17
+   code_edit        3.85 < 3.88   short by 0.03
+   explanation      2.90 < 2.94   short by 0.04
+   long_context     3.92 < 4.80   short by 0.88
+   reasoning        3.57 < 3.70   short by 0.13
+
+  The head is archived and recorded, NOT released, however good its mean.
+  This does not undo a promotion: promotion asks 'does it beat the incumbent on
+  average', release asks 'does it beat it WITHOUT hollowing out the categories an
+  agentic workload actually runs in'. A head can pass the first and fail this.
+[corpus 2026-08-26T01:46:39-04:00] registry:
+| `auto-anchorpow1p5` | 3.8112 | 5 | 28.1412 | 14.19 | `120485e80` | not promoted: suite tau 3.8112 does not beat incumbent 3.8413 by the 3.5%  |
+| `agentic-p25-b0.1` | 3.6812 | 5 | 27.3738 | 13.94 | `e645c549e` | not promoted: suite tau 3.6812 does not beat incumbent 3.8413 by the 3.5%  |
+[corpus 2026-08-26T01:46:39-04:00] corpus chain complete:

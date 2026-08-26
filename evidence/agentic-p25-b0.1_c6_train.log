@@ -1,0 +1,90 @@
+[train] device=cuda torch=2.10.0
+  loading model-00046-of-00048.safetensors ...
+  loading model-00047-of-00048.safetensors ...
+  loading model-00048-of-00048.safetensors ...
+  dequantised 1512 tensors, 12.60 B params, 23.5 GiB bf16
+[train] weights ready in 11.6s
+[train] trainable 517.3 M in 72 tensors | frozen experts 12.08 B
+[train] capture: 61 sample(s)
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[train] ModelArgs: n_mtp=3 block=5 taps=[40, 41, 42] markov_rank=256
+[train] built 3 DSparkBlock(s) on meta
+[train] re-materialised freqs_cis on 3 attention module(s) (persistent=False buffers are NOT in state_dict and to_empty() zapped them)
+[train] load_state_dict: 0 missing, 0 unexpected
+[train] GATE1 model construction OK
+[train] aux: embed.weight(129280, 4096), head.weight(129280, 4096)
+[train] trainable tensors in graph: 72 / 517.3 M
+[train] resumed 72/72 trained tensors from /cap/agentic-p25-b0.1/c5/trained/mtp_trained.safetensors
+[train] resumed AdamW state: 69/72 tensors carry moments (3 never received a gradient, expected), indices aligned
+[train] P2.5 anchor: frozen copy of 3 block(s), beta=0.1
+[train] lr schedule: linear warmup 150 step(s) -> cosine over 3007 session step(s), peak 5e-05; this chunk is steps 2946..3006
+/work/train/train_head.py:115: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /opt/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  parts = {"ce": float((w * ce).sum()), "tv": float((w * tv).sum()), "conf": 0.0}
+[train] step 0: T=1046 positions=16 loss=0.0991 ce=0.3435 tv=0.0779 conf=1.2971 grad_norm=0.8245 tensors_with_grad=69/72
+[train] step 1: T=1083 positions=16 loss=0.1992 ce=0.6125 tv=0.1832 conf=6.3200 grad_norm=2.1175 tensors_with_grad=69/72
+[train] step 2: T=1101 positions=16 loss=0.4085 ce=0.7471 tv=0.1242 conf=4.2913 grad_norm=1.3357 tensors_with_grad=69/72
+[train] step 3: T=1250 positions=16 loss=1.7930 ce=2.5195 tv=0.5056 conf=5.8203 grad_norm=6.7014 tensors_with_grad=69/72
+[train] step 4: T=1080 positions=16 loss=0.2743 ce=0.3963 tv=0.0906 conf=1.9061 grad_norm=1.0593 tensors_with_grad=69/72
+[train] step 5: T=1106 positions=16 loss=0.1925 ce=0.3191 tv=0.1372 conf=6.7943 grad_norm=2.6153 tensors_with_grad=69/72
+[train] step 6: T=1208 positions=16 loss=1.2783 ce=1.8896 tv=0.3480 conf=5.7774 grad_norm=4.7591 tensors_with_grad=69/72
+[train] step 7: T=1697 positions=16 loss=0.8979 ce=1.5791 tv=0.2218 conf=5.0715 grad_norm=5.1163 tensors_with_grad=69/72
+[train] step 8: T=1057 positions=16 loss=0.7115 ce=1.1183 tv=0.2312 conf=2.7129 grad_norm=11.9266 tensors_with_grad=69/72
+[train] step 9: T=1045 positions=16 loss=0.5713 ce=1.0331 tv=0.1657 conf=3.8434 grad_norm=4.6046 tensors_with_grad=69/72
+[train] step 10: T=1539 positions=16 loss=1.0196 ce=1.5538 tv=0.3680 conf=8.0955 grad_norm=4.4495 tensors_with_grad=69/72
+[train] step 11: T=1406 positions=16 loss=0.8656 ce=1.6853 tv=0.2551 conf=5.3094 grad_norm=4.2674 tensors_with_grad=69/72
+[train] step 12: T=1549 positions=16 loss=1.1871 ce=2.1815 tv=0.3315 conf=6.0224 grad_norm=7.8573 tensors_with_grad=69/72
+[train] step 13: T=1142 positions=16 loss=0.0765 ce=0.1753 tv=0.0895 conf=3.3171 grad_norm=0.8034 tensors_with_grad=69/72
+[train] step 14: T=1048 positions=16 loss=0.0260 ce=0.0843 tv=0.0261 conf=0.9835 grad_norm=0.4032 tensors_with_grad=69/72
+[train] step 15: T=1129 positions=16 loss=1.1726 ce=1.8656 tv=0.3629 conf=5.1390 grad_norm=6.4689 tensors_with_grad=69/72
+[train] step 16: T=2208 positions=16 loss=0.9706 ce=1.7686 tv=0.2647 conf=5.4711 grad_norm=4.0851 tensors_with_grad=69/72
+[train] step 17: T=1149 positions=16 loss=0.7010 ce=1.0403 tv=0.1993 conf=4.9707 grad_norm=6.8612 tensors_with_grad=69/72
+[train] step 18: T=1041 positions=16 loss=0.3839 ce=0.6024 tv=0.2105 conf=7.8005 grad_norm=5.1545 tensors_with_grad=69/72
+[train] step 19: T=1058 positions=16 loss=0.4141 ce=1.0520 tv=0.1544 conf=5.7916 grad_norm=2.3175 tensors_with_grad=69/72
+[train] step 20: T=1058 positions=16 loss=0.1227 ce=0.3428 tv=0.1577 conf=6.8274 grad_norm=2.3619 tensors_with_grad=69/72
+[train] step 21: T=1329 positions=16 loss=0.6786 ce=1.0957 tv=0.2225 conf=4.7945 grad_norm=3.1629 tensors_with_grad=69/72
+[train] step 22: T=1065 positions=16 loss=0.0083 ce=0.0982 tv=0.0783 conf=7.9303 grad_norm=3.3690 tensors_with_grad=69/72
+[train] step 23: T=1712 positions=16 loss=1.5642 ce=2.8572 tv=0.3692 conf=8.0927 grad_norm=5.1876 tensors_with_grad=69/72
+[train] step 24: T=1085 positions=16 loss=0.2887 ce=0.4933 tv=0.1692 conf=8.5718 grad_norm=9.0267 tensors_with_grad=69/72
+[train] step 25: T=1091 positions=16 loss=0.4542 ce=1.0941 tv=0.3012 conf=9.1976 grad_norm=6.6125 tensors_with_grad=69/72
+[train] step 26: T=1039 positions=16 loss=0.5792 ce=0.7540 tv=0.2169 conf=5.4786 grad_norm=4.7811 tensors_with_grad=69/72
+[train] step 27: T=1043 positions=16 loss=0.2194 ce=0.3393 tv=0.0648 conf=1.8889 grad_norm=0.9173 tensors_with_grad=69/72
+[train] step 28: T=1040 positions=16 loss=0.3278 ce=0.4178 tv=0.1355 conf=2.8199 grad_norm=1.9457 tensors_with_grad=69/72
+[train] step 29: T=1798 positions=16 loss=1.6249 ce=2.9010 tv=0.3396 conf=5.5584 grad_norm=9.2531 tensors_with_grad=69/72
+[train] step 30: T=1064 positions=16 loss=0.2387 ce=0.3273 tv=0.0724 conf=0.3901 grad_norm=0.9967 tensors_with_grad=69/72
+[train] step 31: T=1082 positions=16 loss=0.6598 ce=1.1311 tv=0.2126 conf=1.4574 grad_norm=3.7171 tensors_with_grad=69/72
+[train] step 32: T=1225 positions=16 loss=0.3551 ce=0.7752 tv=0.1970 conf=5.2534 grad_norm=5.5806 tensors_with_grad=69/72
+[train] step 33: T=1071 positions=16 loss=0.0676 ce=0.1388 tv=0.0761 conf=5.7760 grad_norm=0.9991 tensors_with_grad=69/72
+[train] step 34: T=1179 positions=16 loss=0.1618 ce=0.3277 tv=0.1130 conf=1.8095 grad_norm=4.3684 tensors_with_grad=69/72
+[train] step 35: T=1727 positions=16 loss=1.5300 ce=2.2401 tv=0.3493 conf=4.4071 grad_norm=6.3461 tensors_with_grad=69/72
+[train] step 36: T=1210 positions=16 loss=1.6980 ce=2.6809 tv=0.4935 conf=7.0783 grad_norm=7.1979 tensors_with_grad=69/72
+[train] step 37: T=1098 positions=16 loss=0.2434 ce=0.5412 tv=0.1374 conf=5.9516 grad_norm=2.1021 tensors_with_grad=69/72
+[train] step 38: T=1053 positions=16 loss=0.3424 ce=0.5789 tv=0.1887 conf=7.8425 grad_norm=14.7430 tensors_with_grad=69/72
+[train] step 39: T=1049 positions=16 loss=0.8136 ce=1.2557 tv=0.3000 conf=5.2615 grad_norm=7.6987 tensors_with_grad=69/72
+[train] step 40: T=1038 positions=16 loss=0.6894 ce=1.1695 tv=0.2165 conf=4.8467 grad_norm=4.0667 tensors_with_grad=69/72
+[train] step 41: T=1090 positions=16 loss=0.7983 ce=1.2312 tv=0.2449 conf=5.7064 grad_norm=3.6934 tensors_with_grad=69/72
+[train] step 42: T=1669 positions=16 loss=1.3830 ce=2.5148 tv=0.3619 conf=8.7772 grad_norm=3.6064 tensors_with_grad=69/72
+[train] step 43: T=1118 positions=16 loss=0.2004 ce=0.3962 tv=0.0929 conf=2.4437 grad_norm=5.5160 tensors_with_grad=69/72
+[train] step 44: T=1048 positions=16 loss=0.1575 ce=0.2722 tv=0.0697 conf=2.6921 grad_norm=0.9084 tensors_with_grad=69/72
+[train] step 45: T=1600 positions=16 loss=1.7049 ce=2.7502 tv=0.4076 conf=6.2738 grad_norm=5.5223 tensors_with_grad=69/72
+[train] step 46: T=1397 positions=16 loss=1.2173 ce=1.9816 tv=0.3483 conf=7.9394 grad_norm=7.9379 tensors_with_grad=69/72
+[train] step 47: T=1394 positions=16 loss=1.1970 ce=2.0796 tv=0.2917 conf=7.0463 grad_norm=6.7624 tensors_with_grad=69/72
+[train] step 48: T=1128 positions=16 loss=0.8013 ce=1.9178 tv=0.1788 conf=5.2549 grad_norm=8.2170 tensors_with_grad=69/72
+[train] step 49: T=1183 positions=16 loss=1.1369 ce=1.8574 tv=0.3202 conf=2.9076 grad_norm=5.1601 tensors_with_grad=69/72
+[train] step 50: T=1090 positions=16 loss=0.2950 ce=0.5685 tv=0.1448 conf=9.3648 grad_norm=2.7631 tensors_with_grad=69/72
+[train] step 51: T=1468 positions=16 loss=0.6389 ce=1.1999 tv=0.2140 conf=4.0100 grad_norm=3.6983 tensors_with_grad=69/72
+[train] step 52: T=1094 positions=16 loss=0.5501 ce=0.9406 tv=0.1960 conf=3.7815 grad_norm=5.5965 tensors_with_grad=69/72
+[train] step 53: T=1042 positions=16 loss=1.0900 ce=2.1085 tv=0.3077 conf=5.5088 grad_norm=6.9505 tensors_with_grad=69/72
+[train] step 54: T=1142 positions=16 loss=0.2576 ce=0.2965 tv=0.1164 conf=3.1308 grad_norm=5.3543 tensors_with_grad=69/72
+[train] step 55: T=1038 positions=16 loss=1.7544 ce=2.7788 tv=0.4735 conf=4.1487 grad_norm=5.7013 tensors_with_grad=69/72
+[train] step 56: T=1223 positions=16 loss=1.6492 ce=2.5463 tv=0.4840 conf=8.6348 grad_norm=8.6062 tensors_with_grad=69/72
+[train] step 57: T=1467 positions=16 loss=1.7197 ce=3.0567 tv=0.3897 conf=3.3779 grad_norm=7.8987 tensors_with_grad=69/72
+[train] step 58: T=1512 positions=16 loss=1.2217 ce=2.3095 tv=0.3067 conf=6.9331 grad_norm=8.2899 tensors_with_grad=69/72
+[train] step 59: T=1177 positions=16 loss=1.9338 ce=2.9191 tv=0.5259 conf=5.3820 grad_norm=6.2766 tensors_with_grad=69/72
+[train] step 60: T=1091 positions=16 loss=0.4841 ce=0.7885 tv=0.2192 conf=4.8229 grad_norm=3.7336 tensors_with_grad=69/72
+[diag] draft-argmax == TARGET-argmax : 75.9%  | == ground-truth token: 75.7%
+[diag] mean top-1 prob  target 0.871  draft 0.799   (TV near 1 with a PEAKED draft => misalignment; with a FLAT draft => genuine)
+[train] saved 72 trained tensors -> /cap/agentic-p25-b0.1/c6/trained/mtp_trained.safetensors
+[train] saved AdamW state -> /cap/agentic-p25-b0.1/c6/trained/opt_state.pt (needed for --resume to be equivalent to one continuous run)
+[train] metrics -> /cap/agentic-p25-b0.1/c6/train_metrics.json  (loss 0.0991 -> 0.4841, tail mean 1.4605)
+[train] TRAIN OK
