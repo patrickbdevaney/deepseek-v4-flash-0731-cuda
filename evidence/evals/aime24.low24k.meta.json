@@ -10,7 +10,7 @@
   "temperature": 1.0,
   "top_p": 0.95,
   "max_tokens": 24000,
-  "code_commit": "7fbb03f87ceca5f6305bfe5ddda7b077c29cb3ae",
+  "code_commit": "35b99a5aa80c27d7c22e526967a8a1c67696c2aa",
   "code_dirty": true,
   "server_sha256": "5a0f9e482e712d80",
   "server_mtime": "2026-08-13T23:19:14Z",

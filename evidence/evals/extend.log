@@ -155,3 +155,19 @@ wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/mmlu_pro.low24k.
   [PASS] mmlu_pro       snapshot matches the published one       b189ec765aa7 vs b189ec765aa7
 
 VERIFY: 0 failed -> PASS
+[land] mmlu_pro@low24k: 74.7% [67.2, 81.0] n=150/150 trunc=4 err=0 — verified, committed, pushed
+[extend 2026-08-26T18:04:33-04:00] aime24: 15.0% truncated over 60 records — continuing truncated traces to 24000
+[aime24@low -> low24k] 60 base records: 51 terminated (kept as-is), 9 truncated (to continue), 60 already written
+
+wrote /home/patrickd/deepseek-v4-flash-0731-cuda/evidence/evals/aime24.low24k.jsonl  (51 carried + 9 continued + 0 not continuable, 0 with prefix drift, max |drift| 0)
+[extend 2026-08-26T18:04:33-04:00] aime24: extension finished, landing as aime24@low24k
+  [PASS] aime24         no duplicate records                     60 records, 60 unique
+  [PASS] aime24         every id exists in the benchmark         0 unknown
+  [PASS] aime24         gold matches the pinned dataset          0 mismatched
+  [PASS] aime24         prompt matches the one that was sent     60/60 records carry a hash; 0 mismatched
+  [PASS] aime24         no silent empty generations              0 empty
+  [PASS] aime24         stored correct flags reproduce           0 disagree
+  [PASS] aime24/low24k  published accuracy is reproducible       recomputed 91.7 % vs published 91.7 % over 60 records
+  [PASS] aime24         snapshot matches the published one       8d88b2876a82 vs 8d88b2876a82
+
+VERIFY: 0 failed -> PASS
