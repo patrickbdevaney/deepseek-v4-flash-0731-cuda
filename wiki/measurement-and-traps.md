@@ -1563,3 +1563,21 @@ running, log redirection intact); `opt_state.pt` is present for chunks 0-2, so c
 is equivalent to one continuous run; the s3recap captures the autopilot arms symlink are intact;
 the trainer image is present and trained three chunks today; and peak disk for the remainder is
 ~92 GB against 232 GB free.
+
+## 45. A research binary's prefill scratch is not bounded by the server's context limit
+
+The S6 probe (2026-08-26) was first launched with a 5650-token prompt, on the reasoning that the
+eval battery had just run 24k-token contexts, so 5.6k was obviously safe. memguard killed it 90
+seconds in: `MemAvailable 949 MB falling 3625 MB/s`.
+
+`build/decode` is not `build/dsv4-server`. It holds the weights in MANAGED device-preferred memory
+and reports `116.6/122.8 GiB` with the layer structs built and **before any prefill scratch is
+allocated** — roughly 6 GiB of headroom for a prefill batch that scales with `PS`. The server
+reaches 24k by a different allocation strategy entirely; carrying its context limit over to the
+research binary is comparing two things that share a checkpoint and nothing else.
+
+`PS = 1022` is the shape B9 profiled and is the proven-safe size for `decode`. Size probe prompts
+against **the binary you are launching**, not against the largest context the box has ever served.
+
+The guard did its job — the run died clean with a named cause and cost 90 seconds. Worth noting
+because the alternative reading, "5.6k is small, the box does 24k", is the one that sounds right.

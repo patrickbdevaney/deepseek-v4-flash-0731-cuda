@@ -903,3 +903,9 @@
 [memguard] victim gone, exiting. low-water 8518 MB, peak fall rate 30285 MB/s 2026-08-26T06:49:52-04:00
 [memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=dsv4-server started 2026-08-26T06:50:25-04:00
 [memguard] watching pid 893419 (dsv4-server)
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-26T20:31:52-04:00
+[memguard] watching pid 1587768 (decode)
+[memguard] !!! MemAvailable 949 MB falling 3625 MB/s (< 2000 MB and faster than 400 MB/s): ~2 tenths of a second from zero — KILLING pid 1587768 2026-08-26T20:33:22-04:00
+[memguard] killed. MemAvailable now 305 MB
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-26T20:34:23-04:00
+[memguard] watching pid 1590746 (decode)
