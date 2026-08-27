@@ -102,7 +102,22 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
 
     // --- compressed idxs (offset = s, into the compressed region) ---
     int itopk; int* compress_topk;
-    if (has_indexer) {
+    // ---- INDEXER BYPASS (DSV4_IDX_BYPASS=1). NOT BIT-EXACT, and mathematically exact. ----
+    // `itopk = min(index_topk, T)`. index_topk is 512 and T = ceil(s/ratio), so for ratio 4 the
+    // selection saturates only above ctx 2048 (ratio 128: above 65536). Below that the top-k selects
+    // EVERY compressed row: k_topk_offset removes each picked row from contention, so over T slots
+    // every one of the T rows is picked exactly once, and the causal mask is applied at the OUTPUT.
+    // The emitted SET is therefore identical to the strided construction below -- provably, not
+    // approximately. What differs is ORDER: the indexer emits descending-score, strided emits
+    // ascending-position, and sparse attention's online softmax accumulates in fp32, so the sum is
+    // reassociated and the last bits move. Same rows, same mathematics, different rounding.
+    //
+    // So at these lengths the indexer computes an s x T score matrix and a full sort to produce an
+    // ordering that cannot change which rows are attended to. Bypassing it is worth the whole
+    // `cattn:indexer` mark. It is OFF by default because this project's gate is bit-exactness, not
+    // mathematical equivalence, and reassociating a reduction is exactly what that gate forbids.
+    const bool idx_identity = has_indexer && (w.index_topk >= T) && getenv("DSV4_IDX_BYPASS")!=nullptr;
+    if (has_indexer && !idx_identity) {
         itopk = w.index_topk < T ? w.index_topk : T;
         float* idx_score; CU(zalloc((void**)&idx_score,(size_t)s*T*4)); CU(zalloc((void**)&compress_topk,(size_t)s*itopk*4));
         indexer_forward(idx_score, compress_topk, x, qr, w.idx_wq_b, w.idx_wq_b_s, w.idx_weights_proj,
@@ -110,6 +125,8 @@ void compressed_attn_forward(float* out, const float* x, const CompressedAttnWei
                         s, DIM, Q_LORA, w.index_n_heads, w.index_head_dim, ROPE_DIM, ratio, w.index_topk, s, eps, stream);
         cudaFree(idx_score);
     } else {
+        // Reached by ratio-128 (no indexer by construction) and, under DSV4_IDX_BYPASS, by ratio-4
+        // whenever the top-k is the identity. Same code, same output shape, in both cases.
         // strided (get_compress_topk_idxs, prefill): compress[i,t] = (t >= (i+1)/ratio) ? -1 : t + s
         itopk = T; std::vector<int> hc((size_t)s * T);
         for (int i = 0; i < s; ++i) { int thr = (i + 1) / ratio;

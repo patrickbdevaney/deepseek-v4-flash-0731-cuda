@@ -1159,7 +1159,7 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
     // which is the original kernel. OG_TC_MT=1 forces the original for the A/B.
     {   const char* mte = getenv("OG_TC_MT");
         int ntile = (bs+15)/16;
-        int MT = mte ? atoi(mte) : (ntile>=8 ? 8 : ntile>=4 ? 4 : ntile>=2 ? 2 : 1);
+        int MT = mte ? atoi(mte) : (ntile>=8 ? 8 : ntile>=4 ? 4 : ntile>=2 ? 2 : 1);   // may be lowered to 4 by OG_NB below
         if(MT!=1&&MT!=2&&MT!=4&&MT!=8) MT=1;
         int ogwpb = 1; if(const char* w=getenv("OG_WPB")) ogwpb=atoi(w);   // NULL RESULT, see negative-results
         if(ogwpb<1) ogwpb=1; if(ogwpb>8) ogwpb=8;
@@ -1167,8 +1167,14 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         // OG_NB: n-blocks per warp. Attacks the activation re-read, which is 97% of this region's
         // traffic. Combos are ENUMERATED after the MoE lesson (trap 46) -- a product rule admitted a
         // wrong kernel there -- and each is verified by an end-to-end token-stream diff.
-        int ognb = 1; if(const char* e=getenv("OG_NB")) ognb=atoi(e);
+        // DEFAULT MT=4, NB=4 (2026-08-26), chosen by measurement and not by the traffic model that
+        // motivated the knob -- the model predicted 377 ms here and 301 at MT=2/NB=8; measured 1333
+        // and 1869, the latter being the WORST config tried. See negative-results: the re-reads this
+        // was built to remove are largely L2-served, so removing them does not buy their DRAM cost,
+        // and what actually binds is the MT*NB*4 accumulator budget. 4x4 balances it best.
+        int ognb = 4; if(const char* e=getenv("OG_NB")) ognb=atoi(e);
         if(ognb!=1&&ognb!=2&&ognb!=4&&ognb!=8) ognb=1;
+        if(ognb==4 && MT>4) MT=4;
         if(ognb>1 && ogwpb==1){
             dim3 gridn((nb8+ognb-1)/ognb, G, (ntile+MT-1)/MT);
             #define OGNB_LAUNCH(M,B) tc_ogroup_fp8_mtnb_kernel<M,B><<<gridn,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd)

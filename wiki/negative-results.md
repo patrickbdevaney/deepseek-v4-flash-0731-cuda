@@ -645,3 +645,33 @@ per block moves no bytes and therefore moved no time.
 another with the same launch shape. Launch shape is not the mechanism; *what is scarce* is. The MoE
 was short of warp slots, `ogroup` is short of bandwidth, and the two want opposite work. The knob is
 left in place, defaulted to 1, so the null does not have to be re-derived.
+
+## The prefill traffic model over-predicts, twice, and inverts once (2026-08-26)
+
+Two kernels were optimised this session by the same reasoning: count the bytes a warp re-reads,
+divide them by a reuse factor, predict the time. It worked on the MoE and it did not work on
+`ogroup`, and the difference is worth keeping.
+
+| | predicted | measured |
+|---|---:|---:|
+| MoE `RG=2` (weight reuse) | ~2x | **1.12x** |
+| `ogroup` MT=8 NB=1 (the model's own baseline) | 1231 ms | 1543 ms — model accounts for it |
+| `ogroup` MT=8 NB=2 | 635 ms | **1575 ms** (slower than baseline) |
+| `ogroup` MT=4 NB=4 | 377 ms | **1333 ms** (the only win, -13.7 %) |
+| `ogroup` MT=2 NB=8 | 301 ms | **1869 ms** — the model's BEST config is the WORST measured |
+
+**Why the model fails.** It counts re-reads as DRAM traffic. Thor's L2 is 33.6 MB and `ogroup`'s
+per-layer activation block is 55.4 MB, but the working set a warp actually cycles — one `(gg, z)`
+slice — is far smaller, so the "7.09 GB/layer" of re-reads is overwhelmingly **L2-served**. Removing
+an L2 hit does not refund a DRAM cost, so the predicted saving was never on the table. What does bind
+is the `MT*NB*4` accumulator budget: all three variants spend 64 registers, and only the 4x4 split
+balances weight-reuse against activation-reuse well enough to come out ahead.
+
+**The rule this leaves.** A byte-counting model is a hypothesis about *where the bytes come from*,
+not just how many there are. Before trusting one, ask whether the working set fits in L2 — if it
+does, the model is counting cache hits and will over-predict by whatever the hit rate is. It earns
+trust only where it reproduces a measured baseline **and** the working set is past L2, which was true
+for the MoE (weights cycled past L2 by construction) and false here.
+
+The same model correctly predicted `ogroup`'s *baseline* (1231 vs 1543). Reproducing a baseline is
+necessary and nowhere near sufficient: it fixes the constant, not the slope.
