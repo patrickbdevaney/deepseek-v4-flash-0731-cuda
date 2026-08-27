@@ -1,0 +1,4 @@
+[memguard] floor=1500MB x3 slope=<-400MB/s below 2000MB poll=0.2s pat=decode started 2026-08-26T23:12:32-04:00
+[memguard] watching pid 1739350 (decode)
+[memguard] !!! MemAvailable 1079 MB falling 675 MB/s (< 2000 MB and faster than 400 MB/s): ~15 tenths of a second from zero — KILLING pid 1739350 2026-08-26T23:13:43-04:00
+[memguard] killed. MemAvailable now 56614 MB

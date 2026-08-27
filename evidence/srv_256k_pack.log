@@ -1,0 +1,16 @@
+  live checkpoint pinned by config/live_ckpt -> /home/patrickd/models/ckpt-head-s3recap-p25-b0.1
+  preflight gate_tokenizer ok
+  preflight gate_encoding ok
+  preflight gate_api ok
+  preflight gate_stream ok
+  MOE_MMA=1 (default): tensor-core MoE. prefill +22.2%, decode -14.4%; break-even P/R 1.75.
+[server] tokenizer /home/patrickd/models/ckpt-head-s3recap-p25-b0.1/tokenizer.json
+[server] tokenizer ok (vocab 128000, 1283 added)
+[engine] loading /home/patrickd/models/ckpt-head-s3recap-p25-b0.1 (seqmax=262144, blk=5, adaptK=1.50)...
+[engine] loaded 100.40 GiB, 45821 tensors (MANAGED device-preferred)
+[engine] building 43 layer structs (persistent)...
+[engine] DSpark head: NSTAGE=3 experts=160
+[engine] ready. mem 121.8/122.8 GiB  (seqmax 262144, batch 64, arena 640 MiB)
+
+[server] listening on http://0.0.0.0:8080   (web UI at /)
+[server] model deepseek-v4-flash-0731-reap, context 262144, block 5, adaptK 1.50

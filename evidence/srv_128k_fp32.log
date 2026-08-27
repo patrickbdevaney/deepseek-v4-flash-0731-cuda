@@ -1,0 +1,9 @@
+  live checkpoint pinned by config/live_ckpt -> /home/patrickd/models/ckpt-head-s3recap-p25-b0.1
+  preflight gate_tokenizer ok
+  preflight gate_encoding ok
+  preflight gate_api ok
+  preflight gate_stream ok
+  MOE_MMA=1 (default): tensor-core MoE. prefill +22.2%, decode -14.4%; break-even P/R 1.75.
+[server] tokenizer /home/patrickd/models/ckpt-head-s3recap-p25-b0.1/tokenizer.json
+[server] tokenizer ok (vocab 128000, 1283 added)
+[engine] loading /home/patrickd/models/ckpt-head-s3recap-p25-b0.1 (seqmax=131072, blk=5, adaptK=1.50)...

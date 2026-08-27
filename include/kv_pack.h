@@ -105,6 +105,7 @@ __host__ __device__ __forceinline__ float kv_unpack(const uint8_t* row, int j) {
 extern int g_kv_pack;
 extern int g_kv_rowf;
 void kv_pack_init();                        // reads DSV4_KV_PACK; idempotent
+void kv_pack_init_seqmax(int seqmax);       // DSV4_KV_PACK wins; unset => auto above 32768
 
 static inline float* kv_row(float* base, long long i) { return base + (size_t)i * (size_t)g_kv_rowf; }
 static inline const float* kv_row(const float* base, long long i) { return base + (size_t)i * (size_t)g_kv_rowf; }

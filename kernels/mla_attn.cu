@@ -1247,11 +1247,30 @@ void act_quant_fp4sim(float* x, int rows, int active_dim, int block, int row_str
 // entry points the cache call sites use.
 int g_kv_pack = 0;
 int g_kv_rowf = dsv4::HEAD_DIM;
-void kv_pack_init() {
+// AUTO-ENABLE ABOVE A CONTEXT THRESHOLD (2026-08-26). Packing is BIT-EXACT -- verified by identical
+// token streams over 400 generated tokens -- because the FP32 path already runs act_quant_fp8sim on
+// these rows and then stores the dequantised float in 4 bytes. Packing stores the e4m3 code instead.
+// Same values, 720 B/row instead of 2048.
+//
+// It is not free in TIME: the consumer redoes the conversion on every read, measured at -12 % prefill
+// (107.9 -> 94.8 tok/s). So it should not be unconditional -- an 8k session would pay for headroom it
+// never uses. It should also not be off by default, because without it long context does not fit:
+//
+//     seqmax    fp32                        packed
+//      8,192    ready, 119.6/122.8 GiB      --
+//     32,768    ready, 119.9/122.8 GiB      --
+//    131,072    NEVER REACHES READY         ready, 117.0/122.8 GiB
+//
+// fp32 is proven to 32,768 and proven to fail at 131,072, so the threshold sits at the top of what
+// has actually been measured to work. DSV4_KV_PACK=0 forces it off, =1 forces it on; unset means
+// "decide from seqmax", which is the only setting that is right at both ends of that table.
+void kv_pack_init_seqmax(int seqmax) {
     const char* e = getenv("DSV4_KV_PACK");
-    g_kv_pack = (e && atoi(e)) ? 1 : 0;
+    if (e) g_kv_pack = atoi(e) ? 1 : 0;
+    else   g_kv_pack = (seqmax > 32768) ? 1 : 0;
     g_kv_rowf = g_kv_pack ? dsv4kv::KVP_ROWF : dsv4::HEAD_DIM;
 }
+void kv_pack_init() { kv_pack_init_seqmax(0); }
 
 // k_kv_pack IS act_quant_fp8sim, with the store changed and nothing else.
 //

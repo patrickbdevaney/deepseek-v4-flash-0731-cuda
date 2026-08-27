@@ -172,3 +172,47 @@ tokens at the `high` reasoning effort these evals use. Truncated items are score
 context ceiling is depressing the published capability of the checkpoint by an unknown amount. **The
 cheapest way to raise those scores is not a better prompt or a bigger sample — it is deleting a
 heuristic in `src/engine.cu:388`.**
+
+---
+
+## Resolved: 128k ships, and the page above is stale (2026-08-26)
+
+Everything this page argued for has been built, and by the time it was re-read only one of its three
+offenders was still open.
+
+| offender | state |
+|---|---|
+| arena `(512 + 2 x seqmax) MiB` | **fixed** — `(512 + MAXB x 2) MiB`, sized by batch; 640 MiB in practice |
+| `xin` 656 KiB/token | **fixed** — ring of `2 x ratio` rows, fixed ~124 MiB |
+| prefill activation buffers | **fixed** — `h0`/`hbuf` are batch-width |
+| top-k 49,140-token smem ceiling | **fixed** — shipped radix path requests zero dynamic smem |
+
+What remained was the FP32 KV rows, and the fix for that already existed too (`DSV4_KV_PACK`,
+720 B/row vs 2048) and was simply not being used. Measured on the server, weights 100.4 GiB of 122.8:
+
+| seqmax | fp32 KV | packed KV |
+|---:|---|---|
+| 8,192 | ready, 119.6 / 122.8 | — |
+| 32,768 | ready, 119.9 / 122.8 | — |
+| **131,072** | **never reaches ready** | **ready, 117.0 / 122.8** |
+| 262,144 | — | ready, 121.8 / 122.8 — **1.0 GiB headroom, below memguard's 1500 MB floor** |
+
+**Packing is bit-exact.** Token streams identical over 400 generated tokens, and the reason is
+structural rather than lucky: the FP32 path already runs `act_quant_fp8sim` on these rows and stores
+the *dequantised* float in four bytes. Packing stores the e4m3 code instead. Same values.
+
+It costs **~12 % of prefill** (107.9 -> 94.8 tok/s) because the consumer redoes the conversion on
+read, so it is now **auto-enabled above seqmax 32768** (`kv_pack_init_seqmax`) rather than being on
+unconditionally: 32,768 is the largest context FP32 is measured to survive, so below the threshold
+nothing is paid. `DSV4_KV_PACK=0/1` still forces either way. The default `SEQMAX` moves 8192 ->
+32768, which is 4x the context for free.
+
+**256k is NOT supported.** It allocates and it cannot serve. Getting there needs `win_kv` (7.6 GiB
+at 256k packed) rebased off absolute positions, and this page's speculation that it might be a cheap
+128-row ring is **wrong**: `kv_row(win_kv, pos)` indexes by absolute position and the full history is
+copied into `kv_all` every step, so it needs reader-side index remapping exactly like the `xin` fix.
+
+**Trap for the next person.** The first 128k probe was run against `build/decode`, which prefills the
+whole prompt as ONE batch and therefore must size scratch for M = 131,322 -- it cannot reach long
+context by construction, no matter what is allocated. `dsv4-server` chunks prefill at `EXT_CHUNK`.
+That is trap 45 (`size the probe against the binary you are launching`) recurring within one day.

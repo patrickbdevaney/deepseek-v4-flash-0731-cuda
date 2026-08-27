@@ -26,3 +26,11 @@
 [oomsentry 2026-08-26T20:33:28-04:00] killed. MemAvailable now 299 MB
 [oomsentry 2026-08-26T20:33:28-04:00] !!! MemAvailable 289 MB < floor 1200 MB x3 — KILLING decode pid 1587768
 [oomsentry 2026-08-26T20:33:33-04:00] killed. MemAvailable now 103797 MB
+[oomsentry 2026-08-26T23:13:44-04:00] !!! MemAvailable 983 MB < floor 1200 MB x3 — KILLING decode pid 1739350
+[oomsentry 2026-08-26T23:13:49-04:00] killed. MemAvailable now 89342 MB
+[oomsentry 2026-08-26T23:20:14-04:00] !!! MemAvailable 102 MB falling 2365 MB/s — KILLING decode pid 1747632
+[oomsentry 2026-08-26T23:20:19-04:00] killed. MemAvailable now 47337 MB
+[oomsentry 2026-08-26T23:23:20-04:00] !!! MemAvailable 1622 MB falling 755 MB/s — KILLING dsv4-server pid 1750227
+[oomsentry 2026-08-26T23:23:25-04:00] killed. MemAvailable now 65154 MB
+[oomsentry 2026-08-26T23:26:05-04:00] !!! MemAvailable 371 MB < floor 1200 MB x3 — KILLING dsv4-server pid 1752514
+[oomsentry 2026-08-26T23:26:10-04:00] killed. MemAvailable now 54842 MB

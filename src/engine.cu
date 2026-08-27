@@ -332,7 +332,7 @@ void Engine::Impl::load() {
     // measurement goes. Kept behind DSV4_KV_COMBINED=1 so the experiment is repeatable.
     // DECODE_LADDER 1b.2. Must run BEFORE any KV cache is allocated: it is what sets the row
     // stride every allocation, memcpy and kernel below uses. See include/kv_pack.h.
-    kv_pack_init();
+    kv_pack_init_seqmax(seqmax);   // packing is bit-exact; auto-on above 32768 so long context fits
     g_kv_winmax = (getenv("DSV4_KV_COMBINED") && atoi(getenv("DSV4_KV_COMBINED")) == 1) ? seqmax : 0;
     const size_t comp_rows = (size_t)(seqmax / 4 + 2);   // widest compressed cache (ratio 4)
     for (int Lyr = 0; Lyr < N_LAYERS; ++Lyr) {

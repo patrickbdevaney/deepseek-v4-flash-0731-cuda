@@ -1,0 +1,3 @@
+[decode] loading /home/patrickd/models/ckpt-head-s3recap-p25-b0.1 ... s=6 NDEC=8 seqmax=131323
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] KV layout: fp32, 2048 B/row, 10.771 GiB for 131323 rows x 43 layers

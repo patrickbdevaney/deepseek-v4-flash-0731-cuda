@@ -29,7 +29,17 @@ fi
 CKPT="${CKPT:-$CKPT_DEFAULT}"
 PORT="${PORT:-8080}"
 HOST="${HOST:-0.0.0.0}"
-SEQMAX="${SEQMAX:-8192}"
+# CONTEXT DEFAULT (2026-08-26). Measured on this box, weights 100.4 GiB of 122.8:
+#     seqmax   8,192  fp32 KV   ready 119.6/122.8
+#     seqmax  32,768  fp32 KV   ready 119.9/122.8      <- default: 4x the old one, and free
+#     seqmax 131,072  fp32 KV   NEVER REACHES READY
+#     seqmax 131,072  packed    ready 117.0/122.8      <- SEQMAX=131072 just works; packing auto-ons
+#     seqmax 262,144  packed    ready 121.8/122.8      <- 1.0 GiB headroom, BELOW memguard's 1500 MB
+#                                                         floor. It allocates; it cannot serve. Do
+#                                                         not use without freeing win_kv first.
+# Packing is bit-exact (identical tokens over 400 generated) and costs ~12% prefill, so kv_pack_init
+# turns it on only above 32768 -- see kernels/mla_attn.cu. 32768 therefore pays nothing.
+SEQMAX="${SEQMAX:-32768}"
 EXT_CHUNK="${EXT_CHUNK:-64}"
 
 [ -x build/dsv4-server ] || { echo "build/dsv4-server missing — run scripts/build_server.sh"; exit 1; }
