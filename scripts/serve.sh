@@ -42,5 +42,21 @@ for g in gate_tokenizer gate_encoding gate_api gate_stream; do
   echo "  preflight $g ok"
 done
 
+# MOE_MMA -- THE PREFILL/DECODE LAYOUT CHOICE, MADE EXPLICIT (2026-08-26).
+# src/decode.cu sets g_moe_gemv = (getenv("MOE_MMA")==nullptr), so the tensor-core MoE is opt-in and
+# this script had never opted in: production prefill ran the M=1 GEMV on a full-batch prefill, which
+# is the exact mismatch F85 identified. It cannot just be turned on -- tc_ensure_repacked mutates the
+# weights IN PLACE and the decode GEMV needs the original layout, so one process gets one layout.
+#
+# Measured on decode at PS=845, hpb=4/smem=1 both sides, token streams IDENTICAL (bit-exact):
+#     prefill  61.7 -> 75.4 tok/s  (+22.2%)      spec decode  32.54 -> 27.86 tok/s  (-14.4%)
+# Per request: prefill saves P * 2.945 ms/1000, decode costs R * 5.164 ms/1000.
+#     BREAK-EVEN AT P/R = 1.75.
+# Agentic coding runs P/R of 5-50 and wins clearly; chat sits at 1-3 and is marginal. Default OFF so
+# the shipped decode headline is unchanged -- set MOE_MMA=1 for prompt-heavy serving.
+if [ -n "${MOE_MMA:-}" ]; then
+    echo "  MOE_MMA=1: tensor-core MoE. prefill +22%, decode -14%; worth it above P/R 1.75."
+    export MOE_MMA
+fi
 exec ./build/dsv4-server --ckpt "$CKPT" --host "$HOST" --port "$PORT" --seqmax "$SEQMAX" \
      --ext-chunk "$EXT_CHUNK" "$@"

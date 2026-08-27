@@ -178,3 +178,66 @@ default and has not been re-run; what is measured here is the kernel, at the pre
 `gate_sparse_hpb`. `cattn:sparse` is one mark of a prefill, so the end-to-end gain will be smaller
 than 1.28x and is currently **unmeasured** — stated here rather than estimated, because §4 of this
 page is about exactly that kind of correction.
+
+## 8. The end-to-end numbers §7 said were unmeasured, and the MoE fix that was silently off (2026-08-26)
+
+§7 landed ladder 1.7's bit-exact `hpb=4/smem=1` and stated plainly that the end-to-end effect was
+**unmeasured**. It is now measured, on `decode` at the shapes named, `MOE_MMA` held constant:
+
+| PS | `hpb=4/smem=1` | `hpb=8/smem=0` (pre-1.7) | |
+|---:|---:|---:|---|
+| 845 | **61.7 tok/s** | 59.4 | **+3.9 %** |
+| 1308 | **60.9** | 58.1 | **+4.8 %** |
+| 74 | 62.6 | 63.6 | −1.6 % |
+
+Emitted token streams are **identical across all three prompts** and the first-token GATE passes, so
+1.7 is bit-exact end to end and not merely at the kernel. It is worth ~4 % at real prefill shapes and
+slightly negative at trivial ones, which is the launch heuristic choosing wrong at 74 positions.
+
+### The larger finding: B9's MoE fix is not on
+
+`src/decode.cu:248` reads `g_moe_gemv = (getenv("MOE_MMA")==nullptr)`. **The tensor-core MoE path is
+opt-in and nothing in the serving path opts in** — `scripts/serve.sh` never sets it. So production
+prefill runs the M=1 GEMV on a full-batch prefill: the precise mismatch F85 identified and fixed, on
+by default for nobody. dprof at PS=845, same binary, same prompt, `hpb=4/smem=1` both sides:
+
+| | GEMV (default) | `MOE_MMA=1` | |
+|---|---:|---:|---|
+| **prefill** | 13705.8 ms — **61.7 tok/s** | 11200.6 ms — **75.4 tok/s** | **+22.2 %** |
+| `MoE` total | 7526.1 ms (61.3 %) | 5044.1 ms (51.5 %) | −33 % |
+| `moe:w1w3` | 4693.1 | 3237.8 | |
+| `moe:w2` | 2513.7 | 1354.0 | |
+| `ATTENTION` | 3988.6 | 3981.0 | unchanged — the control |
+
+`ATTENTION` moving 0.2 % across the pair is what says the delta is the MoE and not the weather.
+**Token streams are identical and the GATE passes: this is +22.2 % of prefill, exactly lossless.**
+
+### Why it is off, and the trade, priced
+
+It cannot simply be switched on. `tc_ensure_repacked` mutates weights **in place** and the decode
+GEMV needs the original layout, so one process gets one layout. Measured cost on the same runs:
+
+| | GEMV | `MOE_MMA=1` |
+|---|---:|---:|
+| prefill | 61.7 tok/s | **75.4** (+22.2 %) |
+| spec decode | **32.54 tok/s** | 27.86 (−14.4 %) |
+| base AR | **13.67** | 12.15 (−11.1 %) |
+| one-time repack | — | ~2.3 s (visible as the 5-position prefill at 2500 ms) |
+
+Per request, ignoring the one-time repack: prefill saves `P x 2.945 ms/1000`, decode costs
+`R x 5.164 ms/1000`. **Break-even is `P/R = 1.75`.**
+
+So the answer is workload-dependent and, for this project, not close. Agentic coding runs prompts of
+5k–30k against responses of 200–2000 — `P/R` of 5–50, far above break-even. Chat sits near 1–3 and is
+genuinely marginal. `MOE_MMA=1` is the right default for the workload
+[`NORTH_STAR.md`](NORTH_STAR.md) names, and the wrong one for a decode benchmark — which is exactly
+why it must be a deliberate switch and not a silent one. Left **default-off** so the shipped decode
+headline is unchanged; `scripts/serve.sh` now passes it through and documents the break-even.
+
+### What is still on the table
+
+Even at 75.4 tok/s the MoE is **5044 ms against a ~415 ms floor**, computed from `config.json`:
+160 experts x 3 matrices x 4096 x 2048 at fp4 = **86.6 GB read once** (which independently reproduces
+§4's `IDEAL 81.2 GB`), at the measured 208.7 GB/s roofline. Arithmetic is not the bound — 15.5 TFLOP
+is 168 ms at the fp8 TC peak. **12x remains in the MoE alone, and it is a data-movement problem, so
+it is exactly-lossless territory.** `ATTENTION` is now 40.7 % and has its own gap.
