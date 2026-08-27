@@ -571,3 +571,44 @@ ahead of the AR-kernel work, to buy under two percent.
 7. **"Bit-exact" is a two-place relation, and the second argument is a design decision** (ladder
    1.5, §4d). Claiming it against the incumbent inherits the incumbent's reassociations and cost
    1.5 a factor of 3.4 until the claim was re-aimed at the reference.
+
+## S6 / suffix drafting, closed a second time — on the workload it asked for (2026-08-26)
+
+F80 retired S6 at an oracle ceiling of **+0.0 %** and scoped its own refutation: it was measured on a
+period-8 degenerate repeating decode, and *"reopening needs a long-repeated-context prompt on which
+`mlen` routinely reaches the block size."* `PHASE2_PLAN.md` §6.1 named that as the reopening
+condition and called it the highest-value-per-effort item in the plan.
+
+**The condition has now been met, and S6 still loses.** Three prompts built to the condition and
+encoded through the checkpoint's own tokenizer — a copy-heavy manifest rewrite whose correct output
+is almost entirely a verbatim span of the prompt, `longctx_001`'s needle-plus-repeated-filler, and a
+tool-call schema echo — run under `DSV4_SUFFIXPROBE=1` at block 5, **217 verifies** against F80's 21.
+
+| | copy-heavy edit | needle + filler | tool-call |
+|---|---:|---:|---:|
+| verifies | 68 | 75 | 74 |
+| a suffix match existed | **68/68** | 72/75 | 69/74 |
+| MTP (shipped) tok/verify | 5.926 | 5.360 | 5.405 |
+| suffix only, sound lower bound | 5.162 (−12.9 %) | 3.600 (−32.8 %) | 2.838 (−47.5 %) |
+| **ORACLE `max(MTP, suffix)`** | **+0.2 %** | **+0.5 %** | **+1.2 %** |
+| suffix beat MTP | 1 | 2 | 5 |
+| best cascade, any threshold | −12.4 % | −30.6 % | −45.0 % |
+
+The reopening condition is unambiguously satisfied — a match existed in **209 of 217** verifies and
+`mlen` ran 6–32 against a block size of 5, where F80 saw `mlen = 0` in 13 of 21. So this is not
+trap 27 again; the drafter is being handed exactly the queries it wanted. **It still cannot use
+them.** The oracle — a cascade that picks the better drafter for free, every time, with no selection
+cost — tops out at **+1.2 %**, against a 3.5 % promotion bar. Every realisable threshold is negative.
+
+**Why, and it is not the drafter's fault.** The MTP head reaches **5.926 of a 6.0 ceiling — 98.8 %**
+— on the copy-heavy prompt, and 89–90 % on the other two. On precisely the shapes SuffixDecoding
+reports wins for, the shipped head has already taken almost everything there is. A suffix drafter can
+only win where the MTP is wrong, and on repetitive spans the MTP is not wrong.
+
+**S6 is closed.** Not "closed on the wrong workload" — closed on its own stated reopening condition,
+with 10x the evidence. Do not reopen it without a *new* mechanism, not a new workload.
+
+**The wider reading:** this also prices the acceptance ceiling for the agentic regime generally. At
+32.4–35.0 tok/s and 2.25–2.51x on these three prompts, the engine is at 89–99 % of the block-5
+per-verify ceiling on the workloads it exists to serve. The suite mean of `tau` 3.84 is dragged by
+other categories; where it matters most, there is nearly nothing left for *any* draft technique.
