@@ -261,6 +261,34 @@ void compressed_attn_cache_r4(float* win_kv, float* comp_kv, float* idx_ckv, int
     kv_commit(win_kv, wst, s0, stream);
     dsync(stream); kv_stage_free(wst, win_kv); dfree(xq); dfree(xs);
     int Tc = 0;
+    // ---- BATCHED CACHE POPULATION (DSV4_BATCH_COMPRESS=1) ----------------------------------------
+    // The loop below emits ONE group per call, twice per group. At a 845-token prefill with ratio 4
+    // that is 211 groups x 2 x 41 layers = 17,302 launches, each doing the work of four tokens and
+    // each RE-READING the compressor's whole weight matrix -- the same defect compressor.cu already
+    // documents ("one group emit read 8 x 33.6 MB where it needed 33.6"). `cattn:compress` is
+    // 1429 ms of a 9.1 s prefill and this is what is in it.
+    //
+    // compressor_forward is the batched equivalent, already used by compressed_attn_forward on the
+    // same weights with the same overlap/rotate flags: it runs one gemm over the whole sequence
+    // (weights read ONCE), pools every group, and rmsnorms the lot. Per-token gemm rows and per-group
+    // pooling are independent, so the arithmetic per group is the work the loop was doing.
+    //
+    // GUARDED ON LAYOUT, not assumed: compressor_forward writes [groups, d] contiguously, and
+    // kv_row() strides by g_kv_rowf, so the two agree only when g_kv_rowf == HEAD_DIM -- true in the
+    // default FP32 cache (2048 B/row) and false under DSV4_KV_PACK. idx_ckv is a plain contiguous
+    // buffer in both modes.
+    // DEFAULT ON (2026-08-26): measured bit-exact over 400 generated tokens and worth 78% of this
+    // region -- cattn:compress 1431 -> 318 ms, prefill 92.8 -> 105.4 tok/s. Set DSV4_BATCH_COMPRESS=0
+    // to restore the per-group loop (or run with a packed KV cache, which takes the guard below).
+    const char* bce = getenv("DSV4_BATCH_COMPRESS");
+    const bool batch_ok = (g_kv_rowf == HEAD_DIM) && (!bce || bce[0] != '0');
+    if (batch_ok) {
+        compressor_forward(comp_kv, x, w.mc_wkv, w.mc_wgate, w.mc_ape, w.mc_norm, w.cc_cos, w.cc_sin,
+                           s0, DIM, HEAD_DIM, ratio, true, ROPE_DIM, eps, false, stream);
+        compressor_forward(idx_ckv, x, w.idx_c_wkv, w.idx_c_wgate, w.idx_c_ape, w.idx_c_norm,
+                           w.cc_cos, w.cc_sin, s0, DIM, idx_hd, ratio, true, ROPE_DIM, eps, true, stream);
+        Tc = s0 / ratio;
+    } else
     for(int g=0; g*ratio + ratio - 1 <= s0 - 1; ++g){
         compressor_emit_group(kv_row(comp_kv, g), x, g, ratio, w.mc_wkv, w.mc_wgate, w.mc_ape,
                               w.mc_norm, w.cc_cos, w.cc_sin, DIM, HEAD_DIM, true, ROPE_DIM, eps, false, stream);

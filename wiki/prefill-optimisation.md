@@ -303,3 +303,60 @@ of prefill (3976 ms) and the MoE 39.8 %**. The four attention marks have had no 
 pass, and `cattn:ogroup` (1543 ms) and `cattn:compress` (1406 ms) are each now larger than
 `moe:w2`. That is where the next prefill work is, and the activation-reuse question should be asked
 of them first.
+
+## 10. The cache population was 17,300 launches — 92.8 -> 105.6 tok/s, bit-exact (2026-08-26)
+
+`cattn:compress` was 1431 ms, the second-largest mark in the prefill, and none of it was arithmetic.
+
+`compressed_attn_cache_r4` emitted compressed groups from a **host loop, one group per call, twice
+per group** (main KV and indexer KV). At PS=845 with ratio 4 that is 211 groups x 2 x 41 layers =
+**17,302 kernel launches**, each doing the work of four tokens and each re-reading the compressor's
+entire weight matrix — the same defect `compressor.cu` already documents in its own header ("one
+group emit read 8 x 33.6 MB where it needed 33.6").
+
+The batched equivalent was already in the tree and already used by `compressed_attn_forward` on the
+same weights with the same overlap/rotate flags. It did not have to be inferred equivalent, either:
+`include/compressor.h` **defines** `compressor_emit_group` as emitting "ONE compressed row
+(= `compressor_forward`'s `out[g]`)". One gemm over the whole sequence, weights read once, every
+group pooled and normed together.
+
+| | prefill | `cattn:compress` |
+|---|---:|---:|
+| per-group loop | 92.8 tok/s | 1431.1 ms |
+| **batched (now default)** | **105.6 tok/s** | **318.2 ms  (-78 %)** |
+
+**Token streams identical over 400 generated tokens.** Guarded on `g_kv_rowf == HEAD_DIM`, because
+`compressor_forward` writes `[groups, d]` contiguously while `kv_row()` strides by `g_kv_rowf`; the
+two agree in the default FP32 cache and not under `DSV4_KV_PACK`. `DSV4_BATCH_COMPRESS=0` restores
+the loop.
+
+### What this says about ranking work
+
+`cattn:sparse` (1007 ms) had been the headline target all session because it is compute-bound at
+20 % of fp32 peak, and the plan for it was a bf16 tensor-core rewrite costing bit-exactness. Compress
+was the *larger* mark and was never examined, because "1429 ms of compressor" sounds like arithmetic.
+It was launch overhead and weight re-reads, and removing it was worth **three times** what the bf16
+rewrite was projected to buy — losslessly, in one afternoon, against a multi-day battery
+revalidation.
+
+**Rank by what a region is SPENDING, not by how large it is.** A mark is a measurement of time, not
+of work; the two are only the same in a kernel that is already efficient.
+
+## 11. Where prefill stands
+
+61.7 -> **105.6 tok/s, +71.2 %, every step bit-exact.** At PS=845 (8004 ms):
+
+| | ms | % |
+|---|---:|---:|
+| `moe:w1w3` | 2006 | 26.1 |
+| `cattn:ogroup` | 1365 | 17.8 |
+| `cattn:sparse` | 1006 | 13.1 |
+| `moe:w2` | 679 | 8.8 |
+| `cattn:q_proj` | 664 | 8.6 |
+| `cattn:indexer` | 468 | 6.1 |
+| `cattn:compress` | 318 | 4.1 |
+
+Open, in rough order of promise: `MOE_NBLK=8` (verified 14.22 vs 15.07 ms in isolation, not yet
+measured end to end); `cattn:q_proj`, which has never been examined; and `cattn:sparse`, whose
+6 shuffles per key are 46 % of its instruction count and may have a lossless fix that was never
+looked for because the bf16 rewrite was assumed to be the answer.
