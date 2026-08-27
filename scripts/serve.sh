@@ -49,11 +49,13 @@ done
 # weights IN PLACE and the decode GEMV needs the original layout, so one process gets one layout.
 #
 # Measured on decode at PS=845, hpb=4/smem=1 both sides, token streams IDENTICAL (bit-exact):
-#     prefill  61.7 -> 75.4 tok/s  (+22.2%)      spec decode  32.54 -> 27.86 tok/s  (-14.4%)
-# Per request: prefill saves P * 2.945 ms/1000, decode costs R * 5.164 ms/1000.
-#     BREAK-EVEN AT P/R = 1.75.
-# Agentic coding runs P/R of 5-50 and wins clearly; chat sits at 1-3 and is marginal. Default OFF so
-# the shipped decode headline is unchanged -- set MOE_MMA=1 for prompt-heavy serving.
+#     prefill  61.7 -> 90.7 tok/s  (+47.0%)      spec decode  32.54 -> 27.85 tok/s  (-14.4%)
+# The prefill figure includes MOE_NBLK=4 (default), which is worth +20% on its own at ZERO decode
+# cost -- 27.81 vs 27.85 tok/s across the pair. Per request: prefill saves P * 5.182 ms/1000, decode
+# costs R * 5.175 ms/1000.
+#     BREAK-EVEN AT P/R = 1.00.  (It was 1.75 before NB=4 halved the prefill side of the trade.)
+# So this wins whenever the prompt is at least as long as the response. Agentic coding runs P/R of
+# 5-50; even chat at 1-3 is now on the winning side. Hence DEFAULT ON.
 # DEFAULT ON as of 2026-08-26: this server exists for prompt-heavy agentic work, where P/R runs
 # 5-50 against a break-even of 1.75. Set MOE_MMA=0 to serve a decode-dominated workload (P/R < 1.75)
 # or to reproduce the pre-2026-08-26 decode headline.

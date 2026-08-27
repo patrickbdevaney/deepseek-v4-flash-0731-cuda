@@ -241,3 +241,65 @@ Even at 75.4 tok/s the MoE is **5044 ms against a ~415 ms floor**, computed from
 §4's `IDEAL 81.2 GB`), at the measured 208.7 GB/s roofline. Arithmetic is not the bound — 15.5 TFLOP
 is 168 ms at the fp8 TC peak. **12x remains in the MoE alone, and it is a data-movement problem, so
 it is exactly-lossless territory.** `ATTENTION` is now 40.7 % and has its own gap.
+
+## 9. The MoE's 12x, decomposed and half-taken — 61.7 -> 90.8 tok/s, bit-exact (2026-08-26)
+
+§8 left the MoE at 5044 ms against a ~415 ms floor and called it "12x, and pure data movement". Both
+halves of that sentence were wrong in an instructive way.
+
+**It is not bandwidth-bound.** `tools/moe_gemv_bench` at the PREFILL grouping (160 experts, every one
+hit) shows time **linear in rows per expert while the ideal DRAM bytes never change**: 16 rows =
+16.3 ms, 32 = 32.8, 64 = 65.5. A memory-bound kernel would be flat. Above 16 rows it holds a flat
+**87 GB/s of real traffic — 36 % of the 244 GB/s this box measures in the same binary**. It is
+issue-bound, and the floor that matters is instruction issue, not DRAM.
+
+**The redundancy that mattered was the activations, not the weights.** Two separate re-reads:
+
+| | traffic per w1/w3 launch at PS=845 | |
+|---|---:|---|
+| expert weights, ideal | 0.71 GB | each expert once |
+| expert weights, actual | 1.43 GB | `ceil(32/16)` = 2 tiles per expert |
+| **activations** | **10.7 GB** | 42 MB re-read once per n-block, x256 |
+
+A warp owned 8 N-columns, so it issued **one mma per activation-fragment load**. The A fragment is a
+function of `(row, k)` and not of `n`. `MOE_NBLK=NB` gives a warp NB n-blocks and divides that 10.7 GB
+by NB — the same lever `MOE_BN=2` already took on the GEMV path in this file (155 -> 242 GB/s), which
+the mma path had never been given. `MOE_ROWG=RG` attacks the weight half by letting one tile own
+RG row-groups.
+
+Isolated kernel, 160 experts x 32 rows, w1/w3, **all configs verified to produce an identical output
+checksum** (see [`measurement-and-traps.md` §46](measurement-and-traps.md) for why that sentence is
+load-bearing):
+
+| config | ms | |
+|---|---:|---|
+| RG=1 NB=1 (baseline) | 32.74 | |
+| RG=2 NB=1 | 29.36 | 1.12x — the weight half is small |
+| RG=1 NB=2 | 20.41 | 1.60x |
+| **RG=1 NB=4** | **15.11** | **2.17x** |
+| RG=2 NB=2 | 15.35 | 2.13x |
+
+End to end on the engine, `MOE_MMA=1`, PS=845, **token streams identical and GATE PASS at every step**:
+
+| | prefill | `MoE` | `moe:w1w3` | `moe:w2` |
+|---|---:|---:|---:|---:|
+| GEMV MoE (what shipped) | 61.7 tok/s | — | — | — |
+| `MOE_MMA=1`, NB=1 | 75.4 | 5044 ms | 3240 | 1354 |
+| **`MOE_MMA=1`, NB=4 (now default)** | **90.8** | **3135** | **2004** | **680** |
+
+**+47.0 % on prefill, entirely lossless.** For context, §6's route to ~94 tok/s went through a bf16
+score path and said in as many words that "bit-exactness is off the table". Nearly all of that
+estimate turned out to be reachable without spending the invariant.
+
+**Decode is untouched by NB** — 27.81 vs 27.85 tok/s across the pair — so the +20 % is free. That
+re-prices `MOE_MMA` itself: its break-even against the -14.4 % decode cost was `P/R = 1.75`, and with
+the prefill side 47 % better it is now **`P/R = 1.00`**. It wins whenever the prompt is at least as
+long as the response, which is why `scripts/serve.sh` now defaults it ON rather than offering it as
+an opt-in for prompt-heavy serving.
+
+**What is left.** `RG*NB > 4` is refused, not tuned — RG=2/NB=4 was incorrect (trap 46) and its
+apparent 6.74x was missing work. The regions have now flipped a second time: **`ATTENTION` is 50.5 %
+of prefill (3976 ms) and the MoE 39.8 %**. The four attention marks have had no equivalent of this
+pass, and `cattn:ogroup` (1543 ms) and `cattn:compress` (1406 ms) are each now larger than
+`moe:w2`. That is where the next prefill work is, and the activation-reuse question should be asked
+of them first.

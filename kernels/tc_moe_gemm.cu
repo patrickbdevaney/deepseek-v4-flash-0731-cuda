@@ -334,7 +334,7 @@ void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d
 // vanished. One value, read by both, or they disagree.
 int tcm_rowg();
 int tcm_nblk(){ static int nb=-1;
-    if(nb<0){ const char* e=getenv("MOE_NBLK"); nb = e?atoi(e):1; if(nb!=1&&nb!=2&&nb!=4) nb=1;
+    if(nb<0){ const char* e=getenv("MOE_NBLK"); nb = e?atoi(e):4;   // DEFAULT 4: +20% prefill, decode neutral, bit-exact if(nb!=1&&nb!=2&&nb!=4) nb=1;
               if(tcm_rowg()*nb > 4){
                   fprintf(stderr,"[moe] MOE_ROWG=%d x MOE_NBLK=%d unsupported (>4); NB forced to 1\n", tcm_rowg(), nb);
                   nb = 1; } }
