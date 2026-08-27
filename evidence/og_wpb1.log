@@ -1,0 +1,74 @@
+[decode] loading /home/patrickd/models/ckpt-head-s3recap-p25-b0.1 ... s=6 NDEC=8 seqmax=1331
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] KV layout: fp32, 2048 B/row, 0.109 GiB for 1331 rows x 43 layers
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 113.9/122.8 GiB
+[dprof] enabled, 8192 marks
+[decode] prefill 5 positions...
+[f32mk] tile 4x4 (DSV4_F32MK_TILE=unset)
+[decode] PREFILL: 5 positions in 2513.7 ms = 2.0 tok/s (502.731 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (83.6 ms warmup)
+  step 1 pos 6 -> token 16  (83.5 ms)
+  step 2 pos 7 -> token 455  (90.4 ms)
+  step 3 pos 8 -> token 6102  (83.8 ms)
+  step 4 pos 9 -> token 294  (83.7 ms)
+  step 5 pos 10 -> token 16603  (84.2 ms)
+  step 6 pos 11 -> token 344  (90.3 ms)
+  step 7 pos 12 -> token 29168  (83.5 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 85.6 ms/tok = 11.68 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 154.0 ms (= 30.8 ms/tok if all accepted vs 85.6 M=1 -> 2.78x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5
+[spec] head built. mem 114.0/122.8 GiB
+[decode] PREFILL: 845 positions in 9288.6 ms = 91.0 tok/s (10.992 ms/tok)
+
+[dprof] PREFILL PS=845 — verify step by sub-op, summed over all layers (1106 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)       268.77     3.4%         43
+[dprof] rmsnorm (attn)         3.28     0.0%         43
+[dprof] ATTENTION           3972.64    50.4%         43
+[dprof] hc_post (attn)        52.62     0.7%         43
+[dprof] hc_pre  (ffn)        397.76     5.0%         43
+[dprof] rmsnorm (ffn)          3.09     0.0%         43
+[dprof] MoE                 3132.77    39.8%         43
+[dprof] hc_post (ffn)         43.34     0.6%         43
+[dprof] kv xin copy            2.95     0.0%         41
+[dprof]   attn:kv_write       39.18     0.5%         43
+[dprof]   cattn:q_proj       663.08     8.4%         41
+[dprof]   cattn:compress    1407.44    17.9%         41
+[dprof]   cattn:indexer      469.77     6.0%         41
+[dprof]   cattn:sparse      1009.25    12.8%         41
+[dprof]   cattn:ogroup      1544.80    19.6%         41
+[dprof]   moe:router          62.58     0.8%         43
+[dprof]   moe:group          117.06     1.5%         43
+[dprof]   moe:w1w3          2003.28    25.4%         43
+[dprof]   moe:act            201.92     2.6%         43
+[dprof]   moe:w2             678.12     8.6%         43
+[dprof]   moe:combine         60.69     0.8%         43
+[dprof]   moe:shared           6.34     0.1%         43
+[dprof]       mg:count         0.29     0.0%         43
+[dprof]       mg:prefix        0.23     0.0%         43
+[dprof]       mg:scatter       0.39     0.0%         43
+[dprof]       mg:tiles         0.32     0.0%         43
+[dprof] TOTAL               7877.21
+[dprof] *** INVALID: attn children 5133.53 ms > ATTENTION 3972.64 ms — marks recorded outside the reported window
+[spec] decoding 8 tokens (block=5, draft passes=1, adaptK=1.50, prompt=1 s=846)...
+[arena] first draft: draft footprint 211.44 MB, global hwm 667.18 MB / cap 3130.00 MB (21.3%), draft path = ARENA
+  [margins] 12.39 6.71 12.54 6.27 7.36  K=6
+  verify 1: accepted 5/5 (K=6) + correction -> +6 tokens (374.6 ms)  cpos=851
+  [margins] 11.96 7.64 9.40 10.15 7.11  K=6
+  verify 2: accepted 5/5 (K=6) + correction -> +6 tokens (215.5 ms)  cpos=857
+
+[spec] generated 12 tokens over 2 verifies: mean tokens/verify = 6.00 (block=5, max 6)
+[spec] tokens: 361 28612 329 3362 223 18 14 582 2852 3362 582 15717
+[spec] SPEC-DECODE: 35.9 ms/tok = 27.84 tok/s  (vs base M=1 85.6 ms/tok = 11.68 tok/s -> 2.38x)
+[decode] mem 113.8/122.8 GiB

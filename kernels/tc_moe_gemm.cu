@@ -334,9 +334,22 @@ void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d
 // vanished. One value, read by both, or they disagree.
 int tcm_rowg();
 int tcm_nblk(){ static int nb=-1;
-    if(nb<0){ const char* e=getenv("MOE_NBLK"); nb = e?atoi(e):4;   // DEFAULT 4: +20% prefill, decode neutral, bit-exact if(nb!=1&&nb!=2&&nb!=4) nb=1;
-              if(tcm_rowg()*nb > 4){
-                  fprintf(stderr,"[moe] MOE_ROWG=%d x MOE_NBLK=%d unsupported (>4); NB forced to 1\n", tcm_rowg(), nb);
+    if(nb<0){ const char* e=getenv("MOE_NBLK"); nb = e?atoi(e):4;   // DEFAULT 4: +20% prefill, decode neutral, bit-exact if(nb!=1&&nb!=2&&nb!=4&&nb!=8) nb=1;
+              // VALID COMBOS ARE ENUMERATED, NOT DERIVED FROM A PRODUCT. The first guard was
+              // "RG*NB <= 4", which reads like a register-budget rule and is not one: RG=1,NB=8
+              // (product 8) is CORRECT and RG=2,NB=4 (product 8) writes 1/8 of the output. Raising
+              // the cap to 8 to admit the first silently re-admitted the second. The failure is
+              // specific to RG>=2 combined with NB>=4, so that is what the guard says.
+              // Measured, combination by combination, against a full-output checksum:
+              //   RG=1: NB 1,2,4,8 all correct        RG=2: NB 1,2 correct, NB=4 writes 1/8
+              //   RG=4: NB=1 correct, NB=2 writes 1/4
+              // So the rule is "RG=1 scales to NB=8; for RG>=2 the product must stay <= 4" -- which is
+              // NOT the same as a flat product cap, since RG=1/NB=8 has product 8 and is correct.
+              const int rgv = tcm_rowg();
+              const bool ok = (rgv==1) ? (nb==1||nb==2||nb==4||nb==8)
+                                       : (rgv*nb <= 4);
+              if(!ok){
+                  fprintf(stderr,"[moe] MOE_ROWG=%d x MOE_NBLK=%d is not a verified combination; NB forced to 1\n", rgv, nb);
                   nb = 1; } }
     return nb; }
 int tcm_rowg(){ static int rg=-1;
@@ -684,7 +697,8 @@ void tc_fp4_grouped_gemm_e8m0(float* out, const __half* x16all, const uint8_t* c
     }
     dim3 gridn((nb + nbk*wpb - 1)/(nbk*wpb), maxtiles);
     #define TCM_LAUNCH(R,B) k_grouped_w4a8_e8m0_kernel_rg<R,B><<<gridn, 32*wpb, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K)
-    if(rg==1 && nbk==2) TCM_LAUNCH(1,2);
+    if(rg==1 && nbk==8) TCM_LAUNCH(1,8);
+    else if(rg==1 && nbk==2) TCM_LAUNCH(1,2);
     else if(rg==1 && nbk==4) TCM_LAUNCH(1,4);
     else if(rg==2 && nbk==1) TCM_LAUNCH(2,1);
     else if(rg==2 && nbk==2) TCM_LAUNCH(2,2);

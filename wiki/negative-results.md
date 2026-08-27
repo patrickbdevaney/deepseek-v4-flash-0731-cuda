@@ -612,3 +612,36 @@ with 10x the evidence. Do not reopen it without a *new* mechanism, not a new wor
 32.4–35.0 tok/s and 2.25–2.51x on these three prompts, the engine is at 89–99 % of the block-5
 per-verify ceiling on the workloads it exists to serve. The suite mean of `tau` 3.84 is dragged by
 other categories; where it matters most, there is nearly nothing left for *any* draft technique.
+
+## Warps per block on the prefill `ogroup` — a null, and the reason it was a null (2026-08-26)
+
+`tc_ogroup_fp8_mt_kernel` launches `<<<grid,32>>>` — one warp per block — which is exactly the shape
+LOOP_LOG Finding 21 identified on the MoE GEMMs, where `moe_wpb()` (4 warps/block) was a real win:
+"a 32-thread block still consumes a whole block slot, so half the SM's warp slots were unusable."
+
+Packing 4 warps per block here, each taking its own n-block, changed **nothing**:
+
+| | `cattn:ogroup` | prefill |
+|---|---:|---:|
+| `OG_WPB=1` (shipped) | 1544.80 ms | 91.0 tok/s |
+| `OG_WPB=4` | 1542.56 ms | 90.8 tok/s |
+
+Bit-exact (token streams identical), and inside run-to-run noise on both columns.
+
+**Why.** Finding 21's fix pays when the SM is short of *resident work*. `ogroup` at prefill launches
+`(R/8, G, ntile/MT) = 128 x 8 x 7 = 7168` blocks over 20 SMs; it is not short of blocks, and
+occupancy was never what bound it. The traffic model says what does — per layer at bs=845:
+
+```
+weights, ideal        33.6 MB       activations, ideal      55.4 MB
+weights, MT=8        234.9 MB       activations, NB=1     7088.4 MB   <- 97% of the traffic
+```
+
+The activation block is re-read once per n-block, 128 times, because a warp owns 8 of R's 1024
+columns. That model predicts **1231 ms against 1543 measured**, so it accounts for the region. Warps
+per block moves no bytes and therefore moved no time.
+
+**The lesson is about transfer.** A fix that was large on one kernel was assumed to transfer to
+another with the same launch shape. Launch shape is not the mechanism; *what is scarce* is. The MoE
+was short of warp slots, `ogroup` is short of bandwidth, and the two want opposite work. The knob is
+left in place, defaulted to 1, so the null does not have to be re-derived.

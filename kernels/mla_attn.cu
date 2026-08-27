@@ -537,7 +537,7 @@ __device__ __forceinline__ void ogm_mma(float* c, const unsigned* a, const unsig
 __global__ void k_f2h(__half* o, const float* in, size_t n){ size_t i=blockIdx.x*(size_t)blockDim.x+threadIdx.x; if(i<n) o[i]=__float2half(in[i]); }
 __global__ void tc_ogroup_kernel(float* out, const __half* o16, const __half* wo16, int bs, int G, int R, int Kd){
     int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
-    int gg=blockIdx.y, n0=blockIdx.x*8; if(n0>=R) return;
+    int gg=blockIdx.y, n0=(blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5))*8; if(n0>=R) return;
     const int mb=blockIdx.z*16, r0=mb+gid, r8=mb+gid+8;       // row tiles — same defect as the fp8 twin
     const __half* xg0 = o16 + ((size_t)r0*G+gg)*Kd;           // A row bb=r0 (stride G*Kd), group gg
     const __half* xg8 = o16 + ((size_t)r8*G+gg)*Kd;
@@ -619,7 +619,12 @@ template<int MT>
 __global__ void tc_ogroup_fp8_mt_kernel(float* out, const __half* o16, const uint8_t* wo,
                                         const uint8_t* wsc, int bs, int G, int R, int Kd){
     int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
-    int gg=blockIdx.y, n0=blockIdx.x*8; if(n0>=R) return;
+    // WARPS PER BLOCK (Finding 21's class, the same fix moe_wpb() already applies to the MoE GEMMs).
+    // This launched <<<grid,32>>>: one warp per block, so a 32-thread block burns a whole block slot
+    // and half the SM's warp slots are unusable. The warps here are fully independent -- no shared
+    // memory, no __syncthreads, and n is the only thing that differs -- so several can share a block,
+    // each taking its own n-block. Pure launch geometry: the per-warp math is byte-identical.
+    int gg=blockIdx.y, n0=(blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5))*8; if(n0>=R) return;
     const uint8_t* Bg = wo + (size_t)gg*R*Kd; int scw=Kd/128;
     int n=n0+gid; const uint8_t* wr = Bg + (size_t)n*Kd; size_t grow=(size_t)gg*R+n;
     const int mb0 = blockIdx.z*(16*MT);
@@ -934,6 +939,79 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_smem_k
     else if(ognr==2) OG_MK_LAUNCH(M,2); \
     else             OG_MK_LAUNCH(M,1); break;
 // fp8-native TC ogroup: o(f32)->f16 + fused fp8 wo_a decode in the mma. No per-token wo16 conversion.
+// ============ ogroup MT x NB: the activation loaded once, used NB times =========================
+// The MT kernel above amortises the WEIGHT dequant across m-tiles, which was the right lever for the
+// weights -- and the weights were never the cost. At bs=845, G=8, R=1024, Kd=4096, per layer:
+//
+//     weights, ideal                     33.6 MB      activations, ideal             55.4 MB
+//     weights, MT=8 (what ships)        234.9 MB      activations, NB=1            7088.4 MB
+//
+// A warp owns 8 of R's 1024 columns, so the activation block is re-read 128 times and is 97 % of the
+// traffic. The A fragment depends on (row, k) and NOT on n -- the same fact the MoE's MOE_NBLK
+// exploits -- so NB n-blocks per warp issue NB mma against one A load. Predicted from traffic alone:
+// MT=8/NB=1 1231 ms against 1543 measured (the model explains it), MT=8/NB=2 635, MT=4/NB=4 377.
+//
+// MT and NB trade against the same register budget (MT*NB*4 accumulators), and since activations
+// dominate, spending it on NB beats spending it on MT.
+//
+// BIT-EXACT: each output (r,n) still accumulates over k0 in the same order through the same mma.
+template<int MT, int NB>
+__global__ void tc_ogroup_fp8_mtnb_kernel(float* out, const __half* o16, const uint8_t* wo,
+                                         const uint8_t* wsc, int bs, int G, int R, int Kd){
+    int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
+    int gg=blockIdx.y, nb0=blockIdx.x*NB;
+    const uint8_t* Bg = wo + (size_t)gg*R*Kd; int scw=Kd/128;
+    const int mb0 = blockIdx.z*(16*MT);
+    int nq[NB]; const uint8_t* wrq[NB]; size_t growq[NB]; bool nok[NB];
+    #pragma unroll
+    for(int q=0;q<NB;++q){ int n0=(nb0+q)*8; nq[q]=n0+gid; nok[q]=(n0<R) && (nq[q]<R);
+        int nn = nok[q]?nq[q]:0;
+        wrq[q]=Bg+(size_t)nn*Kd; growq[q]=(size_t)gg*R+nn; }
+    float c[MT][NB][4];
+    #pragma unroll
+    for(int t=0;t<MT;++t) {
+        #pragma unroll
+        for(int q=0;q<NB;++q){ c[t][q][0]=c[t][q][1]=c[t][q][2]=c[t][q][3]=0.f; } }
+    for(int k0=0;k0<Kd;k0+=16){
+        unsigned b[NB][2];
+        #pragma unroll
+        for(int q=0;q<NB;++q){
+            if(nok[q]){ int kk=k0+2*t4;
+                float s0=exp2f((float)wsc[(growq[q]/128)*scw + kk/128]-127.f);
+                float s1=exp2f((float)wsc[(growq[q]/128)*scw + (kk+8)/128]-127.f);
+                __half2 p0=__halves2half2(__float2half(ogm_e4m3(wrq[q][kk])*s0),   __float2half(ogm_e4m3(wrq[q][kk+1])*s0));
+                __half2 p1=__halves2half2(__float2half(ogm_e4m3(wrq[q][kk+8])*s1), __float2half(ogm_e4m3(wrq[q][kk+9])*s1));
+                b[q][0]=*(unsigned*)&p0; b[q][1]=*(unsigned*)&p1;
+            } else { b[q][0]=0u; b[q][1]=0u; } }
+        #pragma unroll
+        for(int t=0;t<MT;++t){
+            const int mb=mb0+t*16, r0=mb+gid, r8=mb+gid+8;
+            if(mb>=bs) continue;
+            const __half* xg0 = o16 + ((size_t)r0*G+gg)*Kd;
+            const __half* xg8 = o16 + ((size_t)r8*G+gg)*Kd;
+            bool m0=r0<bs, m8=r8<bs;
+            unsigned a[4];
+            a[0]=m0?*(const unsigned*)(xg0+k0+2*t4):0u; a[1]=m8?*(const unsigned*)(xg8+k0+2*t4):0u;
+            a[2]=m0?*(const unsigned*)(xg0+k0+2*t4+8):0u; a[3]=m8?*(const unsigned*)(xg8+k0+2*t4+8):0u;
+            #pragma unroll
+            for(int q=0;q<NB;++q) ogm_mma(c[t][q],a,b[q]);
+        }
+    }
+    int cn=2*t4;
+    #pragma unroll
+    for(int t=0;t<MT;++t){
+        const int mb=mb0+t*16, r0=mb+gid, r8=mb+gid+8;
+        if(mb>=bs) continue;
+        #pragma unroll
+        for(int q=0;q<NB;++q){
+            int n0=(nb0+q)*8; if(n0>=R) continue;
+            if(r0<bs && n0+cn  <R) out[((size_t)r0*G+gg)*R + n0+cn  ]=c[t][q][0];
+            if(r0<bs && n0+cn+1<R) out[((size_t)r0*G+gg)*R + n0+cn+1]=c[t][q][1];
+            if(r8<bs && n0+cn  <R) out[((size_t)r8*G+gg)*R + n0+cn  ]=c[t][q][2];
+            if(r8<bs && n0+cn+1<R) out[((size_t)r8*G+gg)*R + n0+cn+1]=c[t][q][3];
+        }
+    }
+}
 void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const uint8_t* wo_sc,
                      int bs, int G, int R, int Kd, cudaStream_t stream){
     // NVFP4 overlay for wo_a -- MEASURED AND DEFAULT OFF (DSV4_NVFP4_WOA=1 to re-enable).
@@ -1083,13 +1161,35 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         int ntile = (bs+15)/16;
         int MT = mte ? atoi(mte) : (ntile>=8 ? 8 : ntile>=4 ? 4 : ntile>=2 ? 2 : 1);
         if(MT!=1&&MT!=2&&MT!=4&&MT!=8) MT=1;
-        if(MT==1){ dim3 grid((R+7)/8, G, ntile);
-                   tc_ogroup_fp8_kernel<<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); }
-        else {     dim3 grid((R+7)/8, G, (ntile+MT-1)/MT);
+        int ogwpb = 1; if(const char* w=getenv("OG_WPB")) ogwpb=atoi(w);   // NULL RESULT, see negative-results
+        if(ogwpb<1) ogwpb=1; if(ogwpb>8) ogwpb=8;
+        const int nb8 = (R+7)/8, gx = (nb8 + ogwpb - 1)/ogwpb, thr = 32*ogwpb;
+        // OG_NB: n-blocks per warp. Attacks the activation re-read, which is 97% of this region's
+        // traffic. Combos are ENUMERATED after the MoE lesson (trap 46) -- a product rule admitted a
+        // wrong kernel there -- and each is verified by an end-to-end token-stream diff.
+        int ognb = 1; if(const char* e=getenv("OG_NB")) ognb=atoi(e);
+        if(ognb!=1&&ognb!=2&&ognb!=4&&ognb!=8) ognb=1;
+        if(ognb>1 && ogwpb==1){
+            dim3 gridn((nb8+ognb-1)/ognb, G, (ntile+MT-1)/MT);
+            #define OGNB_LAUNCH(M,B) tc_ogroup_fp8_mtnb_kernel<M,B><<<gridn,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd)
+            bool done=true;
+            if      (MT==8&&ognb==2) OGNB_LAUNCH(8,2);
+            else if (MT==4&&ognb==2) OGNB_LAUNCH(4,2);
+            else if (MT==4&&ognb==4) OGNB_LAUNCH(4,4);
+            else if (MT==2&&ognb==4) OGNB_LAUNCH(2,4);
+            else if (MT==2&&ognb==8) OGNB_LAUNCH(2,8);
+            else if (MT==1&&ognb==8) OGNB_LAUNCH(1,8);
+            else done=false;
+            #undef OGNB_LAUNCH
+            if(done){ dsync(stream); dfree(o16); return; }
+        }
+        if(MT==1){ dim3 grid(gx, G, ntile);
+                   tc_ogroup_fp8_kernel<<<grid,thr,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); }
+        else {     dim3 grid(gx, G, (ntile+MT-1)/MT);
                    switch(MT){
-                     case 2: tc_ogroup_fp8_mt_kernel<2><<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break;
-                     case 4: tc_ogroup_fp8_mt_kernel<4><<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break;
-                     default:tc_ogroup_fp8_mt_kernel<8><<<grid,32,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break; } }
+                     case 2: tc_ogroup_fp8_mt_kernel<2><<<grid,thr,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break;
+                     case 4: tc_ogroup_fp8_mt_kernel<4><<<grid,thr,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break;
+                     default:tc_ogroup_fp8_mt_kernel<8><<<grid,thr,0,stream>>>(out,o16,wo_fp8,wo_sc,bs,G,R,Kd); break; } }
     }
     dsync(stream); dfree(o16);
 }
