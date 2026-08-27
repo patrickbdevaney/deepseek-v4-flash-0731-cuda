@@ -356,7 +356,24 @@ of work; the two are only the same in a kernel that is already efficient.
 | `cattn:indexer` | 468 | 6.1 |
 | `cattn:compress` | 318 | 4.1 |
 
-Open, in rough order of promise: `MOE_NBLK=8` (verified 14.22 vs 15.07 ms in isolation, not yet
-measured end to end); `cattn:q_proj`, which has never been examined; and `cattn:sparse`, whose
-6 shuffles per key are 46 % of its instruction count and may have a lossless fix that was never
-looked for because the bf16 rewrite was assumed to be the answer.
+`MOE_NBLK=8` landed: `moe:w1w3` 2005 -> 1808 ms, prefill 105.7 -> **108.1 tok/s**, tokens identical.
+Final budget at PS=845 (7813 ms): `moe:w1w3` 1808, `cattn:ogroup` 1361, `cattn:sparse` 1005,
+`moe:w2` 681, `cattn:q_proj` 663, `cattn:indexer` 470, `cattn:compress` 318.
+
+**61.7 -> 108.1 tok/s, +75.2 %, every step bit-exact.**
+
+### What is left, and why none of it is cheap
+
+- **`cattn:q_proj` (663 ms).** Examined and NOT a missing switch: `fp8_block_gemm` already dispatches
+  to `tc_fp8_gemm` at M>=2, so prefill q_proj is on tensor cores. It runs at 3.94 TFLOPS, which is
+  72 % of the fp32 CUDA-core peak but a few percent of the fp8 TC peak -- a tuning problem in an
+  already-correct kernel, not a path that is switched off.
+- **`cattn:sparse` (1005 ms).** Compute-bound (69 ms byte floor, 20 % of fp32 peak) and 46 % of its
+  instructions are the 6 shuffles per key. Only a tensor-core restructure removes them -- 2816
+  instructions become 32 -- and that costs bit-exactness AND a battery revalidation, because a bf16
+  score path diverges by construction so token-diff stops being a check.
+- **`moe:w1w3` (1808 ms)** is issue-bound, not bandwidth-bound, so its ~415 ms byte floor is not
+  reachable by moving fewer bytes.
+
+The cheap structural wins are spent. What remains is per-kernel tuning at single-digit percent, or
+one rewrite that spends the invariant the whole project is built on.

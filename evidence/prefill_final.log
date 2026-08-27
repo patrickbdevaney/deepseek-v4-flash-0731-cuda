@@ -1,0 +1,204 @@
+[decode] loading /home/patrickd/models/ckpt-head-s3recap-p25-b0.1 ... s=6 NDEC=8 seqmax=1723
+[decode] loaded 100.40 GiB, 45821 tensors  (weights in MANAGED device-preferred memory)
+[decode] KV layout: fp32, 2048 B/row, 0.141 GiB for 1723 rows x 43 layers
+[decode] building 43 layer structs once (persistent)...
+[decode] structs built. mem 112.2/122.8 GiB
+[dprof] enabled, 8192 marks
+[decode] prefill 5 positions...
+[f32mk] tile 4x4 (DSV4_F32MK_TILE=unset)
+[decode] PREFILL: 5 positions in 2523.3 ms = 2.0 tok/s (504.660 ms/tok)
+[decode] prefill done. caches populated. starting decode.
+  step 0 pos 5 -> token 11111  (88.7 ms warmup)
+  step 1 pos 6 -> token 16  (88.7 ms)
+  step 2 pos 7 -> token 455  (95.2 ms)
+  step 3 pos 8 -> token 6102  (88.4 ms)
+  step 4 pos 9 -> token 294  (89.3 ms)
+  step 5 pos 10 -> token 16603  (88.9 ms)
+  step 6 pos 11 -> token 344  (95.2 ms)
+  step 7 pos 12 -> token 29168  (89.0 ms)
+
+[decode] first decoded token argmax = 11111  (expect 11111)  -> GATE PASS
+[decode] generated: 11111 16 455 6102 294 16603 344 29168
+[decode] WARM decode: 90.7 ms/tok = 11.03 tok/s  (M=1 steady state, 7-step avg)
+
+[spec-verify] M=5 verify in ONE forward: 167.7 ms (= 33.5 ms/tok if all accepted vs 90.7 M=1 -> 2.70x)
+[spec-verify] verify argmax: 11111 16 455 6102 294
+[spec-verify] decode tokens: 11111 16 455 6102 294
+[spec-verify] MATCH 5/5 -> PASS  (M=K verify == K sequential decodes; diffs = MoE-atomic near-ties)
+
+[spec] using EMBEDDED DSpark heads from the main checkpoint (no extra memory)
+[spec] NSTAGE=3 head-experts=160 BLK sweep: 5
+[spec] head built. mem 112.3/122.8 GiB
+[decode] PREFILL: 845 positions in 7813.4 ms = 108.1 tok/s (9.247 ms/tok)
+
+[dprof] PREFILL PS=845 — verify step by sub-op, summed over all layers (1106 marks)
+[dprof] phase                    ms        %      calls
+[dprof] hc_pre  (attn)       269.43     3.6%         43
+[dprof] rmsnorm (attn)         3.01     0.0%         43
+[dprof] ATTENTION           3777.36    50.4%         43
+[dprof] hc_post (attn)        49.73     0.7%         43
+[dprof] hc_pre  (ffn)        398.31     5.3%         43
+[dprof] rmsnorm (ffn)          2.96     0.0%         43
+[dprof] MoE                 2945.07    39.3%         43
+[dprof] hc_post (ffn)         42.60     0.6%         43
+[dprof] kv xin copy            2.76     0.0%         41
+[dprof]   attn:kv_write       39.27     0.5%         43
+[dprof]   cattn:q_proj       663.44     8.9%         41
+[dprof]   cattn:compress     318.08     4.2%         41
+[dprof]   cattn:indexer      470.45     6.3%         41
+[dprof]   cattn:sparse      1005.42    13.4%         41
+[dprof]   cattn:ogroup      1361.13    18.2%         41
+[dprof]   moe:router          62.75     0.8%         43
+[dprof]   moe:group          117.26     1.6%         43
+[dprof]   moe:w1w3          1807.90    24.1%         43
+[dprof]   moe:act            201.78     2.7%         43
+[dprof]   moe:w2             680.68     9.1%         43
+[dprof]   moe:combine         65.84     0.9%         43
+[dprof]   moe:shared           6.18     0.1%         43
+[dprof]       mg:count         0.28     0.0%         43
+[dprof]       mg:prefix        0.23     0.0%         43
+[dprof]       mg:scatter       0.36     0.0%         43
+[dprof]       mg:tiles         0.31     0.0%         43
+[dprof] TOTAL               7491.24
+[dprof] *** INVALID: attn children 3857.78 ms > ATTENTION 3777.36 ms — marks recorded outside the reported window
+[spec] decoding 400 tokens (block=5, draft passes=1, adaptK=1.50, prompt=1 s=846)...
+[arena] first draft: draft footprint 211.44 MB, global hwm 657.96 MB / cap 3130.00 MB (21.0%), draft path = ARENA
+  [margins] 12.39 6.71 12.54 6.27 7.36  K=6
+  verify 1: accepted 5/5 (K=6) + correction -> +6 tokens (390.9 ms)  cpos=851
+  [margins] 11.96 7.64 9.40 10.15 7.11  K=6
+  verify 2: accepted 5/5 (K=6) + correction -> +6 tokens (234.4 ms)  cpos=857
+  [margins] 14.80 10.89 4.24 5.94 8.32  K=6
+  verify 3: accepted 5/5 (K=6) + correction -> +6 tokens (236.7 ms)  cpos=863
+  [margins] 11.61 9.88 4.18 9.36 5.01  K=6
+  verify 4: accepted 5/5 (K=6) + correction -> +6 tokens (238.9 ms)  cpos=869
+  [margins] 9.94 11.79 13.84 10.68 8.59  K=6
+  verify 5: accepted 5/5 (K=6) + correction -> +6 tokens (237.3 ms)  cpos=875
+  [margins] 14.14 15.10 10.44 13.18 7.29  K=6
+  verify 6: accepted 5/5 (K=6) + correction -> +6 tokens (245.8 ms)  cpos=881
+  [margins] 11.19 11.40 15.28 11.70 8.46  K=6
+  verify 7: accepted 5/5 (K=6) + correction -> +6 tokens (233.6 ms)  cpos=887
+  [margins] 12.02 7.40 6.56 7.54 5.49  K=6
+  verify 8: accepted 5/5 (K=6) + correction -> +6 tokens (244.5 ms)  cpos=893
+  [margins] 12.78 12.94 9.29 6.97 10.75  K=6
+  verify 9: accepted 5/5 (K=6) + correction -> +6 tokens (257.3 ms)  cpos=899
+  [margins] 14.70 11.35 7.41 14.12 9.46  K=6
+  verify 10: accepted 5/5 (K=6) + correction -> +6 tokens (239.5 ms)  cpos=905
+  [margins] 12.62 13.43 13.63 13.69 12.88  K=6
+  verify 11: accepted 5/5 (K=6) + correction -> +6 tokens (232.5 ms)  cpos=911
+  [margins] 14.41 13.78 12.34 14.10 11.39  K=6
+  verify 12: accepted 5/5 (K=6) + correction -> +6 tokens (243.6 ms)  cpos=917
+  [margins] 13.42 11.74 13.42 13.93 11.46  K=6
+  verify 13: accepted 5/5 (K=6) + correction -> +6 tokens (238.7 ms)  cpos=923
+  [margins] 11.33 4.92 11.61 8.74 1.76  K=6
+  verify 14: accepted 5/5 (K=6) + correction -> +6 tokens (238.5 ms)  cpos=929
+  [margins] 15.85 12.37 7.64 0.26 10.25  K=4
+  verify 15: accepted 3/3 (K=4) + correction -> +4 tokens (204.8 ms)  cpos=933
+  [margins] 14.07 14.76 14.88 11.88 5.73  K=6
+  verify 16: accepted 5/5 (K=6) + correction -> +6 tokens (233.9 ms)  cpos=939
+  [margins] 14.13 13.63 15.97 12.45 13.96  K=6
+  verify 17: accepted 5/5 (K=6) + correction -> +6 tokens (251.0 ms)  cpos=945
+  [margins] 12.57 11.25 6.13 8.79 7.28  K=6
+  verify 18: accepted 5/5 (K=6) + correction -> +6 tokens (234.0 ms)  cpos=951
+  [margins] 15.11 10.90 11.96 14.75 15.22  K=6
+  verify 19: accepted 5/5 (K=6) + correction -> +6 tokens (248.6 ms)  cpos=957
+  [margins] 18.82 10.64 13.99 9.42 11.74  K=6
+  verify 20: accepted 5/5 (K=6) + correction -> +6 tokens (241.7 ms)  cpos=963
+  [margins] 13.40 15.41 8.50 13.42 6.42  K=6
+  verify 21: accepted 5/5 (K=6) + correction -> +6 tokens (244.9 ms)  cpos=969
+  [margins] 15.36 16.24 15.81 12.27 6.36  K=6
+  verify 22: accepted 5/5 (K=6) + correction -> +6 tokens (241.2 ms)  cpos=975
+  [margins] 14.66 14.09 12.39 13.21 12.77  K=6
+  verify 23: accepted 5/5 (K=6) + correction -> +6 tokens (242.8 ms)  cpos=981
+  [margins] 12.82 11.78 8.41 12.82 7.18  K=6
+  verify 24: accepted 5/5 (K=6) + correction -> +6 tokens (229.4 ms)  cpos=987
+  [margins] 13.39 11.19 14.54 14.04 13.67  K=6
+  verify 25: accepted 5/5 (K=6) + correction -> +6 tokens (245.2 ms)  cpos=993
+  [margins] 17.18 11.78 15.44 11.46 15.42  K=6
+  verify 26: accepted 5/5 (K=6) + correction -> +6 tokens (241.8 ms)  cpos=999
+  [margins] 16.34 15.37 9.41 15.15 6.60  K=6
+  verify 27: accepted 5/5 (K=6) + correction -> +6 tokens (250.8 ms)  cpos=1005
+  [margins] 15.37 17.13 16.04 11.09 6.62  K=6
+  verify 28: accepted 5/5 (K=6) + correction -> +6 tokens (233.4 ms)  cpos=1011
+  [margins] 15.80 13.93 15.02 14.42 13.62  K=6
+  verify 29: accepted 5/5 (K=6) + correction -> +6 tokens (248.7 ms)  cpos=1017
+  [margins] 14.78 13.35 8.74 16.70 9.53  K=6
+  verify 30: accepted 5/5 (K=6) + correction -> +6 tokens (238.1 ms)  cpos=1023
+  [margins] 13.25 10.87 12.83 12.11 12.80  K=6
+  verify 31: accepted 5/5 (K=6) + correction -> +6 tokens (264.9 ms)  cpos=1029
+  [margins] 16.01 12.82 16.86 13.09 14.96  K=6
+  verify 32: accepted 5/5 (K=6) + correction -> +6 tokens (242.3 ms)  cpos=1035
+  [margins] 16.70 13.91 11.80 14.28 8.84  K=6
+  verify 33: accepted 5/5 (K=6) + correction -> +6 tokens (253.0 ms)  cpos=1041
+  [margins] 15.32 14.53 16.19 12.08 7.71  K=6
+  verify 34: accepted 5/5 (K=6) + correction -> +6 tokens (235.7 ms)  cpos=1047
+  [margins] 16.91 13.27 12.76 13.12 14.05  K=6
+  verify 35: accepted 5/5 (K=6) + correction -> +6 tokens (252.2 ms)  cpos=1053
+  [margins] 14.22 12.21 8.31 14.73 9.51  K=6
+  verify 36: accepted 5/5 (K=6) + correction -> +6 tokens (239.1 ms)  cpos=1059
+  [margins] 13.41 11.22 12.75 13.76 13.23  K=6
+  verify 37: accepted 5/5 (K=6) + correction -> +6 tokens (242.8 ms)  cpos=1065
+  [margins] 16.39 12.18 12.99 12.40 12.46  K=6
+  verify 38: accepted 5/5 (K=6) + correction -> +6 tokens (237.1 ms)  cpos=1071
+  [margins] 14.38 13.66 10.72 15.35 3.20  K=6
+  verify 39: accepted 5/5 (K=6) + correction -> +6 tokens (253.8 ms)  cpos=1077
+  [margins] 15.78 15.31 15.37 13.39 7.80  K=6
+  verify 40: accepted 5/5 (K=6) + correction -> +6 tokens (237.0 ms)  cpos=1083
+  [margins] 15.57 12.16 15.36 13.86 14.73  K=6
+  verify 41: accepted 5/5 (K=6) + correction -> +6 tokens (247.9 ms)  cpos=1089
+  [margins] 13.16 11.71 8.09 11.92 9.95  K=6
+  verify 42: accepted 5/5 (K=6) + correction -> +6 tokens (240.9 ms)  cpos=1095
+  [margins] 14.31 11.37 11.91 13.56 13.31  K=6
+  verify 43: accepted 5/5 (K=6) + correction -> +6 tokens (244.4 ms)  cpos=1101
+  [margins] 17.35 13.00 16.36 9.69 13.83  K=6
+  verify 44: accepted 5/5 (K=6) + correction -> +6 tokens (241.0 ms)  cpos=1107
+  [margins] 15.87 12.60 10.09 16.92 9.02  K=6
+  verify 45: accepted 5/5 (K=6) + correction -> +6 tokens (253.2 ms)  cpos=1113
+  [margins] 15.69 14.40 15.53 11.40 7.73  K=6
+  verify 46: accepted 5/5 (K=6) + correction -> +6 tokens (237.9 ms)  cpos=1119
+  [margins] 16.02 13.48 14.57 13.71 14.98  K=6
+  verify 47: accepted 5/5 (K=6) + correction -> +6 tokens (245.1 ms)  cpos=1125
+  [margins] 13.99 11.51 11.57 14.70 11.04  K=6
+  verify 48: accepted 5/5 (K=6) + correction -> +6 tokens (240.1 ms)  cpos=1131
+  [margins] 12.82 10.72 12.52 13.42 13.36  K=6
+  verify 49: accepted 5/5 (K=6) + correction -> +6 tokens (245.8 ms)  cpos=1137
+  [margins] 16.09 13.42 16.22 12.29 12.85  K=6
+  verify 50: accepted 5/5 (K=6) + correction -> +6 tokens (241.5 ms)  cpos=1143
+  [margins] 17.05 11.03 11.07 15.02 7.40  K=6
+  verify 51: accepted 5/5 (K=6) + correction -> +6 tokens (243.5 ms)  cpos=1149
+  [margins] 15.98 16.66 16.72 12.02 8.20  K=6
+  verify 52: accepted 5/5 (K=6) + correction -> +6 tokens (255.3 ms)  cpos=1155
+  [margins] 16.30 13.42 13.67 14.04 14.93  K=6
+  verify 53: accepted 5/5 (K=6) + correction -> +6 tokens (249.0 ms)  cpos=1161
+  [margins] 14.38 12.73 10.17 12.29 7.81  K=6
+  verify 54: accepted 5/5 (K=6) + correction -> +6 tokens (237.5 ms)  cpos=1167
+  [margins] 13.32 9.13 11.39 13.30 12.58  K=6
+  verify 55: accepted 5/5 (K=6) + correction -> +6 tokens (245.1 ms)  cpos=1173
+  [margins] 16.12 15.64 16.89 13.43 15.96  K=6
+  verify 56: accepted 5/5 (K=6) + correction -> +6 tokens (244.2 ms)  cpos=1179
+  [margins] 14.68 14.92 11.86 10.77 9.44  K=6
+  verify 57: accepted 5/5 (K=6) + correction -> +6 tokens (252.6 ms)  cpos=1185
+  [margins] 13.45 15.15 13.56 12.09 7.16  K=6
+  verify 58: accepted 5/5 (K=6) + correction -> +6 tokens (236.8 ms)  cpos=1191
+  [margins] 16.60 12.91 13.85 12.89 15.20  K=6
+  verify 59: accepted 5/5 (K=6) + correction -> +6 tokens (247.2 ms)  cpos=1197
+  [margins] 14.69 13.04 12.77 14.19 10.73  K=6
+  verify 60: accepted 5/5 (K=6) + correction -> +6 tokens (239.2 ms)  cpos=1203
+  [margins] 14.00 10.89 12.36 12.66 12.82  K=6
+  verify 61: accepted 5/5 (K=6) + correction -> +6 tokens (250.8 ms)  cpos=1209
+  [margins] 15.38 9.68 14.30 12.45 15.03  K=6
+  verify 62: accepted 5/5 (K=6) + correction -> +6 tokens (241.4 ms)  cpos=1215
+  [margins] 16.02 9.61 12.74 15.53 9.84  K=6
+  verify 63: accepted 5/5 (K=6) + correction -> +6 tokens (251.4 ms)  cpos=1221
+  [margins] 15.68 18.15 16.94 12.01 7.66  K=6
+  verify 64: accepted 5/5 (K=6) + correction -> +6 tokens (239.5 ms)  cpos=1227
+  [margins] 15.00 14.28 15.37 14.82 15.21  K=6
+  verify 65: accepted 5/5 (K=6) + correction -> +6 tokens (242.1 ms)  cpos=1233
+  [margins] 12.36 11.15 9.84 12.91 7.89  K=6
+  verify 66: accepted 5/5 (K=6) + correction -> +6 tokens (239.9 ms)  cpos=1239
+  [margins] 13.19 9.74 12.19 9.68 10.34  K=6
+  verify 67: accepted 5/5 (K=6) + correction -> +6 tokens (255.4 ms)  cpos=1245
+
+[spec] generated 400 tokens over 67 verifies: mean tokens/verify = 5.97 (block=5, max 6)
+[spec] tokens: 361 28612 329 3362 223 18 14 582 2852 3362 582 15717 65 1320 1760 582 26757 3362 582 349 61883 15 20 1760 582 17722 3362 582 73119 1760 582 27086 3362 223 26 10656 361 28612 329 3362
+[spec] SPEC-DECODE: 40.7 ms/tok = 24.60 tok/s  (vs base M=1 90.7 ms/tok = 11.03 tok/s -> 2.23x)
+[decode] mem 112.0/122.8 GiB

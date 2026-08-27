@@ -334,7 +334,7 @@ void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d
 // vanished. One value, read by both, or they disagree.
 int tcm_rowg();
 int tcm_nblk(){ static int nb=-1;
-    if(nb<0){ const char* e=getenv("MOE_NBLK"); nb = e?atoi(e):4;   // DEFAULT 4: +20% prefill, decode neutral, bit-exact if(nb!=1&&nb!=2&&nb!=4&&nb!=8) nb=1;
+    if(nb<0){ const char* e=getenv("MOE_NBLK"); nb = e?atoi(e):8;   // DEFAULT 8: w1w3 2005->1809 ms end to end, bit-exact if(nb!=1&&nb!=2&&nb!=4&&nb!=8) nb=1;
               // VALID COMBOS ARE ENUMERATED, NOT DERIVED FROM A PRODUCT. The first guard was
               // "RG*NB <= 4", which reads like a register-budget rule and is not one: RG=1,NB=8
               // (product 8) is CORRECT and RG=2,NB=4 (product 8) writes 1/8 of the output. Raising
