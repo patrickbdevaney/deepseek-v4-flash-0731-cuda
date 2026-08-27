@@ -1,13 +1,13 @@
 {
   "tasks": [
     {
-      "task": "aime24",
+      "task": "gpqa_diamond",
       "effort": "low24k",
-      "records": 60,
-      "recomputed_acc": 91.67,
-      "published_acc": 91.7,
-      "snapshot": "8d88b2876a82a080e2f172cc9b25d0d9d2cb4792",
-      "source": "Maxwell-Jia/AIME_2024 (30)"
+      "records": 198,
+      "recomputed_acc": 83.84,
+      "published_acc": 83.8,
+      "snapshot": "68be7564497676e07a77a042fdb587deb88c51c3",
+      "source": "fingertap/GPQA-Diamond (test, 198)"
     }
   ],
   "failed": 0

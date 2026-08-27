@@ -6,5 +6,13 @@
     "proven_identical_to": "edac0f30454cbc9f91cf537a6705c3be58855a23",
     "server_sha256": "5a0f9e482e712d80",
     "note": "Run predates per-record prompt_sha256. Prompts and golds rebuilt from the harness at the run-start commit are byte-identical to HEAD, so HEAD re-derives exactly what was sent. This is a SET-level proof, weaker than a per-record hash, and is reported as such."
+  },
+  "gpqa_diamond.low24k": {
+    "run_start_commit": "18a90a06260fdf57bdb9fed7b3fd48f0f4ffc2f9",
+    "prompts_sha256": "1f6d5c75b804f1480c833c03b19e85bd5113ae89405ea5d377feead189f55555",
+    "n_prompts": 198,
+    "proven_identical_to": "30a855c4a28629f5d5d8915fec920d5b2f699c88",
+    "server_sha256": "c9ba5be035a16d26",
+    "note": "Run predates per-record prompt_sha256. Prompts and golds rebuilt from the harness at the run-start commit are byte-identical to HEAD, so HEAD re-derives exactly what was sent. This is a SET-level proof, weaker than a per-record hash, and is reported as such."
   }
 }
