@@ -33,7 +33,7 @@ Full text and per-phase gates: [`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md).
 | phase | what it is | state |
 |---|---|---|
 | **1. draft head + spec decode** | exhaust every acceptance lever before measuring anything | **in flight** — P2.5 landed (+4.13 %), P2.6 running, 2.3 not started |
-| **2. prefill to the roofline** | 62.4 tok/s and ~3.3 min TTFT at 12 k is the largest remaining gap in the system | not started |
+| **2. prefill to the roofline** | 62.4 tok/s and ~3.3 min TTFT at 12 k was the largest remaining gap | **90.8 tok/s, bit-exact** (+45 %) — attention is now the larger half |
 | **3. prefix caching** | prove the OpenAI-compatible server is usable by a real agentic harness | not started |
 | **4. the eval battery** | run **once**, at the final configuration | armed, deliberately not started |
 
@@ -119,7 +119,7 @@ removes that bound. It has now been measured, and it does not remove much: the w
 entropy supports is close to 5 almost everywhere. **The remaining headroom is in the kernels, not in
 the speculator.**
 
-**Prefill is not on the ladder and may matter more than all of it.** 62.4 tok/s and **~3.3 min TTFT
+**Prefill is not on the ladder and may matter more than all of it.** 90.8 tok/s and **~2.2 min TTFT
 at 12 k** contribute nothing to tok/s, and a three-minute time-to-first-token makes throughput
 academic for an agentic harness.
 
@@ -130,7 +130,7 @@ academic for an agentic harness.
 | **speculative decode**, 8-prompt suite mean | **28.38 tok/s** (`s3recap-p25-b0.1`, live) | — | +25.3 % over the stock head this project started from |
 | acceptance τ, suite mean | **3.84 / 5** | 5 at block 5 | **77 %** of the width ceiling |
 | **base AR decode** | **14.61 tok/s** | 14.33–15.98 | at the realistic floor |
-| **prefill (PS=1022)** | **62.4 tok/s** | ≥ 410 target | **the largest gap in the system** — phase 2 |
+| **prefill (PS=845)** | **90.8 tok/s** | ≥ 410 target | +45 % on 2026-08-26, all bit-exact; `ATTENTION` is now 50.5 % of it |
 
 The shipped speculator is **`s3recap-p25-b0.1`**, promoted at `tau` 3.8413 against a same-width
 incumbent of 3.6888. Every candidate, rejects included, is in
