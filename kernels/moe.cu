@@ -290,6 +290,8 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         void tc_ensure_repacked(uint8_t*, int, int, cudaStream_t);
         void tc_a_to_fp16(__half*, const uint8_t*, const float*, int, int, cudaStream_t);
         void tc_build_tiles(int*, int*, int*, const int*, int, cudaStream_t);
+        void tc_build_tiles_rg(int*, int*, int*, const int*, int, cudaStream_t, int);
+        int  tcm_rowg();
         void tc_fp4_grouped_gemm(float*, const __half*, const uint8_t* const*, const float* const*,
                                  const int*, const int*, const int*, const int*, int, int, int, cudaStream_t);
         void tc_fp4_grouped_gemm_e8m0(float*, const __half*, const uint8_t* const*, const uint8_t* const*,
@@ -377,7 +379,10 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         // -- tile descriptors (device) --
         int *tile_e,*tile_row0,*ntiles_d; tile_e=(decltype(tile_e))dmalloc(maxm*4); tile_row0=(decltype(tile_row0))dmalloc(maxm*4); ntiles_d=(decltype(ntiles_d))dmalloc(4);
         dprof_begin(DP_MG_TILES,stream);
-        tc_build_tiles(tile_e,tile_row0,ntiles_d,off_d,nr,stream);
+        // The mma path can pack RG row-groups per tile (tc_build_tiles_rg); the GEMV path reads
+        // me<=16 per tile and would silently drop rows if handed a wider one, so it stays at 16.
+        if(!g_moe_gemv) tc_build_tiles_rg(tile_e,tile_row0,ntiles_d,off_d,nr,stream,tcm_rowg());
+        else            tc_build_tiles(tile_e,tile_row0,ntiles_d,off_d,nr,stream);
         dprof_end(DP_MG_TILES,stream);
         // -- repack every expert weight in place once (idempotent) + upload per-expert ptr tables to device --
         // GEMV path reads ORIGINAL fp4 (no repack).

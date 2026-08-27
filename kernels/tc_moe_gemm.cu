@@ -214,11 +214,11 @@ void tc_a_to_fp16(__half* x16, const uint8_t* A_fp8, const float* a_s, int M, in
 // Weights & scales are the SAME bytes the pp path uses -> identical mma -> cosine 1.0 vs the per-expert loop.
 
 // For each expert e, emit ceil(me/16) tiles at rows off[e], off[e]+16, ...  (single thread; nr<=~160).
-__global__ void k_build_tiles(int* tile_e, int* tile_row0, int* ntiles, const int* off, int nr){
+__global__ void k_build_tiles(int* tile_e, int* tile_row0, int* ntiles, const int* off, int nr, int step){
     if(threadIdx.x||blockIdx.x) return;
     int nt=0;
     for(int e=0;e<nr;++e){ int r0=off[e], r1=off[e+1];
-        for(int r=r0;r<r1;r+=16){ tile_e[nt]=e; tile_row0[nt]=r; ++nt; } }
+        for(int r=r0;r<r1;r+=step){ tile_e[nt]=e; tile_row0[nt]=r; ++nt; } }
     *ntiles=nt;
 }
 
@@ -275,14 +275,14 @@ __global__ void k_grouped_w4a8_kernel(float* out, const uint8_t* const* wptr, co
 // per-expert tile counts. Emission order is unchanged (expert-ascending, then row-ascending), so
 // tile_e[]/tile_row0[]/*ntiles are BIT-IDENTICAL to the serial version.
 #define TCM_SCAN_T 256
-__global__ void k_build_tiles_par(int* tile_e, int* tile_row0, int* ntiles, const int* __restrict__ off, int nr){
+__global__ void k_build_tiles_par(int* tile_e, int* tile_row0, int* ntiles, const int* __restrict__ off, int nr, int step){
     __shared__ int s[TCM_SCAN_T]; __shared__ int carry;
     if(threadIdx.x==0) carry=0;
     __syncthreads();
     for(int base=0; base<nr; base+=TCM_SCAN_T){
         int e = base + threadIdx.x;
         int r0=0, nt=0;
-        if(e<nr){ r0=off[e]; nt=(off[e+1]-r0+15)>>4; }   // ceil(me/16) tiles for this expert
+        if(e<nr){ r0=off[e]; nt=(off[e+1]-r0+step-1)/step; }   // ceil(me/step) tiles for this expert
         s[threadIdx.x]=nt;
         __syncthreads();
         for(int d=1; d<TCM_SCAN_T; d<<=1){
@@ -292,7 +292,7 @@ __global__ void k_build_tiles_par(int* tile_e, int* tile_row0, int* ntiles, cons
             __syncthreads();
         }
         int excl = carry + s[threadIdx.x] - nt;          // this expert's first tile index
-        for(int j=0;j<nt;++j){ tile_e[excl+j]=e; tile_row0[excl+j]=r0+16*j; }
+        for(int j=0;j<nt;++j){ tile_e[excl+j]=e; tile_row0[excl+j]=r0+step*j; }
         __syncthreads();
         if(threadIdx.x==TCM_SCAN_T-1) carry += s[TCM_SCAN_T-1];
         __syncthreads();
@@ -301,10 +301,50 @@ __global__ void k_build_tiles_par(int* tile_e, int* tile_row0, int* ntiles, cons
 }
 // Build tile descriptors on device from off[] (no host sync).
 // DSV4_SERIAL_SCAN=1 restores the <<<1,1>>> kernel so the A/B stays reachable.
-void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d, int nr, cudaStream_t s){
+static void tc_build_tiles_step(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d, int nr,
+                                cudaStream_t s, int step){
     static int serial = -1; if(serial<0) serial = getenv("DSV4_SERIAL_SCAN")!=nullptr;
-    if(serial) k_build_tiles    <<<1,1,0,s>>>(tile_e, tile_row0, ntiles_d, off_d, nr);
-    else       k_build_tiles_par<<<1,TCM_SCAN_T,0,s>>>(tile_e, tile_row0, ntiles_d, off_d, nr);
+    if(serial) k_build_tiles    <<<1,1,0,s>>>(tile_e, tile_row0, ntiles_d, off_d, nr, step);
+    else       k_build_tiles_par<<<1,TCM_SCAN_T,0,s>>>(tile_e, tile_row0, ntiles_d, off_d, nr, step);
+}
+void tc_build_tiles(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d, int nr, cudaStream_t s){
+    tc_build_tiles_step(tile_e, tile_row0, ntiles_d, off_d, nr, s, 16);
+}
+// ROW-GROUPS PER TILE (2026-08-26). include/moe.h has recorded since B9 that "EVERY tile re-reads its
+// expert's whole weight matrix, so weight traffic is ntiles x (w1+w3+w2)". At decode that is invisible
+// -- one tile per expert. At a PREFILL it is the whole cost: PS=845 puts 845*6/160 = ~32 rows on every
+// expert, i.e. TWO 16-row tiles, i.e. every expert weight read TWICE. Measured on tools/moe_gemv_bench
+// at the prefill grouping, the mma path holds a flat 87 GB/s of REAL traffic from 16 rows upward, so
+// the tiles are the bytes and the bytes are the time: 160x16 = 16.3 ms, 160x32 = 32.8, 160x64 = 65.5,
+// exactly linear in ceil(R/16) while the IDEAL traffic never changes.
+//
+// A tile that owns RG row-groups loads and dequantises the B fragment ONCE for all of them. The
+// K-reduction order of every output element is untouched -- the same mma over the same k_tile
+// sequence -- so this is bit-exact, and gate_grouped_moe proves it by memcmp rather than by this
+// paragraph. RG=1 dispatches to the ORIGINAL kernel, byte for byte, so the default cannot regress.
+// RG*NB > 4 IS REFUSED, and the reason is a trap worth naming. RG=2,NB=4 benched 6.74x faster than
+// baseline -- and wrote 1/8 of the output: 5120 rows x 256 of 2048 columns. It was faster because it
+// was doing an eighth of the work. ptxas reports no spills, so it is a launch that fails to cover its
+// grid, not register pressure. A checksum across configs (MOE_BENCH_SUM=1 in tools/moe_gemv_bench)
+// caught it; speed alone never would have.
+//
+// The clamp lives HERE, in the accessor, and not at the launch site. Clamping at the launch site was
+// the first attempt and it was WORSE: tools/moe_gemv_bench builds its tiles from tcm_rowg() while the
+// kernel used the clamped value, so tiles were strided 32 and read as 16 and exactly half the rows
+// vanished. One value, read by both, or they disagree.
+int tcm_rowg();
+int tcm_nblk(){ static int nb=-1;
+    if(nb<0){ const char* e=getenv("MOE_NBLK"); nb = e?atoi(e):1; if(nb!=1&&nb!=2&&nb!=4) nb=1;
+              if(tcm_rowg()*nb > 4){
+                  fprintf(stderr,"[moe] MOE_ROWG=%d x MOE_NBLK=%d unsupported (>4); NB forced to 1\n", tcm_rowg(), nb);
+                  nb = 1; } }
+    return nb; }
+int tcm_rowg(){ static int rg=-1;
+    if(rg<0){ const char* e=getenv("MOE_ROWG"); rg = e?atoi(e):1; if(rg!=1&&rg!=2&&rg!=4) rg=1; }
+    return rg; }
+void tc_build_tiles_rg(int* tile_e, int* tile_row0, int* ntiles_d, const int* off_d, int nr,
+                       cudaStream_t s, int rowg){
+    tc_build_tiles_step(tile_e, tile_row0, ntiles_d, off_d, nr, s, 16*rowg);
 }
 
 // ===================== M=1 fp4 GEMV (small-M decode, ORIGINAL fp4 layout, no repack) =====================
@@ -540,6 +580,90 @@ __global__ void k_grouped_w4a8_e8m0_kernel(float* out, const uint8_t* const* wpt
     if(gid+8<me && n0+cn  <N) out[(size_t)(row0+gid+8)*N + n0+cn ]=c[2];
     if(gid+8<me && n0+cn+1<N) out[(size_t)(row0+gid+8)*N + n0+cn+1]=c[2+1];
 }
+// ============ RG row-groups x NB n-blocks per warp: load once, use many ==========================
+// TWO redundancies, measured at the PREFILL grouping on tools/moe_gemv_bench (160 experts):
+//
+//   WEIGHTS. include/moe.h has recorded since B9 that every 16-row tile re-reads its expert's whole
+//   matrix. PS=845 puts 845*6/160 = ~32 rows on each expert = TWO tiles = every weight read twice.
+//   RG row-groups in one tile load and dequantise the B fragment ONCE for all of them.
+//
+//   ACTIVATIONS, and this one is bigger. A warp owned 8 N-columns, i.e. ONE mma per A-fragment load,
+//   so the activation tensor is re-read once per n-block: 42 MB x 256 = 10.7 GB against the weights'
+//   1.43 GB. The A fragment depends on (row,k) and NOT on n, so NB n-blocks per warp issue NB mma
+//   against one A load and divide that traffic by NB. Same lever MOE_BN=2 already took on the GEMV
+//   path in this file (155 -> 242 GB/s); the mma path never got it.
+//
+// Every output element still accumulates over the same k_tile sequence in the same order, so this is
+// bit-exact. RG=1,NB=1 dispatches to the ORIGINAL kernel so the default cannot regress.
+template<int RG, int NB>
+__global__ void k_grouped_w4a8_e8m0_kernel_rg(float* out, const uint8_t* const* wptr, const uint8_t* const* sptr,
+        const int* __restrict__ tile_e, const int* __restrict__ tile_row0, const int* __restrict__ ntiles,
+        const int* __restrict__ off, const __half* x16all, int N, int K){
+    int tile = blockIdx.y; if(tile >= *ntiles) return;
+    int e = tile_e[tile]; int row0 = tile_row0[tile];
+    int me_tot = off[e+1]-row0; if(me_tot > 16*RG) me_tot = 16*RG;
+    const uint8_t* wprE = wptr[e]; const uint8_t* b_s = sptr[e];
+    int off_b=(int)((uintptr_t)wprE & 15); int k0f=off_b>>2; unsigned shf=(off_b&3)*8;
+    int lane=threadIdx.x&31, gid=lane>>2, t4=lane&3;
+    int wbase = (blockIdx.x*(blockDim.x>>5) + (threadIdx.x>>5))*NB;
+    if((long)wbase*8>=N) return;
+    float c[4*RG*NB];
+    #pragma unroll
+    for(int i=0;i<4*RG*NB;++i) c[i]=0.f;
+    int kg8=K/128, Ks32=K/32;
+    const uint8_t* wbn[NB]; const uint8_t* bsrn[NB]; bool nok[NB];
+    #pragma unroll
+    for(int q=0;q<NB;++q){ int nb=wbase+q; nok[q] = ((long)nb*8 < N); int nu = nok[q]?nb:0;
+        wbn[q]  = wprE + (long)nu*kg8*512;
+        bsrn[q] = b_s  + (long)(nu*8+gid)*Ks32; }
+    const __half* xg0[RG]; const __half* xg8[RG]; int mer[RG];
+    #pragma unroll
+    for(int r=0;r<RG;++r){ int base = row0 + r*16;
+        xg0[r] = x16all + (size_t)(base+gid)*K;
+        xg8[r] = x16all + (size_t)(base+gid+8)*K;
+        int m = me_tot - r*16; if(m<0) m=0; if(m>16) m=16; mer[r]=m; }
+    for(int g=0; g<kg8; ++g){
+        uint4 W[NB];
+        #pragma unroll
+        for(int q=0;q<NB;++q){ const uint8_t* wa = wbn[q] + (long)g*512 + lane*16 - off_b;
+            uint4 A=__ldcs((const uint4*)wa), B=__ldcs((const uint4*)(wa+16));
+            W[q]=tcm_funnel16(A,B,k0f,shf); }
+        #pragma unroll
+        for(int kl=0; kl<8; ++kl){ int k_tile=g*8+kl, k0=k_tile*16;
+            unsigned bb[NB][2];
+            #pragma unroll
+            for(int q=0;q<NB;++q){ const uint8_t* wby=(const uint8_t*)&W[q];
+                __half2 sc2 = __half2half2(__float2half(exp2f((float)bsrn[q][k_tile/2]-127.f)));
+                __half2 b0 = __hmul2(tcm_fp4x2(wby[2*kl]),   sc2);
+                __half2 b1 = __hmul2(tcm_fp4x2(wby[2*kl+1]), sc2);
+                bb[q][0]=*(unsigned*)&b0; bb[q][1]=*(unsigned*)&b1; }
+            #pragma unroll
+            for(int r=0;r<RG;++r){
+                unsigned a[4];
+                bool m0 = gid < mer[r], m8 = (gid+8) < mer[r];
+                a[0]=m0? *(const unsigned*)(xg0[r]+k0+2*t4)   : 0u;
+                a[1]=m8? *(const unsigned*)(xg8[r]+k0+2*t4)   : 0u;
+                a[2]=m0? *(const unsigned*)(xg0[r]+k0+2*t4+8) : 0u;
+                a[3]=m8? *(const unsigned*)(xg8[r]+k0+2*t4+8) : 0u;
+                #pragma unroll
+                for(int q=0;q<NB;++q) mma_m16n8k16(c+4*(r*NB+q), a, bb[q]);
+            }
+        }
+    }
+    int cn=2*t4;
+    #pragma unroll
+    for(int r=0;r<RG;++r){ int base = row0 + r*16, m = mer[r];
+        #pragma unroll
+        for(int q=0;q<NB;++q){
+            if(!nok[q]) continue;
+            int n0q=(wbase+q)*8, i=4*(r*NB+q);
+            if(gid<m   && n0q+cn  <N) out[(size_t)(base+gid)*N   + n0q+cn  ]=c[i+0];
+            if(gid<m   && n0q+cn+1<N) out[(size_t)(base+gid)*N   + n0q+cn+1]=c[i+1];
+            if(gid+8<m && n0q+cn  <N) out[(size_t)(base+gid+8)*N + n0q+cn  ]=c[i+2];
+            if(gid+8<m && n0q+cn+1<N) out[(size_t)(base+gid+8)*N + n0q+cn+1]=c[i+3];
+        }
+    }
+}
 // Warps per block for the grouped MoE GEMMs. 1 (the old value) caps theoretical occupancy at 50%.
 // Env-overridable so the A/B is reproducible: MOE_WPB=1 restores the previous behaviour exactly.
 static int moe_wpb(){
@@ -552,7 +676,21 @@ void tc_fp4_grouped_gemm_e8m0(float* out, const __half* x16all, const uint8_t* c
         int maxtiles, int N, int K, cudaStream_t s){
     const int wpb = moe_wpb(), nb = N/8;
     dim3 grid((nb + wpb - 1)/wpb, maxtiles);
-    k_grouped_w4a8_e8m0_kernel<<<grid, 32*wpb, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K);
+    // RG=1 keeps the ORIGINAL kernel so the shipped default is byte-for-byte what it always was.
+    const int rg = tcm_rowg(), nbk = tcm_nblk();
+    if(rg==1 && nbk==1){
+        k_grouped_w4a8_e8m0_kernel<<<grid, 32*wpb, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K);
+        return;
+    }
+    dim3 gridn((nb + nbk*wpb - 1)/(nbk*wpb), maxtiles);
+    #define TCM_LAUNCH(R,B) k_grouped_w4a8_e8m0_kernel_rg<R,B><<<gridn, 32*wpb, 0, s>>>(out, wptr_d, sptr_d, tile_e, tile_row0, ntiles_d, off_d, x16all, N, K)
+    if(rg==1 && nbk==2) TCM_LAUNCH(1,2);
+    else if(rg==1 && nbk==4) TCM_LAUNCH(1,4);
+    else if(rg==2 && nbk==1) TCM_LAUNCH(2,1);
+    else if(rg==2 && nbk==2) TCM_LAUNCH(2,2);
+    else if(rg==4 && nbk==1) TCM_LAUNCH(4,1);
+    else TCM_LAUNCH(1,1);
+    #undef TCM_LAUNCH
 }
 // Grouped W4A8: out[total,N] = per-tile (expert wptr[e]) mma over x16all rows. maxtiles = host upper bound on tiles.
 void tc_fp4_grouped_gemm(float* out, const __half* x16all, const uint8_t* const* wptr_d, const float* const* sptr_d,

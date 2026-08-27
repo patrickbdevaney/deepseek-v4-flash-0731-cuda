@@ -54,9 +54,15 @@ done
 #     BREAK-EVEN AT P/R = 1.75.
 # Agentic coding runs P/R of 5-50 and wins clearly; chat sits at 1-3 and is marginal. Default OFF so
 # the shipped decode headline is unchanged -- set MOE_MMA=1 for prompt-heavy serving.
-if [ -n "${MOE_MMA:-}" ]; then
-    echo "  MOE_MMA=1: tensor-core MoE. prefill +22%, decode -14%; worth it above P/R 1.75."
-    export MOE_MMA
+# DEFAULT ON as of 2026-08-26: this server exists for prompt-heavy agentic work, where P/R runs
+# 5-50 against a break-even of 1.75. Set MOE_MMA=0 to serve a decode-dominated workload (P/R < 1.75)
+# or to reproduce the pre-2026-08-26 decode headline.
+if [ "${MOE_MMA:-1}" != "0" ]; then
+    export MOE_MMA=1
+    echo "  MOE_MMA=1 (default): tensor-core MoE. prefill +22.2%, decode -14.4%; break-even P/R 1.75."
+else
+    unset MOE_MMA
+    echo "  MOE_MMA=0: M=1 GEMV MoE. Decode-optimal; prefill gives up 22.2%."
 fi
 exec ./build/dsv4-server --ckpt "$CKPT" --host "$HOST" --port "$PORT" --seqmax "$SEQMAX" \
      --ext-chunk "$EXT_CHUNK" "$@"

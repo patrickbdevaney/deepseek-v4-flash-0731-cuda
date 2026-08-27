@@ -1581,3 +1581,43 @@ against **the binary you are launching**, not against the largest context the bo
 
 The guard did its job — the run died clean with a named cause and cost 90 seconds. Worth noting
 because the alternative reading, "5.6k is small, the box does 24k", is the one that sounds right.
+
+## 46. A kernel that is faster because it is doing less work
+
+Optimising the prefill MoE (2026-08-26), a new `RG=2, NB=4` variant benched **6.74x faster** than the
+shipped kernel at the prefill grouping — 4.856 ms against 32.741. Every instinct said ship it.
+
+It was writing **1/8 of the output**: 5120 rows x 256 of 2048 columns, i.e. 32 of 256 n-blocks. The
+speedup was the missing work, exactly and entirely.
+
+Nothing in the timing could have revealed this. `ptxas -v` reported **0 bytes spilled**, so the usual
+suspect was innocent. The bench printed ms and GB/s and both looked wonderful. What caught it was a
+checksum of the whole output buffer, computed *after* the timed region and compared **across
+configs** — `MOE_BENCH_SUM=1` in `tools/moe_gemv_bench.cu`:
+
+```
+RG=1 NB=1   32.744 ms   chk=4.938100e+13 nz=10485760
+RG=2 NB=4    4.855 ms   chk=6.161968e+12 nz=1310720     <- 1/8 the elements
+```
+
+**Any benchmark of a kernel variant must compare OUTPUT, not just time.** A variant that changes how
+much work a thread owns can silently change how much work happens at all, and the failure mode is a
+number that looks like a win. Cheap rule: every bench prints a checksum, and configs that claim to
+compute the same thing must agree on it before any timing is read.
+
+### The second trap, inside the fix
+
+The first fix clamped `RG*NB <= 4` **at the launch site**. That was worse: `moe_gemv_bench` builds its
+tiles from `tcm_rowg()` while the kernel used the clamped value, so tiles were strided 32 and read as
+16 — and exactly **half** the rows disappeared. A clamp that two readers disagree about is a bug, not
+a guard. The clamp now lives in the accessor (`tcm_nblk()`), so the tile builder and the kernel read
+one value and cannot diverge.
+
+### And a third, on the same afternoon
+
+An unrelated re-run of the same bench showed the baseline at 64.4 ms where it had been 32.7 — a clean
+2x "regression" in a path that had not been touched. The GPU clocks had dropped after the previous
+`run_model.sh` exited. The streaming roofline in the same binary barely moved (244 -> 237 GB/s) while
+the kernel halved, which is itself the tell: **a bandwidth-bound kernel tracks the memory clock, an
+issue-bound one tracks the core clock.** Pin clocks before believing any kernel A/B, and print the
+in-binary roofline alongside every number so the two can be told apart.

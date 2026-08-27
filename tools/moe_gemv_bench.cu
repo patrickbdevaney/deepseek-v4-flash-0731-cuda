@@ -43,6 +43,8 @@ void tc_fp4_grouped_gemv_e8m0(float*, const unsigned char*, const float*, const 
         const unsigned char* const*, const int*, const int*, const int*, const int*,
         int, int, int, cudaStream_t, int, int);
 void tc_build_tiles(int*, int*, int*, const int*, int, cudaStream_t);
+void tc_build_tiles_rg(int*, int*, int*, const int*, int, cudaStream_t, int);
+int  tcm_rowg();
 // The OTHER MoE kernel, already in the tree and reachable via MOE_MMA=1: one m16n8k16 tile per
 // <=16 rows, so the weight is dequantised ONCE for all rows a tile owns. Needs mma-order weights
 // (`tc_ensure_repacked`, in place) and fp16 activations (`tc_a_to_fp16`).
@@ -116,7 +118,9 @@ static double bench(const Case& c, const std::vector<int>& rows_per_expert, int 
     CU(cudaMalloc(&tile_e, total_rows*sizeof(int)));
     CU(cudaMalloc(&tile_row0, total_rows*sizeof(int)));
     CU(cudaMalloc(&ntiles_d, sizeof(int)));
-    tc_build_tiles(tile_e, tile_row0, ntiles_d, off_d, nr, 0);
+    // the mma path may pack RG row-groups into one tile; the GEMV path is always 16 rows.
+    if(mma) tc_build_tiles_rg(tile_e, tile_row0, ntiles_d, off_d, nr, 0, tcm_rowg());
+    else    tc_build_tiles(tile_e, tile_row0, ntiles_d, off_d, nr, 0);
     CU(cudaDeviceSynchronize());
 
     // --- bytes the launch MUST move -----------------------------------------------------------
@@ -169,8 +173,19 @@ static double bench(const Case& c, const std::vector<int>& rows_per_expert, int 
     float ms; CU(cudaEventElapsedTime(&ms, t0, t1));
     const double gbs = bytes * reps / (ms/1e3) / 1e9;
 
-    printf("  %-32s %-6s rows=%-3d experts=%-3d %-4s  %7.3f ms  %7.1f GB/s\n",
+    // CORRECTNESS, not just speed. A kernel that does LESS work also runs faster, and the RG/NB
+    // variants change how much work each warp owns -- so print a checksum of the whole output and
+    // compare it ACROSS configs. Computed after the timed region; it cannot perturb the number.
+    double chk = 0.0; long nz = 0;
+    if(getenv("MOE_BENCH_SUM")){
+        std::vector<float> h((size_t)total_rows*c.N);
+        CU(cudaMemcpy(h.data(), out, h.size()*sizeof(float), cudaMemcpyDeviceToHost));
+        for(size_t i=0;i<h.size();++i){ if(h[i]!=0.f){ chk += (double)h[i]*(double)((i%1021)+1); ++nz; } }
+    }
+    printf("  %-32s %-6s rows=%-3d experts=%-3d %-4s  %7.3f ms  %7.1f GB/s",
            label, c.name, total_rows, nr, mma ? "mma" : "gemv", ms/reps, gbs);
+    if(getenv("MOE_BENCH_SUM")) printf("  chk=%.6e nz=%ld", chk, nz);
+    printf("\n");
     if (x16) cudaFree(x16);
 
     for (int p = 0; p < pool; ++p){
@@ -270,6 +285,28 @@ int main(int argc, char** argv){
         char lab[64]; snprintf(lab, sizeof lab, "18 experts x %d rows", R);
         setenv("MOE_RB", "8", 1); bench(w13, g, 8, pool, reps, lab, 0, false); unsetenv("MOE_RB");
         bench(w13, g, 8, pool, reps, lab, 0, true);
+    }
+
+    // ===================== PREFILL GROUPING (2026-08-26) =====================
+    // Everything above is decode/verify: <= 8 rows per expert, a handful of experts. PREFILL is a
+    // different regime and the engine's largest single mark. At PS=845 with 6 experts per token,
+    // 845*6 = 5070 rows spread over ALL 160 experts = ~32 rows each -- 4x past the widest case
+    // benched above, and every expert hit, so the ideal DRAM traffic is the whole expert set read
+    // once. dprof says the MoE is 5044 ms with MOE_MMA=1 against a ~415 ms bandwidth floor; this is
+    // where that 12x either shows up as redundancy or as plain inefficiency.
+    printf("\n[PREFILL grouping: 160 experts, rows per expert varying, GEMV vs mma]\n");
+    printf("  ideal DRAM = every expert read once; mma dequants once per 16-row tile\n");
+    for (int R : {8, 16, 32, 64}){
+        std::vector<int> g(160, R);
+        char lab[64]; snprintf(lab, sizeof lab, "160 experts x %2d rows", R);
+        setenv("MOE_RB", "8", 1); bench(w13, g, 8, pool, reps, lab, 0, false); unsetenv("MOE_RB");
+        bench(w13, g, 8, pool, reps, lab, 0, true);
+    }
+    printf("\n[PREFILL, w2 shape]\n");
+    {
+        std::vector<int> g(160, 32);
+        setenv("MOE_RB", "8", 1); bench(w2, g, 8, pool, reps, "160 x 32 rows", 0, false); unsetenv("MOE_RB");
+        bench(w2, g, 8, pool, reps, "160 x 32 rows", 0, true);
     }
     return 0;
 }
