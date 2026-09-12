@@ -115,14 +115,15 @@ int main(int argc, char** argv){
         m.gate_w=L.bf16(p+"gate.weight"); m.is_hash=is_hash;
         m.gate_bias=m.is_hash?nullptr:(W.has(p+"gate.bias")?L.f32(p+"gate.bias"):nullptr);
         m.tid2eid=m.is_hash?(const long*)W.get(p+"gate.tid2eid").dev:nullptr;
-        for(int e=0;e<N_ROUTED;++e){ std::string ep=p+"experts."+std::to_string(e)+".";
+        const int NR = discover_n_routed(W, p + "experts.");
+        for(int e=0;e<NR;++e){ std::string ep=p+"experts."+std::to_string(e)+".";
             p1.push_back(L.raw(ep+"w1.weight")); p2.push_back(L.raw(ep+"w2.weight")); p3.push_back(L.raw(ep+"w3.weight"));
             s1.push_back(L.scale(ep+"w1.scale")); s2.push_back(L.scale(ep+"w2.scale")); s3.push_back(L.scale(ep+"w3.scale")); }
         m.w1p=p1.data(); m.w2p=p2.data(); m.w3p=p3.data(); m.w1sp=s1.data(); m.w2sp=s2.data(); m.w3sp=s3.data();
         std::string sp=p+"shared_experts.";
         m.sw1=L.raw(sp+"w1.weight"); m.sw2=L.raw(sp+"w2.weight"); m.sw3=L.raw(sp+"w3.weight");
         m.sw1s=L.scale(sp+"w1.scale"); m.sw2s=L.scale(sp+"w2.scale"); m.sw3s=L.scale(sp+"w3.scale");
-        m.n_routed=N_ROUTED; m.n_act=N_ACT; m.dim=DIM; m.inter=MOE_INTER; m.vocab=VOCAB; m.route_scale=ROUTE_SCALE; m.swiglu_limit=SWIGLU_LIMIT;
+        m.n_routed=NR; m.n_act=N_ACT; m.dim=DIM; m.inter=MOE_INTER; m.vocab=VOCAB; m.route_scale=ROUTE_SCALE; m.swiglu_limit=SWIGLU_LIMIT;
         m.use_tc_pp=true; m.batched=true; m.device_route=true; }; // TC pp MoE + batched + DEVICE-SIDE grouping (Step 1 -> graphs; gated cosine 1.0)
     auto fill_attn=[&](const std::string& pfx, MLAWeights& a, bool compressed){
         std::string p=pfx+"attn.";

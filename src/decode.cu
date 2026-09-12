@@ -45,6 +45,8 @@
 #include <cstring>
 #include <memory>
 #include <cmath>
+
+static int g_n_routed_seen = N_ROUTED;   // set at load by discover_n_routed()
 using namespace dsv4;
 #define CU(x) do{cudaError_t e=(x); if(e){fprintf(stderr,"cuda %s:%d %s\n",__FILE__,__LINE__,cudaGetErrorString(e));exit(1);} }while(0)
 
@@ -291,7 +293,9 @@ int main(int argc, char** argv){
         m.gate_w=L.bf16(p+"gate.weight"); m.is_hash=is_hash;
         m.gate_bias=is_hash?nullptr:(W.has(p+"gate.bias")?L.f32(p+"gate.bias"):nullptr);
         m.tid2eid=is_hash?(const long*)W.get(p+"gate.tid2eid").dev:nullptr;
-        for(int e=0;e<N_ROUTED;++e){ std::string ep=p+"experts."+std::to_string(e)+".";
+        const int NR = discover_n_routed(W, p + "experts.");
+        g_n_routed_seen = NR;   // so [union] reports THIS checkpoint's denominator, not the K160 default
+        for(int e=0;e<NR;++e){ std::string ep=p+"experts."+std::to_string(e)+".";
             p1.push_back(L.raw(ep+"w1.weight")); p2.push_back(L.raw(ep+"w2.weight")); p3.push_back(L.raw(ep+"w3.weight"));
             s1.push_back(L.raw(ep+"w1.scale")); s2.push_back(L.raw(ep+"w2.scale")); s3.push_back(L.raw(ep+"w3.scale")); }  // e8m0 bytes, persistent (no dequant)
         m.w1p=p1.data();m.w2p=p2.data();m.w3p=p3.data();
@@ -299,7 +303,7 @@ int main(int argc, char** argv){
         std::string sp=p+"shared_experts.";
         m.sw1=L.raw(sp+"w1.weight");m.sw2=L.raw(sp+"w2.weight");m.sw3=L.raw(sp+"w3.weight");
         m.sw1s=L.scale(sp+"w1.scale");m.sw2s=L.scale(sp+"w2.scale");m.sw3s=L.scale(sp+"w3.scale");
-        m.n_routed=N_ROUTED;m.n_act=N_ACT;m.dim=DIM;m.inter=MOE_INTER;m.vocab=VOCAB;m.route_scale=ROUTE_SCALE;m.swiglu_limit=SWIGLU_LIMIT;
+        m.n_routed=NR;m.n_act=N_ACT;m.dim=DIM;m.inter=MOE_INTER;m.vocab=VOCAB;m.route_scale=ROUTE_SCALE;m.swiglu_limit=SWIGLU_LIMIT;
         m.use_tc_pp=true;m.batched=true;m.device_route=true; };
     auto fill_attn=[&](const std::string& pfx, MLAWeights& a, bool compressed){
         std::string p=pfx+"attn.";
@@ -654,7 +658,7 @@ int main(int argc, char** argv){
                 { char tg[32]; snprintf(tg,sizeof tg,"K=%d",K); dprof_report(tg); }
                 if(getenv("DSV4_MOEUNION") && g_moe_union_calls){
                     printf("[union] K=%d : mean distinct experts per layer = %.2f  (%d calls, top-%d of %d)\n",
-                           K, (double)g_moe_union_sum/g_moe_union_calls, g_moe_union_calls, N_ACT, N_ROUTED);
+                           K, (double)g_moe_union_sum/g_moe_union_calls, g_moe_union_calls, N_ACT, g_n_routed_seen);
                     printf("[union] K=%d : rows/expert mean %.2f max %d  hist(me=1..8,>8):",
                            K, (double)g_moe_rows_sum/g_moe_union_sum, g_moe_rows_max);
                     for(int i=1;i<=9;++i) printf(" %lld", g_moe_rows_hist[i]);

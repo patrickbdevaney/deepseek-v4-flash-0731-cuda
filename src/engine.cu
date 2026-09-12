@@ -192,7 +192,8 @@ void Engine::Impl::build_layer(int Lyr, const float* slide_cos, const float* sli
         m.gate_w = L.bf16(p + "gate.weight"); m.is_hash = is_hash;
         m.gate_bias = is_hash ? nullptr : (W.has(p + "gate.bias") ? L.f32(p + "gate.bias") : nullptr);
         m.tid2eid = is_hash ? (const long*)W.get(p + "gate.tid2eid").dev : nullptr;
-        for (int e = 0; e < N_ROUTED; ++e) {
+        const int NR = discover_n_routed(W, p + "experts.");
+        for (int e = 0; e < NR; ++e) {
             const std::string ep = p + "experts." + std::to_string(e) + ".";
             p1.push_back(L.raw(ep + "w1.weight")); p2.push_back(L.raw(ep + "w2.weight")); p3.push_back(L.raw(ep + "w3.weight"));
             s1.push_back(L.raw(ep + "w1.scale")); s2.push_back(L.raw(ep + "w2.scale")); s3.push_back(L.raw(ep + "w3.scale"));
@@ -202,7 +203,7 @@ void Engine::Impl::build_layer(int Lyr, const float* slide_cos, const float* sli
         const std::string sp = p + "shared_experts.";
         m.sw1 = L.raw(sp + "w1.weight"); m.sw2 = L.raw(sp + "w2.weight"); m.sw3 = L.raw(sp + "w3.weight");
         m.sw1s = L.scale(sp + "w1.scale"); m.sw2s = L.scale(sp + "w2.scale"); m.sw3s = L.scale(sp + "w3.scale");
-        m.n_routed = N_ROUTED; m.n_act = N_ACT; m.dim = DIM; m.inter = MOE_INTER; m.vocab = VOCAB;
+        m.n_routed = NR; m.n_act = N_ACT; m.dim = DIM; m.inter = MOE_INTER; m.vocab = VOCAB;
         m.route_scale = ROUTE_SCALE; m.swiglu_limit = SWIGLU_LIMIT;
         m.use_tc_pp = true; m.batched = true; m.device_route = true;
     };
@@ -374,6 +375,14 @@ void Engine::Impl::load() {
     P1.assign(N_LAYERS, {}); P2.assign(N_LAYERS, {}); P3.assign(N_LAYERS, {});
     S18.assign(N_LAYERS, {}); S28.assign(N_LAYERS, {}); S38.assign(N_LAYERS, {});
     BW.assign(N_LAYERS, BlockWeights()); CW.assign(N_LAYERS, CompressedBlockWeights());
+    {   // Report the DISCOVERED expert count at startup. A checkpoint's prune ratio is the single
+        // thing that differs between sibling REAPs of this architecture, so it belongs in the log
+        // next to the byte count -- the same reason every eval result line names its served model.
+        const int nr_seen = discover_n_routed(W, "layers.0.ffn.experts.");
+        say("[engine] routed experts: %d of 256 (%.1f%% pruned), top-%d%s\n", nr_seen,
+            100.0 * (256 - nr_seen) / 256.0, N_ACT,
+            nr_seen == N_ROUTED ? "" : "  [NOT the K160 default]");
+    }
     say("[engine] building %d layer structs (persistent)...\n", N_LAYERS);
     for (int Lyr = 0; Lyr < N_LAYERS; ++Lyr)
         build_layer(Lyr, slide_cos, slide_sin, cqc, cqs, cc4c, cc4s, cc128c, cc128s);

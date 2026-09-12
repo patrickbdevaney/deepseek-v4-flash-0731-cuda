@@ -10,6 +10,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <stdexcept>
 
 namespace dsv4 {
 
@@ -35,7 +36,8 @@ static const int N_KV_HEADS = 1;        // MLA single latent KV
 static const int WINDOW     = 128;      // sliding_window
 
 // ---- MoE ----
-static const int N_ROUTED   = 160;      // REAP K160 (unpruned DSpark = 256)
+static const int N_ROUTED   = 160;      // REAP K160 default (unpruned DSpark = 256); see
+                                        // discover_n_routed() -- the loaders DISCOVER this.
 static const int N_ACT      = 6;        // num_experts_per_tok
 static const int N_SHARED   = 1;
 static const int MOE_INTER  = 2048;     // per-expert & shared FFN width
@@ -43,6 +45,29 @@ static const int N_HASH_LAY = 3;        // first 3 layers route by tid2eid hash
 static const float ROUTE_SCALE = 1.5f;  // routed_scaling_factor
 static const float SWIGLU_LIMIT = 10.0f;
 // score_func = sqrtsoftplus ; topk_method = noaux_tc (bias for SELECTION only)
+
+// The backbone routed-expert count is DISCOVERED from the checkpoint, not assumed. N_ROUTED
+// above is 0731-REAP's K160 and stays the value for that checkpoint, but sibling REAPs of this
+// same architecture differ ONLY in this number: DeepSeek-V4-Flash-Vision-Exp-REAP-145B is K128
+// with identical layers (43), top-k (6), vocab (129280), quantization (fp8 / ue8m0 / 128x128
+// block) and expert_dtype (fp4). Serving it used to fail at load with
+//   weight not found: layers.0.ffn.experts.128.w1.weight
+// because 160 was baked in at compile time -- a one-constant problem that silently cost a whole
+// eval arm. Everything downstream was ALREADY runtime-parameterised (MoEWeights::n_routed, the
+// router kernel's n_routed argument and its dynamic shared memory, the per-expert pointer
+// tables), so only the load loops needed this.
+//
+// Same pattern the DSpark/MTP head has always used to size itself. Probing by name costs one
+// hash lookup per expert per MoE layer at load, which is noise against reading the weights.
+template <class WMap>
+inline int discover_n_routed(const WMap& W, const std::string& expert_pfx) {
+    int n = 0;
+    while (W.has(expert_pfx + std::to_string(n) + ".w1.weight")) ++n;
+    if (n == 0)
+        throw std::runtime_error("no routed experts found under '" + expert_pfx +
+                                 "' -- checkpoint layout is not what this engine expects");
+    return n;
+}
 
 // ---- Hyper-Connections ----
 static const int HC_MULT = 4;
