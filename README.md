@@ -51,6 +51,12 @@ can see which rows are poolable.
 
 ### Where each row actually stands
 
+> **Update.** This table is the 2026-08-22 snapshot. The MMLU-Pro and GPQA-Diamond extensions completed
+> afterwards; the final numbers are on the
+> [model card](https://huggingface.co/patrickbdevaney/DeepSeek-V4-Flash-0731-REAP-DSpark): **GPQA-Diamond
+> 83.8 % (n = 198)** — below the pre-registered 87–93 % prediction — and **MMLU-Pro 74.7 % (n = 150)**.
+> Quote those, not the partial rows below.
+
 | task | row | n | acc | trunc | state |
 |---|---|---:|---:|---:|---|
 | math500 | low | 100 | 95.0 | 1.0 % | **quotable** |
@@ -58,8 +64,8 @@ can see which rows are poolable.
 | bfcl | low | 240 | 86.2 | 1.2 % | **quotable** |
 | bfcl_live | low | 508 | 78.7 | 1.0 % | **quotable** |
 | aime24 | low24k | 60 | 91.7 | 10.0 % | extended and landed; **over the 5 % gate → needs forcing** |
-| mmlu_pro | low24k | 141/150 | *76.6* | *1.4 %* | ⚠️ **extension partial** |
-| gpqa_diamond | low24k | 147/198 | *93.9* | *0.0 %* | ⚠️ **extension partial** |
+| mmlu_pro | low24k | 141/150 | *76.6* | *1.4 %* | ⚠️ partial snapshot — **superseded: final 74.7 % (n = 150)** |
+| gpqa_diamond | low24k | 147/198 | *93.9* | *0.0 %* | ⚠️ partial snapshot — **superseded: final 83.8 % (n = 198)** |
 | aime25 | low24k | 45/60 | *96.2* | *2.2 %* | ⚠️ **extension partial** — suspended cleanly after item 6/21 |
 | scicode | low | 291 | 30.2 | 18.6 % | extension not started |
 | lcb | low | 175 | 46.9 | **59.4 %** | extension not started |
