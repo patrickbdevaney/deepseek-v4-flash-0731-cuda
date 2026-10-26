@@ -18,7 +18,8 @@ one concurrent request, one GPU architecture.
 |---|---|
 | Engine: MLA + DSA attention, MXFP4 MoE, hyper-connections, DSpark verify | Complete; every kernel gated against a PyTorch oracle |
 | OpenAI-compatible server ([`server/`](server/)) | Complete: chat and completions, streaming, tool calls, thinking blocks, KV prefix cache |
-| Draft head [`dspark-mtp-draft-head-s3recap-p25-b0.1`](https://huggingface.co/patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1) | Public; the served head |
+| Checkpoint with the head installed: [`DeepSeek-V4-Flash-0731-REAP-DSpark`](https://huggingface.co/patrickbdevaney/DeepSeek-V4-Flash-0731-REAP-DSpark) | Public, 100.4 GiB; the model card carries the final evaluation |
+| Draft head alone: [`dspark-mtp-draft-head-s3recap-p25-b0.1`](https://huggingface.co/patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1) | Public; the served head |
 | Capability evaluation | 14 rows; 12 complete, one partial (do not quote), two budget-limited ([below](#capability)) |
 | Context | 128K tokens supported, 32,768 by default; KV packing switches on automatically above 32,768 |
 
@@ -66,6 +67,7 @@ Brackets are 95% cluster-bootstrap intervals; "budget" is the `max_tokens` cap.
 | LiveCodeBench | 175 | 8K | 46.9 [39.6, 54.2] | **104 (59%)**: budget-limited, not a capability number |
 | SciCode | 291 | 8K | 30.2 [24.1, 36.9] | 54 (19%): budget-limited |
 
+- **GPQA Diamond missed its prediction.** It came in at 83.8, below the pre-registered prediction of 87–93.
 - **AIME 2025 at 24K is partial** (54 of 60) and must not be quoted. An extension finishes the easy traces first, so
   a partial file overstates accuracy.
 - **Budget changes results.** At an 8K budget, GPQA Diamond reads 72.7 with 51 truncated; at 24K it reads 83.8.
@@ -94,9 +96,10 @@ Two measurement facts every number here depends on:
 
 ## Getting started
 
-Requires a Jetson AGX Thor (128 GB, CUDA 13), the
-[0731-REAP checkpoint](https://huggingface.co/0xSero/DeepSeek-V4-Flash-0731-REAP) (100.4 GiB), and the
-[draft head](https://huggingface.co/patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1). Run nothing else that
+Requires a Jetson AGX Thor (128 GB, CUDA 13) and the
+[checkpoint with the head installed](https://huggingface.co/patrickbdevaney/DeepSeek-V4-Flash-0731-REAP-DSpark)
+(100.4 GiB). Alternatively, use 0xSero's [0731-REAP checkpoint](https://huggingface.co/0xSero/DeepSeek-V4-Flash-0731-REAP)
+plus the [draft head](https://huggingface.co/patrickbdevaney/dspark-mtp-draft-head-s3recap-p25-b0.1). Run nothing else that
 loads a model: the weights take most of the unified memory pool.
 
 ```bash
