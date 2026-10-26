@@ -243,7 +243,7 @@ __global__ void k_moe_prefix_par(int* off, const int* __restrict__ counts, int n
         __syncthreads();
     }
 }
-// DSV4_SERIAL_SCAN=1 restores the <<<1,1>>> kernels so the A/B stays reachable (LEVERS.md rule).
+// DSV4_SERIAL_SCAN=1 restores the <<<1,1>>> kernels so the A/B stays reachable (docs/LEVERS.md rule).
 static inline bool moe_serial_scan(){ static int v=-1; if(v<0) v = getenv("DSV4_SERIAL_SCAN")!=nullptr; return v; }
 __global__ void k_moe_scatter(int* alltok, float* allwt, int* allslot, int* cursor, const int* idx, const float* wt,
                               const int* off, int bs, int na){
@@ -348,7 +348,7 @@ void moe_forward(float* out, const float* x, const int* input_ids, const MoEWeig
         dprof_end(DP_MG_SCATTER,stream);
         // EXPERT UNION (DSV4_MOEUNION=1). The claim "the routed MoE is at the memory roofline" — the
         // single most load-bearing fact in the priority model, because it is 50% of the verify — rests
-        // on a MODELLED union of 29.9 distinct experts at K=5 (ROOFLINE.md's c_v), never a measured
+        // on a MODELLED union of 29.9 distinct experts at K=5 (docs/ROOFLINE.md's c_v), never a measured
         // one. The measured TIME only scales 1.90/2.58/3.28/3.95 from K=1..5 where a no-overlap union
         // would scale 2/3/4/5, so either the union is ~23.7 and the MoE is at 72% of roofline with
         // real headroom, or it is ~30 and efficiency rises with K. Those differ by ~22 ms of the

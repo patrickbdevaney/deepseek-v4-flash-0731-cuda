@@ -3,7 +3,7 @@
 #
 # WHY THIS HAS TO EXIST. Ladder 2.1 shipped the draft block 6 -> 5. `tau` is tokens committed per
 # target forward and its CEILING IS THE WIDTH, so a block-5 tau cannot be compared with the
-# block-6 tau in every row of HEAD_REGISTRY.md. Promoting a P2 head against an archived block-6
+# block-6 tau in every row of docs/HEAD_REGISTRY.md. Promoting a P2 head against an archived block-6
 # number would compare a 5-ceilinged measurement with a 6-ceilinged one and call the difference a
 # regression. promote_head.py --incumbent-tau takes a same-width value; this produces it.
 #
@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 BLK="${S5_BLOCK:-5}"
 # DEFAULTS to the deployed head, which is the incumbent a promotion must beat. BASELINE_CKPT
 # overrides it for the one other measurement this protocol needs: RUN-0, the stock head, which the
-# release rule in HEAD_REGISTRY.md compares the reconstructive categories against. Run-0 had only
+# release rule in docs/HEAD_REGISTRY.md compares the reconstructive categories against. Run-0 had only
 # ever been measured at block 6, so after ladder 2.1 the release rule could not be evaluated at all
 # -- its floors were 6-ceilinged and every candidate is 5-ceilinged. The stock head IS the base
 # checkpoint's own, so measuring it needs no staging and never touches config/live_ckpt.

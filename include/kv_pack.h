@@ -1,6 +1,6 @@
 #pragma once
 // kv_pack.h — FP8 E4M3 + UE8M0 storage for the MAIN KV cache. BIT-EXACT, and that is the point.
-// DECODE_LADDER item 1b.2; the arithmetic and the citations are in KV_PRECISION_FINDINGS.md.
+// DECODE_LADDER item 1b.2; the arithmetic and the citations are in docs/KV_PRECISION_FINDINGS.md.
 //
 // WHAT IS ALREADY TRUE. Every row written into a KV cache in this engine ends in
 // `act_quant_fp8sim(row, rows, NOPE_DIM=448, 64, HEAD_DIM=512)` (kernels/mla_attn.cu:378), which is
@@ -12,7 +12,7 @@
 // so dims 0..447 already sit exactly on the E4M3 grid times an exact power of two, and are then
 // stored in FP32. The cache holds 8 bits of information in 32 bits per element. Dims 448..511 are
 // the RoPE half and are never passed to act_quant -- they stay FP32 here, because that is the one
-// component the literature says is fragile (KV_PRECISION_FINDINGS.md §5).
+// component the literature says is fragile (docs/KV_PRECISION_FINDINGS.md §5).
 //
 // WHY THE ROUND TRIP IS EXACT, not merely close. We keep the E4M3 byte and the exponent byte.
 // Unpacking computes `(float)(half)e4m3_byte * 2^k` -- the same two conversions and the same
@@ -118,7 +118,7 @@ static inline size_t kv_rows_bytes(long long rows) { return (size_t)rows * (size
 //     that was already there -- the same kernel on the same memory, so the before-arm is unchanged.
 //   * packed mode: kv_stage returns dmalloc scratch and kv_commit quantises AND packs in one pass,
 //     computing the identical amax/scale/e4m3 code and storing the byte instead of the dequantised
-//     float. No FP32 copy of the cache is ever materialised (KV_PRECISION_FINDINGS.md §6).
+//     float. No FP32 copy of the cache is ever materialised (docs/KV_PRECISION_FINDINGS.md §6).
 float* kv_stage(float* cache_row, int rows);
 void   kv_commit(float* cache_row, float* staged, int rows, cudaStream_t stream);
 void   kv_stage_free(float* staged, float* cache_row);

@@ -32,7 +32,7 @@ TWO PROTOCOL DEVIATIONS, BOTH DELIBERATE, BOTH REPORTED:
      "FC" column. This matches how `exec_*` and `live_*` were already run here, so the three rows
      are comparable to each other.
   2. Execution results are returned in the CHECKPOINT'S native `<tool_result>` wrapper
-     (CHAT_FORMAT.md), not BFCL's `role: tool` message. BFCL relies on each model's chat template
+     (docs/CHAT_FORMAT.md), not BFCL's `role: tool` message. BFCL relies on each model's chat template
      to render that role; ours is applied here, and this is what this checkpoint documents.
 
 SAFETY. BFCL executes model output with `eval()`. Its guard is a blocklist of bare names

@@ -395,7 +395,7 @@ __global__ void k_grouped_fp4_gemv_e8m0(float* out, const uint8_t* const* wptr, 
     // therefore rows x expert_bytes, not union x expert_bytes: at K=5 that is 17.25 GB where 10.08
     // would do, and it is why the MoE looked "at the roofline" (217 GB/s) while moving 1.71x the
     // bytes it needs. The measured union is 6.00/9.67/12.58/15.16/17.53 at K=1..5 (DSV4_MOEUNION=1),
-    // NOT the 29.9 the ROOFLINE.md byte model assumed — the five block positions share most of their
+    // NOT the 29.9 the docs/ROOFLINE.md byte model assumed — the five block positions share most of their
     // experts, and the model that said they do not is what hid this for the whole project.
     //
     // This is the same "read B once, dot it against all M rows" transformation Findings 40/42/43

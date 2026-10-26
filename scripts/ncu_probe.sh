@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ncu_probe.sh — profile the two kernels that are the whole remaining gap to the roofline.
-# ncu needs root on this box. Note (HARDWARE.md): ncu's "Memory Throughput %" is L2 on Thor, so
+# ncu needs root on this box. Note (docs/HARDWARE.md): ncu's "Memory Throughput %" is L2 on Thor, so
 # read dram__bytes.sum.per_second, not the SpeedOfLight memory row.
 set -e
 cd "$(dirname "$0")/.."

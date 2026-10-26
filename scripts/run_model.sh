@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # run_model.sh — the ONLY sanctioned way to launch a full-model binary.
 #
-# Enforces the two hard rules from HARDWARE.md §4 mechanically instead of by discipline:
+# Enforces the two hard rules from docs/HARDWARE.md §4 mechanically instead of by discipline:
 #
 #   1. SINGLE-TENANT. The weights are 100.4 GiB in a 117 GiB unified pool shared with the OS.
 #      Two concurrent full-model processes exhaust memory and thrash swap. `flock` makes a second
 #      launch fail loudly instead of silently starving the box.
 #      (This is not hypothetical: on 2026-08-06 a failed-looking launch had in fact succeeded, the
 #      relaunch created a second loader, and the pair drove `available` to 0 with swap in use.
-#      See LOOP_LOG.md Finding 22.)
+#      See dev/archive/LOOP_LOG.md Finding 22.)
 #
 #   2. DETACHED. setsid+nohup so an SSH drop or a killed shell never leaves the GPU wedged or the
 #      user locked out.
@@ -64,7 +64,7 @@ if [ "$AVAIL_GB" -lt 105 ]; then
 fi
 
 # CLOCK STATE IS PART OF THE MEASUREMENT, AND NOTHING WAS RECORDING IT (ladder 3.1).
-# HARDWARE.md has demanded since 2026-08-07 that "every future measurement must state whether clocks
+# docs/HARDWARE.md has demanded since 2026-08-07 that "every future measurement must state whether clocks
 # were pinned", and 3.1 found the box GOVERNED -- so every A/B this ladder has run stated nothing and
 # was taken against a ramping governor. A rule that lives only in prose is followed when someone
 # remembers. Pinning here makes it a property of the launch.

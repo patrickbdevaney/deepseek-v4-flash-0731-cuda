@@ -10,7 +10,7 @@
 // and hands the kernels `cudaHostGetDevicePointer`. That is zero-copy MAPPED HOST memory — chosen
 // because the model is 100.4 GiB in a 122 GiB unified pool and a device copy would double it.
 //
-// ROOFLINE.md's 240 GB/s came from `bw_probe`, which measures a `cudaMalloc` buffer. If mapped-host
+// docs/ROOFLINE.md's 240 GB/s came from `bw_probe`, which measures a `cudaMalloc` buffer. If mapped-host
 // reads are slower than device reads on this part, then the engine has been measured against a
 // roofline it structurally cannot reach, and every "% of achievable" in the log is wrong.
 //

@@ -845,7 +845,7 @@ __global__ __launch_bounds__(256, OGMK_BLOCKS_PER_SM) void ogroup_gemv_mk_kernel
 // A 128-bit smem load is serviced in 4 phases of 8 lanes = 32 banks exactly, so the float4 reads
 // below are conflict-free.
 //
-// LAZY (Finding 79, this cycle). LEVERS.md B8' — the one remaining idea on `o:wo_a` and the only one
+// LAZY (Finding 79, this cycle). docs/LEVERS.md B8' — the one remaining idea on `o:wo_a` and the only one
 // that moves ~16 registers rather than 3. `float4 o4[M]` below is M float4s = 4M registers held live
 // across the whole r loop (20 at the shipped M=5), in a kernel whose `<5,4>` instantiation is
 // ALREADY 8 registers over its 64-register `__launch_bounds__` cap. In the NON-staged kernel that
@@ -1106,7 +1106,7 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         // So an M-gated `ogsmem` (on at M<=3, off at M>=4) is a real candidate — but priced against
         // the dprof K columns it is worth only ~0.4% end-to-end (o:wo_a is 10.74 ms of an 85.9 ms
         // K=2 verify and 10.26 of 104.7 at K=3, and only 4 of 9 verifies run at K<=3), i.e.
-        // SUB-1%, and trap 3 plus F76/F78 both say the bench overstates. LEVERS.md B8''.
+        // SUB-1%, and trap 3 plus F76/F78 both say the bench overstates. docs/LEVERS.md B8''.
         // The two structural preconditions are CHECKED, not assumed: every warp in a block must
         // land in the same o-group, and the staged chunk must divide the row. Both hold for this
         // model's shape, but a shape that broke either would read `o` for the wrong group and
@@ -1114,7 +1114,7 @@ void ogroup_gemm_fp8(float* out, const float* o, const uint8_t* wo_fp8, const ui
         const bool ogsmem = (getenv("OG_SMEM")!=nullptr)
                          && ((R % ((threads/32)*ognr)) == 0) && (((Kd/128) % 8) == 0);
         // OG_SMEM_LAZY: read the staged activation float4 from smem per (r,m) instead of hoisting
-        // M of them into 4M registers (LEVERS.md B8', Finding 79). Only meaningful with OG_SMEM=1.
+        // M of them into 4M registers (docs/LEVERS.md B8', Finding 79). Only meaningful with OG_SMEM=1.
         //
         // MEASURED, NOT ADOPTED, and it CLOSES B8'. The premise was that `float4 o4[M]` is 4M = 20
         // registers at M=5 in a kernel whose <5,4> instantiation is already over its 64-register
@@ -1243,7 +1243,7 @@ void act_quant_fp4sim(float* x, int rows, int active_dim, int block, int row_str
 
 // ================== DECODE_LADDER 1b.2 — packed KV storage ====================================
 // The format, the exactness argument and the byte arithmetic are in include/kv_pack.h and
-// KV_PRECISION_FINDINGS.md. What lives here is the one kernel that writes it and the four host
+// docs/KV_PRECISION_FINDINGS.md. What lives here is the one kernel that writes it and the four host
 // entry points the cache call sites use.
 int g_kv_pack = 0;
 int g_kv_rowf = dsv4::HEAD_DIM;

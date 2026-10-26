@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """byte_floor.py — the byte-weighted achievable floor for base AR decode, from data already on disk.
 
-WHY THIS EXISTS. LEVERS.md quotes a base roofline of 19.0 tok/s = 12.26 GB / 233 GB/s, and that
+WHY THIS EXISTS. docs/LEVERS.md quotes a base roofline of 19.0 tok/s = 12.26 GB / 233 GB/s, and that
 number assumes every kernel moves bytes at full DRAM bandwidth. No kernel in this engine does: the
 same file says "use the K=1 column as the achievability bar, not the roofline", and F76 found at
 least one mark that is latency-bound and does not respond to byte cuts at all. So 19.0 is a
@@ -13,7 +13,7 @@ INPUTS, both already on disk, nothing measured here:
   - shapes  : the checkpoint's own config.json (no invented constants)
   - times   : the K=1 dprof table in evidence/kchunk.log (in situ, whole model, 43 layers)
 
-SELF-CHECK. The four MLA rates quoted in LEVERS.md (wq_a 115, wq_b 195, wo_b 185, wo_a 168 GB/s)
+SELF-CHECK. The four MLA rates quoted in docs/LEVERS.md (wq_a 115, wq_b 195, wo_b 185, wo_a 168 GB/s)
 were derived by hand from these same two sources. This script recomputes them from config.json and
 must reproduce them, or the byte model is wrong and every number below it is wrong too.
 """
@@ -38,7 +38,7 @@ VOCAB = c["vocab_size"]             # 129280
 MB = 1024.0**2
 # DECIMAL GB, deliberately. Bandwidth is always quoted decimal, so the 233 GB/s probe and the
 # 12.26 GB manifest total are decimal, and mixing GiB into the rate column puts every kernel 7.4%
-# slow. The first run of this script did exactly that and reproduced LEVERS.md's 115/195/185/168 as
+# slow. The first run of this script did exactly that and reproduced docs/LEVERS.md's 115/195/185/168 as
 # 107/184/171/160 -- uniformly 1/1.0737 off, which is what a units bug looks like when it is honest
 # enough to be visible. The self-check below is the only reason it was caught.
 GB = 1.0e9
@@ -120,11 +120,11 @@ if unmodelled:
           ", ".join(f"{n} {v:.2f}ms" for n, v in unmodelled))
 
 # ---- the floor ------------------------------------------------------------------------------
-# SELF-CHECK against the four rates LEVERS.md derived by hand from these same two files. If the
+# SELF-CHECK against the four rates docs/LEVERS.md derived by hand from these same two files. If the
 # byte model is wrong, every floor below it is wrong, and a silent 7% units error is exactly the
 # kind of thing that would otherwise be quoted for weeks.
 EXPECT = {"q:wq_a": 115, "q:wq_b": 195, "o:wo_b": 185, "o:wo_a": 168}
-print("\nself-check vs LEVERS.md hand-derived rates:")
+print("\nself-check vs docs/LEVERS.md hand-derived rates:")
 bad = 0
 for name, _, _, _, rate in byte_rows:
     if name in EXPECT:

@@ -8,7 +8,7 @@
 # NOTHING IS PUBLISHED THAT HAS NOT BEEN RE-DERIVED. `tools/eval_verify.py` re-reads every stored
 # generation, re-extracts the answer from the raw text, re-derives the gold from the pinned dataset
 # rather than from the record, re-scores, and requires the result to equal the published number. If
-# that fails, this script refuses to commit. A number in EVALS.md is therefore always reproducible
+# that fails, this script refuses to commit. A number in docs/EVALS.md is therefore always reproducible
 # from evidence/evals/<task>.jsonl by anyone, with no GPU and no model.
 #
 #   bash scripts/eval_land.sh gpqa_diamond

@@ -11,7 +11,7 @@
 # One divergence event at leg 32 of 52 and never identical again. A row-split bug does not switch on
 # at leg 32 of a descending sweep -- it would fire at the deepest context, not the shallowest -- so
 # the shape says "the two server runs came apart once" rather than "the cached prefix is wrong".
-# But shape is an argument, and DECODE_LADDER.md's invariant is not satisfied by arguments (item 1.6
+# But shape is an argument, and docs/DECODE_LADDER.md's invariant is not satisfied by arguments (item 1.6
 # was resolved with a control BUILD for exactly this reason). So this script measures it.
 #
 # THE INSTRUMENT THE FIRST ATTEMPT SHOULD HAVE USED. `decode_fit_probe.py` samples at temperature
@@ -19,11 +19,11 @@
 # a bit-exactness instrument if the whole server is reproducible run-to-run -- which is the very
 # thing in question. `build/decode` has no such dependency: it is ARGMAX end to end, no seed, no
 # HTTP, no prefix cache, and `DSV4_GENOUT` writes the raw prompt+generated token IDS. That is
-# DECODE_LADDER.md's invariant *literally* ("byte-identical generated token ids"), measured on the
+# docs/DECODE_LADDER.md's invariant *literally* ("byte-identical generated token ids"), measured on the
 # binary that also carries the standing LOSSLESS gate.
 #
 # PHASES 1-3 are that comparison, at REAL context: prompt 0 is the canonical 6-id gate prompt, and
-# prompts 1-2 are 3,072- and 1,024-token prefixes of LOOP_LOG.md -- the SAME document the sweep
+# prompts 1-2 are 3,072- and 1,024-token prefixes of dev/archive/LOOP_LOG.md -- the SAME document the sweep
 # reads, so the cached prefix is exercised over thousands of rows rather than a handful.
 #
 # WHY 3,072 AND NOT 6,132, WHICH IS WHAT THE FIRST ATTEMPT ASKED FOR. `build/decode` is not the

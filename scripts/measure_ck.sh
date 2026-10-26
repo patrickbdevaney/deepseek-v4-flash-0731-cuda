@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# measure_ck.sh — the gating measurement for adaptive block width (ROADMAP.md lever 1).
+# measure_ck.sh — the gating measurement for adaptive block width (dev/archive/ROADMAP.md lever 1).
 #
 # WHY THIS IS THE WHOLE QUESTION, AND WHY IT NEEDS NO CUDA. Adaptive width is priced at +20-25 %
 # on the assumption that the best width DIFFERS BY TASK SHAPE. That assumption has never been

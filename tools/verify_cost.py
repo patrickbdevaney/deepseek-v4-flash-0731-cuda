@@ -2,7 +2,7 @@
 """Speculative-verify cost model: E_frac(k), c_v(k), and the S(k) break-even table.
 
 Reads the byte split from tools/inventory.py's accounting (recomputed here from the same
-headers, so the two cannot drift). Prints the table embedded in ROOFLINE.md section 5.
+headers, so the two cannot drift). Prints the table embedded in docs/ROOFLINE.md section 5.
 """
 import json, glob, os, collections, sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -180,7 +180,7 @@ def main():
     # the deepcopy entirely, so the control arms pay nothing and stay bit-identical.
     # ---- LADDER P2.6, HASS ------------------------------------------------------------------
     # Free-run the Markov head from step N onward instead of teacher-forcing it. 0 = OFF, which is
-    # teacher forcing and reproduces every session in HEAD_REGISTRY.md exactly. P2.6 scopes it to
+    # teacher forcing and reproduces every session in docs/HEAD_REGISTRY.md exactly. P2.6 scopes it to
     # steps 2-3, i.e. --hass-from 1 (0-indexed): step 0 always takes the real seed, because at
     # inference the engine has the real token there too.
     ap.add_argument("--hass-from", type=int, default=0, dest="hass_from",
@@ -425,7 +425,7 @@ def main():
     _dbg = {"agree":0,"hit":0,"n":0,"tgt_top1_p":0.0,"drf_top1_p":0.0,"m":0}
     _dw = {"sum": 0.0, "n": 0, "wsum": 0.0, "kl": 0.0, "kln": 0}
     # P2.5 anchor: snapshot BEFORE any optimizer step, so this is the incumbent head exactly as
-    # HEAD_REGISTRY.md recorded it. Built only when it will be used.
+    # docs/HEAD_REGISTRY.md recorded it. Built only when it will be used.
     frozen_blocks = None
     if a.beta > 0:
         frozen_blocks = copy.deepcopy(blocks)

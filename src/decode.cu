@@ -418,7 +418,7 @@ int main(int argc, char** argv){
     dprof_init();
     printf("[decode] prefill %d positions...\n", PS);
     // Timed because prefill throughput -- not the M=1 decode rate -- is what sizes a teacher-forced
-    // hidden-state capture for a draft-head fine-tune (LEVERS.md S5). One batched forward over PS
+    // hidden-state capture for a draft-head fine-tune (docs/LEVERS.md S5). One batched forward over PS
     // positions, so tok/s here is the corpus-ingest rate. Synchronise on both sides: the loop is
     // async and an untimed launch queue would report the enqueue cost, which is trap 3.
     CU(cudaDeviceSynchronize());
@@ -609,7 +609,7 @@ int main(int argc, char** argv){
         }
 
         // ---- K-sweep + per-layer-flavour cost split (DSV4_KSWEEP=1) ----
-        // Decisive test for LOOP_LOG Finding 13. The weight-traffic model in ROOFLINE.md §5 says
+        // Decisive test for LOOP_LOG Finding 13. The weight-traffic model in docs/ROOFLINE.md §5 says
         // c_v(K) = (B_fixed + 43*|union|(K)*b_expert)/B_tok, i.e. 1.000/1.296/1.582/1.856/2.120
         // for K=1..5. Measured c_v(5) is 2.62. Finding 13 refuted the MoE explanation by code
         // inspection, leaving DSA (top-512 select + irregular gather PER QUERY POSITION) as the
@@ -1154,7 +1154,7 @@ int main(int argc, char** argv){
         double acc_dral=0, acc_drsy=0, acc_rral=0, acc_rrsy=0; long long acc_dn=0, acc_dsn=0, acc_rn=0, acc_rsn=0;
         double raw0=0, rsy0=0, rawd=0, rsyd=0; long long rawn0=0, rsyn0=0, rawnd=0, rsynd=0;
         // ---- S6 COUNTERFACTUAL SUFFIX-DRAFT PROBE (DSV4_SUFFIXPROBE=1, default OFF) ----
-        // LEVERS.md S6 proposes a suffix-automaton / prompt-lookup drafter ahead of the MTP, and its
+        // docs/LEVERS.md S6 proposes a suffix-automaton / prompt-lookup drafter ahead of the MTP, and its
         // own falsification says the win is NOT the skipped draft head (13 ms of a 151 ms cycle) but
         // any ACCEPTANCE gained at the same K. Acceptance is a counted integer, so it is immune to
         // the ~1.5 % cross-run timing floor Finding 79 measured — which is the only reason S6 is

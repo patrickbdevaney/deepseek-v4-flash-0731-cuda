@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""release_rule.py — evaluate HEAD_REGISTRY.md's release rule on a candidate's eval log.
+"""release_rule.py — evaluate docs/HEAD_REGISTRY.md's release rule on a candidate's eval log.
 
 PROMOTION AND RELEASE ARE DIFFERENT GATES, and 2026-08-23 is the case that separates them:
 `s3recap-p25-b0.1` beat the incumbent's suite mean by 4.13 %, was correctly promoted, is correctly
 deployed -- and fails 3 of the 6 per-category floors. A head can win the mean by hollowing out the
 reconstructive categories, which are exactly the ones an agentic coding harness lives in.
 
-THE RULE (HEAD_REGISTRY.md, written 2026-08-20 before the P2 candidates existed):
+THE RULE (docs/HEAD_REGISTRY.md, written 2026-08-20 before the P2 candidates existed):
 
     reconstructive  long_context, agentic_format, code_edit   >= run-0 minus 0.2
     constructive    explanation, code_gen, reasoning          >= the incumbent's value

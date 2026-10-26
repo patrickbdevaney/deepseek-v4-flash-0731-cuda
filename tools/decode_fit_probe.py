@@ -44,10 +44,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # One document, so the only thing that varies across points is how much of it is resident. Content
 # cannot affect the cost anyway -- the DSA scan is a fixed-size sweep over the whole cache and does
 # not branch on values -- but holding it fixed removes the question.
-CORPUS = os.path.join(ROOT, 'LOOP_LOG.md')
+CORPUS = os.path.join(ROOT, 'dev/archive/LOOP_LOG.md')
 # A DIFFERENT document for the controls: it must share no prefix with CORPUS, or the control would
 # hit the very cache it exists to bypass.
-CONTROL_CORPUS = os.path.join(ROOT, 'COMPRESSION_PLAYBOOK.md')
+CONTROL_CORPUS = os.path.join(ROOT, 'docs/COMPRESSION_PLAYBOOK.md')
 
 TARGETS = [12288, 9216, 6144, 3072, 1536, 768, 384, 128]   # prompt tokens, DESCENDING (see above)
 CONTROL_TARGETS = [6144, 1536]
@@ -140,7 +140,7 @@ def run_point(host, args, fh, seen, tag, prompt, target, rep, corpus_sha):
     # independent runs and carried identical `tau`, which is what made the paired timing comparison
     # possible. Use it that way: as a filter that identifies which legs are comparable, NOT as a
     # verdict on the kernel. The verdict comes from memcmp of the kernel's own output buffer.
-    # See wiki/measurement-and-traps.md 12 and DECODE_LADDER.md hard invariant 1.
+    # See wiki/measurement-and-traps.md 12 and docs/DECODE_LADDER.md hard invariant 1.
     txt = ((r.get('choices') or [{}])[0] or {}).get('text') or ''
     rec = dict(id=rid, kind=tag, target_tokens=target, rep=rep, corpus_sha256=corpus_sha,
                usage=u, timings=tm, spec_profile=r.get('spec_profile'),

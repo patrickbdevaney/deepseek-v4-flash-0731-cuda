@@ -64,7 +64,7 @@ run_arm s3recap-conf1.0  0.1 0.9 1 0.1 1 1.0
 run_arm s3recap-conf0.1  0.1 0.9 1 0.1 1 0.1
 
 LOG "arms done. Registry (expect REFUSALS -- see the header of this script):"
-tail -4 HEAD_REGISTRY.md
+tail -4 docs/HEAD_REGISTRY.md
 
 LOG "the gate that actually decides 2.3:"
 LOG "  python3 tools/conf_calibration.py s3recap-conf1.0 s3recap-conf0.1 --control s3recap-hass1-p25"

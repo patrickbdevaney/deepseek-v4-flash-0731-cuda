@@ -40,7 +40,7 @@ import argparse, glob, json, os, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'evidence', 'evals')
 BW = 240.0               # GB/s achievable, measured by tools/bw_probe.cu
-B_TOK = 11202.36         # MB read by an M=1 AR step (MODEL_INVENTORY.md)
+B_TOK = 11202.36         # MB read by an M=1 AR step (docs/MODEL_INVENTORY.md)
 B_ROUTED = 3449.29       # MB of that which is the top-6 routed experts
 B_DRAFT = 1892.0         # MB floor for the 3 MTP blocks + draft lm_head
 
@@ -49,7 +49,7 @@ B_DRAFT = 1892.0         # MB floor for the 3 MTP blocks + draft lm_head
 # and reads the UNION of the experts they route to -- measured at 17.53 of a possible 30 at K=5
 # (LOOP_LOG, DSV4_MOEUNION; the instrument self-validates at K=1 -> exactly 6.00) -- plus the whole
 # draft side. Dividing B_tok by a per-forward wall time therefore understates efficiency by ~1.76x.
-# PERF.md says so in as many words ("a lower bound on efficiency, not an estimate of it"); the 34%
+# docs/PERF.md says so in as many words ("a lower bound on efficiency, not an estimate of it"); the 34%
 # that fell out of it was then quoted as an estimate anyway, here and in the research prompt.
 UNION_K5 = 17.53         # measured expert union at K=5
 UNION_FIT = 22.0         # the same quantity implied by the K-sweep fit -- an honest upper end
@@ -106,7 +106,7 @@ def fit(pts):
     ss_tot = sum((y - my) ** 2 for _, y, _ in pts)
     # STANDARD ERRORS, BECAUSE R^2 IS THE WRONG STATISTIC ONCE b IS SMALL. A fit whose slope is
     # genuinely zero has R^2 ~ 0 no matter how precisely that zero is known -- which reads as "bad
-    # fit" and is in fact the result. The stop condition in DECODE_LADDER.md is a statement about
+    # fit" and is in fact the result. The stop condition in docs/DECODE_LADDER.md is a statement about
     # b (`b*6592 <= 5 ms`), so it needs an interval on b, not a goodness-of-fit score.
     s2 = ss_res / (n - 2) if n > 2 else 0.0
     se_b = (s2 / sxx) ** 0.5 if sxx else 0.0
@@ -148,7 +148,7 @@ def main():
     # those carry no timings. An extrapolation printed in the same table as a measurement is
     # indistinguishable from one, which is the exact failure this instrument exists to end.
     ctx_max = max(x for x, _, _ in pts)
-    # tau IN EVERY MEASUREMENT (DECODE_LADDER.md invariant 2), and at both ends: a median hides a
+    # tau IN EVERY MEASUREMENT (docs/DECODE_LADDER.md invariant 2), and at both ends: a median hides a
     # collapse that only happens deep, and acceptance is exactly where a "byte-identical" kernel
     # change can still regress.
     byctx = sorted(pts)

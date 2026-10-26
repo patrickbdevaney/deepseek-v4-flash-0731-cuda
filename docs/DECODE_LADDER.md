@@ -2264,7 +2264,7 @@ So, in order:
 ## P2 — the acceptance programme
 
 **Authorised 2026-08-20.** The kernel path is at the bandwidth floor and `tau` is the only
-multiplier left. Full reasoning, arithmetic and citations: [`PHASE2_PLAN.md`](PHASE2_PLAN.md).
+multiplier left. Full reasoning, arithmetic and citations: [`PHASE2_PLAN.md`](../dev/archive/PHASE2_PLAN.md).
 These items are written to the same rules as the ladder above — pre-registered ceiling, named
 instrument, a gate that can fail, evidence path — with two additions the kernel items did not need:
 

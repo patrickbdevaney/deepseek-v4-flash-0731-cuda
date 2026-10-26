@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """analyze_ck.py — does the best draft width differ by task shape?
 
-That single question decides ROADMAP.md lever 1. tok/s at width k already equals
+That single question decides dev/archive/ROADMAP.md lever 1. tok/s at width k already equals
 E[A(T_k)] / C(k), so the per-prompt argmax over k IS the choice an adaptive engine would make --
 measured, not modelled. The gain column is the honest upper bound on the engine change: what you
 would get if the engine picked each prompt's own best width instead of one width for all.
@@ -50,7 +50,7 @@ uniq = sorted(set(kstars))
 if len(uniq) == 1:
     print("VERDICT: k* = %d for EVERY prompt." % uniq[0])
     print("  Adaptive block width has nothing to exploit -- one width is optimal across a 2.7x")
-    print("  spread in acceptance. ROADMAP.md lever 1 is REFUTED and must be re-priced to ~0")
+    print("  spread in acceptance. dev/archive/ROADMAP.md lever 1 is REFUTED and must be re-priced to ~0")
     print("  before any CUDA is written. This is the cheap outcome and it is worth knowing.")
 else:
     gain = 100 * (totstar - tot5) / tot5

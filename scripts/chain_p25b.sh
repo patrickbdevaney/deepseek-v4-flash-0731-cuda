@@ -55,7 +55,7 @@ run_arm s3recap-p25b-p2-b0.3  0.1 0.9 1 0.3 2
 run_arm s3recap-p25b-p2-b0.2  0.1 0.9 1 0.2 2
 
 LOG "arms done. Registry:"
-tail -3 HEAD_REGISTRY.md
+tail -3 docs/HEAD_REGISTRY.md
 LOG "NOTE: a promotion here is necessary but NOT sufficient. The head that ships must clear the"
 LOG "      per-category floors as well -- that is the whole reason this arm exists."
 LOG "p25b complete:"

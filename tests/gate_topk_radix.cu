@@ -1,5 +1,5 @@
 // gate_topk_radix.cu — prove the single-CTA radix select is BIT-IDENTICAL to the shipped warp
-// selection sort on all four kernel shapes, then time both. DECODE_LADDER.md item 1.2.
+// selection sort on all four kernel shapes, then time both. docs/DECODE_LADDER.md item 1.2.
 //
 // The shipped kernels do `topk` SEQUENTIAL argmax rounds over the row (item 1.1 spread each round
 // across 32 lanes; the rounds themselves are still serial). At topk=512, T=3072 that is 512

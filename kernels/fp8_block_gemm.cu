@@ -229,7 +229,7 @@ void fp8_block_gemm(float* C, const uint8_t* A_fp8, const float* a_s,
     // M=1 decode: vectorized GEMV (bandwidth-bound, beats the mma-latency-bound TC at M=1). K%128==0 always here.
     if (g_tc_fp8 && M == 1 && (K % 128 == 0) && getenv("NO_GEMV")==nullptr) {
         int threads=256;
-        // NEGATIVE RESULT — see LOOP_LOG.md Opt #2. Two wave-quantisation schemes were tried on
+        // NEGATIVE RESULT — see dev/archive/LOOP_LOG.md Opt #2. Two wave-quantisation schemes were tried on
         // top of the grid-stride kernel and NEITHER beat this plain one-warp-per-row launch:
         //   clamp to a single full wave      -> wq_b 214.6 -> 186.3 GB/s, wo_b 225.5 -> 194.7 (worse)
         //   round down to whole waves        -> within run-to-run noise; not demonstrable

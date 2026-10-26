@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""runs_index.py — regenerate RUNS.md, one row per training run and measurement, from the evidence.
+"""runs_index.py — regenerate dev/archive/RUNS.md, one row per training run and measurement, from the evidence.
 
 WHY GENERATED AND NOT HAND-WRITTEN. A hand-maintained index drifts from the logs the moment a run is
 added, and an index that disagrees with the evidence is worse than none: it invites conclusions the
@@ -10,7 +10,7 @@ the index.
 It answers one question directly: for every fine-tune run, where is the training log, where is the
 eval that measured it, where are the trained weights, and what did it score.
 
-  python3 tools/runs_index.py [--out RUNS.md]
+  python3 tools/runs_index.py [--out dev/archive/RUNS.md]
 """
 import argparse, csv, glob, json, os, re, statistics as st, subprocess, sys
 
@@ -118,7 +118,7 @@ conclusions the data does not support.
 **What is in git and what is not.** Every log, measurement CSV and metrics file referenced here is
 committed. The **weights are not** — they are 1 GB (trained tensors) to 7 GB (materialised head)
 each, and they live in `~/model-backups/heads/<name>/` with a sha256 per file plus a `head_card.json`
-recording the engine revision they were measured at. `HEAD_REGISTRY.md` is the promotion record,
+recording the engine revision they were measured at. `docs/HEAD_REGISTRY.md` is the promotion record,
 rejects included. That split is deliberate: the engine and its evidence are in git and therefore
 safe; the weights are the one product that git cannot hold, which is what the backup store and the
 checksums are for.
@@ -128,7 +128,7 @@ checksums are for.
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=os.path.join(ROOT, "RUNS.md"))
+    ap.add_argument("--out", default=os.path.join(ROOT, "dev/archive/RUNS.md"))
     a = ap.parse_args()
     L = [HEADER]
 

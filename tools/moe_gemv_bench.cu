@@ -14,7 +14,7 @@
 //     w1 / w3 :  N = moe_intermediate 2048,  K = hidden 4096
 //     w2      :  N = hidden          4096,  K = moe_intermediate 2048
 //
-// and at BOTH real groupings, taken from `DSV4_MOEUNION=1` (LEVERS.md §5 reference table):
+// and at BOTH real groupings, taken from `DSV4_MOEUNION=1` (docs/LEVERS.md §5 reference table):
 //
 //     M=1 decode : 6 experts x 1 row              -> RB=1
 //     K=5 verify : 12x1 + 3x2 + 1x3 + 1x4 + 1x5   -> RB=4, 18 experts / 30 rows
@@ -54,7 +54,7 @@ void tc_repack_weight_inplace(unsigned char*, int, int, unsigned char*, cudaStre
 void tc_a_to_fp16(__half*, const unsigned char*, const float*, int, int, cudaStream_t);
 
 // A plain streaming read over the SAME pool, so the roofline is measured on this box at these
-// clocks in this binary rather than quoted from HARDWARE.md.
+// clocks in this binary rather than quoted from docs/HARDWARE.md.
 __global__ void k_stream(const uint4* __restrict__ p, size_t n4, float* sink){
     size_t i = (size_t)blockIdx.x*blockDim.x + threadIdx.x;
     size_t st = (size_t)gridDim.x*blockDim.x;
@@ -221,7 +221,7 @@ int main(int argc, char** argv){
 
     // M=1 decode: 6 routed experts, one row each (num_experts_per_tok = 6).
     std::vector<int> g_m1(6, 1);
-    // K=5 verify: the MEASURED histogram, DSV4_MOEUNION=1 (LEVERS.md §5).
+    // K=5 verify: the MEASURED histogram, DSV4_MOEUNION=1 (docs/LEVERS.md §5).
     std::vector<int> g_k5;
     for (int i=0;i<12;++i) g_k5.push_back(1);
     for (int i=0;i<3;++i)  g_k5.push_back(2);
@@ -266,7 +266,7 @@ int main(int argc, char** argv){
     }
     unsetenv("MOE_RB");
 
-    // LEVERS.md §9 lever #3, "unquantified" since it was written. The engine runs the GEMV at ALL
+    // docs/LEVERS.md §9 lever #3, "unquantified" since it was written. The engine runs the GEMV at ALL
     // M (`g_moe_gemv` is set unconditionally); F85's -16 % decode verdict on MOE_MMA=1 was an
     // engine-level A/B dominated by the M=1 path, where mma loses badly. Nobody has put the two
     // kernels side by side at the grouping the VERIFY actually presents.

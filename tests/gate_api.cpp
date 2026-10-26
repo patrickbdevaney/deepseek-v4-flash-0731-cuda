@@ -1,7 +1,7 @@
 // gate_api.cpp — Gate S1 (part 2): OpenAI request/response shaping, no GPU required.
 //
 // Covers the model-specific behaviour that is easy to get wrong by porting habits from the other
-// servers in this family (CHAT_FORMAT.md): the two orthogonal thinking controls, the tools ->
+// servers in this family (docs/CHAT_FORMAT.md): the two orthogonal thinking controls, the tools ->
 // system-message fold, the DSML tool-call round-trip including the string="true|false" typing
 // signal, and the sampling defaults (temperature 1.0, top_p 0.95 only when tools are present).
 //

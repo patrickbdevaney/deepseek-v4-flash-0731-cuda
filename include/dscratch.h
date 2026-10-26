@@ -26,7 +26,7 @@ static inline void dfree(void* p){ if(!g_arena_on && p) cudaFree(p); }
 // DRAFT path never was: `dspark_main_kv`, `dspark_attn_forward`, `dspark_block_forward`,
 // `dspark_main_x` and `dspark_forward_head` all call raw cudaMalloc/cudaFree per invocation, plus a
 // real `cudaStreamSynchronize` at the end of each — inside the loop that runs once per verify round.
-// The 86 %/14 % verify/draft split quoted in LEVERS.md §1 dates to `evidence/f47.log`, BEFORE every
+// The 86 %/14 % verify/draft split quoted in docs/LEVERS.md §1 dates to `evidence/f47.log`, BEFORE every
 // verify-side adoption (F64/F65/F70/F71/F72/F74), so the draft's share is unmeasured at the current
 // baseline and its *composition* has never been measured at all.
 //

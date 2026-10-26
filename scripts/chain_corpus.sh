@@ -24,7 +24,7 @@
 # dolly.jsonl, the long_context source: context fields run p50 130 words, p90 365, p99 1277,
 # max 3796. The 1280-token cap binds only on the top ~10 %, so no reweighting extracts 4-12k
 # prompts from this dataset -- genuinely long PROMPTS need a different source, and that is a
-# roadmap item (ROADMAP.md), not a knob.
+# roadmap item (dev/archive/ROADMAP.md), not a knob.
 #
 # The GENERATED half has no such ceiling, and it is the better half to lengthen. NGEN 512 -> 1024
 # doubles the context depth every sampled position sees, and the context it adds is the model's OWN
@@ -40,7 +40,7 @@ NAME=agentic-p25-b0.1
 
 LOG "waiting for the anchor-shape arms to finish"
 while systemctl --user is-active --quiet dsv4-p25b; do sleep 120; done
-LOG "p25b done; anchor-shape results:"; tail -3 HEAD_REGISTRY.md
+LOG "p25b done; anchor-shape results:"; tail -3 docs/HEAD_REGISTRY.md
 
 [ -d "$HOME/model-backups/heads/$NAME" ] && { LOG "$NAME already archived"; exit 0; }
 
@@ -64,5 +64,5 @@ S5_ACE=0.1 S5_ATV=0.9 S5_DEFICIT=1 S5_BETA=0.1 S5_ANCHOR_POW=1.0 \
 LOG "release rule for $NAME:"
 python3 tools/release_rule.py "evidence/${NAME}_eval.log" \
     --run0 evidence/run0_tau_blk5.log --incumbent evidence/baseline_tau_blk5.log 2>&1 || true
-LOG "registry:"; tail -2 HEAD_REGISTRY.md
+LOG "registry:"; tail -2 docs/HEAD_REGISTRY.md
 LOG "corpus chain complete:"

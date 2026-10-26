@@ -11,7 +11,7 @@
 # against premises that have since changed:
 #
 #   * `k_topk_verify<<<K,32>>>` launched K blocks of ONE active thread, so verify width was very
-#     nearly free in the context term (DECODE_ZENITH_FINDINGS.md 3.2). Ladder 1.1/1.2 replaced that
+#     nearly free in the context term (docs/DECODE_ZENITH_FINDINGS.md 3.2). Ladder 1.1/1.2 replaced that
 #     kernel. Width is no longer free, and 3.2 said in advance that fixing it "changes the optimal
 #     block size" and that width must be decided AFTER the fix "or you will tune to a transient".
 #   * F94 ran on the head that was shipped then. Ladder 2.2 deployed `s3`, which lifted suite tau

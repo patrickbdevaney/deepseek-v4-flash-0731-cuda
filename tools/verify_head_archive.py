@@ -8,14 +8,14 @@ checkpoint. Nothing proved the ARCHIVE those symlinks point into is still there 
 and the live farm links straight into `model-backups/heads/<name>/`, so a damaged archive is a
 damaged server, discovered at the next load instead of now.
 
-It also answers the question the registry cannot: **is every head named in HEAD_REGISTRY.md actually
+It also answers the question the registry cannot: **is every head named in docs/HEAD_REGISTRY.md actually
 backed up?** A row with no directory is a head that exists only as a number in a table.
 
 WHAT IT CHECKS
 
   heads/<name>/     against head_card.json's `files` list      (size, and sha256 under --full)
   releases/<name>/  against SHA256SUMS                          (size, and sha256 under --full)
-  HEAD_REGISTRY.md  every named head has a directory            (completeness)
+  docs/HEAD_REGISTRY.md  every named head has a directory            (completeness)
   reverse           every directory is named in the registry    (orphans)
 
 A head archived as `mtp_trained.safetensors` ONLY is complete by design, not deficient: the loadable
@@ -37,7 +37,7 @@ import argparse, hashlib, json, os, re, sys
 HEADS = os.path.expanduser("~/model-backups/heads")
 RELEASES = os.path.expanduser("~/model-backups/releases")
 REGISTRY = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "HEAD_REGISTRY.md")
+                        "docs/HEAD_REGISTRY.md")
 # The source of truth a head can be rebuilt from. Its presence is what makes a directory a real
 # backup rather than a copy of derived artifacts.
 SOURCE = "mtp_trained.safetensors"
@@ -143,7 +143,7 @@ def check_release(d, full):
 def registry_names():
     """Head names the registry claims exist, from the first column of its RESULTS table.
 
-    NOT every backticked first cell. `HEAD_REGISTRY.md` also carries prose tables -- the corpus
+    NOT every backticked first cell. `docs/HEAD_REGISTRY.md` also carries prose tables -- the corpus
     inventory (`s3/gen.txt`, `s1_gen.txt`) and the release pointer (`CURRENT_BEST`) -- whose first
     cells look identical to a head row. Reporting those as missing directories produced three
     permanent false alarms, and a checker that always cries wolf is a checker nobody reads.
@@ -211,7 +211,7 @@ def main():
         for n in sorted(have - set(reg)):
             gaps.append("%s/%s exists but no registry row names it" % (HEADS, n))
     else:
-        gaps.append("HEAD_REGISTRY.md not found — completeness not checked")
+        gaps.append("docs/HEAD_REGISTRY.md not found — completeness not checked")
 
     print()
     if gaps:

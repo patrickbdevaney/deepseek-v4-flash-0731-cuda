@@ -9,7 +9,7 @@ per-prompt DIFFERENCES, with a band from their standard error. That is the same 
 kernel items on the ladder use, and for the same reason: this project's run-to-run spread is 3.5%,
 which swamps a point estimate.
 
-Suite means are reported too, excluding prompt 0, because that is the number HEAD_REGISTRY.md
+Suite means are reported too, excluding prompt 0, because that is the number docs/HEAD_REGISTRY.md
 records and comparability with the registry is the whole point of a frozen protocol (F96).
 
 AND PAIRING BY PROMPT DOES NOT REMOVE THE BETWEEN-LOAD SPREAD. Two heads cannot be measured in one

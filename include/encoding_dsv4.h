@@ -4,7 +4,7 @@
 // This is a faithful port of its logic, gated byte-exact against the four golden vectors in
 // encoding/tests/test_input_N.json -> test_output_N.txt (see tests/gate_encoding.cpp).
 //
-// Two independent controls — see CHAT_FORMAT.md:
+// Two independent controls — see docs/CHAT_FORMAT.md:
 //   thinking_mode    {chat, thinking}          binary; decides <think> vs </think> after <|Assistant|>
 //   reasoning_effort {low, high, max}          text prefix BEFORE the system message; thinking-mode only
 // They are orthogonal. `low` is the default and emits nothing.
@@ -36,7 +36,7 @@ inline constexpr const char* ASSISTANT_SP      = "<｜Assistant｜>";
 inline constexpr const char* LATEST_REMINDER_SP= "<｜latest_reminder｜>";
 
 // Task tokens drive DeepSeek's internal search-agent pipeline. Tokenised correctly, not surfaced
-// as server features (CHAT_FORMAT.md §5).
+// as server features (docs/CHAT_FORMAT.md §5).
 inline const std::map<std::string,std::string>& task_tokens() {
     static const std::map<std::string,std::string> m = {
         {"action","<｜action｜>"}, {"query","<｜query｜>"}, {"authority","<｜authority｜>"},
@@ -133,7 +133,7 @@ inline json tools_from_openai(const json& tools) {
 }
 
 // encode_arguments_to_dsml: each parameter carries string="true|false". That attribute is the ONLY
-// signal separating the literal string "5" from the number 5 — see CHAT_FORMAT.md §3.
+// signal separating the literal string "5" from the number 5 — see docs/CHAT_FORMAT.md §3.
 inline std::string encode_arguments_to_dsml(const std::string& arguments_json) {
     json args;
     bool ok = true;

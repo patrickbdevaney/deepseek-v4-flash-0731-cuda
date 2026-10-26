@@ -111,11 +111,11 @@ next_item(){
     local id line
     while read -r id _; do
       case "$id" in ''|'#'*) continue;; esac
-      line=$(grep -n "^- \[ \] \*\*${id}\*\*" DECODE_LADDER.md | head -1)
+      line=$(grep -n "^- \[ \] \*\*${id}\*\*" docs/DECODE_LADDER.md | head -1)
       [ -n "$line" ] && { printf '%s\n' "$line"; return 0; }
     done < DECODE_PRIORITY
   fi
-  grep -n '^- \[ \]' DECODE_LADDER.md | head -1
+  grep -n '^- \[ \]' docs/DECODE_LADDER.md | head -1
 }
 item_id(){ printf '%s' "$1" | sed -n 's/^[0-9]*:- \[ \] \*\*\([^*]*\)\*\*.*/\1/p'; }
 attempts_of(){ awk -v k="$1" '$1==k{print $2; f=1} END{if(!f) print 0}' "$ATTEMPTS" 2>/dev/null | head -1; }
@@ -125,7 +125,7 @@ defer_item(){ # $1 = item id, $2 = why
   python3 - "$1" "$2" <<'PYD'
 import sys, re
 iid, why = sys.argv[1], sys.argv[2]
-p='DECODE_LADDER.md'; s=open(p).read()
+p='docs/DECODE_LADDER.md'; s=open(p).read()
 pat = re.compile(r'^- \[ \] \*\*' + re.escape(iid) + r'\*\*', re.M)
 if pat.search(s):
     s = pat.sub('- [!] **' + iid + '**', s, count=1)
@@ -140,9 +140,9 @@ PYD
 PROMPT_PREAMBLE=$(cat <<'P'
 You are continuing an autonomous decode-optimisation programme on a Jetson AGX Thor (sm_110a).
 Read these first, they are the contract and the state:
-  DECODE_LADDER.md          the ordered work list, the stop condition, and the hard invariants
-  DECODE_ZENITH_FINDINGS.md the measured cost model and the plan it came from
-  KV_PRECISION_FINDINGS.md  the bit-exact packing work
+  docs/DECODE_LADDER.md          the ordered work list, the stop condition, and the hard invariants
+  docs/DECODE_ZENITH_FINDINGS.md the measured cost model and the plan it came from
+  docs/KV_PRECISION_FINDINGS.md  the bit-exact packing work
   evidence/decode_loop.jsonl what previous iterations did and measured
 
 Do EXACTLY ONE ladder item this iteration — the topmost unchecked one — then stop.
@@ -182,7 +182,7 @@ NON-NEGOTIABLE:
   * Do not change clock settings unless the ladder item IS the clock change.
   * One change per measurement. Report bands, not points. The run-to-run spread is 3.5%.
 
-When done: update DECODE_LADDER.md (mark the item, add what you measured), commit with a message
+When done: update docs/DECODE_LADDER.md (mark the item, add what you measured), commit with a message
 that states what was measured and what it means, and push. If the item cannot be completed, say so
 in the ladder entry and leave it unchecked rather than faking progress.
 P
@@ -344,7 +344,7 @@ The iteration left no COMMIT_MSG_*.txt, so this message says only what the ladde
       if [ "$n" -ge "$MAX_ATTEMPTS" ]; then
         say "DEFERRING $ITEM_ID after $n attempts — the ladder must keep moving"
         defer_item "$ITEM_ID" "not completed in $n iterations (last rc=$rc)"
-        git add DECODE_LADDER.md 2>/dev/null && git commit -q -m "loop: defer ladder item $ITEM_ID after $n attempts
+        git add docs/DECODE_LADDER.md 2>/dev/null && git commit -q -m "loop: defer ladder item $ITEM_ID after $n attempts
 
 The loop takes the topmost unchecked item and the prompt tells it to leave an item it cannot finish
 unchecked. Together those re-select the same item forever. Deferring keeps it visible in the ladder

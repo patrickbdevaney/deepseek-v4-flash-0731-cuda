@@ -35,13 +35,13 @@ ARCHIVE_RC=${PIPESTATUS[0]}
 
 # ---------------------------------------------------------------- 2. report
 LOG "registry after the arms:"
-grep -E '^\| `[a-z0-9._-]+` \| [0-9.]+ \|' HEAD_REGISTRY.md | tail -12
+grep -E '^\| `[a-z0-9._-]+` \| [0-9.]+ \|' docs/HEAD_REGISTRY.md | tail -12
 LIVE=$(basename "$(cat config/live_ckpt)" | sed 's/^ckpt-head-//')
 BLK=$(grep -oP 'int\s+blk\s*=\s*\K[0-9]+' include/dsv4_engine.h | head -1)
 LOG "serving head=$LIVE block=$BLK"
 
 # ---------------------------------------------------------------- 3. commit the results
-git add -A HEAD_REGISTRY.md evidence/chain evidence/head_archive_after_arms.json \
+git add -A docs/HEAD_REGISTRY.md evidence/chain evidence/head_archive_after_arms.json \
            evidence/*_eval.log evidence/*_train.log 2>/dev/null
 if ! git diff --cached --quiet; then
     git commit -q -m "results: the draft-head arms, measured and archived

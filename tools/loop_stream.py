@@ -9,7 +9,7 @@ than about the work.
 This reads the raw JSONL on stdin, writes it through UNCHANGED to `--raw` (so nothing is lost and
 the transcript stays machine-readable), and prints one compact human line per event to stdout:
 
-    14:02:11  think   Reading DECODE_LADDER.md to find the topmost unchecked item
+    14:02:11  think   Reading docs/DECODE_LADDER.md to find the topmost unchecked item
     14:02:19  Read    tools/decode_model.py
     14:02:26  Bash    python3 tools/decode_model.py --dir evidence/...
     14:05:02  Edit    tools/decode_fit_probe.py

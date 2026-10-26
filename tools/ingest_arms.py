@@ -3,7 +3,7 @@
 
 WHY. The search reasons from `evidence/autopilot/arms.jsonl`. Arms run by a hand-launched chain --
 which is how every arm before the autopilot existed, and how the P2.5b anchor-shape arms are running
-right now -- land in HEAD_REGISTRY.md and nowhere else. A search that cannot see them will re-propose
+right now -- land in docs/HEAD_REGISTRY.md and nowhere else. A search that cannot see them will re-propose
 configurations already measured, and worse, will search around a stale incumbent.
 
 Configuration comes from the head's own `train_metrics.json`, which records the full loss config as
@@ -20,7 +20,7 @@ AXES = ("a_ce", "a_tv", "deficit", "beta", "anchor_pow", "deficit_clamp", "pos_p
 
 def registry_block5():
     out = {}
-    for line in open("HEAD_REGISTRY.md"):
+    for line in open("docs/HEAD_REGISTRY.md"):
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) < 7:
             continue
@@ -62,7 +62,7 @@ def main():
             rel = os.path.join("evidence", "autopilot", "release_%s.log" % name)
             passed = os.path.exists(rel) and "RELEASE: PASS" in open(rel).read()
             f.write(json.dumps({"name": name, "tau": tau, "release_pass": passed,
-                                "cfg": cfg, "note": "ingested from HEAD_REGISTRY.md"}) + "\n")
+                                "cfg": cfg, "note": "ingested from docs/HEAD_REGISTRY.md"}) + "\n")
             print("ingest %s: tau %.4f cfg %s" % (name, tau, cfg)); added += 1
     print("\n%d ingested, %d skipped" % (added, skipped))
 

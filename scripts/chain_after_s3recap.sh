@@ -152,4 +152,4 @@ LOG "chain complete: arms measured, best head staged, eval battery deliberately 
 LOG "next: the remaining decode levers (P2.5 KL half, P2.6 HASS, P2.1 labeller), then ONE"
 LOG "      homogeneous eval battery at the final configuration"
 python3 tools/promote_head.py 2>/dev/null | tail -3 || true
-LOG "registry:"; grep -E '^\| `' HEAD_REGISTRY.md | tail -6
+LOG "registry:"; grep -E '^\| `' docs/HEAD_REGISTRY.md | tail -6

@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 while :; do
-    if grep -q '^- \[x\] \*\*2\.1' DECODE_LADDER.md; then
+    if grep -q '^- \[x\] \*\*2\.1' docs/DECODE_LADDER.md; then
         touch DECODE_LOOP_STOP
         printf '[stop_after_2p1 %s] 2.1 is checked off; DECODE_LOOP_STOP set\n' "$(date -Is)"
         exit 0

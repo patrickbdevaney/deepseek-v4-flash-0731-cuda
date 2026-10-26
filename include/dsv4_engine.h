@@ -46,7 +46,7 @@ struct GenParams {
 // the joint, because a verify only reaches position j if its width offered a proposal there. So
 // the joint is what is recorded. It is 16x16 ints = 1 KiB per request, incremented once per
 // verify with no sync and no device memory, which is why this can be always-on where
-// DSV4_SPECPROF (documented at ~1 % in LEVERS.md §7) cannot.
+// DSV4_SPECPROF (documented at ~1 % in docs/LEVERS.md §7) cannot.
 struct SpecProfile {
     static constexpr int MAXW = 16;
     // accept_joint[w][a] = verifies that ran at realised width w and accepted a proposals.

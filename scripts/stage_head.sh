@@ -3,7 +3,7 @@
 # touching the checkpoint.
 #
 # THE GAP THIS CLOSES. `tools/promote_head.py` archives a winning head to
-# ~/model-backups/heads/<name>/ and writes it into HEAD_REGISTRY.md. It deliberately never writes
+# ~/model-backups/heads/<name>/ and writes it into docs/HEAD_REGISTRY.md. It deliberately never writes
 # the live checkpoint — promotion is a judgement about weights, not a deployment. The consequence
 # was that s3 sat promoted and measured (tau 3.8438) for eight days while every server start loaded
 # the shipped head, because nothing bridged the two. A head nobody serves is not a speedup.
@@ -52,9 +52,9 @@ OUT="${OUT_DIR:-$HOME/models/ckpt-head-$NAME}"
 
 # ONLY PROMOTED HEADS. The registry is the ledger; a head that was archived but refused promotion
 # is a data point, not a deployment candidate, and staging one would quietly ship a head that lost.
-if ! grep -qE "^\| \`$NAME\` \|.*\| *(PROMOTED|baseline) *\|" HEAD_REGISTRY.md; then
-  echo "REFUSING: '$NAME' is not PROMOTED in HEAD_REGISTRY.md." >&2
-  grep -E "^\| \`$NAME\`" HEAD_REGISTRY.md >&2 || echo "  (not in the registry at all)" >&2
+if ! grep -qE "^\| \`$NAME\` \|.*\| *(PROMOTED|baseline) *\|" docs/HEAD_REGISTRY.md; then
+  echo "REFUSING: '$NAME' is not PROMOTED in docs/HEAD_REGISTRY.md." >&2
+  grep -E "^\| \`$NAME\`" docs/HEAD_REGISTRY.md >&2 || echo "  (not in the registry at all)" >&2
   exit 1
 fi
 

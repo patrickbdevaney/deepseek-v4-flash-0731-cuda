@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # flywheel.sh — ONE iteration of the decode optimisation loop, run headless.
 #
-# This is the mechanical executor for DECODE_FLYWHEEL.md. It is triggered on a timer, does exactly
+# This is the mechanical executor for dev/archive/DECODE_FLYWHEEL.md. It is triggered on a timer, does exactly
 # one lever, and stops. It is deliberately NOT a long-running agent: one lever per invocation means
 # every iteration is independently reviewable, and a bad one costs one iteration.
 #
@@ -37,7 +37,7 @@ cd "${FLYWHEEL_ROOT:-$(dirname "$0")/..}" || exit 1
 ROOT="$PWD"
 [ -f "$ROOT/FLYWHEEL_STATE.json" ] || { echo "[flywheel] wrong root: $ROOT"; exit 1; }
 STATE="$ROOT/FLYWHEEL_STATE.json"
-JOURNAL="$ROOT/FLYWHEEL_JOURNAL.md"
+JOURNAL="$ROOT/dev/archive/FLYWHEEL_JOURNAL.md"
 LOCK=/tmp/dsv4-flywheel.lock
 MODEL="$HOME/models/DeepSeek-V4-Flash-0731-REAP"
 TURNS="${FLYWHEEL_TURNS:-140}"
@@ -99,24 +99,24 @@ You are ONE cycle of the decode-speed loop for this CUDA inference engine. Do on
 stop. You are unattended: never ask a question, never wait for input.
 
 THE TWO LEDGERS ARE THE POINT. Read both before doing anything.
-  LEVERS.md      — what is adopted, what is RETIRED WITH THE NUMBER THAT KILLED IT, what is open with
+  docs/LEVERS.md      — what is adopted, what is RETIRED WITH THE NUMBER THAT KILLED IT, what is open with
                    an expected value, the measurement traps, and the reference data. If your idea is
                    in the retired table, it is closed: reopening needs new EVIDENCE that addresses the
                    specific measurement that killed it, not a new argument.
-  RESEARCH_LOG.md — every query already run. Do not re-run one.
-A cycle that does not write its result back to LEVERS.md has wasted itself, because the next cycle
+  dev/archive/RESEARCH_LOG.md — every query already run. Do not re-run one.
+A cycle that does not write its result back to docs/LEVERS.md has wasted itself, because the next cycle
 will try the same thing. The auditor holds engine commits that do not update it.
 
 PHASES, in order:
 
-0. ORIENT. Read LEVERS.md §1 (where the time goes) and §4/§5 (open levers). Read the tail of
-   LOOP_LOG.md for the last two findings.
+0. ORIENT. Read docs/LEVERS.md §1 (where the time goes) and §4/§5 (open levers). Read the tail of
+   dev/archive/LOOP_LOG.md for the last two findings.
 
-1. RESEARCH — ONLY IF NEEDED. If LEVERS.md has >=2 open levers with expected value >=1%, SKIP this
-   and go to 2. Otherwise follow RESEARCH_LOG.md §1: 6-8 WebSearch queries, at most one per axis,
+1. RESEARCH — ONLY IF NEEDED. If docs/LEVERS.md has >=2 open levers with expected value >=1%, SKIP this
+   and go to 2. Otherwise follow dev/archive/RESEARCH_LOG.md §1: 6-8 WebSearch queries, at most one per axis,
    check every hit against the constraints in §1 (no additional quantisation, no retraining, output
    must stay lossless, implementable against THIS engine), and append every query to §2 with its
-   outcome — including "nothing usable", which is a result. Promote at most 2 into LEVERS.md §4/§5
+   outcome — including "nothing usable", which is a result. Promote at most 2 into docs/LEVERS.md §4/§5
    with an expected value and how you would falsify it.
    NOTE: every adoption so far (F64,F65,F70,F71,F72) came from profiling this engine, not from
    literature. Research is the tiebreaker when the profile stops suggesting things.
@@ -147,13 +147,13 @@ PHASES, in order:
    +28% that passed every other gate.
 
 6b. COUNT THE QUEUE. Update `pivot_criterion.open_nontraining_levers` in FLYWHEEL_STATE.json: how many
-   LEVERS.md items are open, expected >=1%, and doable WITHOUT training or relaxing a standing
+   docs/LEVERS.md items are open, expected >=1%, and doable WITHOUT training or relaxing a standing
    constraint. Count honestly — inflating it to keep the loop alive is the one failure mode that
    cannot be caught by a gate. When it reaches 0 twice the auditor declares a PIVOT to the draft-head
    fine-tune, which is the correct outcome, not a failure.
 
-7. WRITE BACK. Append one LOOP_LOG.md finding: what you tried, the numbers, and the mechanism —
-   including for a FAILURE, with the number that killed it. Move the lever in LEVERS.md into adopted
+7. WRITE BACK. Append one dev/archive/LOOP_LOG.md finding: what you tried, the numbers, and the mechanism —
+   including for a FAILURE, with the number that killed it. Move the lever in docs/LEVERS.md into adopted
    or retired. Copy the run log into evidence/.
 
    YOU CANNOT RUN GIT. `git add`, `git commit`, `git push`, `git checkout` and `git reset` are ALL
@@ -213,7 +213,7 @@ PY
 log "agent exited rc=$RC"
 
 # ---- archive the evidence -----------------------------------------------------------------------
-# Every number in LOOP_LOG.md is only as durable as the log it came from, and those logs live in
+# Every number in dev/archive/LOOP_LOG.md is only as durable as the log it came from, and those logs live in
 # ~/ -- outside the repo, unversioned, and one `rm ~/*.log` from making every past claim
 # unverifiable. The observer's first and most valuable check is "grep the log for that number";
 # that check has to still work in a month. Model-run logs are ~50 KB of text, so copy any that this

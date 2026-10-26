@@ -3,7 +3,7 @@
 #
 # The battery, the extension pass and every later benchmark all append to the same jsonl files, so
 # the corpus is a moving target. Rebuilding it by hand means the analysis is always describing
-# whatever the evidence looked like the last time someone remembered — which is how PERF.md would
+# whatever the evidence looked like the last time someone remembered — which is how docs/PERF.md would
 # end up disagreeing with the data it claims to summarise.
 #
 # The rebuild is a pure function of the evidence and takes under a second on ~1000 rows, so there is
@@ -27,7 +27,7 @@ while true; do
   {
     echo "=== perf refresh $(date -Is) ==="
     python3 tools/perf_ingest.py 2>&1
-    python3 tools/perf_report.py --out PERF.md 2>&1
+    python3 tools/perf_report.py --out docs/PERF.md 2>&1
   } >> "$LOG" 2>&1
 
   # Re-export the generation traces, but only when a benchmark has actually appended since the

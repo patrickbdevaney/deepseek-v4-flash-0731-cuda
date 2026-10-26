@@ -1,7 +1,7 @@
 # The road to a production inference server
 
 Four phases, in order, authorised 2026-08-21. Each ends with a measurement that can fail.
-Reasoning and per-item detail: [`PHASE2_PLAN.md`](PHASE2_PLAN.md), [`DECODE_LADDER.md`](DECODE_LADDER.md).
+Reasoning and per-item detail: [`PHASE2_PLAN.md`](PHASE2_PLAN.md), [`DECODE_LADDER.md`](../../docs/DECODE_LADDER.md).
 
 **Why this order.** Decode and prefill are different bottlenecks (bandwidth at M=1, compute at
 M>>1) and are optimised by different work, so they do not compete. The eval battery is ~3.46 M
@@ -31,7 +31,7 @@ The control is already informative: re-capturing with the fixed `hadamard` did *
 costing decode and the pre-1.10 heads are not compromised. One hypothesis retired.
 
 **Gate:** every arm archived with its per-category table; the release rule in
-[`HEAD_REGISTRY.md`](HEAD_REGISTRY.md) decides which is published.
+[`HEAD_REGISTRY.md`](../../docs/HEAD_REGISTRY.md) decides which is published.
 
 ## Phase 2 — prefill to the roofline
 

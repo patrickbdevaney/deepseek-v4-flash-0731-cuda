@@ -4,7 +4,7 @@
 #
 #   nohup setsid bash scripts/kvpack_capacity_run.sh > evidence/decode_loop/kvpack_capacity.log 2>&1 </dev/null &
 #
-# WHY THIS RUNS AT ALL. KV_PRECISION_FINDINGS.md §3 says seqmax 32768 "does not fit today" and
+# WHY THIS RUNS AT ALL. docs/KV_PRECISION_FINDINGS.md §3 says seqmax 32768 "does not fit today" and
 # DECODE_LADDER 1b.2 inherited that as the item's whole justification. The arithmetic says
 # otherwise: at seqmax 16384 the engine's own resident set is 112.0/122.8 GiB, and going to 32768
 # adds 1.61 GiB of KV plus 0.25 GiB of main_x, i.e. ~113.9 GiB with ~8.9 GiB still free. A premise

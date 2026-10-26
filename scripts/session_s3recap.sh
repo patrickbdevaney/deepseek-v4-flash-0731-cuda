@@ -6,7 +6,7 @@
 # s5_session.sh runs ./build/decode, whose prefill was non-deterministic above ~192 positions until
 # ladder 1.10 landed (aliased hadamard; 56/56 pairs divergent before, 56/56 byte-identical after).
 # Every sequence in every corpus is inside that regime -- s3 1536/1536, min 525 tokens. So every
-# head in HEAD_REGISTRY.md was trained on taps from a forward that did not reproduce itself.
+# head in docs/HEAD_REGISTRY.md was trained on taps from a forward that did not reproduce itself.
 # Whether that cost anything is UNMEASURED. Holding the corpus EXACTLY fixed and varying only the
 # capture is the one comparison that answers it, and s3/gen.txt is retained, so pass 1 is skipped
 # and no vLLM generation is needed. If the fix alone lifts tau, that gain applies to every head
@@ -29,7 +29,7 @@ N=1536
 
 # ---- gate 1: 2.1 must have closed, because the block width is baked into the CAPTURE ----
 LOG "waiting for ladder 2.1 to close (block width is baked into DSV4_BLKSWEEP, not just --block)"
-while ! grep -q '^- \[x\] \*\*2\.1' DECODE_LADDER.md; do
+while ! grep -q '^- \[x\] \*\*2\.1' docs/DECODE_LADDER.md; do
     pgrep -f 'decode_loop.sh' >/dev/null || { sleep 300; }      # loop gone: keep waiting, don't race
     sleep 120
 done
@@ -48,7 +48,7 @@ the engine does not run produces a head tuned for nothing"
 LOG "capturing and training at block $BLK, which is what the engine serves"
 
 # ---- gate 2b: a same-width incumbent, because tau's ceiling IS the width ----
-# Every tau in HEAD_REGISTRY.md was taken at block 6. Comparing a block-5 candidate against one
+# Every tau in docs/HEAD_REGISTRY.md was taken at block 6. Comparing a block-5 candidate against one
 # would be comparing a 5-ceilinged number with a 6-ceilinged one.
 if [ ! -s evidence/baseline_tau.value ]; then
     LOG "no block-$BLK baseline yet; measuring the deployed head"

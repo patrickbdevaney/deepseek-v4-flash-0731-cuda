@@ -2,7 +2,7 @@
 //
 // NOT include/webui.h: that one is gemma's, down to the title, the "118 tok/s" and the assumption
 // that thinking is a single checkbox. This model has TWO orthogonal controls (thinking_mode and
-// reasoning_effort, CHAT_FORMAT.md §2), streams reasoning separately as reasoning_content, and
+// reasoning_effort, docs/CHAT_FORMAT.md §2), streams reasoning separately as reasoning_content, and
 // answers with DSML tool calls that need rendering as structured calls rather than as stray markup.
 #pragma once
 static const char* WEBUI_DSV4_HTML = R"WEBUI(<!DOCTYPE html>

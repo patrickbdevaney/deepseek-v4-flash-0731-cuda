@@ -12,7 +12,7 @@ DESIGN RULES, each of which exists because the alternative would let the number 
    normalised expression, or a unit test that passes or does not. No LLM judge, no partial credit,
    no "contains the answer somewhere" matching. That rules out the benchmarks DeepSeek actually
    leads on -- Terminal Bench, SWE, Toolathlon are agent rollouts -- and it is the right trade: a
-   defensible small number beats an indefensible big one. `EVALS.md` records what was excluded and
+   defensible small number beats an indefensible big one. `docs/EVALS.md` records what was excluded and
    why, so the omissions are part of the report rather than a silence.
 2. **Pinned snapshots, never a download at eval time.** Rows come from a commit sha recorded in
    `evidence/evals/datasets.json` by `tools/eval_fetch.py`. A benchmark that fetches while it scores
@@ -28,7 +28,7 @@ DESIGN RULES, each of which exists because the alternative would let the number 
    prints n actually scored against n in the benchmark, so a partial run can never be mistaken for
    a complete one.
 
-CONTEXT. The server runs at seqmax=8192 -- see EVALS.md and
+CONTEXT. The server runs at seqmax=8192 -- see docs/EVALS.md and
 wiki/context-ceiling-is-not-the-kv-cache.md for why it was 4096 and what changed. Reasoning traces are therefore capped well below what the model would
 emit unbounded, and `truncated` in the report counts the items that hit the ceiling. Those items are
 scored as attempted and wrong rather than dropped, which makes every number here a floor.

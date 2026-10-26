@@ -169,8 +169,8 @@ moments carried across (equivalent to one continuous run).
    fine-tuned against activations from this exact checkpoint. Do not expect it to transfer to another
    quantisation, another REAP revision, or another serving stack.
 
-Full history — including the rejected candidates and the corrections — is in `LOOP_LOG.md`,
-`S5_PROGRESSION.md` and `HEAD_REGISTRY.md` in the engine repo.
+Full history — including the rejected candidates and the corrections — is in `dev/archive/LOOP_LOG.md`,
+`dev/archive/S5_PROGRESSION.md` and `docs/HEAD_REGISTRY.md` in the engine repo.
 """
 
 

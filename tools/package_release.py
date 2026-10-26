@@ -158,7 +158,7 @@ round-trip error for this head: see `provenance.json`.
 Base model `{base_repo}`, used as shipped — no re-pruning and no additional quantisation. Trained
 on activations captured from that checkpoint over {n_seq} prompt continuations the base model itself
 generated. Full training and measurement history, including the rejected candidates and the
-corrections, is in `LOOP_LOG.md` and `S5_PROGRESSION.md` in the engine repository.
+corrections, is in `dev/archive/LOOP_LOG.md` and `dev/archive/S5_PROGRESSION.md` in the engine repository.
 
 Engine revision at measurement time: `{rev}`.
 """

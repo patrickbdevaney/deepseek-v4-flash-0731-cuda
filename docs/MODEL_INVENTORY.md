@@ -2,7 +2,7 @@
 
 > This file is the *incumbent*: what is on disk and what it is made of. For the forward-looking
 > question — which other models fit this box, what they would decode at, and why the frontier
-> open-weights do not fit at any 4-bit quantisation — see **[MODEL_SURVEY_APPENDIX.md](MODEL_SURVEY_APPENDIX.md)**
+> open-weights do not fit at any 4-bit quantisation — see **[MODEL_SURVEY_APPENDIX.md](../dev/archive/MODEL_SURVEY_APPENDIX.md)**
 > (surveyed 2026-08-18).
 
 `0xSero/DeepSeek-V4-Flash-0731-REAP` @ sha `ddc04540efda3d2a0788b129f1fad828ddc19b60`, lastModified 2026-07-31.

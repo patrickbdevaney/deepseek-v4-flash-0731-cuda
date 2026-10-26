@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """mainkv_ab_compare.py — the token-identity half of a decode A/B, and the paired timing table.
 
-WHY THIS EXISTS. DECODE_LADDER.md's first invariant is that a kernel change either produces
+WHY THIS EXISTS. docs/DECODE_LADDER.md's first invariant is that a kernel change either produces
 byte-identical generated token ids or ships behind an explicit gate. For a change on the DRAFT side
 that is not a formality: the draft only proposes, so a wrong draft does not change what the target
 emits -- it changes how much of the draft is accepted, i.e. tau. A run can therefore be "correct"

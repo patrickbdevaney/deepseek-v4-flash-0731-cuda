@@ -224,7 +224,7 @@ for d in /home/patrickd/s5-capture/*/; do
     sudo cp "$src" "$dst/" && sudo chown patrickd:patrickd "$dst/mtp_trained.safetensors" || \
         { LOG "  !! $a: copy FAILED"; continue; }
     for f in train_metrics.json eval.log; do [ -s "$d/$f" ] && cp -n "$d/$f" "$dst/" 2>/dev/null; done
-    tau=$(awk -F'|' -v n="$a" 'NF>=8{gsub(/[ `]/,"",$2); if($2==n){gsub(/ /,"",$3);print $3;exit}}' HEAD_REGISTRY.md)
+    tau=$(awk -F'|' -v n="$a" 'NF>=8{gsub(/[ `]/,"",$2); if($2==n){gsub(/ /,"",$3);print $3;exit}}' docs/HEAD_REGISTRY.md)
     sha=$(sha256sum "$dst/mtp_trained.safetensors" | cut -c1-16)
     python3 - "$dst/head_card.json" "$a" "${tau:-unrecorded}" "$sha" <<'PY'
 import json,sys
@@ -270,14 +270,14 @@ for d in "$HOME"/model-backups/heads/*/; do
     done
     LOG "  uploaded ${pre:-<root>} $a"
 done
-for f in README.md BEST_SETUP.md HEAD_REGISTRY.md DECODE_ENDGAME.md; do
+for f in README.md docs/BEST_SETUP.md docs/HEAD_REGISTRY.md dev/archive/DECODE_ENDGAME.md; do
     [ -s "$f" ] && { up "$f" "$f" "docs: $f" || LOG "  !! $f upload FAILED"; }
 done
 LOG "upload complete"
 
 # ---------------------------------------------------------------- 5. final status, commit, push
 {
-  echo "# FINAL_STATE.md — programme end, $(date -Is)"
+  echo "# docs/FINAL_STATE.md — programme end, $(date -Is)"
   echo
   echo "Champion per \`config/live_ckpt\`: \`$CHAMP\`"
   echo
@@ -288,10 +288,10 @@ LOG "upload complete"
   echo
   echo '| head | tau | tok/s |'; echo '|---|---|---|'
   awk -F'|' 'NF>=8{gsub(/[ `]/,"",$2); gsub(/ /,"",$3); gsub(/ /,"",$5);
-    if($4+0==5 && $3+0>0) printf "| `%s` | %s | %s |\n", $2, $3, $5}' HEAD_REGISTRY.md | sort -t'|' -k3 -rn
+    if($4+0==5 && $3+0>0) printf "| `%s` | %s | %s |\n", $2, $3, $5}' docs/HEAD_REGISTRY.md | sort -t'|' -k3 -rn
   echo
   echo "Uploaded to https://huggingface.co/$REPO"
-} > FINAL_STATE.md
+} > docs/FINAL_STATE.md
 
 git add -A >/dev/null 2>&1
 git commit -q -m "Programme end: final archive, verification and upload
@@ -361,8 +361,8 @@ systemctl --user stop dsv4-decode-loop-watchdog.timer 2>/dev/null && LOG "  stop
 for u in $(systemctl --user list-units --no-legend --state=active 'dsv4-ev-*' 2>/dev/null | awk '{print $1}'); do
     systemctl --user stop "$u" 2>/dev/null && LOG "  stopped $u"
 done
-cat > WAKE_README.md <<'WAKE'
-# WAKE_README.md — how to bring this box back
+cat > dev/archive/WAKE_README.md <<'WAKE'
+# dev/archive/WAKE_README.md — how to bring this box back
 
 The programme finished and the box was suspended by `scripts/finalize_and_suspend.sh`.
 Everything is committed, pushed, and uploaded to HuggingFace. Nothing is mid-flight.
@@ -377,12 +377,12 @@ systemctl --user start dsv4-decode-loop-watchdog.timer
 rm FLYWHEEL_STOP
 ```
 
-State when it went to sleep is in `FINAL_STATE.md`; the archive hash pass is in
+State when it went to sleep is in `docs/FINAL_STATE.md`; the archive hash pass is in
 `evidence/archive_verify_final.txt`.
 WAKE
 git add -A >/dev/null 2>&1; git commit -q -m "Programme end: wake instructions" 2>/dev/null; git push -q 2>&1|tail -1
 
 LOG "all work saved, committed and uploaded. Suspending in 60 s."
-LOG "to wake: press power / send WoL. See WAKE_README.md to re-arm the watchdog and flywheel."
+LOG "to wake: press power / send WoL. See dev/archive/WAKE_README.md to re-arm the watchdog and flywheel."
 sync; sleep 60
 sudo systemctl suspend

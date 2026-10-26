@@ -230,7 +230,7 @@ Per request, ignoring the one-time repack: prefill saves `P x 2.945 ms/1000`, de
 So the answer is workload-dependent and, for this project, not close. Agentic coding runs prompts of
 5k–30k against responses of 200–2000 — `P/R` of 5–50, far above break-even. Chat sits near 1–3 and is
 genuinely marginal. `MOE_MMA=1` is the right default for the workload
-[`NORTH_STAR.md`](NORTH_STAR.md) names, and the wrong one for a decode benchmark — which is exactly
+[`NORTH_STAR.md`](../dev/archive/NORTH_STAR.md) names, and the wrong one for a decode benchmark — which is exactly
 why it must be a deliberate switch and not a silent one. Left **default-off** so the shipped decode
 headline is unchanged; `scripts/serve.sh` now passes it through and documents the break-even.
 

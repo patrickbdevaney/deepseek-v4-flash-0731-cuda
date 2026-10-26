@@ -257,7 +257,7 @@ __global__ void __launch_bounds__(32*WARPS, WARPS>=8 ? TCB_DB_BPS : (WARPS>=2 ? 
 }
 
 // ---------------------------------------------------------------------------------------------
-// CP.ASYNC MULTI-STAGE RING (LEVERS.md B8-cpasync). The lever the cycle-15 research phase promoted,
+// CP.ASYNC MULTI-STAGE RING (docs/LEVERS.md B8-cpasync). The lever the cycle-15 research phase promoted,
 // and it is new EVIDENCE against Finding 78's specific measurement rather than a re-argument.
 //
 // F78 double-buffered in REGISTERS: the same warp issues round n+1's global loads into a second
@@ -430,7 +430,7 @@ static int tcb_kc_env(){
 //   sw2   [4096,2048]  .0616(136)  .0571(147)  .0584(144)  .0597(140)  8
 //
 // KC=4 is consistently WORSE than both 2 and 8 — non-monotone, so this is a lookup, not a rule, and
-// it is fitted to one bench (LEVERS.md trap 3: gemm_bench ranks, it does not predict end-to-end).
+// it is fitted to one bench (docs/LEVERS.md trap 3: gemm_bench ranks, it does not predict end-to-end).
 // TCB_KC=<n> overrides; TCB_KC=1 is exactly the pre-Finding-74 kernel.
 //
 // HARD cap at KC<=4 for W=8: 64 rows x 8 K-blocks would be a 66 KB static __shared__, which does not

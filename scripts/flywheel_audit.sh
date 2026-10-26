@@ -46,8 +46,8 @@ if [ "$OPEN" = "0" ] && [ "$PREV" = "0" ] && [ ! -f "$ROOT/FLYWHEEL_PIVOT" ]; th
       echo "  Kernel optimisation is exhausted for this checkpoint. The remaining lever is S5:"
       echo "  re-align the DSpark MTP draft head. That is a TRAINING job -- the loop cannot do it."
       echo "  Position: $(grep -oE '\"spec_tok_s\": [0-9.]+' FLYWHEEL_STATE.json | head -1) vs a ceiling of 30.8 at acceptance 2.90."
-    } >> "$ROOT/FLYWHEEL_AUDIT.md"
-    say "** PIVOT ** kernel work exhausted; the remaining lever is training (S5). See FLYWHEEL_AUDIT.md"
+    } >> "$ROOT/dev/archive/FLYWHEEL_AUDIT.md"
+    say "** PIVOT ** kernel work exhausted; the remaining lever is training (S5). See dev/archive/FLYWHEEL_AUDIT.md"
 fi
 
 # ---- 1. gates. A cycle that leaves the tree failing must never be published. ----
@@ -59,12 +59,12 @@ for g in gate_units gate_bf16w gate_ogroup_gemv gate_tc_fp8_smem gate_forkjoin_g
 done
 
 # ---- 2. the ledger. A lever whose result is not written back will be tried again. Only enforced on
-# commits that actually touch the engine — an infrastructure or docs commit owes nothing to LEVERS.md,
+# commits that actually touch the engine — an infrastructure or docs commit owes nothing to docs/LEVERS.md,
 # and holding those would train the loop to write a filler entry to get past the auditor. ----
 TOUCHED=$(git show --stat --format= HEAD | awk '{print $1}')
 if echo "$TOUCHED" | grep -qE '^(kernels|src|include)/'; then
-    echo "$TOUCHED" | grep -q "LEVERS.md"  || note "engine changed but LEVERS.md not updated"
-    echo "$TOUCHED" | grep -q "LOOP_LOG.md" || note "engine changed but no LOOP_LOG entry"
+    echo "$TOUCHED" | grep -q "docs/LEVERS.md"  || note "engine changed but docs/LEVERS.md not updated"
+    echo "$TOUCHED" | grep -q "dev/archive/LOOP_LOG.md" || note "engine changed but no LOOP_LOG entry"
 fi
 
 # ---- 3. the measurement. Only applies if the cycle claims a tok/s number. ----
@@ -109,23 +109,23 @@ LAST3=$(git log -3 --format=%s | sed 's/[^a-z]//g' | sort -u | wc -l)
 echo "$HEAD_SHA" > "$ROOT/.flywheel_audited"
 if [ -n "$FAIL" ]; then
     say "HELD (not pushing):$(printf "$FAIL")"
-    { echo "## $(date -Is) — HELD $HEAD_SHA"; printf "%b\n" "$FAIL"; } >> "$ROOT/FLYWHEEL_AUDIT.md"
+    { echo "## $(date -Is) — HELD $HEAD_SHA"; printf "%b\n" "$FAIL"; } >> "$ROOT/dev/archive/FLYWHEEL_AUDIT.md"
     exit 0
 fi
 say "PASS — publishing $HEAD_SHA"
 # TOCTOU (found 2026-08-08). This audited $HEAD_SHA, captured at line 30, but pushed the REF `main`
 # -- so any commit that landed during the audit window rode along unreviewed. It happened on
 # 2026-08-08T10:37:40: the auditor reviewed 7968962 and published 76bb06e, a commit it had never
-# seen, and FLYWHEEL_AUDIT.md recorded the contradiction in its own entry (header sha 7968962,
+# seen, and dev/archive/FLYWHEEL_AUDIT.md recorded the contradiction in its own entry (header sha 7968962,
 # subject line from 76bb06e, because line 117 logged the sha it audited and the subject of whatever
 # HEAD was by then). The whole point of a separate auditor is that the thing making changes is not
 # the thing publishing them; pushing a moving ref quietly gives that back. Push the reviewed OBJECT.
 if git push -q origin "$HEAD_SHA":refs/heads/main 2>/tmp/dsv4-audit-push.log; then
     NOW_SHA=$(git rev-parse HEAD)
     [ "$NOW_SHA" != "$HEAD_SHA" ] && say "note: HEAD moved to ${NOW_SHA:0:7} during the audit; held back for the next tick"
-    { echo "## $(date -Is) — PUSHED $HEAD_SHA"; git log -1 --format='  %s' "$HEAD_SHA"; } >> "$ROOT/FLYWHEEL_AUDIT.md"
+    { echo "## $(date -Is) — PUSHED $HEAD_SHA"; git log -1 --format='  %s' "$HEAD_SHA"; } >> "$ROOT/dev/archive/FLYWHEEL_AUDIT.md"
 else
     say "push failed: $(tail -1 /tmp/dsv4-audit-push.log)"
-    { echo "## $(date -Is) — PUSH FAILED $HEAD_SHA"; } >> "$ROOT/FLYWHEEL_AUDIT.md"
+    { echo "## $(date -Is) — PUSH FAILED $HEAD_SHA"; } >> "$ROOT/dev/archive/FLYWHEEL_AUDIT.md"
 fi
 exit 0

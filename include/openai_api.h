@@ -5,7 +5,7 @@
 // generated text out.
 //
 // Model-specific behaviour that differs from the other servers in this family — do not carry
-// gemma's or Laguna's defaults over by habit (CHAT_FORMAT.md §4):
+// gemma's or Laguna's defaults over by habit (docs/CHAT_FORMAT.md §4):
 //   temperature 1.0 (NOT 0.7), top_p 0.95 for agentic/tool use, 1.0 otherwise.
 //   thinking_mode {chat, thinking} AND reasoning_effort {low, high, max} are INDEPENDENT controls.
 #pragma once

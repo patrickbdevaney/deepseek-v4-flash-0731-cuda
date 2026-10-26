@@ -66,7 +66,7 @@ def main():
     for f in sorted(glob.glob(os.path.join(CK, 'encoding/tests/test_output_*.txt'))):
         cases.append(open(f, encoding='utf-8').read())
     # Whole source files: the densest source of odd byte sequences we have on disk.
-    for f in ['include/encoding_dsv4.h', 'CHAT_FORMAT.md', 'README.md']:
+    for f in ['include/encoding_dsv4.h', 'docs/CHAT_FORMAT.md', 'README.md']:
         if os.path.exists(f):
             cases.append(open(f, encoding='utf-8').read())
     # GSM8K, which is what capability was measured on.

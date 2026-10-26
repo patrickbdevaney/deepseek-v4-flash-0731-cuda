@@ -21,7 +21,7 @@
 #
 # SUBSET SIZES are a time budget, not a statistical preference: at ~20 tok/s the full MMLU-Pro test
 # split is 12032 items and would take a week. `--n` draws a fixed deterministic subset (see
-# `_sample`), the report always prints n-scored against n-in-benchmark, and EVALS.md quotes the
+# `_sample`), the report always prints n-scored against n-in-benchmark, and docs/EVALS.md quotes the
 # Wilson interval, so a subset can never be read as the whole benchmark.
 #
 # Every task resumes: rerunning this script skips ids already in evidence/evals/<task>.jsonl.

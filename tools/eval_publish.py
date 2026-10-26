@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""eval_publish.py — rewrite the RESULTS block of EVALS.md from evidence/evals/summary.json.
+"""eval_publish.py — rewrite the RESULTS block of docs/EVALS.md from evidence/evals/summary.json.
 
 The table is generated rather than written so that the published number and the scored jsonl cannot
 drift apart. Hand-transcribing a benchmark table is exactly the kind of step that puts a wrong digit
@@ -11,10 +11,10 @@ import json, os, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SUMMARY = os.path.join(ROOT, 'evidence', 'evals', 'summary.json')
-DOC = os.path.join(ROOT, 'EVALS.md')
+DOC = os.path.join(ROOT, 'docs/EVALS.md')
 
 # Reference numbers for the UNPRUNED deepseek-ai/DeepSeek-V4-Flash-0731, PER REASONING EFFORT.
-# Third-party aggregation, unattributed -- see EVALS.md, "The comparison problem".
+# Third-party aggregation, unattributed -- see docs/EVALS.md, "The comparison problem".
 #
 # Effort-keyed on purpose: the aggregator's own table moves GPQA by 16 points and LiveCodeBench by
 # 36 between `standard` and `high`, so holding a low-effort result against a high-effort number is
@@ -101,7 +101,7 @@ DEVIATIONS = {
                      'Direction of bias: unknown — a model may do better or worse than with its '
                      'native tool tokens.',
                      "execution results are returned in the CHECKPOINT'S native `<tool_result>` "
-                     'wrapper (CHAT_FORMAT.md) rather than BFCL\'s `role: tool` message, which '
+                     'wrapper (docs/CHAT_FORMAT.md) rather than BFCL\'s `role: tool` message, which '
                      "relies on each model's chat template. Direction of bias: favours this model "
                      'slightly, since results arrive in the form it was trained on.',
                      'BFCL v4 data, while the `exec_*`/`live_*` rows above are v3. v3 and v4 share '

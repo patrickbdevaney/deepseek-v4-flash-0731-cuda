@@ -1,6 +1,6 @@
 // gate_suffix_draft — the S6 candidate drafter's matcher, gated on the host.
 //
-// The counterfactual probe in src/decode.cu prices LEVERS.md S6 from ONE full-model run, so its
+// The counterfactual probe in src/decode.cu prices docs/LEVERS.md S6 from ONE full-model run, so its
 // matcher has to be right BEFORE that run: a matcher that silently proposes nothing would report
 // "S6 is worthless" and retire a lever on a bug. This costs a second instead of a checkpoint load.
 //

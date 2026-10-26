@@ -44,7 +44,7 @@ DIE(){ LOG "HALT: $*"; exit 1; }
 # `[6]` in promote_head.py. It has to move together everywhere or the session trains a head for one
 # width, evaluates it at another, and grades it against archived numbers taken at a third.
 #
-# tau IS NOT COMPARABLE ACROSS WIDTHS -- its ceiling is the width. Every tau in HEAD_REGISTRY.md was
+# tau IS NOT COMPARABLE ACROSS WIDTHS -- its ceiling is the width. Every tau in docs/HEAD_REGISTRY.md was
 # taken at block 6 and a block-5 tau cannot be measured against it. That is what --incumbent-tau on
 # promote_head.py is for, and S5_INCUMBENT_TAU below carries a value re-measured at THIS width.
 BLK="${S5_BLOCK:-5}"
@@ -167,7 +167,7 @@ for (( ci=0; ci<NCHUNK; ci++ )); do
     RES=(); [ -n "$PREV" ] && RES=(--resume "/cap/$NAME/$PREV")
     # S5_ACE/S5_ATV expose the loss mix so a recipe sweep can reuse a RETAINED capture instead of
     # re-capturing per arm. Unset leaves train_head.py's own defaults (0.1 / 0.9) untouched, so the
-    # sessions already recorded in HEAD_REGISTRY.md remain exactly reproducible by omitting them.
+    # sessions already recorded in docs/HEAD_REGISTRY.md remain exactly reproducible by omitting them.
     LOSSW=()
     [ -n "${S5_ACE:-}" ] && LOSSW+=(--a-ce "$S5_ACE")
     [ -n "${S5_ATV:-}" ] && LOSSW+=(--a-tv "$S5_ATV")
@@ -353,7 +353,7 @@ python3 tools/promote_head.py promote "${INC[@]}" --head "$WORK/head" --eval "$R
     --name "$NAME" --metrics "$WORK/train_metrics.json" && LOG "PROMOTED" || LOG "not promoted (archived)"
 
 # ---------------------------------------------------------------- the SESSION decision
-# Thresholds live in S5_PROGRESSION.md §2 and were fixed before the data. Note this is deliberately
+# Thresholds live in dev/archive/S5_PROGRESSION.md §2 and were fixed before the data. Note this is deliberately
 # NOT the promotion rule: session 1 is a single-domain proof and can legitimately say GO while
 # failing a suite-wide >3.5% promotion bar.
 set +e

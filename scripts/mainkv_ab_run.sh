@@ -13,7 +13,7 @@
 #
 # THE ARM IS AN ENVIRONMENT VARIABLE ON ONE BINARY. DSV4_MAINKV_CACHE=0 restores the from-scratch
 # `dspark_main_kv` per token; unset takes the incremental path. Both arms therefore run the SAME
-# build, the same corpus (LOOP_LOG.md, sha recorded in every record), the same targets, the same
+# build, the same corpus (dev/archive/LOOP_LOG.md, sha recorded in every record), the same targets, the same
 # seeds -- so the only difference between the two record sets is the kernel path.
 #
 # PHASE ORDER IS THE DRIFT CONTROL. Baseline runs BEFORE cached, so any thermal drift over the
@@ -157,7 +157,7 @@ fi
 
 # ================= PHASE 4 — the standing LOSSLESS gate ======================================
 # The memcmp gate and the completion hashes below are the real bit-exactness evidence; this is the
-# frozen protocol DECODE_LADDER.md names, on the binary that carries it.
+# frozen protocol docs/DECODE_LADDER.md names, on the binary that carries it.
 if [ "$PHASE_FROM" -le 4 ]; then
 say "=== PHASE 4: standing GATE + LOSSLESS GATE (build/decode, cache ON) ==="
 DEC_LOG=$EV/decode_1p0_lossless.log

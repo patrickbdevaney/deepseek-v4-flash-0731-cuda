@@ -8,7 +8,7 @@
 //
 // A claim of that shape is checked with `memcmp`, not with a cosine. `tests/gate_ogroup_gemv.cu`
 // next door is a cosine gate on the M=1 kernel and would pass a change that perturbed the last
-// mantissa bit; LEVERS.md trap 6 (Finding 68) is the worked example of a numerics change that
+// mantissa bit; docs/LEVERS.md trap 6 (Finding 68) is the worked example of a numerics change that
 // bought +28% tok/s by degrading the output past every tolerance gate in the project.
 //
 // Sweep, per trap 9 (a harness that cannot express the regime just confirms itself):

@@ -23,7 +23,7 @@
 // sees, and `sparse_attn` then sums them in index order, so the error is not bounded by the ulp.
 // tests/gate_units.cu next door is the cosine gate against the golden and would pass all of that.
 //
-// SWEEP, per LEVERS.md trap 9 (a harness that cannot express the regime just confirms itself):
+// SWEEP, per docs/LEVERS.md trap 9 (a harness that cannot express the regime just confirms itself):
 //   * S  = 1 (the dp decode step, one query), 5 and 6 (the verify widths the engine issues), 2, 17
 //     (not a multiple of anything), and 129 (prefill-shaped, forces gridDim.y past a wave)
 //   * T  = 1, 7, 31, 32, 33, 63, 129, 384, 3072 (ctx 12,288 at ratio 4), 6001 — including T below

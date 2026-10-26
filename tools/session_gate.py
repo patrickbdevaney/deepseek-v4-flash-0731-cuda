@@ -8,7 +8,7 @@ next session?** A head can fail promotion and still say GO -- that is the expect
 narrow single-domain proof, and conflating the two rules would end the programme on its first
 deliberately-narrow run.
 
-THE THRESHOLDS ARE COPIED FROM `S5_PROGRESSION.md` §2, WHICH WAS WRITTEN BEFORE THE DATA EXISTS.
+THE THRESHOLDS ARE COPIED FROM `dev/archive/S5_PROGRESSION.md` §2, WHICH WAS WRITTEN BEFORE THE DATA EXISTS.
 That is the entire value of this file: the rule cannot be adjusted after seeing the number, because
 the number does not exist yet and the rule is already in git.
 

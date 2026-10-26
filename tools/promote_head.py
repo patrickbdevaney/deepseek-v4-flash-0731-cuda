@@ -29,7 +29,7 @@ Everything else is bookkeeping, and the bookkeeping is the point.
 """
 import argparse, hashlib, json, os, re, shutil, subprocess, sys, time
 
-REGISTRY = "HEAD_REGISTRY.md"
+REGISTRY = "docs/HEAD_REGISTRY.md"
 STORE    = os.path.expanduser("~/model-backups/heads")
 NOISE    = 0.035          # measured cross-run spread on identical config (F94)
 
@@ -141,7 +141,7 @@ def promote(a):
     if ev["blocks"] != [_pb]:         fails.append(f"eval blocks {ev['blocks']}, protocol is block {_pb}")
     if ev["suite_tok_s"] is None:     fails.append("no suite points parsed")
     # LADDER 2.4 -- THE RULER. This compared `suite_tok_s`, against a row read out of
-    # HEAD_REGISTRY.md: a number recorded on whatever engine revision was current when THAT head
+    # docs/HEAD_REGISTRY.md: a number recorded on whatever engine revision was current when THAT head
     # was measured. The docstring above always said `tau`. 2.2 measured the difference directly --
     # on the same frozen protocol, across 8 days and five decode-kernel rewrites, suite `tau`
     # reproduced the archived value to FOUR DECIMAL PLACES for both heads, while suite tok/s moved
@@ -161,7 +161,7 @@ def promote(a):
     _ov = getattr(a, "incumbent_tau", None)
     _reg = inc["suite_tau"] if inc else None
     cands = [(v, s) for v, s in ((_ov, "re-measured this session"),
-                                 (_reg, "HEAD_REGISTRY.md -- NOT this session")) if v is not None]
+                                 (_reg, "docs/HEAD_REGISTRY.md -- NOT this session")) if v is not None]
     if cands:
         inc_tau, inc_src = max(cands, key=lambda t: t[0])
         if len(cands) == 2:

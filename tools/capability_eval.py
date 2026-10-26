@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """capability_eval.py — task #11: measure capability on the REAP checkpoint, not on its reputation.
 
-NORTH_STAR.md §6 says it plainly: *"The ~50 Artificial-Analysis-class capability figure is a claim
+dev/archive/NORTH_STAR.md §6 says it plainly: *"The ~50 Artificial-Analysis-class capability figure is a claim
 about the BASE checkpoint."* REAP removed 37.5 % of the experts (256 -> 160). Whether the pruned
 checkpoint keeps that capability has never been measured here, and every "frontier + fast" framing
 in this project rests on it. This is the smallest honest test that can move that number from

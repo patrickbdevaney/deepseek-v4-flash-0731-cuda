@@ -5,7 +5,7 @@
 // care what the weight bytes contain, only their shapes — so allocate the representative shapes,
 // run the real kernels, and report achieved bandwidth against the measured 240 GB/s roofline.
 //
-// Shapes are the ACTUAL per-layer shapes read from docs/hdrs (see MODEL_INVENTORY.md), not invented.
+// Shapes are the ACTUAL per-layer shapes read from docs/hdrs (see docs/MODEL_INVENTORY.md), not invented.
 //
 //   build: nvcc -O3 -std=c++17 -arch=sm_110a -I include tools/gemm_bench.cu \
 //            kernels/fp8_block_gemm.cu kernels/tc_fp8_gemm.cu kernels/mla_attn.cu kernels/moe.cu \
@@ -34,7 +34,7 @@ using namespace dsv4;
 extern bool g_tc_fp8;
 void fp8_set_gemv_mk_maxm(int m);
 void tc_fp8_set_smem(int on);
-void tc_fp8_set_cpa(int ns);   // cp.async ring depth (LEVERS.md B8-cpasync); 0 = the shipped KC kernel
+void tc_fp8_set_cpa(int ns);   // cp.async ring depth (docs/LEVERS.md B8-cpasync); 0 = the shipped KC kernel
 
 static void* dalloc(size_t n){ void* p; CU(cudaMalloc(&p,n)); CU(cudaMemset(p,0x11,n)); return p; }
 
@@ -75,14 +75,14 @@ static double timeit(F&& f, int reps, int trials = 5) {
 
 int main(int argc, char** argv) {
     const int reps = argc>1 ? atoi(argv[1]) : 50;
-    const double ROOF = 240.0;                              // measured achievable, HARDWARE.md §2
+    const double ROOF = 240.0;                              // measured achievable, docs/HARDWARE.md §2
     g_tc_fp8 = true;
     arena_init((size_t)512<<20);
 
     printf("gemm_bench — decode-critical GEMMs on synthetic weights of the REAL shapes\n");
     printf("roofline: %.0f GB/s achievable (tools/bw_probe.cu)   reps=%d\n", ROOF, reps);
 
-    // ---- the five MLA per-layer dense GEMMs (41.1%% of B_tok, ROOFLINE.md §2) ----
+    // ---- the five MLA per-layer dense GEMMs (41.1%% of B_tok, docs/ROOFLINE.md §2) ----
     struct Shape { const char* n; int N, K; };
     const Shape mla[] = {
         {"MLA wq_a",   Q_LORA,            DIM},                 // [1024, 4096]
@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
             CU(cudaFree(off_d)); CU(cudaFree(tile_e)); CU(cudaFree(tile_row0)); CU(cudaFree(ntiles_d));
         }
         printf("\nMoE is 30.8%% of B_tok. If this sits far below the MLA GEMMs' efficiency, the\n"
-               "ROOFLINE.md §6 priority order (MLA #1, MoE #2) is inverted by measurement.\n");
+               "docs/ROOFLINE.md §6 priority order (MLA #1, MoE #2) is inverted by measurement.\n");
     }
     // ---- the two remaining suspects for the M>=2 step penalty (LOOP_LOG Finding 15) ----
     // The dense GEMMs were ruled out (+7.4% M=1->M=2, ~1.3 ms across 43 layers vs a ~72 ms penalty).

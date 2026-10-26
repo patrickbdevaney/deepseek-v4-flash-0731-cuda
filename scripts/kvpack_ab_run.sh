@@ -24,7 +24,7 @@
 # build/decode for the engine.
 #
 # WHAT IS EXPECTED AND WHAT IS NOT, STATED BEFORE THE RUN so neither can be a post-hoc excuse.
-#   * CAPACITY is the claim KV_PRECISION_FINDINGS.md §3 makes and it is arithmetic: 2048 -> 720 B
+#   * CAPACITY is the claim docs/KV_PRECISION_FINDINGS.md §3 makes and it is arithmetic: 2048 -> 720 B
 #     per row over 43 window caches, 41 compressed caches and 3 draft main-KV caches. Phase 6
 #     measures it from the engine's own `mem X/Y GiB` line at a FIXED seqmax, which is a
 #     measurement of the resident set and not of the formula.

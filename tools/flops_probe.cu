@@ -11,7 +11,7 @@
 //   2. FP16/BF16 mma.sync m16n8k16 — the Ampere-lineage tensor-core path, what a flash-attention
 //      style score kernel would use.
 //   3. FP8 e4m3 mma.sync m16n8k32 — used by the fp8_block_gemm path.
-// FP4 is deliberately NOT probed here: HARDWARE.md records that mma.sync FP4 is BLOCKED on sm_110a
+// FP4 is deliberately NOT probed here: docs/HARDWARE.md records that mma.sync FP4 is BLOCKED on sm_110a
 // and that Thor reaches FP4 only through tcgen05, which needs tensor-memory allocation and matrix
 // descriptors — a probe of its own, not a line in this one.
 //

@@ -28,7 +28,7 @@
 // 3071. The gate's range stops six times short of where the defect lives, so it is evidence about
 // 1..29 and nothing else. 1.9 also re-ran the 128..256 ladder with DSV4_ARENA_ZERO=1 on both arms
 // (unchanged verdict) and four times inside ONE process (four different answers), so the residual
-// is a RACE in this file's call graph, not uninitialised memory. See DECODE_LADDER.md item 1.10 and
+// is a RACE in this file's call graph, not uninitialised memory. See docs/DECODE_LADDER.md item 1.10 and
 // wiki/measurement-and-traps.md §25. The 8/8 -> 5/8 was a 5-cycle in the engine
 // (Finding 61) sampled 8 times, not a change caused by zeroing: with the sharper instrument the
 // engine produces the SAME hash sequence zeroed and unzeroed.

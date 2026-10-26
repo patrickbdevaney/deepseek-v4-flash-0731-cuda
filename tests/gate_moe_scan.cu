@@ -3,7 +3,7 @@
 // k_moe_prefix and k_build_tiles were one thread walking nr=160 experts, once per layer (Finding 71's
 // class). The replacements are one-block, 256-thread Hillis-Steele scans. Both produce integers by
 // addition in the same order, so the correct gate is EQUALITY, not cosine — and equality is only
-// meaningful if the harness spans the regimes the kernels see. Per LEVERS.md trap 9 ("check the
+// meaningful if the harness spans the regimes the kernels see. Per docs/LEVERS.md trap 9 ("check the
 // harness can express the regime"), this sweeps:
 //   - nr from 1 to 400, i.e. below, at, and ABOVE the 256-thread block width (the chunk carry);
 //   - empty experts (me=0), single-tile, exactly-16, and multi-tile experts (me>16);

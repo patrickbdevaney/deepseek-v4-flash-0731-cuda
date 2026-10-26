@@ -61,7 +61,7 @@ record(){ # name a_ce a_tv deficit beta anchor_pow dclamp pos
 import re,sys
 name=sys.argv[1]
 try:
-    for line in open("HEAD_REGISTRY.md"):
+    for line in open("docs/HEAD_REGISTRY.md"):
         m=re.match(r"\|\s*`%s`\s*\|\s*([\d.]+)\s*\|" % re.escape(name), line)
         if m: print(m.group(1)); break
     else: print("")
@@ -116,7 +116,7 @@ PY
         bash scripts/stage_head.sh "$best" --activate 2>&1 | tail -5 | tee -a "$DEC"
     else
         LOG "NO arm cleared both gates. Live head unchanged ($(cat config/live_ckpt))."
-        LOG "  The mean-only winner is deliberately NOT staged on that basis -- see HEAD_REGISTRY.md."
+        LOG "  The mean-only winner is deliberately NOT staged on that basis -- see docs/HEAD_REGISTRY.md."
     fi
     LOG "starting the eval battery: extend -> retry -> force -> BFCL multi-turn"
     bash scripts/eval_resume.sh 2>&1 | tail -20 | tee -a "$DEC"

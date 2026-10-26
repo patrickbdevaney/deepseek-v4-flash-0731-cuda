@@ -107,7 +107,7 @@ def force_timeout(prompt_tokens, max_tokens, fixed_s=60):
 def tag_for(effort, cap):
     """`low` forced at an 8000-token thinking cap becomes `low8kforced`.
 
-    Distinct from eval_extend's `low24k` by construction: a reader scanning EVALS.md cannot confuse
+    Distinct from eval_extend's `low24k` by construction: a reader scanning docs/EVALS.md cannot confuse
     a forced row with a budget-extended one, and efforts_on_disk() discovers it without a code
     change (it splits the filename on '.', so the tag must simply contain no dot).
     """

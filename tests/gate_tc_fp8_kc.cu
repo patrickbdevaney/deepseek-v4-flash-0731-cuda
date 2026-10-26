@@ -8,7 +8,7 @@
 // the BIT. Finding 68 is why that distinction is gated rather than argued: a reduction-order change
 // that looked fine on cosine sent the model into a repeating loop and produced a fake +28% tok/s.
 //
-// Per LEVERS.md trap 9, the sweep has to be able to express the regimes:
+// Per docs/LEVERS.md trap 9, the sweep has to be able to express the regimes:
 //   - M crosses the m16 tile boundary (1,2,3,5,8,13,16,17,20) so grid.y>1 is exercised
 //   - every W the dispatcher picks: N=32768/4096 -> W=8, 1024 -> W=2, 512 -> W=1, plus an N%64 tail
 //   - K=1024/2048/4096/8192 so KB=8..64, i.e. KC both divides KB exactly and is capped by it
@@ -31,7 +31,7 @@ extern bool g_tc_fp8;
 void tc_fp8_set_smem(int on);
 void tc_fp8_set_kc(int kc);
 void tc_fp8_set_db(int on);
-// cp.async ring depth (LEVERS.md B8-cpasync). Like KC and DB it changes only WHEN and HOW the staged
+// cp.async ring depth (docs/LEVERS.md B8-cpasync). Like KC and DB it changes only WHEN and HOW the staged
 // bytes reach smem — one K-block per ring stage, `acc` still takes `cb` in kblk order — so it must be
 // bit-identical to KC=1 too. NS is swept over the depths the dispatcher can pick, INCLUDING a depth
 // larger than KB so the empty-commit_group padding in the prologue/epilogue is exercised: with

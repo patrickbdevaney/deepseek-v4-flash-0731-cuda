@@ -13,7 +13,7 @@
 //      So emit boundaries are rounded down to a character boundary.
 //
 // Tool calls are buffered rather than streamed as deltas: the DSML block has to be parsed as a whole
-// (each parameter's string="true|false" attribute decides its JSON type, CHAT_FORMAT.md §3), so the
+// (each parameter's string="true|false" attribute decides its JSON type, docs/CHAT_FORMAT.md §3), so the
 // server emits them in one final chunk. That matches what vLLM and SGLang do.
 //
 // Gated by tests/gate_stream.cpp -- byte-boundary-independent by construction, which is the property

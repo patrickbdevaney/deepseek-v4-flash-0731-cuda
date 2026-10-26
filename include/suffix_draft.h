@@ -1,4 +1,4 @@
-// suffix_draft.h — the LEVERS.md S6 candidate drafter (suffix-automaton / prompt-lookup), as a
+// suffix_draft.h — the docs/LEVERS.md S6 candidate drafter (suffix-automaton / prompt-lookup), as a
 // PURE function of the token sequence so it can be gated on the host without a checkpoint load.
 //
 // Rule: take the LONGEST suffix of S that occurred strictly earlier in S, break ties toward the

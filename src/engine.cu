@@ -763,7 +763,7 @@ GenStats Engine::Impl::generate(const std::vector<int>& ids, const GenParams& gp
         CU(cudaDeviceSynchronize());
         // The report syncs and prints; it lands AFTER the sync above, so it adds no stall inside the
         // step it describes -- but it is inside the decode timing window, so a DPROF run's tok/s is
-        // an instrumented number and is not comparable to PERF.md. The per-mark ms are.
+        // an instrumented number and is not comparable to docs/PERF.md. The per-mark ms are.
         if (dp_step) {
             static const int every = getenv("DSV4_DPROF_EVERY") ? atoi(getenv("DSV4_DPROF_EVERY")) : 1;
             if (every > 0 && stats.verifies % every == 0) {

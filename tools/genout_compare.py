@@ -8,7 +8,7 @@ them apart is the whole question. Ids compared positionally say WHERE the first 
 and "diverges at token 0" (the prefix was already wrong) is a completely different finding from
 "diverges at token 137" (the two runs came apart mid-generation).
 
-WHY IDS AND NOT TEXT. DECODE_LADDER.md's invariant is written in ids -- "byte-identical generated
+WHY IDS AND NOT TEXT. docs/DECODE_LADDER.md's invariant is written in ids -- "byte-identical generated
 token ids" -- and `build/decode` emits exactly that with DSV4_GENOUT, argmax, no seed. The text is a
 lossy view of it: two different id sequences can decode to the same string.
 

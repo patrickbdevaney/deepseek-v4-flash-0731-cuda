@@ -1,5 +1,5 @@
 // topk_radix.h — single-CTA radix select, the exact-equivalent replacement for the four warp
-// selection-sort top-k kernels. DECODE_LADDER.md item 1.2.
+// selection-sort top-k kernels. docs/DECODE_LADDER.md item 1.2.
 //
 // WHAT IT REPLACES AND WHY. `k_topk_decode`, `k_topk_verify`, `k_topk_masked` (compressed_decode.cu)
 // and `k_topk_offset` (indexer.cu) all run the same shape: `topk` sequential passes over the score
