@@ -177,7 +177,9 @@ Files kept at the root on purpose:
 
 ## License
 
-- **Code in this repository:** no license has been granted yet. One is pending.
+- **Code in this repository:** MIT ([`LICENSE`](LICENSE)).
+- **Third-party code** keeps its own license: `include/third_party/httplib.h` and `json.hpp` (both MIT), and
+  `ref/deepseek_v4_ref.py`, adapted from DeepSeek's reference inference code (MIT).
 - **Weights:** the checkpoint is MIT, from `0xSero/DeepSeek-V4-Flash-0731-REAP`, derived from DeepSeek-V4-Flash.
 
 ## Citation
